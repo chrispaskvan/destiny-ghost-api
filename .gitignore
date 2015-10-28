@@ -1,1 +1,6 @@
 # Created by .ignore support plugin (hsz.mobi)
+.idea
+settings/
+settings/*
+node_modules/
+node_modules/*

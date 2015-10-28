@@ -7,10 +7,10 @@ var notifications = function () {
     var sendSms = function (body, to) {
         client.sendSms({
             to: to,
-            from:'9708002310',
+            from: '9708002310',
             body: body,
             statusCallback: 'http://a20adc9c.ngrok.io/api/twilio/test2'
-        }, function(error, message) {
+        }, function (error, message) {
             if (!error) {
                 console.log('Success! The SID for this SMS message is:');
                 console.log(message.sid);

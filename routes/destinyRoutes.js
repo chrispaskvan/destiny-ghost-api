@@ -12,12 +12,12 @@ var routes = function () {
     var destinyRouter = express.Router();
     storage.initSync();
 
-    var getIpAddress = function(req) {
+    var getIpAddress = function (req) {
         return req.headers['x-forwarded-for'] || req.connection.remoteAddress;
     };
 
-    var getMembershipId = function(ipAddress) {
-        return Q.Promise(function(resolve, reject) {
+    var getMembershipId = function (ipAddress) {
+        return Q.Promise(function (resolve, reject) {
             var displayName = storage.getItem(ipAddress);
             if (displayName) {
                 var membershipId = storage.getItem(displayName);
@@ -44,7 +44,7 @@ var routes = function () {
         .get(destinyController.getCharacters);
 
     destinyRouter.route('/characters/:characterId')
-        .get(function(req, res) {
+        .get(function (req, res) {
             getMembershipId(getIpAddress(req))
                 .then(function (membershipId) {
                     destiny.getCharacter(membershipId, req.params.characterId)
@@ -55,7 +55,7 @@ var routes = function () {
         });
 
     destinyRouter.route('/characters/:characterId/Activity')
-        .get(function(req, res) {
+        .get(function (req, res) {
             getMembershipId(getIpAddress(req))
                 .then(function (membershipId) {
                     var destiny = Destiny();
@@ -67,7 +67,7 @@ var routes = function () {
         });
 
     destinyRouter.route('/characters/:characterId/Inventory')
-        .get(function(req, res) {
+        .get(function (req, res) {
             getMembershipId(getIpAddress(req))
                 .then(function (membershipId) {
                     destiny.getInventory(req.params.characterId, membershipId)
@@ -78,7 +78,7 @@ var routes = function () {
         });
 
     destinyRouter.route('/characters/:characterId/Progression')
-        .get(function(req, res) {
+        .get(function (req, res) {
             destiny.getMembershipIdFromDisplayName('Blue18Dragon')
                 .then(function (result) {
                     destiny.getProgression(req.params.characterId, result)
@@ -92,7 +92,7 @@ var routes = function () {
         .get(destinyController.getFieldTestWeapons);
 
     destinyRouter.route('/items/:itemHash')
-        .get(function(req, res) {
+        .get(function (req, res) {
             var itemHash = req.params.itemHash;
             if (!itemHash) {
                 res.status(404).json(jSend.fail("itemHash is required."));
@@ -104,7 +104,7 @@ var routes = function () {
         });
 
     destinyRouter.route('/signIn/')
-        .post(function(req, res) {
+        .post(function (req, res) {
             var displayName = req.body.displayName;
             if (!displayName) {
                 res.status(404).json(jSend.fail("displayName is required."));
@@ -113,7 +113,7 @@ var routes = function () {
             destiny.getMembershipIdFromDisplayName(displayName)
                 .then(function (result) {
                     storage.setItem(displayName, result);
-                    res.json(jSend.success({ membershipId: result }));
+                    res.json(jSend.success({membershipId: result}));
                 })
                 .catch(function (error) {
                     // ToDo
@@ -121,7 +121,7 @@ var routes = function () {
         });
 
     destinyRouter.route('/signOut')
-        .post(function(req, res) {
+        .post(function (req, res) {
             var ipAddress = getIpAddress(req);
             var displayName = storage.getItem(ipAddress);
             if (displayName) {

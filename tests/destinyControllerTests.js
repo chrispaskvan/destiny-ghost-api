@@ -29,7 +29,7 @@ describe('Destiny Controller Tests', function () {
     });
     describe("What's available for testing from the Gun Smith?", function () {
         it('should return valid membershipId', function () {
-            var fieldTestWeapons = ["Häkke Test-A","SUROS TSA-10","Omolon Test FR1","Häkke Test-A","Häkke Test-A"];
+            var fieldTestWeapons = ["Häkke Test-A", "SUROS TSA-10", "Omolon Test FR1", "Häkke Test-A", "Häkke Test-A"];
             var req = {
                 membershipId: "4611686018433851972"
             }
