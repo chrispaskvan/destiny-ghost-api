@@ -1,0 +1,18 @@
+Caching: Node Persist
+https://github.com/simonlast/node-persist
+
+NodeJS Best Practices
+http://justbuildsomething.com/node-js-best-practices/
+https://www.airpair.com/node.js/posts/top-10-mistakes-node-developers-make
+
+NodeJS Examples
+http://scottksmith.com/blog/2014/05/29/beer-locker-building-a-restful-api-with-node-passport/
+
+Angular 2
+http://angularjs.blogspot.com/
+
+Telemetry
+http://kenhaines.net/adding-application-insights-to-an-angularjs-application/
+
+NodeJS in IIS 8
+http://tomasz.janczuk.org/2013/07/application-initialization-of-nodejs.html
