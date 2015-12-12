@@ -2,35 +2,41 @@
  * Created by chris on 11/14/15.
  */
 'use strict';
-var Horseman = require('node-horseman');
+var _ = require('underscore'),
+    Horseman = require('node-horseman'),
+    Q = require('q');
 
-var fbUser = 'kyle.paskvan@apricothill.com';
-var fbPass = 'kcp5823sss2';
-
-var retryCount = 0; // we're retrying to login 2 times
-
-var testController = function () {
-
-    var login = function () {
+var authenticationController = function () {
+    var signIn = function (userName, password) {
         var horseman = new Horseman();
-        horseman
-            .open('https://www.bungie.net/en/User/SignIn/Psnid')
+        var deferred = Q.defer();
+        horseman.open('https://www.bungie.net/en/User/SignIn/Psnid')
             .waitForSelector('#signInInput_SignInID')
-            .log('typing...')
-            .type('input[id="signInInput_SignInID"]', fbUser)
-            .type('input[id="signInInput_Password"]', fbPass)
+            .type('input[id="signInInput_SignInID"]', userName)
+            .type('input[id="signInInput_Password"]', password)
             .click('#signInButton')
-            .log('clicked the button')
             .waitForNextPage()
             .cookies()
-            .then(function(cookies){
-                console.log( cookies );
-                return horseman.close();
+            .then(function (cookies) {
+                var bungieCookies = {
+                    bungled: _.find(cookies, function (cookie) {
+                        return cookie.name === 'bungled';
+                    }).value,
+                    bungledid: _.find(cookies, function (cookie) {
+                        return cookie.name === 'bungledid';
+                    }).value,
+                    bungleatk: _.find(cookies, function (cookie) {
+                        return cookie.name === 'bungleatk';
+                    }).value
+                };
+                horseman.close();
+                deferred.resolve(bungieCookies);
             });
+        return deferred.promise;
     };
     return {
-        login: login
+        signIn: signIn
     };
 };
 
-module.exports = testController;
+module.exports = authenticationController;

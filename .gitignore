@@ -1,6 +1,5 @@
 # Created by .ignore support plugin (hsz.mobi)
 .idea
+database/
 settings/
-settings/*
 node_modules/
-node_modules/*

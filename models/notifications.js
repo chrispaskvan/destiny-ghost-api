@@ -1,35 +1,47 @@
 /**
  * Created by chris on 9/27/15.
  */
-var nconf = require("nconf");
-nconf.file("./settings/twilio.json");
-var accountSid = nconf.get("accountSid"),
-    authToken = nconf.get("authToken");
+'use strict';
+var fs = require('fs'),
+    sqlite3 = require('sqlite3'),
+    twilio = require('twilio');
 
-var client = require('twilio')(accountSid, authToken);
-
-var Notifications = function () {
-    var sendSms = function (body, to) {
-        client.sendSms({
+var Notifications = function (databaseFullPath, twilioSettingsFullPath) {
+    databaseFullPath = databaseFullPath || './database/ghost.db';
+    if (!fs.existsSync(databaseFullPath)) {
+        console.log('Creating database file.');
+        fs.openSync(databaseFullPath, 'w');
+    }
+    var db = new sqlite3.Database(databaseFullPath);
+    db.configure('busyTimeout', 2000);
+    db.serialize(function () {
+        db.run('CREATE TABLE IF NOT EXISTS DestinyGhostMessage(id TEXT, json BLOB)');
+    });
+    var createMessage = function (message) {
+        var sql = db.prepare('INSERT INTO DestinyGhostMessage VALUES (?, ?)');
+        sql.run(new Date().toISOString(), JSON.stringify(message));
+        sql.finalize();
+    };
+    var settings = JSON.parse(fs.readFileSync(twilioSettingsFullPath || './settings/twilio.json'));
+    var twilioClient = twilio(settings.accountSid, settings.authToken);
+    var sendMessage = function (body, to) {
+        twilioClient.sendSms({
             to: to,
-            from: '9708002310',
+            from: settings.phoneNumber,
             body: body,
-            statusCallback: 'http://a20adc9c.ngrok.io/api/twilio/test2'
+            statusCallback: process.env.DOMAIN + '/api/twilio/destiny/s'
         }, function (error, message) {
             if (!error) {
-                console.log('Success! The SID for this SMS message is:');
-                console.log(message.sid);
-                console.log('Message sent on:');
-                console.log(message.dateCreated);
+                createMessage(message);
             } else {
-                console.log('Oops! There was an error.');
+                console.log(error.toString());
             }
         });
     };
-
     return {
-        sendSms: sendSms
-    }
+        createMessage: createMessage,
+        sendMessage: sendMessage
+    };
 };
 
 module.exports = Notifications;

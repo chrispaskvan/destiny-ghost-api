@@ -1,8 +1,5 @@
 /**
- * Created by chris on 11/20/15.
- */
-/**
- * Created by chris on 9/29/15.
+ * Created by chris on 11/29/15.
  */
 var _ = require('underscore'),
     assert = require('assert'),
@@ -12,7 +9,7 @@ var _ = require('underscore'),
     Ghost = require('../models/ghost'),
     World = require('../models/World');
 
-describe('Destiny World Tests', function () {
+describe('Destiny Model Tests', function () {
     describe('Get Fusion Rifle Category', function () {
         it('should return valid membershipId', function () {
             var ghost = new Ghost();

@@ -1,209 +1,246 @@
 /**
  * Created by chris on 9/29/15.
  */
+'use strict';
 var _ = require('underscore'),
-    destiny = require('../models/Destiny')(),
-    ghost = require('../models/Ghost')(),
-    jSend = require('../models/JSend'),
+    Bitly = require('../models/Bitly'),
+    fs = require('fs'),
+    Ghost = require('../models/Ghost'),
     path = require('path'),
     Q = require('q'),
-    storage = require('node-persist'),
-    world = require('../models/World')(ghost.getWorldDatabasePath());
+    S = require('string'),
+    twilio = require('twilio'),
+    User = require('../models/User'),
+    World = require('../models/World');
 
-var fs = require('fs'),
-request = require('request'), yauzl = require('yauzl');
-
-var destinyController = function () {
-    var _getIpAddress = function(req) {
-        return req.headers['x-forwarded-for'] || req.connection.remoteAddress;
-    };
-    var _getMembershipId = function(ipAddress) {
-        return Q.Promise(function(resolve, reject) {
-            var displayName = storage.getItem(ipAddress);
-            if (displayName) {
-                var membershipId = storage.getItem(displayName);
-                if (membershipId) {
-                    resolve(membershipId);
-                } else {
-                    destiny.getMembershipIdFromDisplayName(displayName)
-                        .then(function (result) {
-                            resolve(result);
-                        });
-                }
-            } else {
-                reject("Please sign in.");
-            }
+var twilioController = function () {
+    var ghost = new Ghost(process.env.DATABASE);
+    var world;
+    ghost.getWorldDatabasePath()
+        .then(function (path) {
+            world = new World(path);
         });
+    var bitly = new Bitly(process.env.BITLY);
+    var authToken = JSON.parse(fs.readFileSync(process.env.TWILIO || './settings/twilio.json')).authToken;
+    var userModel = new User(process.env.DATABASE, process.env.TWILIO);
+    var _getRandomResponseForNoResults = function () {
+        var responses = ['Are you sure that\'s how it\'s spelled?',
+            'Does it look like a Gjallarhorn?',
+            'Sorry, I\'ve got nothing.'];
+        return responses[Math.floor(Math.random() * responses.length)];
     };
-    var _getCharacters = function (req, res) {
-        destiny.getCharacters(req.membershipId)
-            .then(function (characters) {
-                world.open();
-                var characterPromises = _.map(characters, function (character) {
-                    var deferred = Q.defer();
-                    var characterBase = {
-                        characterBase: {
-                            characterId: character.characterBase.characterId,
-                            emblem: character.emblemPath,
-                            backgroundPath: character.backgroundPath,
-                            powerLevel: character.characterBase.powerLevel
-                        }
-                    };
-                    var itemHashes = _.map(character.characterBase.peerView.equipment, function (equipedItem) {
-                        return equipedItem.itemHash;
-                    });
-                    var itemPromises = [];
-                    _.each(itemHashes, function (itemHash) {
-                        itemPromises.push(world.getItem(itemHash));
-                    });
-                    Q.all(itemPromises)
-                        .then(function (items) {
-                            var equipment = _.map(_.filter(items, function (item) {
-                                return item !== undefined;
-                            }), function (item) {
-                                return item.itemName;
-                            });
-                            characterBase.equipment = equipment;
-                            world.getClass(character.characterBase.classHash)
-                                .then(function (characterClass) {
-                                    characterBase.className = characterClass.className;
-                                    deferred.resolve(characterBase);
-                                })
-                                .fail(function (err) {
-                                    res.json(jSend.fail(err));
+    var fallback = function (req, res) {
+        var header = req.headers['x-twilio-signature'];
+        var twiml = new twilio.TwimlResponse();
+        if (twilio.validateRequest(authToken, header, process.env.DOMAIN + req.originalUrl, req.body)) {
+            twiml.message('Sorry. Something went wrong. I blame Oryx.');
+            res.writeHead(200, {
+                'Content-Type': 'text/xml'
+            });
+        } else {
+            res.writeHead(403, {
+                'Content-Type': 'text/xml'
+            });
+        }
+        res.end(twiml.toString());
+    };
+    var _getItem = function (item) {
+        var deferred = Q.defer();
+        var promises = [];
+        _.each(item.itemCategoryHashes, function (itemCategoryHash) {
+            promises.push(world.getItemCategory(itemCategoryHash));
+        });
+        Q.all(promises)
+            .then(function (itemCategories) {
+                world.close();
+                var itemCategory = _.reduce(_.sortBy(_.filter(itemCategories, function (itemCategory) {
+                    return itemCategory.itemCategoryHash !== 0;
+                }), function(itemCategory) {
+                    return itemCategory.itemCategoryHash;
+                }), function (memo, itemCategory) {
+                    return memo + itemCategory.title + ' ';
+                }, ' ').trim();
+                deferred.resolve([{
+                    itemCategory: itemCategory,
+                    icon: 'https://www.bungie.net' + item.icon,
+                    itemHash: item.itemHash,
+                    itemName: item.itemName,
+                    itemType: item.itemType,
+                    tierTypeName: item.tierTypeName
+                }]);
+            })
+            .fail(function (err) {
+                deferred.reject(err);
+            });
+        return deferred.promise;
+    }
+    var getItem = function(itemName) {
+        var deferred = Q.defer();
+        ghost.getLastManifest()
+            .then(function (lastManifest) {
+                var worldPath = path.join('./database/', path.basename(lastManifest.mobileWorldContentPaths['en']));
+                world.open(worldPath);
+                world.getItemByName(itemName)
+                    .then(function (items) {
+                        if (items.length > 0) {
+                            if (items.length > 1) {
+                                var groups = _.groupBy(items, function (item) {
+                                    return item.itemName;
                                 });
+                                var keys = Object.keys(groups);
+                                if (keys.length === 1) {
+                                    _getItem(items[0])
+                                        .then(function (item) {
+                                            deferred.resolve(item);
+                                        });
+                                } else {
+                                    deferred.resolve(items);
+                                }
+                            } else {
+                                _getItem(items[0])
+                                    .then(function (item) {
+                                        deferred.resolve(item);
+                                    });
+                            }
+                        } else {
+                            deferred.resolve([]);
+                        }
+                    });
+            })
+            .fail(function (error) {
+                deferred.reject(error);
+            });
+        return deferred.promise;
+    };
+    var getItemByHash = function(itemHash) {
+        var deferred = Q.defer();
+        ghost.getLastManifest()
+            .then(function (lastManifest) {
+                var worldPath = path.join('./database/', path.basename(lastManifest.mobileWorldContentPaths['en']));
+                world.open(worldPath);
+                world.getItemByHash(itemHash)
+                    .then(function (item) {
+                        world.getClassByType(2)
+                            .then(function (characterClass) {
+                                world.close();
+                                deferred.resolve({
+                                    classType: characterClass.className,
+                                    icon: shortUrl,
+                                    itemHash: itemHash,
+                                    itemName: item.itemName,
+                                    itemType: item.itemType,
+                                    tierTypeName: item.tierTypeName
+                                });
+                            })
+                            .fail(function (err) {
+                                deferred.reject(err);
+                            });
+                    })
+                    .fail(function (err) {
+                        deferred.reject(err);
+                    });
+            })
+            .fail(function (error) {
+                deferred.reject(error);
+            });
+        return deferred.promise;
+    };
+    var request = function (req, res) {
+        var header = req.headers['x-twilio-signature'];
+        var twiml = new twilio.TwimlResponse();
+        if (twilio.validateRequest(authToken, header, process.env.DOMAIN + req.originalUrl, req.body)) {
+            var counter = parseInt(req.cookies.counter, 10) || 0;
+            var itemHash = req.cookies.itemHash;
+            if (itemHash && req.body.Body.trim().toUpperCase() === 'MORE') {
+                bitly.getShortUrl('http://db.planetdestiny.com/items/view/' + itemHash)
+                    .then(function (shortUrl) {
+                        twiml.message(shortUrl);
+                        res.writeHead(200, {
+                            'Content-Type': 'text/xml'
+                        });
+                        res.end(twiml.toString());
+                    });
+            } else {
+                if (counter > 121) {
+                    twiml.message('Let me check with the Speaker regarding your standing with the Vanguard.');
+                    res.writeHead(200, {
+                        'Content-Type': 'text/xml'
+                    });
+                    res.end(twiml.toString());
+                } else {
+                    getItem(req.body.Body.trim())
+                        .then(function (items) {
+                            counter = counter + 1;
+                            res.cookie('counter', counter);
+                            if (items.length === 1) {
+                                res.cookie('itemHash', items[0].itemHash);
+                                var template = '{{itemName}} {{tierTypeName}} {{itemCategory}}';
+                                userModel.getUserByPhoneNumber(req.body.From)
+                                    .then(function (user) {
+                                        if (user.type === 'landline') {
+                                            twiml.message((new S(template).template(items[0]).s).substr(0, 130));
+                                        } else {
+                                            twiml.message(function () {
+                                                this.body(new S(template).template(items[0]).s)
+                                                    .media(items[0].icon);
+                                            });
+                                        }
+                                        res.writeHead(200, {
+                                            'Content-Type': 'text/xml'
+                                        });
+                                        res.end(twiml.toString());
+                                    });
+                            } else if (items.length > 1) {
+                                var groups = _.groupBy(items, function (item) {
+                                    return item.itemName;
+                                });
+                                var keys = Object.keys(groups);
+                                var result = _.reduce(keys, function (memo, key) {
+                                    return memo + '\n' + key;
+                                }, ' ').trim();
+                                twiml.message(result.substr(0, 130));
+                                res.writeHead(200, {
+                                    'Content-Type': 'text/xml'
+                                });
+                                res.end(twiml.toString());
+                            } else {
+                                twiml.message(_getRandomResponseForNoResults());
+                                res.writeHead(200, {
+                                    'Content-Type': 'text/xml'
+                                });
+                                res.end(twiml.toString());
+                            }
                         })
                         .fail(function (err) {
-                            res.json(jSend.fail(err));
+                            res.end(err.toString());
                         });
-                    return deferred.promise;
-                });
-                Q.all(characterPromises)
-                    .then(function (characters) {
-                        world.close();
-                        res.status(200);
-                        res.json(characters);
-                });
-            });
-    };
-    var getCharacters = function(req, res) {
-        if (!req.membershipId) {
-            _getMembershipId(_getIpAddress(req))
-                .then(function (membershipId) {
-                    req.membershipId = membershipId;
-                    _getCharacters(req, res);
-                })
-                .fail(function (err) {
-                    res.status(401).send(err);
-                });
+                }
+            }
         } else {
-            _getCharacters(req, res);
+            res.writeHead(403);
+            res.end();
         }
     };
-    var getFieldTestWeapons = function(req, res) {
-        destiny.getFieldTestWeapons()
-            .then(function (items) {
-                if (items === undefined || items.length == 0) {
-                    res.json(jSend.fail("Banshee-44 is the Gunsmith."));
-                    return;
-                }
-                var itemHashes = _.map(items, function (item) {
-                    return item.item.itemHash;
-                });
-                world.open();
-                var promises = [];
-                _.each(itemHashes, function (itemHash) {
-                    promises.push(world.getItem(itemHash));
-                });
-                Q.all(promises)
-                    .then(function (items) {
-                        world.close();
-                        res.json(_.map(items, function (item) {
-                            return item.itemName;
-                        }));
-                    })
-                    .fail(function (err) {
-                        res.json(jSend.fail(err));
-                    });
-            })
-            .catch(function (error) {
-                res.json(jSend.fail(error));
+    var statusCallback = function (req, res) {
+        var header = req.headers['x-twilio-signature'];
+        var twiml = new twilio.TwimlResponse();
+        if (twilio.validateRequest(authToken, header, process.env.DOMAIN + req.originalUrl, req.body)) {
+            // ToDo: update db
+            res.writeHead(200, {
+                'Content-Type': 'text/xml'
             });
-    };
-    var getXur = function (req, res) {
-        destiny.getXur()
-            .then(function (items) {
-                if (items === undefined || items.length == 0) {
-                    res.status(200).json(jSend.fail("Xur is not available to take your call at this time."));
-                    return;
-                }
-                var itemHashes = _.map(items, function(item) {
-                    return item.item.itemHash;
-                });
-                world.open();
-                var promises = [];
-                _.each(itemHashes, function (itemHash) {
-                    promises.push(world.getItem(itemHash));
-                });
-                Q.all(promises)
-                    .then(function (items) {
-                        world.close();
-                        res.json(_.map(items, function (item) {
-                            return item.itemName;
-                        }));
-                    })
-                    .fail(function (err) {
-                        res.json(jSend.fail(err));
-                    });
-            })
-            .catch(function (error) {
-                res.json(jSend.fail(error));
+        } else {
+            res.writeHead(403, {
+                'Content-Type': 'text/xml'
             });
-    };
-    var init = function () {
-        destiny.getManifest()
-            .then(function (manifest) {
-                ghost.getLastManifest()
-                    .then(function (lastManifest) {
-                        if (!lastManifest || lastManifest.version !== manifest.version) {
-                            var relativeUrl = manifest.mobileWorldContentPaths["en"];
-                            var fileName = relativeUrl.substring(relativeUrl.lastIndexOf('/') + 1);
-                            var file = fs.createWriteStream(fileName + ".zip");
-                            var stream = request("https://www.bungie.net" + relativeUrl, function () {
-                                // ToDo: A log entry here would be nice.
-                                console.log("done1");
-                            }).pipe(file);
-                            stream.on('finish', function () {
-                                yauzl.open(fileName + ".zip", function (err, zipFile) {
-                                    if (err) {
-                                        throw err;
-                                    } else {
-                                        zipFile.on("entry", function (entry) {
-                                            zipFile.openReadStream(entry, function (err, readStream) {
-                                                if (err) {
-                                                    throw err;
-                                                } else {
-                                                    readStream.pipe(fs.createWriteStream(entry.fileName));
-                                                    ghost.createManifest(manifest);
-                                                    world.setPath(entry.fileName);
-                                                }
-                                            });
-                                        });
-                                    }
-                                });
-                            });
-                        } else {
-                            world.setPath(path.join("./database/", path.basename(lastManifest.mobileWorldContentPaths["en"])));
-                        }
-                    });
-            });
+        }
+        res.end(twiml.toString());
     };
     return {
-        getCharacters: getCharacters,
-        getFieldTestWeapons: getFieldTestWeapons,
-        getXur: getXur,
-        init: init
-    }
+        fallback: fallback,
+        request: request,
+        statusCallback: statusCallback
+    };
 };
 
-module.exports = destinyController;
+module.exports = twilioController;

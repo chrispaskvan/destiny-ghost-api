@@ -1,32 +1,19 @@
 /**
  * Created by chris on 9/28/15.
  */
+'use strict';
 var express = require('express'),
-    twilio = require('twilio');
+    TwilioController = require('../controllers/twilioController');
 
 var routes = function () {
     var twilioRouter = express.Router();
-
-    twilioRouter.route('/test')
-        .get(function(req, res) {
-            res.json("OK");
-        });
-
-    twilioRouter.route('/test2')
-        .post(function(req, res) {
-            console.log('------------');
-            console.log(req.body);
-            var resp = new twilio.TwimlResponse();
-            if (req.body.Body) {
-                console.log(req.body.Body.trim().toLowerCase());
-            }
-            resp.message('Thanks for subscribing!');
-            res.writeHead(200, {
-                'Content-Type':'text/xml'
-            });
-            res.end(resp.toString());
-        });
-
+    var twilioController = new TwilioController();
+    twilioRouter.route('/destiny/r')
+        .post(twilioController.request);
+    twilioRouter.route('/destiny/s')
+        .post(twilioController.statusCallback);
+    twilioRouter.route('/destiny/f')
+        .post(twilioController.fallback);
     return twilioRouter;
 };
 
