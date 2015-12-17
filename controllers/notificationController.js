@@ -26,6 +26,7 @@ var notificationController = function (shadowUserConfiguration) {
         });
     var userModel = new User(process.env.DATABASE);
     shadowUserConfiguration = shadowUserConfiguration || './settings/ShadowUser.json';
+    var shadowUser = JSON.parse(fs.readFileSync(shadowUserConfiguration));
     var _getCookieValueByName = function (cookies, cookieName) {
         if (!(cookies && cookies.constructor === Array)) {
             return undefined;
@@ -58,10 +59,13 @@ var notificationController = function (shadowUserConfiguration) {
                                                     world.close();
                                                     _.each(users, function (user) {
                                                         notifications.sendMessage('The foundry is accepting orders for...\n' + _.reduce(_.map(items, function (item) {
-                                                                return item.itemName;
-                                                            }), function (memo, itemName) {
-                                                                return memo + itemName + '\n';
-                                                            }, ' ').trim(), user.phoneNumber);
+                                                            return item.itemName;
+                                                        }), function (memo, itemName) {
+                                                            return memo + itemName + '\n';
+                                                        }, ' ').trim(), user.phoneNumber)
+                                                            .then(function (message) {
+                                                                userModel.createUserMessage(user, message, 'Banshee-44');
+                                                            });
                                                     });
                                                 });
                                         }
@@ -69,7 +73,7 @@ var notificationController = function (shadowUserConfiguration) {
                                     .fail(function (err) {
                                         if (err.code === 99 && !isSecondAttempt) {
                                             var authenticationContoller = new AuthenticationController();
-                                            authenticationContoller.signIn(userName, password)
+                                            authenticationContoller.signIn(shadowUser.userName, shadowUser.password)
                                                 .then(function (cookies) {
                                                     destiny.setAuthenticationCookies(_getCookieValueByName(cookies, 'bungled'),
                                                         _getCookieValueByName(cookies, 'bungledid'),
@@ -106,12 +110,18 @@ var notificationController = function (shadowUserConfiguration) {
                                             return item.itemName;
                                         }), function (memo, itemName) {
                                             return memo + itemName + '\n';
-                                        }, ' ').trim(), user.phoneNumber);
+                                        }, ' ').trim(), user.phoneNumber)
+                                            .then(function (message) {
+                                                userModel.createUserMessage(user, message, 'Xur');
+                                            });
                                     });
                                 });
                         } else {
                             _.each(users, function (user) {
-                                notifications.sendMessage('Xur hasn\'t opened shop yet.', user.phoneNumber);
+                                notifications.sendMessage('Xur hasn\'t opened shop yet.', user.phoneNumber)
+                                    .then(function (message) {
+                                        userModel.createUserMessage(user, message, 'Xur');
+                                    });
                             });
                         }
                     })
@@ -149,13 +159,22 @@ var notificationController = function (shadowUserConfiguration) {
                         },
                         start: true
                     });
+                    new CronJob({
+                        cronTime: '00 00 00 * * *',
+                        onTick: function () {
+                            notifications.purgeMessages();
+                            this.stop();
+                        },
+                        onComplete: function () {
+                            console.log('Job completed.');
+                        },
+                        start: true
+                    });
                 }
             });
     };
     var init = function () {
-        var shadowUser = JSON.parse(fs.readFileSync(shadowUserConfiguration));
         if (_getCookieValueByName(shadowUser.cookies, 'bungled') === undefined || _getCookieValueByName(shadowUser.cookies, 'bungledid') === undefined || _getCookieValueByName(shadowUser.cookies, 'bungleatk') === undefined) {
-            var userModel = new User(process.env.DATABASE);
             userModel.signIn(shadowUser.userName, shadowUser.password)
                 .then(function (cookies) {
                     shadowUser.cookies = cookies;

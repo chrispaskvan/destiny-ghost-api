@@ -20,6 +20,7 @@ var User = function (databaseFullPath, twilioSettingsFullPath) {
     db.configure('busyTimeout', 2000);
     db.serialize(function () {
         db.run('CREATE TABLE IF NOT EXISTS DestinyGhostUser(id TEXT, json BLOB)');
+        db.run('CREATE TABLE IF NOT EXISTS DestinyGhostUserMessage(id TEXT, json BLOB)');
     });
     var schema = {
         name: 'User',
@@ -68,6 +69,7 @@ var User = function (databaseFullPath, twilioSettingsFullPath) {
         },
         additionalProperties: true
     };
+    var settings = JSON.parse(fs.readFileSync(twilioSettingsFullPath || './settings/twilio.json'));
     var _getUserByPhoneNumber = function (phoneNumber) {
         var deferred = Q.defer();
         db.each('SELECT json FROM DestinyGhostUser WHERE json LIKE \'%"phoneNumber":"' + phoneNumber + '"%\' LIMIT 1', function (err, row) {
@@ -81,6 +83,21 @@ var User = function (databaseFullPath, twilioSettingsFullPath) {
             }
             if (rows === 0) {
                 deferred.resolve();
+            }
+        });
+        return deferred.promise;
+    };
+    var getPhoneNumberType = function (phoneNumber) {
+        var client = new twilio.LookupsClient(settings.accountSid, settings.authToken);
+        var deferred = Q.defer();
+        client.phoneNumbers(phoneNumber).get({
+            countryCode: 'US',
+            type: 'carrier'
+        }, function (error, number) {
+            if (error) {
+                deferred.resolve(error);
+            } else {
+                deferred.resolve(number.carrier);
             }
         });
         return deferred.promise;
@@ -109,21 +126,15 @@ var User = function (databaseFullPath, twilioSettingsFullPath) {
                 });
         }
     };
-    var settings = JSON.parse(fs.readFileSync(twilioSettingsFullPath || './settings/twilio.json'));
-    var getPhoneNumberType = function (phoneNumber) {
-        var client = new twilio.LookupsClient(settings.accountSid, settings.authToken);
-        var deferred = Q.defer();
-        client.phoneNumbers(phoneNumber).get({
-            countryCode: 'US',
-            type: 'carrier'
-        }, function (error, number) {
-            if (error) {
-                deferred.resolve(error);
-            } else {
-                deferred.resolve(number.carrier);
-            }
-        });
-        return deferred.promise;
+    var createUserMessage = function (user, message, action) {
+        var userMessage = {
+            action: action || '',
+            phoneNumber: user.phoneNumber,
+            sid: message.sid
+        };
+        var sql = db.prepare('INSERT INTO DestinyGhostUserMessage VALUES (?, ?)');
+        sql.run(new Date().toISOString(), JSON.stringify(userMessage));
+        sql.finalize();
     };
     var getSubscribedUsers = function () {
         var deferred = Q.defer();
@@ -185,6 +196,7 @@ var User = function (databaseFullPath, twilioSettingsFullPath) {
     };
     return {
         createUser: createUser,
+        createUserMessage: createUserMessage,
         getPhoneNumberType: getPhoneNumberType,
         getSubscribedUsers: getSubscribedUsers,
         getUserByPhoneNumber: getUserByPhoneNumber,

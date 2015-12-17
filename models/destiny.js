@@ -20,12 +20,13 @@ var Destiny = function (apiKey, cookies) {
     self.cookies = cookies;
     var servicePlatform = 'https://www.bungie.net/platform';
     var DestinyError = function (code, message, status) {
-        var self = this;
-        self.code = code;
-        self.message = message;
-        self.name = 'DestinyError';
-        self.stack = (new Error()).stack;
-        self.status = status;
+        _.extend(this, {
+            code: code,
+            message: message,
+            name: 'DestinyError',
+            stack: (new Error()).stack,
+            status: status
+        });
     };
     DestinyError.prototype = Object.create(Error.prototype);
     var destinyCache = new NodeCache({ stdTTL: 0, checkperiod: 0, useClones: true });
@@ -40,7 +41,6 @@ var Destiny = function (apiKey, cookies) {
             return cookie.name === cookieName;
         }).value;
     };
-
     var getActivity = function (characterId, membershipId) {
         var opts = {
             headers: {
@@ -66,7 +66,6 @@ var Destiny = function (apiKey, cookies) {
         });
         return deferred.promise;
     };
-
     var getCharacter = function (membershipId, characterId) {
         var opts = {
             headers: {
@@ -94,7 +93,6 @@ var Destiny = function (apiKey, cookies) {
         });
         return deferred.promise;
     };
-
     var getCharacters = function (membershipId) {
         var deferred = Q.defer();
         destinyCache.get(membershipId, function (err, characters) {
@@ -115,7 +113,7 @@ var Destiny = function (apiKey, cookies) {
                         if (responseBody.ErrorCode !== 1) {
                             deferred.reject(new DestinyError(responseBody.ErrorCode || -1, responseBody.Message || '', responseBody.ErrorStatus || ''));
                         } else {
-                            var characters = responseBody.Response.data.characters;
+                            characters = responseBody.Response.data.characters;
                             destinyCache.set(membershipId, characters);
                             deferred.resolve(characters);
                         }
@@ -127,7 +125,23 @@ var Destiny = function (apiKey, cookies) {
         });
         return deferred.promise;
     };
-
+    var getMembershipIdFromDisplayName = function (displayName) {
+        var opts = {
+            headers: {
+                'x-api-key': self.apiKey
+            },
+            url: util.format('%s/Destiny/2/Stats/GetMembershipIdByDisplayName/%s/', servicePlatform, encodeURIComponent(displayName))
+        };
+        var deferred = Q.defer();
+        request(opts, function (error, response, body) {
+            if (!error && response.statusCode === 200) {
+                deferred.resolve(JSON.parse(body).Response);
+            } else {
+                deferred.reject(error);
+            }
+        });
+        return deferred.promise;
+    };
     var getCurrentUser = function () {
         var deferred = Q.defer();
         var opts = {
@@ -160,7 +174,6 @@ var Destiny = function (apiKey, cookies) {
         });
         return deferred.promise;
     };
-
     var gunSmithHash = '570929315';
     var getFieldTestWeapons = function (characterId) {
         var deferred = Q.defer();
@@ -203,7 +216,6 @@ var Destiny = function (apiKey, cookies) {
         });
         return deferred.promise;
     };
-
     var getInventory = function (characterId, membershipId) {
         var opts = {
             headers: {
@@ -229,7 +241,6 @@ var Destiny = function (apiKey, cookies) {
         });
         return deferred.promise;
     };
-
     var getItem = function (itemHash) {
         var opts = {
             headers: {
@@ -254,7 +265,6 @@ var Destiny = function (apiKey, cookies) {
         });
         return deferred.promise;
     };
-
     var getManifest = function () {
         var deferred = Q.defer();
         destinyCache.get('getManifest', function (err, manifest) {
@@ -280,25 +290,6 @@ var Destiny = function (apiKey, cookies) {
         });
         return deferred.promise;
     };
-
-    var getMembershipIdFromDisplayName = function (displayName) {
-        var opts = {
-            headers: {
-                'x-api-key': self.apiKey
-            },
-            url: util.format('%s/Destiny/2/Stats/GetMembershipIdByDisplayName/%s/', servicePlatform, encodeURIComponent(displayName))
-        };
-        var deferred = Q.defer();
-        request(opts, function (error, response, body) {
-            if (!error && response.statusCode === 200) {
-                deferred.resolve(JSON.parse(body).Response);
-            } else {
-                deferred.reject(error);
-            }
-        });
-        return deferred.promise;
-    };
-
     var getProgression = function (characterId, membershipId) {
         var opts = {
             headers: {
@@ -319,7 +310,6 @@ var Destiny = function (apiKey, cookies) {
         });
         return deferred.promise;
     };
-
     var getWeapons = function (characterId, membershipId) {
         var opts = {
             headers: {
@@ -336,11 +326,11 @@ var Destiny = function (apiKey, cookies) {
                 deferred.resolve(weapons.sort(function (a, b) {
                     if (a.values.uniqueWeaponKillsPrecisionKills.basic.value < b.values.uniqueWeaponKillsPrecisionKills.basic.value) {
                         return -1;
-                    } else if (a.values.uniqueWeaponKillsPrecisionKills.basic.value > b.values.uniqueWeaponKillsPrecisionKills.basic.value) {
-                        return 1;
-                    } else {
-                        return 0;
                     }
+                    if (a.values.uniqueWeaponKillsPrecisionKills.basic.value > b.values.uniqueWeaponKillsPrecisionKills.basic.value) {
+                        return 1;
+                    }
+                    return 0;
                 }));
             } else {
                 deferred.reject(error);
@@ -348,7 +338,6 @@ var Destiny = function (apiKey, cookies) {
         });
         return deferred.promise;
     };
-
     var getXur = function () {
         var deferred = Q.defer();
         destinyCache.get('getXur', function (err, items) {
@@ -364,7 +353,9 @@ var Destiny = function (apiKey, cookies) {
                 request(opts, function (error, response, body) {
                     if (!error && response.statusCode === 200) {
                         var responseBody = JSON.parse(body);
-                        if (responseBody.ErrorCode !== 1) {
+                        if (responseBody.ErrorCode === 1627) {
+                            deferred.resolve([]);
+                        } else if (responseBody.ErrorCode !== 1) {
                             deferred.reject(new DestinyError(responseBody.ErrorCode || -1, responseBody.Message || '', responseBody.ErrorStatus || ''));
                         } else {
                             var data = responseBody.Response.data;

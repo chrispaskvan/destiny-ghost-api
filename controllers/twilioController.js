@@ -6,6 +6,7 @@ var _ = require('underscore'),
     Bitly = require('../models/Bitly'),
     fs = require('fs'),
     Ghost = require('../models/Ghost'),
+    Notifications = require('../models/Notifications'),
     path = require('path'),
     Q = require('q'),
     S = require('string'),
@@ -21,6 +22,7 @@ var twilioController = function () {
             world = new World(path);
         });
     var bitly = new Bitly(process.env.BITLY);
+    var notifications = new Notifications(process.env.DATABASE, process.env.TWILIO);
     var authToken = JSON.parse(fs.readFileSync(process.env.TWILIO || './settings/twilio.json')).authToken;
     var userModel = new User(process.env.DATABASE, process.env.TWILIO);
     var _getRandomResponseForNoResults = function () {
@@ -55,7 +57,7 @@ var twilioController = function () {
                 world.close();
                 var itemCategory = _.reduce(_.sortBy(_.filter(itemCategories, function (itemCategory) {
                     return itemCategory.itemCategoryHash !== 0;
-                }), function(itemCategory) {
+                }), function (itemCategory) {
                     return itemCategory.itemCategoryHash;
                 }), function (memo, itemCategory) {
                     return memo + itemCategory.title + ' ';
@@ -73,12 +75,12 @@ var twilioController = function () {
                 deferred.reject(err);
             });
         return deferred.promise;
-    }
-    var getItem = function(itemName) {
+    };
+    var getItem = function (itemName) {
         var deferred = Q.defer();
         ghost.getLastManifest()
             .then(function (lastManifest) {
-                var worldPath = path.join('./database/', path.basename(lastManifest.mobileWorldContentPaths['en']));
+                var worldPath = path.join('./database/', path.basename(lastManifest.mobileWorldContentPaths.en));
                 world.open(worldPath);
                 world.getItemByName(itemName)
                     .then(function (items) {
@@ -112,11 +114,11 @@ var twilioController = function () {
             });
         return deferred.promise;
     };
-    var getItemByHash = function(itemHash) {
+    var getItemByHash = function (itemHash) {
         var deferred = Q.defer();
         ghost.getLastManifest()
             .then(function (lastManifest) {
-                var worldPath = path.join('./database/', path.basename(lastManifest.mobileWorldContentPaths['en']));
+                var worldPath = path.join('./database/', path.basename(lastManifest.mobileWorldContentPaths.en));
                 world.open(worldPath);
                 world.getItemByHash(itemHash)
                     .then(function (item) {
@@ -125,7 +127,7 @@ var twilioController = function () {
                                 world.close();
                                 deferred.resolve({
                                     classType: characterClass.className,
-                                    icon: shortUrl,
+                                    icon: 'https://www.bungie.net' + item.icon,
                                     itemHash: itemHash,
                                     itemName: item.itemName,
                                     itemType: item.itemType,
@@ -225,7 +227,7 @@ var twilioController = function () {
         var header = req.headers['x-twilio-signature'];
         var twiml = new twilio.TwimlResponse();
         if (twilio.validateRequest(authToken, header, process.env.DOMAIN + req.originalUrl, req.body)) {
-            // ToDo: update db
+            setTimeout(notifications.updateMessage(req.body), 1000);
             res.writeHead(200, {
                 'Content-Type': 'text/xml'
             });

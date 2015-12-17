@@ -1,6 +1,3 @@
-Caching: Node Persist
-https://github.com/simonlast/node-persist
-
 NodeJS Best Practices
 http://justbuildsomething.com/node-js-best-practices/
 https://www.airpair.com/node.js/posts/top-10-mistakes-node-developers-make
@@ -20,3 +17,7 @@ http://tomasz.janczuk.org/2013/07/application-initialization-of-nodejs.html
 
 Docker
 https://docs.docker.com/engine/examples/nodejs_web_app/
+
+Destiny
+https://www.bungie.net/platform/destiny/help/
+http://bungienetplatform.wikia.com/wiki/Endpoints
