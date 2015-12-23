@@ -1,36 +1,85 @@
 /**
- * Created by chris on 9/29/15.
+ * A module for handling Twilio requests and responses.
+ *
+ * @module twilioController
+ * @author Chris Paskvan
+ * @requires _
+ * @requires Bitly
+ * @requires fs
+ * @requires Ghost
+ * @requires Notifications
+ * @requires path
+ * @requires Q
+ * @requires twilio
+ * @requires User
+ * @requires World
  */
 'use strict';
 var _ = require('underscore'),
-    Bitly = require('../models/Bitly'),
+    Bitly = require('../models/bitly'),
     fs = require('fs'),
-    Ghost = require('../models/Ghost'),
-    Notifications = require('../models/Notifications'),
+    Ghost = require('../models/ghost'),
+    Notifications = require('../models/notifications'),
     path = require('path'),
     Q = require('q'),
     S = require('string'),
     twilio = require('twilio'),
-    User = require('../models/User'),
-    World = require('../models/World');
-
+    User = require('../models/user'),
+    World = require('../models/world');
+/**
+ * @constructor
+ */
 var twilioController = function () {
+    /**
+     * Ghost Model
+     * @type {Ghost|exports|module.exports}
+     */
     var ghost = new Ghost(process.env.DATABASE);
+    /**
+     * World Model
+     * @type {World|exports|module.exports}
+     */
     var world;
     ghost.getWorldDatabasePath()
         .then(function (path) {
             world = new World(path);
         });
+    /**
+     * Bitly Model
+     * @type {Bitly|exports|module.exports}
+     */
     var bitly = new Bitly(process.env.BITLY);
+    /**
+     * Notifications Model
+     * @type {Notifications|exports|module.exports}
+     */
     var notifications = new Notifications(process.env.DATABASE, process.env.TWILIO);
+    /**
+     * @member {Object}
+     * @type {{accountSid: string, authToken string, phoneNumber string}} settings
+     */
     var authToken = JSON.parse(fs.readFileSync(process.env.TWILIO || './settings/twilio.json')).authToken;
+    /**
+     * User Model
+     * @type {User|exports|module.exports}
+     */
     var userModel = new User(process.env.DATABASE, process.env.TWILIO);
+    /**
+     * Get a random response to reply when nothing was found.
+     * @returns {string}
+     * @private
+     */
     var _getRandomResponseForNoResults = function () {
         var responses = ['Are you sure that\'s how it\'s spelled?',
             'Does it look like a Gjallarhorn?',
             'Sorry, I\'ve got nothing.'];
         return responses[Math.floor(Math.random() * responses.length)];
     };
+    /**
+     *
+     * @param req
+     * @param res
+     */
     var fallback = function (req, res) {
         var header = req.headers['x-twilio-signature'];
         var twiml = new twilio.TwimlResponse();
@@ -46,6 +95,12 @@ var twilioController = function () {
         }
         res.end(twiml.toString());
     };
+    /**
+     *
+     * @param item {string}
+     * @returns {*|promise}
+     * @private
+     */
     var _getItem = function (item) {
         var deferred = Q.defer();
         var promises = [];
@@ -76,6 +131,11 @@ var twilioController = function () {
             });
         return deferred.promise;
     };
+    /**
+     *
+     * @param itemName
+     * @returns {*|promise}
+     */
     var getItem = function (itemName) {
         var deferred = Q.defer();
         ghost.getLastManifest()
@@ -114,6 +174,11 @@ var twilioController = function () {
             });
         return deferred.promise;
     };
+    /**
+     *
+     * @param itemHash
+     * @returns {*|promise}
+     */
     var getItemByHash = function (itemHash) {
         var deferred = Q.defer();
         ghost.getLastManifest()
@@ -147,6 +212,11 @@ var twilioController = function () {
             });
         return deferred.promise;
     };
+    /**
+     *
+     * @param req
+     * @param res
+     */
     var request = function (req, res) {
         var header = req.headers['x-twilio-signature'];
         var twiml = new twilio.TwimlResponse();
@@ -223,6 +293,11 @@ var twilioController = function () {
             res.end();
         }
     };
+    /**
+     *
+     * @param req
+     * @param res
+     */
     var statusCallback = function (req, res) {
         var header = req.headers['x-twilio-signature'];
         var twiml = new twilio.TwimlResponse();

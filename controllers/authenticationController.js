@@ -1,12 +1,27 @@
 /**
- * Created by chris on 11/14/15.
+ * A module for managing user authentication.
+ *
+ * @module Authentication Controller
+ * @summary Create a Short URL
+ * @author Chris Paskvan
+ * @requires _
+ * @requires Horseman
+ * @requires Q
  */
 'use strict';
 var _ = require('underscore'),
     Horseman = require('node-horseman'),
     Q = require('q');
-
+/**
+ * @constructor
+ */
 var authenticationController = function () {
+    /**
+     * Sign into the Playstation Network and retrieve the Bungie cookies.
+     * @param userName {string}
+     * @param password {string}
+     * @returns {*|promise}
+     */
     var signIn = function (userName, password) {
         var horseman = new Horseman();
         var deferred = Q.defer();

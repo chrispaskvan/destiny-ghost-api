@@ -17,7 +17,6 @@ http://tomasz.janczuk.org/2013/07/application-initialization-of-nodejs.html
 
 Docker
 https://docs.docker.com/engine/examples/nodejs_web_app/
+http://blogs.msdn.com/b/vscode/archive/2015/08/11/getting-started-with-docker.aspx
 
 Destiny
-https://www.bungie.net/platform/destiny/help/
-http://bungienetplatform.wikia.com/wiki/Endpoints

@@ -1,5 +1,15 @@
 /**
- * Created by chris on 10/30/15.
+ * A module for managing users.
+ *
+ * @module User
+ * @author Chris Paskvan
+ * @requires _
+ * @requires fs
+ * @requires Horseman
+ * @requires Q
+ * @requires sqlite3
+ * @requires twilio
+ * @requires validator
  */
 'use strict';
 var _ = require('underscore'),
@@ -9,19 +19,37 @@ var _ = require('underscore'),
     sqlite3 = require('sqlite3'),
     twilio = require('twilio'),
     validator = require('is-my-json-valid');
-
+/**
+ * @param databaseFullPath {string}
+ * @param twilioSettingsFullPath {string}
+ * @returns {{createUser: createUser, createUserMessage: createUserMessage,
+  * getPhoneNumberType: getPhoneNumberType, getSubscribedUsers: getSubscribedUsers,
+   * getUserByPhoneNumber: getUserByPhoneNumber, signIn: signIn}}
+ * @constructor
+ */
 var User = function (databaseFullPath, twilioSettingsFullPath) {
-    databaseFullPath = databaseFullPath || './database/ghost.db';
-    if (!fs.existsSync(databaseFullPath)) {
+    /**
+     * @member - Full path of the local database.
+     * @type {*|string}
+     * @public
+     */
+    this.databaseFullPath = databaseFullPath || './database/ghost.db';
+    if (!fs.existsSync(this.databaseFullPath)) {
         console.log('Creating database file.');
-        fs.openSync(databaseFullPath, 'w');
+        fs.openSync(this.databaseFullPath, 'w');
     }
-    var db = new sqlite3.Database(databaseFullPath);
+    /**
+     * @type {sqlite3.Database}
+     */
+    var db = new sqlite3.Database(this.databaseFullPath);
     db.configure('busyTimeout', 2000);
     db.serialize(function () {
         db.run('CREATE TABLE IF NOT EXISTS DestinyGhostUser(id TEXT, json BLOB)');
         db.run('CREATE TABLE IF NOT EXISTS DestinyGhostUserMessage(id TEXT, json BLOB)');
     });
+    /**
+     * @private
+     */
     var schema = {
         name: 'User',
         type: 'object',
@@ -69,24 +97,34 @@ var User = function (databaseFullPath, twilioSettingsFullPath) {
         },
         additionalProperties: true
     };
+    /**
+     * @member {Object}
+     * @type {{accountSid: string, authToken string, phoneNumber string}} settings
+     */
     var settings = JSON.parse(fs.readFileSync(twilioSettingsFullPath || './settings/twilio.json'));
+    /**
+     * Look up the user by their phone number.
+     * @param phoneNumber {string}
+     * @returns {*|object}
+     * @private
+     */
     var _getUserByPhoneNumber = function (phoneNumber) {
         var deferred = Q.defer();
-        db.each('SELECT json FROM DestinyGhostUser WHERE json LIKE \'%"phoneNumber":"' + phoneNumber + '"%\' LIMIT 1', function (err, row) {
-            if (err) {
-                throw err;
-            }
-            deferred.resolve(JSON.parse(row.json));
-        }, function (err, rows) {
-            if (err) {
-                throw err;
-            }
-            if (rows === 0) {
-                deferred.resolve();
-            }
-        });
+        db.each('SELECT json FROM DestinyGhostUser WHERE json LIKE \'%"phoneNumber":"' +
+            phoneNumber + '"%\' LIMIT 1', function (err, row) {
+                if (err) {
+                    deferred.reject(err);
+                } else {
+                    deferred.resolve(JSON.parse(row.json));
+                }
+            });
         return deferred.promise;
     };
+    /**
+     * Get the carrier data for the provided phone number.
+     * @param phoneNumber
+     * @returns {*|Object}
+     */
     var getPhoneNumberType = function (phoneNumber) {
         var client = new twilio.LookupsClient(settings.accountSid, settings.authToken);
         var deferred = Q.defer();
@@ -102,6 +140,10 @@ var User = function (databaseFullPath, twilioSettingsFullPath) {
         });
         return deferred.promise;
     };
+    /**
+     * Create the user in the database.
+     * @param user {Object}
+     */
     var createUser = function (user) {
         var validate = validator(schema);
         if (!validate(user)) {
@@ -126,6 +168,12 @@ var User = function (databaseFullPath, twilioSettingsFullPath) {
                 });
         }
     };
+    /**
+     * Create an entry in the database for the message sent to the user.
+     * @param user {Object}
+     * @param message {Object}
+     * @param action {string}
+     */
     var createUserMessage = function (user, message, action) {
         var userMessage = {
             action: action || '',
@@ -136,34 +184,53 @@ var User = function (databaseFullPath, twilioSettingsFullPath) {
         sql.run(new Date().toISOString(), JSON.stringify(userMessage));
         sql.finalize();
     };
+    /**
+     * Get subscribed users from the database.
+     * @returns {*|Array.User}
+     */
     var getSubscribedUsers = function () {
         var deferred = Q.defer();
         var users = [];
         db.each('SELECT json FROM DestinyGhostUser', function (err, row) {
             if (err) {
-                throw err;
-            }
-            var user = JSON.parse(row.json);
-            if (user.isSubscribedToBanshee44 || user.isSubscribedToXur) {
-                users.push(user);
+                deferred.reject(err);
+            } else {
+                var user = JSON.parse(row.json);
+                if (user.isSubscribedToBanshee44 || user.isSubscribedToXur) {
+                    users.push(user);
+                }
             }
         }, function (err) {
             if (err) {
-                throw err;
+                deferred.reject(err);
+            } else {
+                deferred.resolve(users);
             }
-            deferred.resolve(users);
         });
         return deferred.promise;
     };
+    /**
+     * Wrapper for internal function.
+     * @param phoneNumber
+     * @returns {*|Object}
+     */
     var getUserByPhoneNumber = function (phoneNumber) {
         return _getUserByPhoneNumber(phoneNumber);
     };
+    /**
+     * Sign the user in and retrieve the Bungie cookies.
+     * @param userName {string}
+     * @param password {string}
+     * @returns {*|Array}
+     */
     var signIn = function (userName, password) {
         if (!userName || !password) {
             throw new Error('Missing or incomplete credentials.');
         }
-        var horseman;
-        horseman = new Horseman();
+        /**
+         * @type {Horseman|exports|module.exports}
+         */
+        var horseman = new Horseman();
         var deferred = Q.defer();
         horseman.open('https://www.bungie.net/en/User/SignIn/Psnid')
             .waitForSelector('#signInInput_SignInID')

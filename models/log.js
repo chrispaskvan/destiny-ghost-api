@@ -1,11 +1,25 @@
 /**
- * Created by chris on 12/15/15.
+ * A module for logging web requests and their corresponding responses.
+ * @module Log
+ * @summary Log request and response.
+ * @author Chris Paskvan
+ * @description Logging provider for recording requests and responses.
+ * Adopted from Eric Elliott's bunyan-request-logger project hosted at
+ * {@link https://github.com/ericelliott/bunyan-request-logger} and
+ * outlined in detail at {@link http://chimera.labs.oreilly.com/books/1234000000262/ch07.html#logging-requests}.
+ * go to {@link http://dev.bitly.com/api.html}.
+ * @requires _
+ * @requires bunyan
+ * @requires cuid
  */
 'use strict';
 var _ = require('underscore'),
     bunyan = require('bunyan'),
     cuid = require('cuid');
-
+/**
+ * @returns {{errorLogger: *, requestLogger: *}}
+ * @constructor
+ */
 var Log = function () {
     /**
      * Get long stack traces for the error logger.
@@ -23,19 +37,20 @@ var Log = function () {
         }
         return ret;
     };
-
+    /**
+     * @type {{req: serializers.reqSerializer, res: serializers.resSerializer, err: serializers.errSerializer}}
+     */
     var serializers = {
         req: function reqSerializer(req) {
             if (!req || !req.connection) {
                 return req;
             }
-
             return {
                 url: req.url,
                 method: req.method,
                 protocol: req.protocol,
                 requestId: req.requestId,
-                // Check for a proxy server.
+                /** Check for a proxy server. */
                 ip: req.headers['x-forwarded-for'] || req.connection.remoteAddress,
                 headers: req.headers
             };
@@ -44,7 +59,6 @@ var Log = function () {
             if (!res) {
                 return res;
             }
-
             return {
                 statusCode: res.statusCode,
                 headers: res._header,
@@ -56,7 +70,6 @@ var Log = function () {
             if (!err || !err.stack) {
                 return err;
             }
-
             return {
                 message: err.message,
                 name: err.name,
@@ -67,12 +80,13 @@ var Log = function () {
             };
         }
     };
-
+    /**
+     * @type {{name: string, serializers: *}}
+     */
     var defaults = {
         name: 'destiny-ghost-api',
         serializers: _.extend(bunyan.stdSerializers, serializers)
     };
-
     /**
      * Take bunyan options, monkey patch request
      * and response objects for better logging,
@@ -89,7 +103,6 @@ var Log = function () {
     var _createLogger = function (options) {
         var settings = _.extend(defaults, options),
             log = bunyan.createLogger(settings);
-
         log.requestLogger = function createRequestLogger() {
             return function requestLogger(req, res, next) {
                 // Used to calculate response times.
@@ -107,7 +120,6 @@ var Log = function () {
                 next();
             };
         };
-
         log.errorLogger = function createErrorLogger() {
             return function errorLogger(err, req, res, next) {
                 var status = err.status || (res && res.status);
@@ -122,9 +134,11 @@ var Log = function () {
                 next(err);
             };
         };
-
         return log;
     };
+    /**
+     * @type {Function}
+     */
     var logger = _createLogger(defaults);
     return {
         errorLogger: logger.errorLogger,

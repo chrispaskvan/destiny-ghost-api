@@ -1,5 +1,14 @@
 /**
- * Created by chris on 9/25/15.
+ * A module for accessing the Destiny World database.
+ *
+ * @module World
+ * @summary Destiny World database.
+ * @author Chris Paskvan
+ * @requires _
+ * @requires fs
+ * @requires Q
+ * @requires S
+ * @requires sqlite3
  */
 'use strict';
 var _ = require('underscore'),
@@ -7,36 +16,60 @@ var _ = require('underscore'),
     Q = require('q'),
     S = require('string'),
     sqlite3 = require('sqlite3');
-
+/**
+ * @param fileName {string}
+ * @constructor
+ */
 var World = function (fileName) {
+    /**
+     * @type {sqlite3.Database}
+     */
     var db;
+    /**
+     * @property
+     * @readonly
+     */
     Object.defineProperty(this, 'fileName', {
         value: fileName,
         writable: false
     });
+    /**
+     * @function
+     */
     var closeDatabase = function () {
         if (db) {
             db.close();
         }
     };
+    /**
+     * Get the Destiny class definitions.
+     * @returns {*}
+     * @private
+     */
     var _getClasses = function () {
         var deferred = Q.defer();
         db.serialize(function () {
             var classes = [];
             db.each('SELECT json FROM DestinyClassDefinition', function (err, row) {
                 if (err) {
-                    throw err;
+                    deferred.reject(err);
+                } else {
+                    classes.push(JSON.parse(row.json));
                 }
-                classes.push(JSON.parse(row.json));
             }, function (err) {
                 if (err) {
-                    throw err;
+                    deferred.reject(err);
+                } else {
+                    deferred.resolve(classes);
                 }
-                deferred.resolve(classes);
             });
         });
         return deferred.promise;
     };
+    /**
+     * Get the class according to the provided hash.
+     * @param classHash {string}
+     */
     var getClassByHash = function (classHash) {
         _getClasses()
             .then(function (classes) {
@@ -45,6 +78,11 @@ var World = function (fileName) {
                 });
             });
     };
+    /**
+     * Get the class by the type provided.
+     * @param classType {string}
+     * @returns {*}
+     */
     var getClassByType = function (classType) {
         var deferred = Q.defer();
         _getClasses()
@@ -55,69 +93,91 @@ var World = function (fileName) {
             });
         return deferred.promise;
     };
+    /**
+     * Look up the item(s) with matching strings in their name(s).
+     * @param itemName {string}
+     * @returns {*|Object}
+     */
     var getItemByName = function (itemName) {
         var deferred = Q.defer();
         db.serialize(function () {
             var items = [];
-            var it = S(itemName).replaceAll('\'', '\'\'').s;
-            db.each('SELECT json FROM DestinyInventoryItemDefinition WHERE json LIKE \'%"itemName":"%' + it + '%"%\'', function (err, row) {
-                if (err) {
-                    throw err;
-                }
-                items.push(JSON.parse(row.json));
-            }, function (err, rows) {
-                if (err) {
-                    throw err;
-                }
-                if (rows === 0) {
-                    deferred.resolve([]);
-                }
-                deferred.resolve(_.filter(items, function (item) {
-                    return item.qualityLevel === 0;
-                }));
-            });
+            var it = new S(itemName).replaceAll('\'', '\'\'').s;
+            db.each('SELECT json FROM DestinyInventoryItemDefinition WHERE json LIKE \'%"itemName":"%' +
+                it + '%"%\'', function (err, row) {
+                    if (err) {
+                        deferred.reject(err);
+                    }
+                    items.push(JSON.parse(row.json));
+                }, function (err, rows) {
+                    if (err) {
+                        deferred.reject(err);
+                    } else {
+                        if (rows === 0) {
+                            deferred.resolve([]);
+                        } else {
+                            deferred.resolve(_.filter(items, function (item) {
+                                return item.qualityLevel === 0;
+                            }));
+                        }
+                    }
+                });
         });
         return deferred.promise;
     };
+    /**
+     * Get item by the hash provided.
+     * @param itemHash
+     * @returns {*}
+     */
     var getItemByHash = function (itemHash) {
         var deferred = Q.defer();
         db.serialize(function () {
-            db.each('SELECT json FROM DestinyInventoryItemDefinition WHERE json LIKE \'%"itemHash":' + itemHash + '%\' LIMIT 1', function (err, row) {
-                if (err) {
-                    throw err;
-                }
-                deferred.resolve(JSON.parse(row.json));
-            }, function (err, rows) {
-                if (err) {
-                    throw err;
-                }
-                if (rows === 0) {
-                    deferred.resolve();
-                }
-            });
+            db.each('SELECT json FROM DestinyInventoryItemDefinition WHERE json LIKE \'%"itemHash":' +
+                itemHash + '%\' LIMIT 1', function (err, row) {
+                    if (err) {
+                        deferred.reject(err);
+                    } else {
+                        deferred.resolve(JSON.parse(row.json));
+                    }
+                });
         });
         return deferred.promise;
     };
+    /**
+     * Get the category definition for the provided hash.
+     * @param itemCategoryHash
+     * @returns {*}
+     */
     var getItemCategory = function (itemCategoryHash) {
         var deferred = Q.defer();
         db.serialize(function () {
-            db.each('SELECT json FROM DestinyItemCategoryDefinition WHERE id = ' + itemCategoryHash, function (err, row) {
-                if (err) {
-                    throw err;
-                }
-                deferred.resolve(JSON.parse(row.json));
-            }, function (err, rows) {
-                if (err) {
-                    throw err;
-                }
-                if (rows === 0) {
-                    deferred.reject(new Error('No item category found for hash' + itemCategoryHash));
-                }
-            });
+            db.each('SELECT json FROM DestinyItemCategoryDefinition WHERE id = ' +
+                itemCategoryHash, function (err, row) {
+                    if (err) {
+                        deferred.reject(err);
+                    } else {
+                        deferred.resolve(JSON.parse(row.json));
+                    }
+                }, function (err, rows) {
+                    if (err) {
+                        deferred.reject(err);
+                    } else {
+                        if (rows === 0) {
+                            deferred.reject(new Error('No item category found for hash' +
+                                itemCategoryHash));
+                        } else {
+                            deferred.reject(new Error('Hash, ' +
+                                itemCategoryHash + ', is not an unique identifier.'));
+                        }
+                    }
+                });
         });
         return deferred.promise;
     };
-
+    /**
+     * @param fileName {string}
+     */
     var openDatabase = function (fileName) {
         fileName = fileName || this.fileName;
         if (!fs.existsSync(fileName)) {
@@ -125,6 +185,10 @@ var World = function (fileName) {
         }
         db = new sqlite3.Database(fileName);
     };
+    /**
+     * Update the Destiny World database file name and/or location.
+     * @param path {string}
+     */
     var setPath = function (path) {
         this.fileName = path;
     };

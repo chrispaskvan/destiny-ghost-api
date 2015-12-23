@@ -1,7 +1,11 @@
 /**
- * Created by chris on 9/25/15.
+ * JSend
+ * @namespace
  */
 'use strict';
+/**
+ * @type {{error: JSend.error, fail: JSend.fail, success: JSend.success}}
+ */
 var JSend = {
     error: function (message) {
         this.status = 'error';

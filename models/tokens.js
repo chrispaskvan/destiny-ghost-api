@@ -1,10 +1,21 @@
 /**
- * Created by chris on 11/7/15.
+ * A module for creating tokens.
+ *
+ * @module Tokens
+ * @summary Generate a simple token.
+ * @author Chris Paskvan
+ * @requires crypto
  */
 'use strict';
 var crypto = require('crypto');
-
+/**
+ * @constructor
+ */
 var Tokens = function () {
+    /**
+     * Get a new token.
+     * @returns {string}
+     */
     var getToken = function () {
         var chars = '1234567890';
         var length = 6;

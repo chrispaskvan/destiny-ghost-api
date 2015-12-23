@@ -1,5 +1,19 @@
 /**
- * Created by chris on 9/29/15.
+ * A module for handling Destiny routes..
+ *
+ * @module destinyController
+ * @author Chris Paskvan
+ * @requires _
+ * @requires Destiny
+ * @requires fs
+ * @requires Ghost
+ * @requires jSend
+ * @requires path
+ * @requires Q
+ * @requires request
+ * @requires User
+ * @requires World
+ * @requires yauzl
  */
 'use strict';
 var _ = require('underscore'),
@@ -15,13 +29,32 @@ var _ = require('underscore'),
     yauzl = require('yauzl');
 
 var destinyController = function () {
+    /**
+     * Destiny Model
+     * @type {Destiny|exports|module.exports}
+     */
     var destiny;
+    /**
+     * Ghost Model
+     * @type {Ghost|exports|module.exports}
+     */
     var ghost = new Ghost(process.env.DATABASE);
+    /**
+     * World Model
+     * @type {World|exports|module.exports}
+     */
     var world;
     ghost.getWorldDatabasePath()
         .then(function (path) {
             world = new World(path);
         });
+    /**
+     * Get the value of the cookie given the name.
+     * @param cookies {Array}
+     * @param cookieName {string}
+     * @returns {*|string}
+     * @private
+     */
     var _getCookieValueByName = function (cookies, cookieName) {
         if (!(cookies && cookies.constructor === Array)) {
             return undefined;
@@ -30,6 +63,12 @@ var destinyController = function () {
             return cookie.name === cookieName;
         }).value;
     };
+    /**
+     * Get the Bungie membership number from the user display name.
+     * @param displayName {string}
+     * @returns {*|string}
+     * @private
+     */
     var _getMembershipId = function (displayName) {
         return Q.Promise(function (resolve, reject) {
             destiny.getMembershipIdFromDisplayName(displayName)
@@ -41,6 +80,12 @@ var destinyController = function () {
                 });
         });
     };
+    /**
+     * Get characters for the provided member.
+     * @param membershipId
+     * @returns {*|Array}
+     * @private
+     */
     var _getCharacters = function (membershipId) {
         return Q.promise(function (resolve, reject) {
             destiny.getCharacters(membershipId)
@@ -56,21 +101,21 @@ var destinyController = function () {
                                 powerLevel: character.characterBase.powerLevel
                             }
                         };
-                        var itemHashes = _.map(character.characterBase.peerView.equipment, function (equipedItem) {
-                            return equipedItem.itemHash;
-                        });
+                        var itemHashes = _.map(character.characterBase.peerView.equipment,
+                            function (equipedItem) {
+                                return equipedItem.itemHash;
+                            });
                         var itemPromises = [];
                         _.each(itemHashes, function (itemHash) {
                             itemPromises.push(world.getItemByHash(itemHash));
                         });
                         Q.all(itemPromises)
                             .then(function (items) {
-                                var equipment = _.map(_.filter(items, function (item) {
+                                characterBase.equipment = _.map(_.filter(items, function (item) {
                                     return item !== undefined;
                                 }), function (item) {
                                     return item.itemName;
                                 });
-                                characterBase.equipment = equipment;
                                 world.getClassByHash(character.characterBase.classHash)
                                     .then(function (characterClass) {
                                         characterBase.className = characterClass.className;
@@ -93,12 +138,17 @@ var destinyController = function () {
                 });
         });
     };
+    /**
+     * Insert or update the Destiny manifest.
+     * @private
+     */
     var _upsertManifest = function () {
         destiny.getManifest()
             .then(function (manifest) {
                 ghost.getLastManifest()
                     .then(function (lastManifest) {
-                        if (!lastManifest || lastManifest.version !== manifest.version) {
+                        if (!lastManifest || lastManifest.version !== manifest.version ||
+                                lastManifest.mobileWorldContentPaths.en !== manifest.mobileWorldContentPaths.en) {
                             var databasePath = './database/';
                             var relativeUrl = manifest.mobileWorldContentPaths.en;
                             var fileName = databasePath + relativeUrl.substring(relativeUrl.lastIndexOf('/') + 1);
@@ -128,11 +178,17 @@ var destinyController = function () {
                                 });
                             });
                         } else {
-                            world.setPath(path.join('./database/', path.basename(lastManifest.mobileWorldContentPaths.en)));
+                            world.setPath(path.join('./database/',
+                                path.basename(lastManifest.mobileWorldContentPaths.en)));
                         }
                     });
             });
     };
+    /**
+     * Get the currently available field test weapons from the gun smith.
+     * @param req
+     * @param res
+     */
     var getFieldTestWeapons = function (req, res) {
         destiny.getFieldTestWeapons()
             .then(function (items) {
@@ -163,6 +219,11 @@ var destinyController = function () {
                 res.json(jSend.fail(error));
             });
     };
+    /**
+     * Get the exotic weapons and gear available from Xur.
+     * @param req
+     * @param res
+     */
     var getXur = function (req, res) {
         destiny.getXur()
             .then(function (items) {
@@ -193,9 +254,15 @@ var destinyController = function () {
                 res.json(jSend.fail(error));
             });
     };
+    /**
+     * Initialize the module.
+     * @param shadowUserConfiguration
+     */
     var init = function (shadowUserConfiguration) {
         var shadowUser = JSON.parse(fs.readFileSync(shadowUserConfiguration));
-        if (_getCookieValueByName(shadowUser.cookies, 'bungled') === undefined || _getCookieValueByName(shadowUser.cookies, 'bungledid') === undefined || _getCookieValueByName(shadowUser.cookies, 'bungleatk') === undefined) {
+        if (_getCookieValueByName(shadowUser.cookies, 'bungled') === undefined ||
+                _getCookieValueByName(shadowUser.cookies, 'bungledid') === undefined ||
+                _getCookieValueByName(shadowUser.cookies, 'bungleatk') === undefined) {
             var userModel = new User(process.env.DATABASE);
             userModel.signIn(shadowUser.userName, shadowUser.password)
                 .then(function (cookies) {
