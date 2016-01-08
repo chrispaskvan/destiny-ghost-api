@@ -8,14 +8,25 @@ var DestinyController = require('../controllers/destinyController'),
 
 var routes = function () {
     var destinyRouter = express.Router();
+    /**
+     * Set up routes and initialize the controller.
+     * @type {destinyController|exports|module.exports}
+     */
     var destinyController = new DestinyController();
-    destinyController.init('./settings/ShadowUser.json');
+    destinyRouter.route('/characters/')
+        .get(destinyController.getCharacters);
     destinyRouter.route('/fieldTestWeapons/')
         .get(destinyController.getFieldTestWeapons);
-
-    destinyRouter.route('/Xur')
+    destinyRouter.route('/foundryOrders/')
+        .get(destinyController.getFoundryOrders);
+    destinyRouter.route('/ironBannerEventRewards/')
+        .get(destinyController.getIronBannerEventRewards);
+    destinyRouter.route('/xur/')
         .get(destinyController.getXur);
-
+    /**
+     * Initialize the controller.
+     * @type {notificationController|exports|module.exports}
+     */
     var notificationController = new NotificationController();
     notificationController.init('./settings/ShadowUser.json');
     return destinyRouter;

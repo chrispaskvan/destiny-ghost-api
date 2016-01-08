@@ -1,5 +1,5 @@
 /**
- * A module for managing custom Bitlinks.
+ * A module for interacting with the Bungie Destiny web API.
  *
  * @module Destiny
  * @summary Helper functions for accessing the Destiny web API.
@@ -26,22 +26,15 @@ var _ = require('underscore'),
  * @throws Invalid argument(s) provided.
  * @constructor
  */
-var Destiny = function (apiKey, cookies) {
+var Destiny = function (apiKey) {
     if (!apiKey || !_.isString(apiKey)) {
         throw new Error('The API key is missing.');
-    }
-    if (!cookies || !_.isArray(cookies)) {
-        throw new Error('The Bungie cookies are absent.');
     }
     var self = this;
     /**
      * @member {string} apiKey - The Destiny API key.
      */
     self.apiKey = apiKey;
-    /**
-     * @member {Array.Object.{{name: string, value: string}}
-     */
-    self.cookies = cookies;
     /**
      * @constant
      * @type {string}
@@ -73,28 +66,28 @@ var Destiny = function (apiKey, cookies) {
      */
     var destinyCache = new NodeCache({ stdTTL: 0, checkperiod: 0, useClones: true });
     /**
-     * @function
-     * @returns {string|*}
-     * @private
-     * @return {string}
      * @description Returns the cookie header string comprised of all Bungie cookies
      * required in certain web API requests.
+     * @param cookies
+     * @returns {string|*}
+     * @private
      */
-    var _getCookieHeader = function () {
-        return _.reduce(self.cookies, function (memo, cookie) {
+    var _getCookieHeader = function (cookies) {
+        return _.reduce(cookies, function (memo, cookie) {
             return memo + ' ' + cookie.name + '=' + cookie.value + ';';
         }, ' ').trim();
     };
     /**
      * @function
+     * @param cookies
      * @param cookieName {string}
      * @returns {string|*}
      * @private
      * @description Returns the value associated with the cookie identified by the
      * name provided.
      */
-    var _getCookieValueByName = function (cookieName) {
-        return _.find(self.cookies, function (cookie) {
+    var _getCookieValueByName = function (cookies, cookieName) {
+        return _.find(cookies, function (cookie) {
             return cookie.name === cookieName;
         }).value;
     };
@@ -104,19 +97,23 @@ var Destiny = function (apiKey, cookies) {
      * @param membershipId {string}
      * @returns {*|promise}
      */
-    var getActivity = function (characterId, membershipId) {
+    var getActivity = function (characterId, membershipId, cookies, callback) {
+        var deferred = Q.defer();
+        if (!cookies || !_.isArray(cookies)) {
+            deferred.reject(new Error('The Bungie cookies are missing.'));
+            return deferred.promise.nodeify(callback);
+        }
         var opts = {
             headers: {
-                cookie:  _getCookieHeader(),
+                cookie: _getCookieHeader(cookies),
                 'x-api-key': self.apiKey,
-                'x-csrf': _getCookieValueByName('bungled')
+                'x-csrf': _getCookieValueByName(cookies, 'bungled')
             },
             url: util.format('%s/Destiny/2/Account/%s/Character/%s/Activities/',
                 servicePlatform, membershipId, characterId)
         };
-        var deferred = Q.defer();
-        request(opts, function (err, response, body) {
-            if (!err && response.statusCode === 200) {
+        request(opts, function (err, res, body) {
+            if (!err && res.statusCode === 200) {
                 var responseBody = JSON.parse(body);
                 if (responseBody.ErrorCode !== 1) {
                     deferred.reject(new DestinyError(responseBody.ErrorCode || -1,
@@ -129,7 +126,7 @@ var Destiny = function (apiKey, cookies) {
                 deferred.reject(err);
             }
         });
-        return deferred.promise;
+        return deferred.promise.nodeify(callback);
     };
     /**
      * @function
@@ -138,19 +135,23 @@ var Destiny = function (apiKey, cookies) {
      * @returns {*|promise}
      * @description Get the details for the member's character provided.
      */
-    var getCharacter = function (membershipId, characterId) {
+    var getCharacter = function (membershipId, characterId, cookies, callback) {
+        var deferred = Q.defer();
+        if (!cookies || !_.isArray(cookies)) {
+            deferred.reject(new Error('The Bungie cookies are missing.'));
+            return deferred.promise.nodeify(callback);
+        }
         var opts = {
             headers: {
-                cookie:  _getCookieHeader(),
+                cookie: _getCookieHeader(cookies),
                 'x-api-key': self.apiKey,
-                'x-csrf': _getCookieValueByName('bungled')
+                'x-csrf': _getCookieValueByName(cookies, 'bungled')
             },
             url: util.format('%s/Destiny/2/Account/%s/Character/%s/Complete/',
                 servicePlatform, membershipId, characterId)
         };
-        var deferred = Q.defer();
-        request(opts, function (err, response, body) {
-            if (!err && response.statusCode === 200) {
+        request(opts, function (err, res, body) {
+            if (!err && res.statusCode === 200) {
                 var responseBody = JSON.parse(body);
                 if (responseBody.ErrorCode !== 1) {
                     deferred.reject(new DestinyError(responseBody.ErrorCode || -1,
@@ -159,13 +160,13 @@ var Destiny = function (apiKey, cookies) {
                     var character = responseBody.Response.data;
                     deferred.resolve(character);
                 }
-            } else if (!err && response.statusCode === 99) {
-                deferred.reject(new DestinyError(response.statusCode, response.Message));
+            } else if (!err && res.statusCode === 99) {
+                deferred.reject(new DestinyError(res.statusCode, res.Message));
             } else {
                 deferred.reject(err);
             }
         });
-        return deferred.promise;
+        return deferred.promise.nodeify(callback);
     };
     /**
      * @function
@@ -173,43 +174,29 @@ var Destiny = function (apiKey, cookies) {
      * @returns {*|promise}
      * @description Get character details.
      */
-    var getCharacters = function (membershipId) {
+    var getCharacters = function (membershipId, callback) {
         var deferred = Q.defer();
-        destinyCache.get(membershipId, function (err, characters) {
-            if (err) {
-                deferred.reject(err);
-            } else {
-                if (characters) {
-                    setTimeout(function () {
-                        deferred.resolve(characters);
-                    }, 10);
+        var opts = {
+            headers: {
+                'x-api-key': self.apiKey
+            },
+            url: util.format('%s/Destiny/2/Account/%s/Summary/', servicePlatform,
+                membershipId)
+        };
+        request(opts, function (err, res, body) {
+            if (!err && res.statusCode === 200) {
+                var responseBody = JSON.parse(body);
+                if (responseBody.ErrorCode !== 1) {
+                    deferred.reject(new DestinyError(responseBody.ErrorCode || -1,
+                        responseBody.Message || '', responseBody.ErrorStatus || ''));
                 } else {
-                    var opts = {
-                        headers: {
-                            'x-api-key': self.apiKey
-                        },
-                        url: util.format('%s/Destiny/2/Account/%s/Summary/', servicePlatform,
-                            membershipId)
-                    };
-                    request(opts, function (err, response, body) {
-                        if (!err && response.statusCode === 200) {
-                            var responseBody = JSON.parse(body);
-                            if (responseBody.ErrorCode !== 1) {
-                                deferred.reject(new DestinyError(responseBody.ErrorCode || -1,
-                                    responseBody.Message || '', responseBody.ErrorStatus || ''));
-                            } else {
-                                characters = responseBody.Response.data.characters;
-                                destinyCache.set(membershipId, characters);
-                                deferred.resolve(characters);
-                            }
-                        } else {
-                            deferred.reject(err);
-                        }
-                    });
+                    deferred.resolve(responseBody.Response.data.characters);
                 }
+            } else {
+                deferred.reject(err);
             }
         });
-        return deferred.promise;
+        return deferred.promise.nodeify(callback);
     };
     /**
      * @function
@@ -217,7 +204,8 @@ var Destiny = function (apiKey, cookies) {
      * @returns {*|promise}
      * @description Get the Bungie member number from the user's display name.
      */
-    var getMembershipIdFromDisplayName = function (displayName) {
+    var getMembershipIdFromDisplayName = function (displayName, callback) {
+        var deferred = Q.defer();
         var opts = {
             headers: {
                 'x-api-key': self.apiKey
@@ -225,28 +213,31 @@ var Destiny = function (apiKey, cookies) {
             url: util.format('%s/Destiny/2/Stats/GetMembershipIdByDisplayName/%s/',
                 servicePlatform, encodeURIComponent(displayName))
         };
-        var deferred = Q.defer();
-        request(opts, function (err, response, body) {
-            if (!err && response.statusCode === 200) {
+        request(opts, function (err, res, body) {
+            if (!err && res.statusCode === 200) {
                 deferred.resolve(JSON.parse(body).Response);
             } else {
                 deferred.reject(err);
             }
         });
-        return deferred.promise;
+        return deferred.promise.nodeify(callback);
     };
     /**
      * @function
      * @returns {*|promise}
      * @description Get the current user based on the Bungie cookies.
      */
-    var getCurrentUser = function () {
+    var getCurrentUser = function (cookies, callback) {
         var deferred = Q.defer();
+        if (!cookies || !_.isArray(cookies)) {
+            deferred.reject(new Error('The Bungie cookies are missing.'));
+            return deferred.promise.nodeify(callback);
+        }
         var opts = {
             headers: {
-                cookie:  _getCookieHeader(),
+                cookie: _getCookieHeader(cookies),
                 'x-api-key': self.apiKey,
-                'x-csrf': _getCookieValueByName('bungled')
+                'x-csrf': _getCookieValueByName(cookies, 'bungled')
             },
             url: util.format('%s/User/GetBungieNetUser/', servicePlatform)
         };
@@ -275,7 +266,7 @@ var Destiny = function (apiKey, cookies) {
                 deferred.reject(err);
             }
         });
-        return deferred.promise;
+        return deferred.promise.nodeify(callback);
     };
     /**
      * @constant
@@ -289,8 +280,12 @@ var Destiny = function (apiKey, cookies) {
      * @returns {*|promise}
      * @description Return the current field test weapons available from the gunsmith.
      */
-    var getFieldTestWeapons = function (characterId) {
+    var getFieldTestWeapons = function (characterId, cookies, callback) {
         var deferred = Q.defer();
+        if (!cookies || !_.isArray(cookies)) {
+            deferred.reject(new Error('The Bungie cookies are missing.'));
+            return deferred.promise.nodeify(callback);
+        }
         destinyCache.get('getFieldTestWeapons', function (err, saleItems) {
             if (err) {
                 deferred.reject(err);
@@ -302,9 +297,9 @@ var Destiny = function (apiKey, cookies) {
                 } else {
                     var opts = {
                         headers: {
-                            cookie: _getCookieHeader(),
+                            cookie: _getCookieHeader(cookies),
                             'x-api-key': self.apiKey,
-                            'x-csrf': _getCookieValueByName('bungled')
+                            'x-csrf': _getCookieValueByName(cookies, 'bungled')
                         },
                         url: util.format('%s/Destiny/2/MyAccount/Character/%s/Vendor/%s/',
                             servicePlatform, characterId, gunSmithHash)
@@ -314,8 +309,7 @@ var Destiny = function (apiKey, cookies) {
                             deferred.reject(error);
                         } else {
                             var responseBody = JSON.parse(body);
-                            if (responseBody.Reponse !== undefined ||
-                                    responseBody.ErrorCode !== 1) {
+                            if (responseBody.ErrorCode !== 1) {
                                 deferred.reject(new DestinyError(responseBody.ErrorCode,
                                     responseBody.Message, responseBody.Status));
                             } else {
@@ -336,7 +330,65 @@ var Destiny = function (apiKey, cookies) {
                 }
             }
         });
-        return deferred.promise;
+        return deferred.promise.nodeify(callback);
+    };
+    /**
+     * @function
+     * @param characterId {string}
+     * @returns {*|promise}
+     * @description Return the current field test weapons available from the gunsmith.
+     */
+    var getFoundryOrders = function (characterId, cookies, callback) {
+        var deferred = Q.defer();
+        if (!cookies || !_.isArray(cookies)) {
+            deferred.reject(new Error('The Bungie cookies are missing.'));
+            return deferred.promise.nodeify(callback);
+        }
+        destinyCache.get('getFoundryOrders', function (err, saleItems) {
+            if (err) {
+                deferred.reject(err);
+            } else {
+                if (saleItems) {
+                    setTimeout(function () {
+                        deferred.resolve(saleItems);
+                    }, 10);
+                } else {
+                    var opts = {
+                        headers: {
+                            cookie: _getCookieHeader(cookies),
+                            'x-api-key': self.apiKey,
+                            'x-csrf': _getCookieValueByName(cookies, 'bungled')
+                        },
+                        url: util.format('%s/Destiny/2/MyAccount/Character/%s/Vendor/%s/',
+                            servicePlatform, characterId, gunSmithHash)
+                    };
+                    request(opts, function (error, res, body) {
+                        if (!(!error && res.statusCode === 200)) {
+                            deferred.reject(error);
+                        } else {
+                            var responseBody = JSON.parse(body);
+                            if (responseBody.ErrorCode !== 1) {
+                                deferred.reject(new DestinyError(responseBody.ErrorCode,
+                                    responseBody.Message, responseBody.Status));
+                            } else {
+                                var data = responseBody.Response.data;
+                                if (data) {
+                                    var saleItemCategories = data.saleItemCategories;
+                                    var foundryOrders = _.find(saleItemCategories, function (saleItemCategory) {
+                                        return saleItemCategory.categoryTitle === 'Foundry Orders';
+                                    });
+                                    destinyCache.set('getFoundryOrders', foundryOrders.saleItems);
+                                    deferred.resolve(foundryOrders.saleItems);
+                                } else {
+                                    deferred.resolve([]);
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+        });
+        return deferred.promise.nodeify(callback);
     };
     /**
      * @function
@@ -344,19 +396,23 @@ var Destiny = function (apiKey, cookies) {
      * @param membershipId {string}
      * @returns {*|promise}
      */
-    var getInventory = function (characterId, membershipId) {
+    var getInventory = function (characterId, membershipId, cookies, callback) {
+        var deferred = Q.defer();
+        if (!cookies || !_.isArray(cookies)) {
+            deferred.reject(new Error('The Bungie cookies are missing.'));
+            return deferred.promise.nodeify(callback);
+        }
         var opts = {
             headers: {
-                cookie:  _getCookieHeader(),
+                cookie: _getCookieHeader(cookies),
                 'x-api-key': self.apiKey,
-                'x-csrf': _getCookieValueByName('bungled')
+                'x-csrf': _getCookieValueByName(cookies, 'bungled')
             },
             url: util.format('%s/Destiny/2/Account/%s/Character/%s/Inventory/',
                 servicePlatform, membershipId, characterId)
         };
-        var deferred = Q.defer();
-        request(opts, function (err, response, body) {
-            if (!err && response.statusCode === 200) {
+        request(opts, function (err, res, body) {
+            if (!err && res.statusCode === 200) {
                 var responseBody = JSON.parse(body);
                 if (responseBody.ErrorCode !== 1) {
                     deferred.reject(new DestinyError(responseBody.ErrorCode || -1,
@@ -369,25 +425,90 @@ var Destiny = function (apiKey, cookies) {
                 deferred.reject(err);
             }
         });
-        return deferred.promise;
+        return deferred.promise.nodeify(callback);
+    };
+    /**
+     * @constant
+     * @type {string}
+     * @description Iron Banner's Vendor Number
+     */
+    var lordSaladinHash = '242140165';
+    /**
+     * @function
+     * @param characterId {string}
+     * @returns {*|promise}
+     * @description Return the current field test weapons available from the gunsmith.
+     */
+    var getIronBannerEventRewards = function (characterId, cookies, callback) {
+        var deferred = Q.defer();
+        if (!cookies || !_.isArray(cookies)) {
+            deferred.reject(new Error('The Bungie cookies are missing.'));
+            return deferred.promise.nodeify(callback);
+        }
+        destinyCache.get('getIronBannerEventRewards', function (err, saleItems) {
+            if (err) {
+                deferred.reject(err);
+            } else {
+                if (saleItems) {
+                    setTimeout(function () {
+                        deferred.resolve(saleItems);
+                    }, 10);
+                } else {
+                    var opts = {
+                        headers: {
+                            cookie: _getCookieHeader(cookies),
+                            'x-api-key': self.apiKey,
+                            'x-csrf': _getCookieValueByName(cookies, 'bungled')
+                        },
+                        url: util.format('%s/Destiny/2/MyAccount/Character/%s/Vendor/%s/',
+                            servicePlatform, characterId, lordSaladinHash)
+                    };
+                    request(opts, function (error, res, body) {
+                        if (!err && res.statusCode === 200) {
+                            var responseBody = JSON.parse(body);
+                            if (responseBody.ErrorCode === 1627) {
+                                deferred.resolve([]);
+                            } else if (responseBody.ErrorCode !== 1) {
+                                deferred.reject(new DestinyError(responseBody.ErrorCode ||
+                                    -1, responseBody.Message || '',
+                                    responseBody.ErrorStatus || ''));
+                            } else {
+                                var data = responseBody.Response.data;
+                                if (data) {
+                                    var saleItemCategories = data.saleItemCategories;
+                                    var eventRewards = _.find(saleItemCategories, function (saleItemCategory) {
+                                        return saleItemCategory.categoryTitle === 'Event Rewards';
+                                    });
+                                    destinyCache.set('getIronBannerEventRewards', eventRewards.saleItems);
+                                    deferred.resolve(eventRewards.saleItems);
+                                } else {
+                                    deferred.resolve([]);
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+        });
+        return deferred.promise.nodeify(callback);
     };
     /**
      * @function
      * @param itemHash {string}
      * @returns {*|promise}
      */
-    var getItem = function (itemHash) {
+    var getItem = function (itemHash, callback) {
+        var deferred = Q.defer();
         var opts = {
             headers: {
-                cookie:  _getCookieHeader(),
+                cookie: _getCookieHeader(cookies),
                 'x-api-key': self.apiKey,
-                'x-csrf': _getCookieValueByName('bungled')
+                'x-csrf': _getCookieValueByName(cookies, 'bungled')
             },
             url: util.format('%s/Destiny/Manifest/2/%s/', servicePlatform, itemHash)
         };
-        var deferred = Q.defer();
-        request(opts, function (err, response, body) {
-            if (!err && response.statusCode === 200) {
+        request(opts, function (err, res, body) {
+            if (!err && res.statusCode === 200) {
                 var responseBody = JSON.parse(body);
                 if (responseBody.ErrorCode !== 1) {
                     deferred.reject(new DestinyError(responseBody.ErrorCode || -1,
@@ -399,14 +520,14 @@ var Destiny = function (apiKey, cookies) {
                 deferred.reject(err);
             }
         });
-        return deferred.promise;
+        return deferred.promise.nodeify(callback);
     };
     /**
      * @function
      * @returns {*|promise}
      * @description Get the latest Destiny manifest definition.
      */
-    var getManifest = function () {
+    var getManifest = function (callback) {
         var deferred = Q.defer();
         destinyCache.get('getManifest', function (err, manifest) {
             if (err) {
@@ -423,8 +544,8 @@ var Destiny = function (apiKey, cookies) {
                         },
                         url: util.format('%s/Destiny/Manifest', servicePlatform)
                     };
-                    request(opts, function (err, response, body) {
-                        if (!err && response.statusCode === 200) {
+                    request(opts, function (err, res, body) {
+                        if (!err && res.statusCode === 200) {
                             manifest = JSON.parse(body).Response;
                             destinyCache.set('getManifest', manifest);
                             deferred.resolve(manifest);
@@ -435,7 +556,7 @@ var Destiny = function (apiKey, cookies) {
                 }
             }
         });
-        return deferred.promise;
+        return deferred.promise.nodeify(callback);
     };
     /**
      * @function
@@ -443,45 +564,53 @@ var Destiny = function (apiKey, cookies) {
      * @param membershipId {string}
      * @returns {*|promise}
      */
-    var getProgression = function (characterId, membershipId) {
+    var getProgression = function (characterId, membershipId, cookies, callback) {
+        var deferred = Q.defer();
+        if (!cookies || !_.isArray(cookies)) {
+            deferred.reject(new Error('The Bungie cookies are missing.'));
+            return deferred.promise.nodeify(callback);
+        }
         var opts = {
             headers: {
-                cookie:  _getCookieHeader(),
+                cookie: _getCookieHeader(cookies),
                 'x-api-key': self.apiKey,
-                'x-csrf': _getCookieValueByName('bungled')
+                'x-csrf': _getCookieValueByName(cookies, 'bungled')
             },
             url: util.format('%s/Destiny/2/Account/%s/Character/%s/Progression/',
                 servicePlatform, membershipId, characterId)
         };
-        var deferred = Q.defer();
-        request(opts, function (err, response, body) {
-            if (!err && response.statusCode === 200) {
+        request(opts, function (err, res, body) {
+            if (!err && res.statusCode === 200) {
                 var character = JSON.parse(body).Response;
                 deferred.resolve(character);
             } else {
                 deferred.reject(err);
             }
         });
-        return deferred.promise;
+        return deferred.promise.nodeify(callback);
     };
     /**
      * @function
      * @param characterId {string}
      * @returns {*|promise}
      */
-    var getVendorSummaries = function (characterId) {
+    var getVendorSummaries = function (characterId, cookies, callback) {
         var deferred = Q.defer();
+        if (!cookies || !_.isArray(cookies)) {
+            deferred.reject(new Error('The Bungie cookies are missing.'));
+            return deferred.promise.nodeify(callback);
+        }
         var opts = {
             headers: {
-                cookie:  _getCookieHeader(),
+                cookie: _getCookieHeader(cookies),
                 'x-api-key': self.apiKey,
-                'x-csrf': _getCookieValueByName('bungled')
+                'x-csrf': _getCookieValueByName(cookies, 'bungled')
             },
             url: util.format('%s/Destiny/2/MyAccount/Character/%s/Vendors/Summaries/',
                 servicePlatform, characterId)
         };
-        request(opts, function (err, response, body) {
-            if (!err && response.statusCode === 200) {
+        request(opts, function (err, res, body) {
+            if (!err && res.statusCode === 200) {
                 var responseBody = JSON.parse(body);
                 if (responseBody.ErrorCode !== 1) {
                     deferred.reject(new DestinyError(responseBody.ErrorCode ||
@@ -499,7 +628,7 @@ var Destiny = function (apiKey, cookies) {
                 deferred.reject(err);
             }
         });
-        return deferred.promise;
+        return deferred.promise.nodeify(callback);
     };
     /**
      * @function
@@ -507,19 +636,23 @@ var Destiny = function (apiKey, cookies) {
      * @param membershipId {string}
      * @returns {*|promise}
      */
-    var getWeapons = function (characterId, membershipId) {
+    var getWeapons = function (characterId, membershipId, cookies, callback) {
+        var deferred = Q.defer();
+        if (!cookies || !_.isArray(cookies)) {
+            deferred.reject(new Error('The Bungie cookies are missing.'));
+            return deferred.promise.nodeify(callback);
+        }
         var opts = {
             headers: {
-                cookie:  _getCookieHeader(),
+                cookie: _getCookieHeader(cookies),
                 'x-api-key': self.apiKey,
-                'x-csrf': _getCookieValueByName('bungled')
+                'x-csrf': _getCookieValueByName(cookies, 'bungled')
             },
             url: util.format('%s/Destiny/stats/uniqueweapons/2/%s/%s/',
                 servicePlatform, membershipId, characterId)
         };
-        var deferred = Q.defer();
-        request(opts, function (err, response, body) {
-            if (!(!err && response.statusCode === 200)) {
+        request(opts, function (err, res, body) {
+            if (!(!err && res.statusCode === 200)) {
                 deferred.reject(err);
             } else {
                 var weapons = body.Response.data.weapons;
@@ -536,14 +669,14 @@ var Destiny = function (apiKey, cookies) {
                 }));
             }
         });
-        return deferred.promise;
+        return deferred.promise.nodeify(callback);
     };
     /**
      * @function
      * @returns {*|promise}
      * @description Get the exotic gear and waepons available for sale from XUr.
      */
-    var getXur = function () {
+    var getXur = function (callback) {
         var deferred = Q.defer();
         destinyCache.get('getXur', function (err, items) {
             if (err) {
@@ -558,8 +691,8 @@ var Destiny = function (apiKey, cookies) {
                         },
                         url: util.format('%s/Destiny/Advisors/Xur/', servicePlatform)
                     };
-                    request(opts, function (err, response, body) {
-                        if (!err && response.statusCode === 200) {
+                    request(opts, function (err, res, body) {
+                        if (!err && res.statusCode === 200) {
                             var responseBody = JSON.parse(body);
                             if (responseBody.ErrorCode === 1627) {
                                 deferred.resolve([]);
@@ -589,15 +722,7 @@ var Destiny = function (apiKey, cookies) {
                 }
             }
         });
-        return deferred.promise;
-    };
-    /**
-     * @function
-     * @param cookies {Array}
-     * @description Refresh the Bungie cookies.
-     */
-    var setAuthenticationCookies = function (cookies) {
-        self.cookies = cookies;
+        return deferred.promise.nodeify(callback);
     };
     return {
         getActivity: getActivity,
@@ -605,15 +730,16 @@ var Destiny = function (apiKey, cookies) {
         getCharacters: getCharacters,
         getCurrentUser: getCurrentUser,
         getFieldTestWeapons: getFieldTestWeapons,
+        getFoundryOrders: getFoundryOrders,
         getInventory: getInventory,
+        getIronBannerEventRewards: getIronBannerEventRewards,
         getItem: getItem,
         getManifest: getManifest,
         getMembershipIdFromDisplayName: getMembershipIdFromDisplayName,
         getProgression: getProgression,
         getVendorSummaries: getVendorSummaries,
         getWeapons: getWeapons,
-        getXur: getXur,
-        setAuthenticationCookies: setAuthenticationCookies
+        getXur: getXur
     };
 };
 

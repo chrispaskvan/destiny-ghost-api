@@ -7,13 +7,11 @@ var ApplicationInsights = require('applicationinsights'),
     cookieParser = require('cookie-parser'),
     express = require('express'),
     fs = require('fs'),
-    Log = require('./models/log');
+    Log = require('./models/log'),
+    path = require('path');
 
 var app = express();
 var port = process.env.PORT || 1100;
-
-var logger = new Log();
-app.use(logger.requestLogger());
 
 var appInsightsConfig = JSON.parse(fs.readFileSync(process.env.APPINSIGHTS || './settings/applicationInsights.json'));
 var appInsights = new ApplicationInsights.setup(appInsightsConfig.instrumentationKey)
@@ -24,21 +22,47 @@ appInsights.client.commonProperties = {
 appInsights.client.trackEvent('Server restarted.');
 
 app.use(bodyParser.json());
-var destinyRouter = require('./routes/destinyRoutes')();
-app.use('/api/destiny', destinyRouter);
-
-app.use(logger.errorLogger());
-
 app.use(bodyParser.urlencoded({
     extended: true
 }));
 app.use(cookieParser());
+
+app.use(function(req, res, next) {
+    var _json = res.json;
+    res.json = function(responseData) {
+        res._json = JSON.stringify(responseData);
+        _json.call(this, responseData);
+    }
+    next();
+});
+app.use(function(req, res, next) {
+    var _end = res.end;
+    res.end = function(responseData) {
+        res._end = responseData;
+        _end.call(this, responseData);
+    }
+    next();
+});
+
+var logger = new Log();
+app.use(logger.requestLogger());
+
+var destinyRouter = require('./routes/destinyRoutes')();
+app.use('/api/destiny', destinyRouter);
+
 var twilioRouter = require('./routes/twilioRoutes')();
 app.use('/api/twilio', twilioRouter);
+
+var userRouter = require('./routes/userRoutes')();
+app.use('/api/user', userRouter);
 
 app.use(function (err, req, res, next) {
     appInsights.client.trackRequest(req, res);
     next();
+});
+
+app.get('/signIn', function (req, res) {
+    res.sendFile(path.join(__dirname + '/signIn.html'));
 });
 
 var start = new Date();

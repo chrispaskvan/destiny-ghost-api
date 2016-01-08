@@ -17,6 +17,7 @@
  */
 'use strict';
 var _ = require('underscore'),
+    cookie = require('cookie'),
     Destiny = require('../models/destiny'),
     fs = require('fs'),
     Ghost = require('../models/ghost'),
@@ -24,7 +25,7 @@ var _ = require('underscore'),
     path = require('path'),
     Q = require('q'),
     request = require('request'),
-    User = require('../models/user'),
+    shadowUser = require('../settings/ShadowUser.json'),
     World = require('../models/world'),
     yauzl = require('yauzl');
 
@@ -33,7 +34,7 @@ var destinyController = function () {
      * Destiny Model
      * @type {Destiny|exports|module.exports}
      */
-    var destiny;
+    var destiny = new Destiny(shadowUser.apiKey);
     /**
      * Ghost Model
      * @type {Ghost|exports|module.exports}
@@ -43,11 +44,7 @@ var destinyController = function () {
      * World Model
      * @type {World|exports|module.exports}
      */
-    var world;
-    ghost.getWorldDatabasePath()
-        .then(function (path) {
-            world = new World(path);
-        });
+    var world = new World();
     /**
      * Get the value of the cookie given the name.
      * @param cookies {Array}
@@ -81,62 +78,53 @@ var destinyController = function () {
         });
     };
     /**
-     * Get characters for the provided member.
-     * @param membershipId
+     * Get characters for the current user.
      * @returns {*|Array}
      * @private
      */
-    var _getCharacters = function (membershipId) {
-        return Q.promise(function (resolve, reject) {
-            destiny.getCharacters(membershipId)
-                .then(function (characters) {
-                    world.open();
-                    var characterPromises = _.map(characters, function (character) {
-                        var deferred = Q.defer();
-                        var characterBase = {
-                            characterBase: {
-                                characterId: character.characterBase.characterId,
-                                emblem: character.emblemPath,
-                                backgroundPath: character.backgroundPath,
-                                powerLevel: character.characterBase.powerLevel
-                            }
-                        };
-                        var itemHashes = _.map(character.characterBase.peerView.equipment,
-                            function (equipedItem) {
-                                return equipedItem.itemHash;
-                            });
-                        var itemPromises = [];
-                        _.each(itemHashes, function (itemHash) {
-                            itemPromises.push(world.getItemByHash(itemHash));
-                        });
-                        Q.all(itemPromises)
-                            .then(function (items) {
-                                characterBase.equipment = _.map(_.filter(items, function (item) {
-                                    return item !== undefined;
-                                }), function (item) {
-                                    return item.itemName;
+    var getCharacters = function (req, res) {
+        var cookies = _.pick(cookie.parse(req.headers.cookie), 'bungled', 'bungledid', 'bungleatk');
+        var cookieArray = [];
+        _.each(_.keys(cookies), function (cookieName) {
+            cookieArray.push({
+                name: cookieName,
+                value: cookies[cookieName]
+            });
+        });
+        destiny.getCurrentUser(cookieArray)
+            .then(function (currentUser) {
+                destiny.getCharacters(currentUser.membershipId)
+                    .then(function (characters) {
+                        ghost.getWorldDatabasePath()
+                            .then(function (worldDatabasePath) {
+                                world.open(worldDatabasePath);
+                                var characterBases = _.map(characters, function (character) {
+                                    return {
+                                        characterId: character.characterBase.characterId,
+                                        classHash: character.characterBase.classHash,
+                                        emblem: character.emblemPath,
+                                        backgroundPath: character.backgroundPath,
+                                        powerLevel: character.characterBase.powerLevel
+                                    };
                                 });
-                                world.getClassByHash(character.characterBase.classHash)
-                                    .then(function (characterClass) {
-                                        characterBase.className = characterClass.className;
-                                        deferred.resolve(characterBase);
+                                var promises = [];
+                                _.each(characterBases, function (characterBase) {
+                                    promises.push(world.getClassByHash(characterBase.classHash));
+                                });
+                                Q.all(promises)
+                                    .then(function (characterClasses) {
+                                        world.close();
+                                        _.each(characterBases, function (characterBase, index) {
+                                            characterBase.className = characterClasses[index].className;
+                                        });
+                                        res.json(characterBases);
                                     })
                                     .fail(function (err) {
-                                        reject(err);
+                                        throw err;
                                     });
-                            })
-                            .fail(function (err) {
-                                reject(err);
                             });
-                        return deferred.promise;
                     });
-                    Q.all(characterPromises)
-                        .then(function (characters) {
-                            world.close();
-                            resolve(characters);
-                        });
-                });
-        });
+            });
     };
     /**
      * Insert or update the Destiny manifest.
@@ -165,7 +153,6 @@ var destinyController = function () {
                                                 if (!err) {
                                                     readStream.pipe(fs.createWriteStream(databasePath + entry.fileName));
                                                     ghost.createManifest(manifest);
-                                                    world.setPath(entry.fileName);
                                                     fs.unlink(fileName + '.zip');
                                                 } else {
                                                     throw err;
@@ -177,9 +164,6 @@ var destinyController = function () {
                                     }
                                 });
                             });
-                        } else {
-                            world.setPath(path.join('./database/',
-                                path.basename(lastManifest.mobileWorldContentPaths.en)));
                         }
                     });
             });
@@ -190,96 +174,242 @@ var destinyController = function () {
      * @param res
      */
     var getFieldTestWeapons = function (req, res) {
-        destiny.getFieldTestWeapons()
-            .then(function (items) {
-                if (items === undefined || items.length === 0) {
-                    res.json(jSend.fail('Banshee-44 is the Gunsmith.'));
-                    return;
-                }
-                var itemHashes = _.map(items, function (item) {
-                    return item.item.itemHash;
-                });
-                world.open();
-                var promises = [];
-                _.each(itemHashes, function (itemHash) {
-                    promises.push(world.getItemByHash(itemHash));
-                });
-                Q.all(promises)
-                    .then(function (items) {
-                        world.close();
-                        res.json(_.map(items, function (item) {
-                            return item.itemName;
-                        }));
-                    })
-                    .fail(function (err) {
-                        res.json(jSend.fail(err));
+        var cookies = _.pick(cookie.parse(req.headers.cookie), 'bungled', 'bungledid', 'bungleatk');
+        var cookieArray = [];
+        _.each(_.keys(cookies), function (cookieName) {
+            cookieArray.push({
+                name: cookieName,
+                value: cookies[cookieName]
+            });
+        });
+        destiny.getCurrentUser(cookieArray)
+            .then(function (currentUser) {
+                destiny.getCharacters(currentUser.membershipId)
+                    .then(function (characters) {
+                        destiny.getFieldTestWeapons(characters[0].characterBase.characterId, cookieArray)
+                            .then(function (items) {
+                                if (items === undefined || items.length === 0) {
+                                    res.json(jSend.fail('Banshee-44 is the Gunsmith.'));
+                                    return;
+                                }
+                                var itemHashes = _.map(items, function (item) {
+                                    return item.item.itemHash;
+                                });
+                                ghost.getWorldDatabasePath()
+                                    .then(function (worldDatabasePath) {
+                                        world.open(worldDatabasePath);
+                                        var promises = [];
+                                        _.each(itemHashes, function (itemHash) {
+                                            promises.push(world.getItemByHash(itemHash));
+                                        });
+                                        Q.all(promises)
+                                            .then(function (items) {
+                                                world.close();
+                                                res.json(_.map(items, function (item) {
+                                                    return item.itemName;
+                                                }));
+                                            })
+                                            .fail(function (err) {
+                                                res.json(jSend.fail(err));
+                                            });
+                                    });
+                            })
+                            .fail(function (error) {
+                                res.json(jSend.fail(error));
+                            });
                     });
-            })
-            .fail(function (error) {
-                res.json(jSend.fail(error));
             });
     };
+    /**
+     * Get the currently available field test weapons from the gun smith.
+     * @param req
+     * @param res
+     */
+    var getFoundryOrders = function (req, res) {
+        var cookies = _.pick(cookie.parse(req.headers.cookie), 'bungled', 'bungledid', 'bungleatk');
+        var cookieArray = [];
+        _.each(_.keys(cookies), function (cookieName) {
+            cookieArray.push({
+                name: cookieName,
+                value: cookies[cookieName]
+            });
+        });
+        destiny.getCurrentUser(cookieArray)
+            .then(function (currentUser) {
+                destiny.getCharacters(currentUser.membershipId)
+                    .then(function (characters) {
+                        destiny.getFoundryOrders(characters[0].characterBase.characterId, cookieArray)
+                            .then(function (items) {
+                                if (items === undefined || items.length === 0) {
+                                    res.json(jSend.fail('Banshee-44 is the Gunsmith.'));
+                                    return;
+                                }
+                                var itemHashes = _.map(items, function (item) {
+                                    return item.item.itemHash;
+                                });
+                                ghost.getWorldDatabasePath()
+                                    .then(function (worldDatabasePath) {
+                                        world.open(worldDatabasePath);
+                                        var promises = [];
+                                        _.each(itemHashes, function (itemHash) {
+                                            promises.push(world.getItemByHash(itemHash));
+                                        });
+                                        Q.all(promises)
+                                            .then(function (items) {
+                                                world.close();
+                                                res.json(_.map(items, function (item) {
+                                                    return item.itemName;
+                                                }));
+                                            })
+                                            .fail(function (err) {
+                                                res.json(jSend.fail(err));
+                                            });
+                                    });
+                            })
+                            .fail(function (error) {
+                                res.json(jSend.fail(error));
+                            });
+                    });
+            });
+    };
+    /**
+     * Get the currently available field test weapons from the gun smith.
+     * @param req
+     * @param res
+     */
+    var getIronBannerEventRewards = function (req, res) {
+        var cookies = _.pick(cookie.parse(req.headers.cookie), 'bungled', 'bungledid', 'bungleatk');
+        var cookieArray = [];
+        _.each(_.keys(cookies), function (cookieName) {
+            cookieArray.push({
+                name: cookieName,
+                value: cookies[cookieName]
+            });
+        });
+        destiny.getCurrentUser(cookieArray)
+            .then(function (currentUser) {
+                destiny.getCharacters(currentUser.membershipId)
+                    .then(function (characters) {
+                        var characterPromises = [];
+                        _.each(characters, function (character) {
+                            characterPromises.push(destiny.getIronBannerEventRewards(character.characterBase.characterId, cookieArray));
+                        });
+                        Q.all(characterPromises)
+                            .then(function (characterItems) {
+                                if (characterItems === undefined || characterItems.length === 0) {
+                                    res.json(jSend.fail('Lord Saladin is not currently in the tower. The Iron Banner is unavailable.'));
+                                    return;
+                                }
+                                var items = _.flatten(characterItems);
+                                var itemHashes = _.uniq(_.map(items, function (item) {
+                                    return item.item.itemHash;
+                                }));
+                                ghost.getWorldDatabasePath()
+                                    .then(function (worldDatabasePath) {
+                                        world.open(worldDatabasePath);
+                                        var promises = [];
+                                        _.each(itemHashes, function (itemHash) {
+                                            promises.push(world.getItemByHash(itemHash));
+                                        });
+                                        Q.all(promises)
+                                            .then(function (items) {
+                                                world.close();
+                                                var weapons = _.filter(items, function (item) {
+                                                    return _.contains(item.itemCategoryHashes, 1);
+                                                });
+                                                var hunterArmor =_.filter(items, function (item) {
+                                                    return _.contains(item.itemCategoryHashes, 20) &&
+                                                        _.contains(item.itemCategoryHashes, 23);
+                                                });
+                                                var titanArmor =_.filter(items, function (item) {
+                                                    return _.contains(item.itemCategoryHashes, 20) &&
+                                                        _.contains(item.itemCategoryHashes, 22);
+                                                });
+                                                var warlockArmor =_.filter(items, function (item) {
+                                                    return _.contains(item.itemCategoryHashes, 20) &&
+                                                        _.contains(item.itemCategoryHashes, 21);
+                                                });
+                                                res.json({ weapons: _.map(weapons, function (item) {
+                                                    return item.itemName;
+                                                }), armor: [{ hunter: _.map(hunterArmor, function (item) {
+                                                    return item.itemName;
+                                                }), titan: _.map(titanArmor, function (item) {
+                                                    return item.itemName;
+                                                }), warlock: _.map(warlockArmor, function (item) {
+                                                    return item.itemName;
+                                                })}]});
+                                            });
+                                    })
+                                    .fail(function (error) {
+                                        res.json(jSend.fail(error));
+                                    });
+                            })
+                            .fail(function (error) {
+                                res.json(jSend.fail(error));
+                            });
+                    });
+            });
+    };
+    /**
+     * @constant
+     * @type {string}
+     * @description Xur's Vendor Number
+     */
+    var xurHash = '2796397637';
     /**
      * Get the exotic weapons and gear available from Xur.
      * @param req
      * @param res
      */
     var getXur = function (req, res) {
-        destiny.getXur()
-            .then(function (items) {
-                if (items === undefined || items.length === 0) {
-                    res.status(200).json(jSend.fail('Xur is not available to take your call at this time.'));
-                    return;
-                }
-                var itemHashes = _.map(items, function (item) {
-                    return item.item.itemHash;
-                });
-                world.open();
-                var promises = [];
-                _.each(itemHashes, function (itemHash) {
-                    promises.push(world.getItemByHash(itemHash));
-                });
-                Q.all(promises)
+        ghost.getNextRefreshDate(xurHash)
+            .then(function (nextRefreshDate) {
+                destiny.getXur()
                     .then(function (items) {
-                        world.close();
-                        res.json(_.map(items, function (item) {
-                            return item.itemName;
-                        }));
+                        if (items === undefined || items.length === 0) {
+                            res.status(200).json({ items: [], nextRefreshDate: nextRefreshDate });
+                            return;
+                        }
+                        var itemHashes = _.map(items, function (item) {
+                            return item.item.itemHash;
+                        });
+                        ghost.getWorldDatabasePath()
+                            .then(function (worldDatabasePath) {
+                                world.open(worldDatabasePath);
+                                var promises = [];
+                                _.each(itemHashes, function (itemHash) {
+                                    promises.push(world.getItemByHash(itemHash));
+                                });
+                                Q.all(promises)
+                                    .then(function (items) {
+                                        world.close();
+                                        res.json(_.map(items, function (item) {
+                                            return item.itemName;
+                                        }));
+                                    })
+                                    .fail(function (err) {
+                                        res.json(jSend.fail(err));
+                                    });
+                            });
                     })
-                    .fail(function (err) {
-                        res.json(jSend.fail(err));
+                    .fail(function (error) {
+                        res.json(jSend.fail(error));
                     });
-            })
-            .catch(function (error) {
-                res.json(jSend.fail(error));
             });
     };
     /**
-     * Initialize the module.
-     * @param shadowUserConfiguration
+     * Check for any updates to the Destiny manifest definition.
      */
-    var init = function (shadowUserConfiguration) {
-        var shadowUser = JSON.parse(fs.readFileSync(shadowUserConfiguration));
-        if (_getCookieValueByName(shadowUser.cookies, 'bungled') === undefined ||
-                _getCookieValueByName(shadowUser.cookies, 'bungledid') === undefined ||
-                _getCookieValueByName(shadowUser.cookies, 'bungleatk') === undefined) {
-            var userModel = new User(process.env.DATABASE);
-            userModel.signIn(shadowUser.userName, shadowUser.password)
-                .then(function (cookies) {
-                    shadowUser.cookies = cookies;
-                    fs.writeFileSync(shadowUserConfiguration, JSON.stringify(shadowUser, null, 4));
-                    destiny = new Destiny(shadowUser.apiKey, shadowUser.cookies);
-                    _upsertManifest();
-                });
-        } else {
-            destiny = new Destiny(shadowUser.apiKey, shadowUser.cookies);
-            _upsertManifest();
-        }
-    };
+    //_upsertManifest();
+    /**
+     * @public
+     */
     return {
+        getCharacters: getCharacters,
         getFieldTestWeapons: getFieldTestWeapons,
-        getXur: getXur,
-        init: init
+        getFoundryOrders: getFoundryOrders,
+        getIronBannerEventRewards: getIronBannerEventRewards,
+        getXur: getXur
     };
 };
 

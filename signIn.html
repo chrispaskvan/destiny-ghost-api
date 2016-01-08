@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Sign In</title>
+    <script src="//ajax.aspnetcdn.com/ajax/jquery/jquery-2.1.4.min.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/knockout/3.3.0/knockout-min.js"></script>
+</head>
+<body>
+    <div id="account1">
+        <div>
+            <label for="userName1">User Name:</label>
+            <input id="userName1" type="text" data-bind="value: userName, valueUpdate: 'afterkeydown'" />
+        </div>
+        <div>
+            <label for="password1">Password:</label>
+            <input id="password1" type="password" data-bind="value: password, valueUpdate: 'afterkeydown'" />
+        </div>
+        <div>
+            <button id="submit1" data-bind="click: submit">Sign In</button>
+        </div>
+    </div>
+    <script>
+        jQuery(document).ready(function () {
+            var accountViewModel = function () {
+                var self = this;
+                self.userName = ko.observable().extend({ required: true });
+                self.password = ko.observable().extend({ required: true });
+                self.submit = function () {
+                    var data = JSON.stringify({
+                        userName: self.userName(),
+                        password: self.password(),
+                        membershipType: 2
+                    });
+                    jQuery.ajax({
+                        contentType: 'application/json; charset=utf-8',
+                        data: data,
+                        type: 'POST',
+                        url: 'http://localhost:1100/api/user/signIn'
+                    }).done(function () {
+                        window.location.reload();
+                    });
+                };
+            };
+            ko.applyBindings(new accountViewModel(), document.getElementById('account1'));
+        });
+    </script>
+</body>
+</html>

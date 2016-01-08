@@ -72,7 +72,8 @@ var notificationController = function (shadowUserConfiguration) {
             return cookie.name === cookieName;
         }).value;
     };
-    var _getFieldTestWeapons = function (users, isSecondAttempt) {
+    var _getFieldTestWeapons = function (users, nextRefreshDate, isSecondAttempt) {
+        var deferred = Q.defer();
         ghost.getLastManifest()
             .then(function (lastManifest) {
                 var worldPath = path.join('./database/', path.basename(lastManifest.mobileWorldContentPaths.en));
@@ -87,26 +88,53 @@ var notificationController = function (shadowUserConfiguration) {
                                                 return item.item.itemHash;
                                             });
                                             world.open(worldPath);
-                                            var promises = [];
+                                            var itemPromises = [];
                                             _.each(itemHashes, function (itemHash) {
-                                                promises.push(world.getItemByHash(itemHash));
+                                                itemPromises.push(world.getItemByHash(itemHash));
                                             });
-                                            Q.all(promises)
+                                            Q.all(itemPromises)
                                                 .then(function (items) {
                                                     world.close();
                                                     _.each(users, function (user) {
-                                                        notifications.sendMessage('The foundry is accepting orders for...\n' +
-                                                            _.reduce(_.map(items, function (item) {
-                                                                return item.itemName;
-                                                            }), function (memo, itemName) {
-                                                                return memo + itemName + '\n';
-                                                            }, ' ').trim(), user.phoneNumber, user.type === 'mobile' ?
-                                                                    'https://www.bungie.net/common/destiny_content/icons/6f00d5e7916a92e4d47f1b07816f276d.png'
-                                                            : undefined)
-                                                            .then(function (message) {
-                                                                userModel.createUserMessage(user, message, 'Banshee-44');
+                                                        userModel.getLastNotificationDate(user.phoneNumber, userModel.actions.Gunsmith)
+                                                            .then(function (notificationDate) {
+                                                                var now = new Date();
+                                                                var promises = [];
+                                                                if (notificationDate === undefined ||
+                                                                        (nextRefreshDate < now && notificationDate < nextRefreshDate)) {
+                                                                    promises.push(notifications.sendMessage('The foundry is accepting orders for...\n' +
+                                                                        _.reduce(_.map(items, function (item) {
+                                                                            return item.itemName;
+                                                                        }), function (memo, itemName) {
+                                                                            return memo + itemName + '\n';
+                                                                        }, ' ').trim(), user.phoneNumber, user.type === 'mobile' ?
+                                                                                'https://www.bungie.net/common/destiny_content/icons/6f00d5e7916a92e4d47f1b07816f276d.png'
+                                                                        : undefined)
+                                                                        .then(function (message) {
+                                                                            userModel.createUserMessage(user, message, userModel.actions.Gunsmith);
+                                                                        }));
+                                                                }
+                                                                Q.all(promises)
+                                                                    .then(function () {
+                                                                        deferred.resolve();
+                                                                    });
+                                                            })
+                                                            .catch(function(err) {
+                                                                /**
+                                                                 * @todo Log
+                                                                 */
+                                                                throw err;
+                                                            })
+                                                            .fail(function (err) {
+                                                                throw err;
                                                             });
                                                     });
+                                                })
+                                                .catch(function(err) {
+                                                    throw err;
+                                                })
+                                                .fail(function (err) {
+                                                    throw err;
                                                 });
                                         }
                                     })
@@ -118,7 +146,7 @@ var notificationController = function (shadowUserConfiguration) {
                                                     destiny.setAuthenticationCookies(_getCookieValueByName(cookies, 'bungled'),
                                                         _getCookieValueByName(cookies, 'bungledid'),
                                                         _getCookieValueByName(cookies, 'bungleatk'));
-                                                    _getFieldTestWeapons(users, true);
+                                                    _getFieldTestWeapons(users, nextRefreshDate, true);
                                                 });
                                         }
                                         throw err;
@@ -126,66 +154,87 @@ var notificationController = function (shadowUserConfiguration) {
                             });
                     });
             });
+        return deferred.promise;
     };
     var _getVendorSummaries = function () {
+        var deferred = Q.defer();
         destiny.getCurrentUser()
             .then(function (currentUser) {
                 destiny.getCharacters(currentUser.membershipId)
                     .then(function (characters) {
                         destiny.getVendorSummaries(characters[0].characterBase.characterId)
                             .then(function (vendors) {
+                                var promises = [];
                                 _.each(vendors, function (vendor) {
                                     if (new Date(vendor.nextRefreshDate).getFullYear() < 9999) {
-                                        ghost.upsertVendor(vendor);
+                                        promises.push(ghost.upsertVendor(vendor));
                                     }
                                 });
+                                Q.all(promises)
+                                    .then(function () {
+                                        deferred.resolve();
+                                    });
                             });
                     });
+            })
+            .fail(function (err) {
+                deferred.reject(err);
             });
+        return deferred.promise;
     };
-    var _getXur = function (users) {
+    var _getXur = function (users, nextRefreshDate) {
         ghost.getLastManifest()
             .then(function (lastManifest) {
                 var worldPath = path.join('./database/', path.basename(lastManifest.mobileWorldContentPaths.en));
                 destiny.getXur()
                     .then(function (items) {
+                        var now = new Date();
                         if (items && items.length > 0) {
                             var itemHashes = _.map(items, function (item) {
                                 return item.item.itemHash;
                             });
                             world.open(worldPath);
-                            var promises = [];
+                            var itemPromises = [];
                             _.each(itemHashes, function (itemHash) {
-                                promises.push(world.getItemByHash(itemHash));
+                                itemPromises.push(world.getItemByHash(itemHash));
                             });
-                            Q.all(promises)
+                            Q.all(itemPromises)
                                 .then(function (items) {
                                     world.close();
                                     _.each(users, function (user) {
-                                        notifications.sendMessage('Xur has arrived... for now...\n' +
-                                            _.reduce(_.map(items, function (item) {
-                                                return item.itemName;
-                                            }), function (memo, itemName) {
-                                                return memo + itemName + '\n';
-                                            }, ' ').trim(), user.phoneNumber, user.type === 'mobile' ?
-                                                    'https://www.bungie.net/common/destiny_content/icons/f37d959ec6b20ae2223f9edc1e057b80.png'
-                                            : undefined)
-                                            .then(function (message) {
-                                                userModel.createUserMessage(user, message, 'Xur');
+                                        userModel.getLastNotificationDate(user.phoneNumber, userModel.actions.Xur)
+                                            .then(function (notificationDate) {
+                                                if (notificationDate === undefined ||
+                                                        (nextRefreshDate < now && notificationDate < nextRefreshDate)) {
+                                                    notifications.sendMessage('Xur has arrived... for now...\n' +
+                                                        _.reduce(_.map(items, function (item) {
+                                                            return item.itemName;
+                                                        }), function (memo, itemName) {
+                                                            return memo + itemName + '\n';
+                                                        }, ' ').trim(), user.phoneNumber, user.type === 'mobile' ?
+                                                                'https://www.bungie.net/common/destiny_content/icons/f37d959ec6b20ae2223f9edc1e057b80.png'
+                                                        : undefined)
+                                                        .then(function (message) {
+                                                            userModel.createUserMessage(user, message, userModel.actions.Xur);
+                                                        });
+                                                }
                                             });
                                     });
                                 });
                         } else {
                             _.each(users, function (user) {
-                                notifications.sendMessage('Xur hasn\'t opened shop yet.', user.phoneNumber)
-                                    .then(function (message) {
-                                        userModel.createUserMessage(user, message, 'Xur');
+                                userModel.getLastNotificationDate(user.phoneNumber, userModel.actions.Xur)
+                                    .then(function (notificationDate) {
+                                        if (notificationDate === undefined ||
+                                                (nextRefreshDate < now && notificationDate < nextRefreshDate)) {
+                                            notifications.sendMessage('Xur hasn\'t opened shop yet.', user.phoneNumber)
+                                                .then(function (message) {
+                                                    userModel.createUserMessage(user, message, userModel.actions.Xur);
+                                                });
+                                        }
                                     });
                             });
                         }
-                    })
-                    .fail(function (err) {
-                        throw err;
                     });
             });
     };
@@ -201,35 +250,72 @@ var notificationController = function (shadowUserConfiguration) {
      * @description Xur's Vendor Number
      */
     var xurHash = '2796397637';
+    var gunSmithJob;
+    var xurJob;
     var _schedule = function () {
         userModel.getSubscribedUsers()
             .then(function (users) {
                 if (users && users.length > 0) {
-                    var t = new Date();
-                    // ToDo(CP): Apply realistic schedule and log.
-                    t.setSeconds(t.getSeconds() + 10);
-                    new CronJob({
-                        cronTime: t,
-                        onTick: function () {
-                            _getFieldTestWeapons(users);
-                            this.stop();
-                        },
-                        onComplete: function () {
-                            console.log('Job completed.');
-                        },
-                        start: true
+                    var gunSmithSubscribers = _.filter(users, function (user) {
+                        return user.isSubscribedToBanshee44 === true;
                     });
-                    new CronJob({
-                        cronTime: t,
-                        onTick: function () {
-                            _getXur(users);
-                            this.stop();
-                        },
-                        onComplete: function () {
-                            console.log('Job completed.');
-                        },
-                        start: true
+                    ghost.getNextRefreshDate(gunSmithHash)
+                        .then(function (nextRefreshDate) {
+                            _getFieldTestWeapons(gunSmithSubscribers, nextRefreshDate)
+                                .then(function () {
+                                    /**
+                                     * Add a 2 minute factor of safety.
+                                     */
+                                    nextRefreshDate.setSeconds(nextRefreshDate.getSeconds() + 120);
+                                    gunSmithJob = new CronJob({
+                                        cronTime: nextRefreshDate,
+                                        onTick: function () {
+                                            _getFieldTestWeapons(gunSmithSubscribers, nextRefreshDate);
+                                            setInterval(function () {
+                                                _reset();
+                                            }, 3600000);
+                                            this.stop();
+                                        },
+                                        onComplete: function () {
+                                            /**
+                                             * @todo Log
+                                             */
+                                            console.log('Job completed.');
+                                        },
+                                        start: true
+                                    });
+                                });
+                        });
+                    var xurSubscribers = _.filter(users, function (user) {
+                        return user.isSubscribedToXur === true;
                     });
+                    ghost.getNextRefreshDate(xurHash)
+                        .then(function (nextRefreshDate) {
+                            _getXur(xurSubscribers, nextRefreshDate)
+                                .then(function () {
+                                    /**
+                                     * Add a 2 minute factor of safety.
+                                     */
+                                    nextRefreshDate.setSeconds(nextRefreshDate.getSeconds() + 120);
+                                    xurJob = new CronJob({
+                                        cronTime: nextRefreshDate,
+                                        onTick: function () {
+                                            _getXur(xurSubscribers, nextRefreshDate);
+                                            setInterval(function () {
+                                                _reset();
+                                            }, 3600000);
+                                            this.stop();
+                                        },
+                                        onComplete: function () {
+                                            /**
+                                             * @todo Log
+                                             */
+                                            console.log('Job completed.');
+                                        },
+                                        start: true
+                                    });
+                                });
+                        });
                     new CronJob({
                         cronTime: '00 00 00 * * *',
                         onTick: function () {
@@ -237,24 +323,20 @@ var notificationController = function (shadowUserConfiguration) {
                             this.stop();
                         },
                         onComplete: function () {
-                            /** ToDo Log Job Completion */
-                            console.log('Job completed.');
-                        },
-                        start: true
-                    });
-                    new CronJob({
-                        cronTime: t,
-                        onTick: function () {
-                            _getVendorSummaries();
-                            this.stop();
-                        },
-                        onComplete: function () {
-                            /** ToDo Log Job Completion */
+                            /**
+                             * @todo Log
+                             */
                             console.log('Job completed.');
                         },
                         start: true
                     });
                 }
+            });
+    };
+    var _reset = function () {
+        _getVendorSummaries()
+            .then(function () {
+                _schedule();
             });
     };
     var init = function () {
@@ -266,11 +348,11 @@ var notificationController = function (shadowUserConfiguration) {
                     shadowUser.cookies = cookies;
                     fs.writeFileSync(shadowUserConfiguration, JSON.stringify(shadowUser, null, 4));
                     destiny = new Destiny(shadowUser.apiKey, shadowUser.cookies);
-                    _schedule();
+                    _reset();
                 });
         } else {
             destiny = new Destiny(shadowUser.apiKey, shadowUser.cookies);
-            _schedule();
+            _reset();
         }
     };
     return {

@@ -65,6 +65,11 @@ var Ghost = function (databaseFullPath) {
         });
         return deferred.promise;
     };
+    /**
+     * Get the next refresh date for the vendor.
+     * @param vendorHash
+     * @returns {*|promise}
+     */
     var getNextRefreshDate = function (vendorHash) {
         var deferred = Q.defer();
         if (vendorHash) {
@@ -73,7 +78,7 @@ var Ghost = function (databaseFullPath) {
                     if (err) {
                         deferred.reject(err);
                     } else {
-                        deferred.resolve(JSON.parse(row.json).nextRefreshDate);
+                        deferred.resolve(new Date(JSON.parse(row.json).nextRefreshDate));
                     }
                 });
         } else {
@@ -81,7 +86,7 @@ var Ghost = function (databaseFullPath) {
                 if (err) {
                     deferred.reject(err);
                 } else {
-                    deferred.resolve(JSON.parse(row.json).nextRefreshDate);
+                    deferred.resolve(new Date(JSON.parse(row.json).nextRefreshDate));
                 }
             });
         }
@@ -99,6 +104,11 @@ var Ghost = function (databaseFullPath) {
                         : undefined;
             });
     };
+    /**
+     *
+     * @param vendor
+     * @returns {*|promise}
+     */
     var upsertVendor = function (vendor) {
         var deferred = Q.defer();
         db.each('SELECT json FROM DestinyGhostVendor WHERE json LIKE \'%"vendorHash":' +
@@ -108,8 +118,8 @@ var Ghost = function (databaseFullPath) {
                 } else {
                     db.run('UPDATE DestinyGhostVendor SET json = \'' + JSON.stringify(vendor) +
                         '\', id = \'' + vendor.nextRefreshDate +
-                        '\' WHERE json LIKE \'%"vendorHash":"' +
-                        vendor.vendorHash + '"%\'', function (err) {
+                        '\' WHERE json LIKE \'%"vendorHash":' +
+                        vendor.vendorHash + '%\'', function (err) {
                             if (err) {
                                 deferred.reject(err);
                             } else {
@@ -127,8 +137,10 @@ var Ghost = function (databaseFullPath) {
                         sql.finalize();
                         deferred.resolve();
                     } else {
-                        deferred.reject(new Error('Hash, ' +
-                            vendor.vendorHash + ', is not an unique identifier.'));
+                        if (rows !== 1) {
+                            deferred.reject(new Error('Hash, ' +
+                                vendor.vendorHash + ', is not an unique identifier.'));
+                        }
                     }
                 }
             });

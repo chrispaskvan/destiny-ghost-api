@@ -7,7 +7,6 @@
  * Adopted from Eric Elliott's bunyan-request-logger project hosted at
  * {@link https://github.com/ericelliott/bunyan-request-logger} and
  * outlined in detail at {@link http://chimera.labs.oreilly.com/books/1234000000262/ch07.html#logging-requests}.
- * go to {@link http://dev.bitly.com/api.html}.
  * @requires _
  * @requires bunyan
  * @requires cuid
@@ -23,8 +22,8 @@ var _ = require('underscore'),
 var Log = function () {
     /**
      * Get long stack traces for the error logger.
-     * @param  {error} err Error object
-     * @return {string}    Stack trace
+     * @param  {error} err - Error object
+     * @return {string} Stack trace
      */
     var _getFullStack = function (err) {
         var ret = err.stack || err.toString(),
@@ -52,7 +51,8 @@ var Log = function () {
                 requestId: req.requestId,
                 /** Check for a proxy server. */
                 ip: req.headers['x-forwarded-for'] || req.connection.remoteAddress,
-                headers: req.headers
+                headers: req.headers,
+                body: _.omit(req.body, 'password')
             };
         },
         res: function resSerializer(res) {
@@ -62,6 +62,7 @@ var Log = function () {
             return {
                 statusCode: res.statusCode,
                 headers: res._header,
+                body: res._json || res._end,
                 requestId: res.requestId,
                 responseTime: res.responseTime
             };
@@ -85,33 +86,44 @@ var Log = function () {
      */
     var defaults = {
         name: 'destiny-ghost-api',
+        streams: [
+            {
+                level: 'info',
+                path: './logs/destiny-ghost-api-request.log'
+            },
+            {
+                level: 'error',
+                path: './logs/destiny-ghost-api-error.log'
+            }
+        ],
         serializers: _.extend(bunyan.stdSerializers, serializers)
     };
     /**
-     * Take bunyan options, monkey patch request
-     * and response objects for better logging,
+     * Take bunyan options, monkey patch request and response objects for better logging,
      * and return a logger instance.
-     *
-     * @param  {object}  options See bunyan docs
-     * @param  {boolean} options.logParams
-     *         Pass true to log request parameters
-     *         in a separate log.info() call.
-     * @return {object}  logger  See bunyan docs
-     * @return {function} logger.requestLogger
-     *                    (See below)
+     * @param options - See bunyan documentation.
+     * @private
      */
     var _createLogger = function (options) {
         var settings = _.extend(defaults, options),
             log = bunyan.createLogger(settings);
         log.requestLogger = function createRequestLogger() {
             return function requestLogger(req, res, next) {
-                // Used to calculate response times.
+                /**
+                 * Used to calculate response times.
+                 */
                 var startTime = new Date();
-                // Add a unique identifier to the request.
+                /**
+                 * Add a unique identifier to the request.
+                 */
                 req.requestId = cuid();
-                // Log the request.
+                /**
+                 * Log the request.
+                 */
                 log.info({ req: req });
-                // Make sure responses get logged, too:
+                /**
+                 * Make sure responses get logged too.
+                 */
                 res.on('finish', function () {
                     res.responseTime = new Date() - startTime;
                     res.requestId = req.requestId;
@@ -123,13 +135,16 @@ var Log = function () {
         log.errorLogger = function createErrorLogger() {
             return function errorLogger(err, req, res, next) {
                 var status = err.status || (res && res.status);
-                // Add a requestId to track the original request.
+                /**
+                 * Add a requestId to track the original request.
+                 */
                 err.requestId = req && req.requestId;
-                // Omit stack from the 4xx range.
+                /**
+                 * Omit stack from the 4xx range.
+                 */
                 if (status >= 400 && status <= 499) {
                     delete err.stack;
                 }
-
                 log.error({ err: err });
                 next(err);
             };

@@ -16,7 +16,11 @@
  */
 'use strict';
 var _ = require('underscore'),
-    Bitly = require('../models/bitly'),
+    /**
+     * Bitly Model
+     * @type {Bitly|exports|module.exports}
+     */
+    bitly = require('../models/bitly')(process.env.BITLY),
     fs = require('fs'),
     Ghost = require('../models/ghost'),
     Notifications = require('../models/notifications'),
@@ -44,11 +48,6 @@ var twilioController = function () {
         .then(function (path) {
             world = new World(path);
         });
-    /**
-     * Bitly Model
-     * @type {Bitly|exports|module.exports}
-     */
-    var bitly = new Bitly(process.env.BITLY);
     /**
      * Notifications Model
      * @type {Notifications|exports|module.exports}
@@ -223,7 +222,7 @@ var twilioController = function () {
         if (twilio.validateRequest(authToken, header, process.env.DOMAIN + req.originalUrl, req.body)) {
             var counter = parseInt(req.cookies.counter, 10) || 0;
             var itemHash = req.cookies.itemHash;
-            if (itemHash && req.body.Body.trim().toUpperCase() === 'MORE') {
+            if (itemHash && req.body.Body.trim().toLowerCase() === 'more') {
                 bitly.getShortUrl('http://db.planetdestiny.com/items/view/' + itemHash)
                     .then(function (shortUrl) {
                         twiml.message(shortUrl);

@@ -17,22 +17,13 @@ var _ = require('underscore'),
     S = require('string'),
     sqlite3 = require('sqlite3');
 /**
- * @param fileName {string}
  * @constructor
  */
-var World = function (fileName) {
+var World = function () {
     /**
      * @type {sqlite3.Database}
      */
     var db;
-    /**
-     * @property
-     * @readonly
-     */
-    Object.defineProperty(this, 'fileName', {
-        value: fileName,
-        writable: false
-    });
     /**
      * @function
      */
@@ -71,12 +62,14 @@ var World = function (fileName) {
      * @param classHash {string}
      */
     var getClassByHash = function (classHash) {
+        var deferred = Q.defer();
         _getClasses()
             .then(function (classes) {
-                _.find(classes, function (characterClass) {
+                deferred.resolve(_.find(classes, function (characterClass) {
                     return characterClass.classHash === classHash;
-                });
+                }));
             });
+        return deferred.promise;
     };
     /**
      * Get the class by the type provided.
@@ -176,21 +169,21 @@ var World = function (fileName) {
         return deferred.promise;
     };
     /**
-     * @param fileName {string}
+     *
+     * @param fileName
+     * @param callback
+     * @returns {*|promise}
      */
-    var openDatabase = function (fileName) {
-        fileName = fileName || this.fileName;
+    var openDatabase = function (fileName, callback) {
+        var deferred = Q.defer();
         if (!fs.existsSync(fileName)) {
-            throw new Error('Database file not found.');
+            deferred.reject(new Error('Database file not found.'));
+            return deferred.promise.nodeify(callback);
         }
-        db = new sqlite3.Database(fileName);
-    };
-    /**
-     * Update the Destiny World database file name and/or location.
-     * @param path {string}
-     */
-    var setPath = function (path) {
-        this.fileName = path;
+        db = new sqlite3.Database(fileName, function () {
+            deferred.resolve();
+        });
+        return deferred.promise.nodeify(callback);
     };
     return {
         close: closeDatabase,
@@ -199,8 +192,7 @@ var World = function (fileName) {
         getItemByName: getItemByName,
         getItemByHash: getItemByHash,
         getItemCategory: getItemCategory,
-        open: openDatabase,
-        setPath: setPath
+        open: openDatabase
     };
 };
 

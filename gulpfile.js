@@ -23,7 +23,14 @@ gulp.task('default', function () {
 });
 
 gulp.task('tests', function () {
-    env({ vars: { ENV: 'Test' } });
-    gulp.src('tests/userModelTests.js', { read: false })
+    env({ vars: {
+        APPINSIGHTS: './settings/applicationInsights.json',
+        BITLY: './settings/bitly.json',
+        DATABASE: './database/ghost.db',
+        DOMAIN: 'http://22d88940.ngrok.io',
+        PORT: 1100,
+        TWILIO: './settings/twilio.json'
+    }});
+    gulp.src('tests/*', { read: false })
         .pipe(gulpMocha({ reporter: 'nyan' }));
 });
