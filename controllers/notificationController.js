@@ -72,16 +72,16 @@ var notificationController = function (shadowUserConfiguration) {
             return cookie.name === cookieName;
         }).value;
     };
-    var _getFieldTestWeapons = function (users, nextRefreshDate, isSecondAttempt) {
+    var _getFieldTestWeapons = function (users, nextRefreshDate) {
         var deferred = Q.defer();
         ghost.getLastManifest()
             .then(function (lastManifest) {
                 var worldPath = path.join('./database/', path.basename(lastManifest.mobileWorldContentPaths.en));
-                destiny.getCurrentUser()
+                destiny.getCurrentUser(shadowUser.cookies)
                     .then(function (currentUser) {
                         destiny.getCharacters(currentUser.membershipId)
                             .then(function (characters) {
-                                destiny.getFieldTestWeapons(characters[0].characterBase.characterId)
+                                destiny.getFieldTestWeapons(characters[0].characterBase.characterId, shadowUser.cookies)
                                     .then(function (items) {
                                         if (items && items.length > 0) {
                                             var itemHashes = _.map(items, function (item) {
@@ -139,16 +139,6 @@ var notificationController = function (shadowUserConfiguration) {
                                         }
                                     })
                                     .fail(function (err) {
-                                        if (err.code === 99 && !isSecondAttempt) {
-                                            var authenticationContoller = new AuthenticationController();
-                                            authenticationContoller.signIn(shadowUser.userName, shadowUser.password)
-                                                .then(function (cookies) {
-                                                    destiny.setAuthenticationCookies(_getCookieValueByName(cookies, 'bungled'),
-                                                        _getCookieValueByName(cookies, 'bungledid'),
-                                                        _getCookieValueByName(cookies, 'bungleatk'));
-                                                    _getFieldTestWeapons(users, nextRefreshDate, true);
-                                                });
-                                        }
                                         throw err;
                                     });
                             });
@@ -158,11 +148,11 @@ var notificationController = function (shadowUserConfiguration) {
     };
     var _getVendorSummaries = function () {
         var deferred = Q.defer();
-        destiny.getCurrentUser()
+        destiny.getCurrentUser(shadowUser.cookies)
             .then(function (currentUser) {
                 destiny.getCharacters(currentUser.membershipId)
                     .then(function (characters) {
-                        destiny.getVendorSummaries(characters[0].characterBase.characterId)
+                        destiny.getVendorSummaries(characters[0].characterBase.characterId, shadowUser.cookies)
                             .then(function (vendors) {
                                 var promises = [];
                                 _.each(vendors, function (vendor) {
@@ -333,27 +323,23 @@ var notificationController = function (shadowUserConfiguration) {
                 }
             });
     };
-    var _reset = function () {
-        _getVendorSummaries()
-            .then(function () {
-                _schedule();
-            });
-    };
     var init = function () {
-        if (_getCookieValueByName(shadowUser.cookies, 'bungled') === undefined ||
-                _getCookieValueByName(shadowUser.cookies, 'bungledid') === undefined ||
-                _getCookieValueByName(shadowUser.cookies, 'bungleatk') === undefined) {
-            userModel.signIn(shadowUser.userName, shadowUser.password)
-                .then(function (cookies) {
-                    shadowUser.cookies = cookies;
-                    fs.writeFileSync(shadowUserConfiguration, JSON.stringify(shadowUser, null, 4));
-                    destiny = new Destiny(shadowUser.apiKey, shadowUser.cookies);
-                    _reset();
-                });
-        } else {
-            destiny = new Destiny(shadowUser.apiKey, shadowUser.cookies);
-            _reset();
-        }
+        userModel.signIn(shadowUser.userName, shadowUser.password)
+            .then(function (cookies) {
+                shadowUser.cookies = cookies;
+                fs.writeFileSync(shadowUserConfiguration, JSON.stringify(shadowUser, null, 4));
+                destiny = new Destiny(shadowUser.apiKey);
+                _getVendorSummaries()
+                    .then(function () {
+                        _schedule();
+                    });
+            })
+            .fail(function (err) {
+                /**
+                 * @todo Log
+                 */
+                console.log(err);
+            });
     };
     return {
         init: init

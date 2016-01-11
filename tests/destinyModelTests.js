@@ -1,29 +1,18 @@
 /**
  * Created by chris on 11/29/15.
  */
-var _ = require('underscore'),
-    expect = require('chai').expect,
-    path = require('path'),
-    Ghost = require('../models/ghost'),
-    World = require('../models/World');
+var expect = require('chai').expect,
+    Destiny = require('../models/destiny'),
+    user = require('../settings/ShadowUser.json');
 
 describe('Destiny Model Tests', function () {
-    describe('Get Fusion Rifle Category', function () {
-        it('Should return the Fusion Rifle category definition', function (done) {
-            var ghost = new Ghost();
-            var world = new World();
-            ghost.getLastManifest()
-                .then(function (lastManifest) {
-                    world.open(path.join('./database/', path.basename(lastManifest.mobileWorldContentPaths.en)));
-                    world.getItemCategory(9)
-                        .then(function (itemCategory) {
-                            world.close();
-                            expect(itemCategory.shortTitle).to.equal('Fusion Rifle');
-                            done();
-                        })
-                        .fail(function (err) {
-                            done(err);
-                        });
+    describe('Get the latest manifest definition', function () {
+        it('Should details of the current Bungie Destiny manifest definition', function (done) {
+            var destiny = new Destiny(user.apiKey);
+            destiny.getManifest()
+                .then(function (manifest) {
+                    expect(manifest).to.include.keys('version');
+                    done();
                 });
         });
     });

@@ -31,6 +31,6 @@ gulp.task('tests', function () {
         PORT: 1100,
         TWILIO: './settings/twilio.json'
     }});
-    gulp.src('tests/*', { read: false })
+    gulp.src('tests/*.js', { read: false })
         .pipe(gulpMocha({ reporter: 'nyan' }));
 });

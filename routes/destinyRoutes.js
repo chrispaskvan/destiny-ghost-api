@@ -13,6 +13,13 @@ var routes = function () {
      * @type {destinyController|exports|module.exports}
      */
     var destinyController = new DestinyController();
+    /**
+     * Check for any changes to the Bungie Destiny manifest definition.
+     */
+    destinyController.upsertManifest();
+    /**
+     * Routes
+     */
     destinyRouter.route('/characters/')
         .get(destinyController.getCharacters);
     destinyRouter.route('/fieldTestWeapons/')

@@ -127,48 +127,6 @@ var destinyController = function () {
             });
     };
     /**
-     * Insert or update the Destiny manifest.
-     * @private
-     */
-    var _upsertManifest = function () {
-        destiny.getManifest()
-            .then(function (manifest) {
-                ghost.getLastManifest()
-                    .then(function (lastManifest) {
-                        if (!lastManifest || lastManifest.version !== manifest.version ||
-                                lastManifest.mobileWorldContentPaths.en !== manifest.mobileWorldContentPaths.en) {
-                            var databasePath = './database/';
-                            var relativeUrl = manifest.mobileWorldContentPaths.en;
-                            var fileName = databasePath + relativeUrl.substring(relativeUrl.lastIndexOf('/') + 1);
-                            var file = fs.createWriteStream(fileName + '.zip');
-                            var stream = request('https://www.bungie.net' + relativeUrl, function () {
-                                // ToDo: A log entry here would be nice.
-                                console.log('done1');
-                            }).pipe(file);
-                            stream.on('finish', function () {
-                                yauzl.open(fileName + '.zip', function (err, zipFile) {
-                                    if (!err) {
-                                        zipFile.on('entry', function (entry) {
-                                            zipFile.openReadStream(entry, function (err, readStream) {
-                                                if (!err) {
-                                                    readStream.pipe(fs.createWriteStream(databasePath + entry.fileName));
-                                                    ghost.createManifest(manifest);
-                                                    fs.unlink(fileName + '.zip');
-                                                } else {
-                                                    throw err;
-                                                }
-                                            });
-                                        });
-                                    } else {
-                                        throw err;
-                                    }
-                                });
-                            });
-                        }
-                    });
-            });
-    };
-    /**
      * Get the currently available field test weapons from the gun smith.
      * @param req
      * @param res
@@ -398,9 +356,46 @@ var destinyController = function () {
             });
     };
     /**
-     * Check for any updates to the Destiny manifest definition.
+     * Insert or update the Destiny manifest.
      */
-    //_upsertManifest();
+    var upsertManifest = function () {
+        destiny.getManifest()
+            .then(function (manifest) {
+                ghost.getLastManifest()
+                    .then(function (lastManifest) {
+                        if (!lastManifest || lastManifest.version !== manifest.version ||
+                            lastManifest.mobileWorldContentPaths.en !== manifest.mobileWorldContentPaths.en) {
+                            var databasePath = './database/';
+                            var relativeUrl = manifest.mobileWorldContentPaths.en;
+                            var fileName = databasePath + relativeUrl.substring(relativeUrl.lastIndexOf('/') + 1);
+                            var file = fs.createWriteStream(fileName + '.zip');
+                            var stream = request('https://www.bungie.net' + relativeUrl, function () {
+                                // ToDo: A log entry here would be nice.
+                                console.log('done1');
+                            }).pipe(file);
+                            stream.on('finish', function () {
+                                yauzl.open(fileName + '.zip', function (err, zipFile) {
+                                    if (!err) {
+                                        zipFile.on('entry', function (entry) {
+                                            zipFile.openReadStream(entry, function (err, readStream) {
+                                                if (!err) {
+                                                    readStream.pipe(fs.createWriteStream(databasePath + entry.fileName));
+                                                    ghost.createManifest(manifest);
+                                                    fs.unlink(fileName + '.zip');
+                                                } else {
+                                                    throw err;
+                                                }
+                                            });
+                                        });
+                                    } else {
+                                        throw err;
+                                    }
+                                });
+                            });
+                        }
+                    });
+            });
+    };
     /**
      * @public
      */
@@ -409,7 +404,8 @@ var destinyController = function () {
         getFieldTestWeapons: getFieldTestWeapons,
         getFoundryOrders: getFoundryOrders,
         getIronBannerEventRewards: getIronBannerEventRewards,
-        getXur: getXur
+        getXur: getXur,
+        upsertManifest: upsertManifest
     };
 };
 

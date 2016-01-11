@@ -47,9 +47,6 @@ describe('Get the carrier type of a phone number', function () {
 });
 describe('Create a new user', function () {
     it('Should add a new valid user', function (done) {
-        /**
-         * Missing firstName and lastName properties.
-         */
         var user = {
             firstName: chance.first(),
             lastName: chance.last(),

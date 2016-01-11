@@ -10,7 +10,8 @@ var _ = require('underscore'),
     ironBannerEventRewards = require('../mocks/ironBannerEventRewards.json'),
     Q = require('q'),
     rewire = require('rewire'),
-    sinon = require('sinon');
+    sinon = require('sinon'),
+    xur = require('../mocks/xur.json');
 
 chai.use(chaiAsPromised);
 chai.should();
@@ -19,7 +20,7 @@ var getRandomId = function () {
 };
 
 var destinyController;
-before(function () {
+before(function (done) {
     var chance = new Chance();
     var destinyMock = function (apiKey) {
         var getCharacters = function (membershipId, callback) {
@@ -49,16 +50,23 @@ before(function () {
             deferred.resolve(foundryOrders);
             return deferred.promise.nodeify(callback);
         };
+        var getXur = function (callback) {
+            var deferred = Q.defer();
+            deferred.resolve(xur);
+            return deferred.promise.nodeify(callback);
+        };
         return {
             getCharacters: getCharacters,
             getCurrentUser: getCurrentUser,
             getIronBannerEventRewards: getIronBannerEventRewards,
-            getFoundryOrders: getFoundryOrders
+            getFoundryOrders: getFoundryOrders,
+            getXur: getXur
         };
     };
     var DestinyController = rewire('../controllers/destinyController');
     DestinyController.__set__('Destiny', destinyMock);
     destinyController = new DestinyController();
+    done();
 });
 
 describe('Destiny Controller Tests', function () {
@@ -112,6 +120,28 @@ describe('Destiny Controller Tests', function () {
                 'SUROS JLB-47',
                 'Häkke Strongbow-D',
                 'Häkke Tamar-D']).notify(done);
+        });
+    });
+    describe('What exotics are up for sale by the Agent of 9?', function () {
+        it('Should return a list of exotic armor and/or weapons', function (done) {
+            var req = {
+                headers: {
+                    cookie: 'bungled=; bungledid=; bungleatk='
+                }
+            };
+            var deferred = Q.defer();
+            var res = {
+                json: function (xur) {
+                    deferred.resolve(xur);
+                }
+            };
+            destinyController.getXur(req, res);
+            deferred.promise.should.become([
+                'No Backup Plans',
+                'Knucklehead Radar',
+                'Apotheosis Veil',
+                'Dragon\'s Breath',
+                'Legacy Engram']).notify(done);
         });
     });
 });
