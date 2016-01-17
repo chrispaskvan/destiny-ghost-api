@@ -2,8 +2,7 @@
  * World Tests
  */
 'use strict';
-var _ = require('underscore'),
-    expect = require('chai').expect,
+var expect = require('chai').expect,
     path = require('path'),
     Ghost = require('../models/ghost'),
     World = require('../models/World');
@@ -14,7 +13,7 @@ describe('Get the Fusion Rifle category', function () {
         var world = new World();
         ghost.getLastManifest()
             .then(function (lastManifest) {
-                world.open(path.join('./database/', path.basename(lastManifest.mobileWorldContentPaths.en)));
+                world.open(path.join('./databases/', path.basename(lastManifest.mobileWorldContentPaths.en)));
                 world.getItemCategory(9)
                     .then(function (itemCategory) {
                         world.close();

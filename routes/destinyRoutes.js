@@ -22,6 +22,8 @@ var routes = function () {
      */
     destinyRouter.route('/characters/')
         .get(destinyController.getCharacters);
+    destinyRouter.route('/currentUser/')
+        .get(destinyController.getCurrentUser);
     destinyRouter.route('/fieldTestWeapons/')
         .get(destinyController.getFieldTestWeapons);
     destinyRouter.route('/foundryOrders/')

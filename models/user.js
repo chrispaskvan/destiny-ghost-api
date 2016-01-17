@@ -14,7 +14,6 @@
 'use strict';
 var _ = require('underscore'),
     fs = require('fs'),
-    Horseman = require('node-horseman'),
     Q = require('q'),
     sqlite3 = require('sqlite3'),
     twilio = require('twilio'),
@@ -33,7 +32,7 @@ var User = function (databaseFullPath, twilioSettingsFullPath) {
      * @type {*|string}
      * @public
      */
-    this.databaseFullPath = databaseFullPath || './database/ghost.db';
+    this.databaseFullPath = databaseFullPath || './databases/ghost.db';
     if (!fs.existsSync(this.databaseFullPath)) {
         /**
          * @todo
@@ -74,6 +73,12 @@ var User = function (databaseFullPath, twilioSettingsFullPath) {
                 maxLength: 16
             },
             isSubscribedToBanshee44: {
+                type: 'boolean'
+            },
+            isSubscribedToFoundryOrders: {
+                type: 'boolean'
+            },
+            isSubscribedToLordSaladin: {
                 type: 'boolean'
             },
             isSubscribedToXur: {
@@ -151,13 +156,16 @@ var User = function (databaseFullPath, twilioSettingsFullPath) {
      * @type {{Gunsmith: string, Xur: string}}
      */
     var actions = {
+        Foundry: 'Orders',
         Gunsmith: 'Banshee-44',
+        IronBanner: 'Lord Saladin',
         Xur: 'Xur'
     };
     /**
      *
      * @param phoneNumber
      * @param action
+     * @param callback
      * @callback
      */
     var getLastNotificationDate = function (phoneNumber, action, callback) {
@@ -206,6 +214,7 @@ var User = function (databaseFullPath, twilioSettingsFullPath) {
     /**
      * Create the user in the database.
      * @param user {Object}
+     * @param callback
      */
     var createUser = function (user, callback) {
         var deferred = Q.defer();
@@ -213,28 +222,27 @@ var User = function (databaseFullPath, twilioSettingsFullPath) {
         if (!validate(user)) {
             deferred.reject(new Error(JSON.stringify(validate.errors)));
             return deferred.promise.nodeify(callback);
-        } else {
-            _getUserByPhoneNumber(user.phoneNumber)
-                .then(function (existingUser) {
-                    if (existingUser) {
-                        deferred.reject(new Error('The phone number, ' + user.phoneNumber + ', is already registered.'));
-                        return deferred.promise.nodeify(callback);
-                    }
-                    getPhoneNumberType(user.phoneNumber)
-                        .then(function (carrier) {
-                            user.carrier = carrier.name;
-                            user.type = carrier.type;
-                            schema.additionalProperties = false;
-                            var filter = validator.filter(schema);
-                            var filteredUser = filter(user);
-                            var sql = db.prepare('INSERT INTO DestinyGhostUser VALUES (?, ?)');
-                            sql.run(new Date().toISOString(), JSON.stringify(filteredUser));
-                            sql.finalize();
-                            deferred.resolve();
-                        });
-                });
-            return deferred.promise.nodeify(callback);
         }
+        _getUserByPhoneNumber(user.phoneNumber)
+            .then(function (existingUser) {
+                if (existingUser) {
+                    deferred.reject(new Error('The phone number, ' + user.phoneNumber + ', is already registered.'));
+                    return deferred.promise.nodeify(callback);
+                }
+                getPhoneNumberType(user.phoneNumber)
+                    .then(function (carrier) {
+                        user.carrier = carrier.name;
+                        user.type = carrier.type;
+                        schema.additionalProperties = false;
+                        var filter = validator.filter(schema);
+                        var filteredUser = filter(user);
+                        var sql = db.prepare('INSERT INTO DestinyGhostUser VALUES (?, ?)');
+                        sql.run(new Date().toISOString(), JSON.stringify(filteredUser));
+                        sql.finalize();
+                        deferred.resolve();
+                    });
+            });
+        return deferred.promise.nodeify(callback);
     };
     /**
      * Create an entry in the database for the message sent to the user.
@@ -293,47 +301,13 @@ var User = function (databaseFullPath, twilioSettingsFullPath) {
     };
     /**
      * Sign the user in and retrieve the Bungie cookies.
-     * @param userName {string}
-     * @param password {string}
+     * @param user {Object}
      * @returns {*|Array}
      */
-    var signIn = function (userName, password) {
-        if (!userName || !password) {
-            throw new Error('Missing or incomplete credentials.');
-        }
+    var updateUser = function (user) {
         /**
-         * @type {Horseman|exports|module.exports}
+         * @todo
          */
-        var horseman = new Horseman();
-        var deferred = Q.defer();
-        horseman.open('https://www.bungie.net/en/User/SignIn/Psnid')
-            .waitForSelector('#signInInput_SignInID')
-            .type('input[id="signInInput_SignInID"]', userName)
-            .type('input[id="signInInput_Password"]', password)
-            .click('#signInButton')
-            .waitForNextPage()
-            .cookies()
-            .then(function (cookies) {
-                var bungieCookies = [{
-                    name: 'bungled',
-                    value: _.find(cookies, function (cookie) {
-                        return cookie.name === 'bungled';
-                    }).value
-                }, {
-                    name: 'bungledid',
-                    value: _.find(cookies, function (cookie) {
-                        return cookie.name === 'bungledid';
-                    }).value
-                }, {
-                    name: 'bungleatk',
-                    value: _.find(cookies, function (cookie) {
-                        return cookie.name === 'bungleatk';
-                    }).value
-                }];
-                horseman.close();
-                deferred.resolve(bungieCookies);
-            });
-        return deferred.promise;
     };
     return {
         actions: actions,
@@ -345,7 +319,7 @@ var User = function (databaseFullPath, twilioSettingsFullPath) {
         getPhoneNumberType: getPhoneNumberType,
         getSubscribedUsers: getSubscribedUsers,
         getUserByPhoneNumber: getUserByPhoneNumber,
-        signIn: signIn
+        updateUser: updateUser
     };
 };
 

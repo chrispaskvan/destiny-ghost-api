@@ -22,7 +22,6 @@ var _ = require('underscore'),
     util = require('util');
 /**
  * @param apiKey {string}
- * @param cookies
  * @throws Invalid argument(s) provided.
  * @constructor
  */
@@ -95,6 +94,8 @@ var Destiny = function (apiKey) {
      * @function
      * @param characterId {string}
      * @param membershipId {string}
+     * @param cookies {Array}
+     * @param callback
      * @returns {*|promise}
      */
     var getActivity = function (characterId, membershipId, cookies, callback) {
@@ -132,6 +133,7 @@ var Destiny = function (apiKey) {
      * @function
      * @param membershipId {string}
      * @param characterId {string}
+     * @param callback
      * @returns {*|promise}
      * @description Get the details for the member's character provided.
      */
@@ -171,6 +173,7 @@ var Destiny = function (apiKey) {
     /**
      * @function
      * @param membershipId {string}
+     * @param callback
      * @returns {*|promise}
      * @description Get character details.
      */
@@ -201,6 +204,7 @@ var Destiny = function (apiKey) {
     /**
      * @function
      * @param displayName {string}
+     * @param callback
      * @returns {*|promise}
      * @description Get the Bungie member number from the user's display name.
      */
@@ -253,7 +257,7 @@ var Destiny = function (apiKey) {
                         .then(function (membershipId) {
                             if (user) {
                                 deferred.resolve({
-                                    displayName: user.psnid,
+                                    displayName: user.psnId,
                                     email: user.email,
                                     membershipId: membershipId
                                 });
@@ -277,6 +281,8 @@ var Destiny = function (apiKey) {
     /**
      * @function
      * @param characterId {string}
+     * @param cookies {Array}
+     * @param callback
      * @returns {*|promise}
      * @description Return the current field test weapons available from the gunsmith.
      */
@@ -335,6 +341,8 @@ var Destiny = function (apiKey) {
     /**
      * @function
      * @param characterId {string}
+     * @param cookies {Array}
+     * @param callback
      * @returns {*|promise}
      * @description Return the current field test weapons available from the gunsmith.
      */
@@ -394,6 +402,8 @@ var Destiny = function (apiKey) {
      * @function
      * @param characterId {string}
      * @param membershipId {string}
+     * @param cookies {Array}
+     * @param callback
      * @returns {*|promise}
      */
     var getInventory = function (characterId, membershipId, cookies, callback) {
@@ -436,6 +446,8 @@ var Destiny = function (apiKey) {
     /**
      * @function
      * @param characterId {string}
+     * @param cookies {Array}
+     * @param callback
      * @returns {*|promise}
      * @description Return the current field test weapons available from the gunsmith.
      */
@@ -463,7 +475,7 @@ var Destiny = function (apiKey) {
                         url: util.format('%s/Destiny/2/MyAccount/Character/%s/Vendor/%s/',
                             servicePlatform, characterId, lordSaladinHash)
                     };
-                    request(opts, function (error, res, body) {
+                    request(opts, function (err, res, body) {
                         if (!err && res.statusCode === 200) {
                             var responseBody = JSON.parse(body);
                             if (responseBody.ErrorCode === 1627) {
@@ -495,9 +507,10 @@ var Destiny = function (apiKey) {
     /**
      * @function
      * @param itemHash {string}
+     * @param callback
      * @returns {*|promise}
      */
-    var getItem = function (itemHash, callback) {
+    var getItem = function (itemHash, cookies, callback) {
         var deferred = Q.defer();
         var opts = {
             headers: {
@@ -562,6 +575,8 @@ var Destiny = function (apiKey) {
      * @function
      * @param characterId {string}
      * @param membershipId {string}
+     * @param cookies {Array}
+     * @param callback
      * @returns {*|promise}
      */
     var getProgression = function (characterId, membershipId, cookies, callback) {
@@ -592,6 +607,8 @@ var Destiny = function (apiKey) {
     /**
      * @function
      * @param characterId {string}
+     * @param cookies {Array}
+     * @param callback
      * @returns {*|promise}
      */
     var getVendorSummaries = function (characterId, cookies, callback) {
@@ -634,6 +651,8 @@ var Destiny = function (apiKey) {
      * @function
      * @param characterId {string}
      * @param membershipId {string}
+     * @param cookies {Array}
+     * @param callback
      * @returns {*|promise}
      */
     var getWeapons = function (characterId, membershipId, cookies, callback) {

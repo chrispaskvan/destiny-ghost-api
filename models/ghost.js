@@ -27,7 +27,7 @@ var Ghost = function (databaseFullPath) {
      * @type {*|string}
      * @public
      */
-    this.databaseFullPath = databaseFullPath || './database/ghost.db';
+    this.databaseFullPath = databaseFullPath || './databases/ghost.db';
     if (!fs.existsSync(this.databaseFullPath)) {
         console.log('Creating database file.');
         fs.openSync(this.databaseFullPath, 'w');
@@ -100,7 +100,7 @@ var Ghost = function (databaseFullPath) {
         return getLastManifest()
             .then(function (lastManifest) {
                 return lastManifest ?
-                        path.join('./database/', path.basename(lastManifest.mobileWorldContentPaths.en))
+                        path.join('./databases/', path.basename(lastManifest.mobileWorldContentPaths.en))
                         : undefined;
             });
     };

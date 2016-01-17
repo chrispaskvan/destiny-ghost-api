@@ -21,6 +21,3 @@ http://blogs.msdn.com/b/vscode/archive/2015/08/11/getting-started-with-docker.as
 
 Azure Windows Server
 http://attester.ariatemplates.com/usage/phantom.html
-
-
-APPINSIGHTS='./settings/applicationInsights.json' BITLY='./settings/bitly.json' DATABASE='./database/ghost.db' DOMAIN='http://22d88940.ngrok.io' PORT=1100 TWILIO='./settings/twilio.json'

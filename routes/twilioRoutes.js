@@ -1,5 +1,8 @@
 /**
- * Created by chris on 9/28/15.
+ * Twilio inbound and outbound request URLs. See the article
+ * at {@link https://twilio.radicalskills.com/projects/getting-started-with-twiml/1.html}
+ * for instructions on how to debug these routes locally. Remember
+ * to update the DOMAIN environment variable.
  */
 'use strict';
 var express = require('express'),

@@ -29,7 +29,7 @@ var Notifications = function (databaseFullPath, twilioSettingsFullPath) {
      * @type {*|string}
      * @public
      */
-    this.databaseFullPath = databaseFullPath || './database/ghost.db';
+    this.databaseFullPath = databaseFullPath || './databases/ghost.db';
     if (!fs.existsSync(databaseFullPath)) {
         console.log('Creating database file.');
         fs.openSync(this.databaseFullPath, 'w');

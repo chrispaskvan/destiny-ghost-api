@@ -16,7 +16,7 @@
  */
 'use strict';
 var _ = require('underscore'),
-    AuthenticationController = require('../controllers/authenticationController'),
+    Authentication = require('../models/authentication'),
     Destiny = require('../models/destiny'),
     fs = require('fs'),
     Ghost = require('../models/ghost'),
@@ -33,6 +33,11 @@ var CronJob = require('cron').CronJob;
  * @param shadowUserConfiguration
  */
 var notificationController = function (shadowUserConfiguration) {
+    /**
+     * Authentication Model
+     * @type {Authentication|exports|module.exports}
+     */
+    var authentication = new Authentication();
     /**
      * Destiny Model
      * @type {Destiny|exports|module.exports}
@@ -64,24 +69,22 @@ var notificationController = function (shadowUserConfiguration) {
     var userModel = new User(process.env.DATABASE, process.env.TWILIO);
     shadowUserConfiguration = shadowUserConfiguration || './settings/ShadowUser.json';
     var shadowUser = JSON.parse(fs.readFileSync(shadowUserConfiguration));
-    var _getCookieValueByName = function (cookies, cookieName) {
-        if (!(cookies && cookies.constructor === Array)) {
-            return undefined;
-        }
-        return _.find(cookies, function (cookie) {
-            return cookie.name === cookieName;
-        }).value;
-    };
+    /**
+     *
+     * @param users
+     * @param nextRefreshDate
+     * @returns {*|promise}
+     * @private
+     */
     var _getFieldTestWeapons = function (users, nextRefreshDate) {
-        var deferred = Q.defer();
-        ghost.getLastManifest()
+        return ghost.getLastManifest()
             .then(function (lastManifest) {
-                var worldPath = path.join('./database/', path.basename(lastManifest.mobileWorldContentPaths.en));
-                destiny.getCurrentUser(shadowUser.cookies)
+                var worldPath = path.join('./databases/', path.basename(lastManifest.mobileWorldContentPaths.en));
+                return destiny.getCurrentUser(shadowUser.cookies)
                     .then(function (currentUser) {
-                        destiny.getCharacters(currentUser.membershipId)
+                        return destiny.getCharacters(currentUser.membershipId)
                             .then(function (characters) {
-                                destiny.getFieldTestWeapons(characters[0].characterBase.characterId, shadowUser.cookies)
+                                return destiny.getFieldTestWeapons(characters[0].characterBase.characterId, shadowUser.cookies)
                                     .then(function (items) {
                                         if (items && items.length > 0) {
                                             var itemHashes = _.map(items, function (item) {
@@ -92,11 +95,12 @@ var notificationController = function (shadowUserConfiguration) {
                                             _.each(itemHashes, function (itemHash) {
                                                 itemPromises.push(world.getItemByHash(itemHash));
                                             });
-                                            Q.all(itemPromises)
+                                            return Q.all(itemPromises)
                                                 .then(function (items) {
                                                     world.close();
+                                                    var userPromises = [];
                                                     _.each(users, function (user) {
-                                                        userModel.getLastNotificationDate(user.phoneNumber, userModel.actions.Gunsmith)
+                                                        userPromises.push(userModel.getLastNotificationDate(user.phoneNumber, userModel.actions.Gunsmith)
                                                             .then(function (notificationDate) {
                                                                 var now = new Date();
                                                                 var promises = [];
@@ -111,48 +115,31 @@ var notificationController = function (shadowUserConfiguration) {
                                                                                 'https://www.bungie.net/common/destiny_content/icons/6f00d5e7916a92e4d47f1b07816f276d.png'
                                                                         : undefined)
                                                                         .then(function (message) {
-                                                                            userModel.createUserMessage(user, message, userModel.actions.Gunsmith);
+                                                                            return userModel.createUserMessage(user, message, userModel.actions.Gunsmith);
                                                                         }));
                                                                 }
-                                                                Q.all(promises)
-                                                                    .then(function () {
-                                                                        deferred.resolve();
-                                                                    });
-                                                            })
-                                                            .catch(function(err) {
-                                                                /**
-                                                                 * @todo Log
-                                                                 */
-                                                                throw err;
-                                                            })
-                                                            .fail(function (err) {
-                                                                throw err;
-                                                            });
+                                                                return Q.all(promises);
+                                                            }));
                                                     });
-                                                })
-                                                .catch(function(err) {
-                                                    throw err;
-                                                })
-                                                .fail(function (err) {
-                                                    throw err;
+                                                    return Q.all(userPromises);
                                                 });
                                         }
-                                    })
-                                    .fail(function (err) {
-                                        throw err;
                                     });
                             });
                     });
             });
-        return deferred.promise;
     };
+    /**
+     *
+     * @returns {*|promise}
+     * @private
+     */
     var _getVendorSummaries = function () {
-        var deferred = Q.defer();
-        destiny.getCurrentUser(shadowUser.cookies)
+        return destiny.getCurrentUser(shadowUser.cookies)
             .then(function (currentUser) {
-                destiny.getCharacters(currentUser.membershipId)
+                return destiny.getCharacters(currentUser.membershipId)
                     .then(function (characters) {
-                        destiny.getVendorSummaries(characters[0].characterBase.characterId, shadowUser.cookies)
+                        return destiny.getVendorSummaries(characters[0].characterBase.characterId, shadowUser.cookies)
                             .then(function (vendors) {
                                 var promises = [];
                                 _.each(vendors, function (vendor) {
@@ -160,25 +147,25 @@ var notificationController = function (shadowUserConfiguration) {
                                         promises.push(ghost.upsertVendor(vendor));
                                     }
                                 });
-                                Q.all(promises)
-                                    .then(function () {
-                                        deferred.resolve();
-                                    });
+                                return Q.all(promises);
                             });
                     });
-            })
-            .fail(function (err) {
-                deferred.reject(err);
             });
-        return deferred.promise;
     };
+    /**
+     *
+     * @param users
+     * @param nextRefreshDate
+     * @private
+     */
     var _getXur = function (users, nextRefreshDate) {
-        ghost.getLastManifest()
+        return ghost.getLastManifest()
             .then(function (lastManifest) {
-                var worldPath = path.join('./database/', path.basename(lastManifest.mobileWorldContentPaths.en));
-                destiny.getXur()
+                var worldPath = path.join('./databases/', path.basename(lastManifest.mobileWorldContentPaths.en));
+                return destiny.getXur()
                     .then(function (items) {
                         var now = new Date();
+                        var userPromises = [];
                         if (items && items.length > 0) {
                             var itemHashes = _.map(items, function (item) {
                                 return item.item.itemHash;
@@ -188,43 +175,44 @@ var notificationController = function (shadowUserConfiguration) {
                             _.each(itemHashes, function (itemHash) {
                                 itemPromises.push(world.getItemByHash(itemHash));
                             });
-                            Q.all(itemPromises)
+                            return Q.all(itemPromises)
                                 .then(function (items) {
                                     world.close();
                                     _.each(users, function (user) {
-                                        userModel.getLastNotificationDate(user.phoneNumber, userModel.actions.Xur)
+                                        userPromises.push(userModel.getLastNotificationDate(user.phoneNumber, userModel.actions.Xur)
                                             .then(function (notificationDate) {
                                                 if (notificationDate === undefined ||
                                                         (nextRefreshDate < now && notificationDate < nextRefreshDate)) {
-                                                    notifications.sendMessage('Xur has arrived... for now...\n' +
+                                                    return notifications.sendMessage('Xur has arrived... for now...\n' +
                                                         _.reduce(_.map(items, function (item) {
                                                             return item.itemName;
                                                         }), function (memo, itemName) {
                                                             return memo + itemName + '\n';
                                                         }, ' ').trim(), user.phoneNumber, user.type === 'mobile' ?
-                                                                'https://www.bungie.net/common/destiny_content/icons/f37d959ec6b20ae2223f9edc1e057b80.png'
+                                                                'https://www.bungie.net/common/destiny_content/icons/4d6ee31e6bb0d28ffecd51a74a085a4f.png'
                                                         : undefined)
                                                         .then(function (message) {
-                                                            userModel.createUserMessage(user, message, userModel.actions.Xur);
+                                                            return userModel.createUserMessage(user, message, userModel.actions.Xur);
                                                         });
                                                 }
-                                            });
+                                            }));
                                     });
+                                    return Q.all(userPromises);
                                 });
-                        } else {
-                            _.each(users, function (user) {
-                                userModel.getLastNotificationDate(user.phoneNumber, userModel.actions.Xur)
-                                    .then(function (notificationDate) {
-                                        if (notificationDate === undefined ||
-                                                (nextRefreshDate < now && notificationDate < nextRefreshDate)) {
-                                            notifications.sendMessage('Xur hasn\'t opened shop yet.', user.phoneNumber)
-                                                .then(function (message) {
-                                                    userModel.createUserMessage(user, message, userModel.actions.Xur);
-                                                });
-                                        }
-                                    });
-                            });
                         }
+                        _.each(users, function (user) {
+                            userPromises.push(userModel.getLastNotificationDate(user.phoneNumber, userModel.actions.Xur)
+                                .then(function (notificationDate) {
+                                    if (notificationDate === undefined ||
+                                            (nextRefreshDate < now && notificationDate < nextRefreshDate)) {
+                                        notifications.sendMessage('Xur hasn\'t opened shop yet.', user.phoneNumber)
+                                            .then(function (message) {
+                                                return userModel.createUserMessage(user, message, userModel.actions.Xur);
+                                            });
+                                    }
+                                }));
+                        });
+                        return Q.all(userPromises);
                     });
             });
     };
@@ -251,7 +239,7 @@ var notificationController = function (shadowUserConfiguration) {
                     });
                     ghost.getNextRefreshDate(gunSmithHash)
                         .then(function (nextRefreshDate) {
-                            _getFieldTestWeapons(gunSmithSubscribers, nextRefreshDate)
+                            return _getFieldTestWeapons(gunSmithSubscribers, nextRefreshDate)
                                 .then(function () {
                                     /**
                                      * Add a 2 minute factor of safety.
@@ -262,7 +250,10 @@ var notificationController = function (shadowUserConfiguration) {
                                         onTick: function () {
                                             _getFieldTestWeapons(gunSmithSubscribers, nextRefreshDate);
                                             setInterval(function () {
-                                                _reset();
+                                                _getVendorSummaries()
+                                                    .then(function () {
+                                                        _schedule();
+                                                    });
                                             }, 3600000);
                                             this.stop();
                                         },
@@ -275,13 +266,19 @@ var notificationController = function (shadowUserConfiguration) {
                                         start: true
                                     });
                                 });
+                        })
+                        .fail(function (err) {
+                            /**
+                             * @todo Log
+                             */
+                            console.log(err);
                         });
                     var xurSubscribers = _.filter(users, function (user) {
                         return user.isSubscribedToXur === true;
                     });
                     ghost.getNextRefreshDate(xurHash)
                         .then(function (nextRefreshDate) {
-                            _getXur(xurSubscribers, nextRefreshDate)
+                            return _getXur(xurSubscribers, nextRefreshDate)
                                 .then(function () {
                                     /**
                                      * Add a 2 minute factor of safety.
@@ -292,7 +289,10 @@ var notificationController = function (shadowUserConfiguration) {
                                         onTick: function () {
                                             _getXur(xurSubscribers, nextRefreshDate);
                                             setInterval(function () {
-                                                _reset();
+                                                _getVendorSummaries()
+                                                    .then(function () {
+                                                        _schedule();
+                                                    });
                                             }, 3600000);
                                             this.stop();
                                         },
@@ -305,6 +305,12 @@ var notificationController = function (shadowUserConfiguration) {
                                         start: true
                                     });
                                 });
+                        })
+                        .fail(function (err) {
+                            /**
+                             * @todo Log
+                             */
+                            console.log(err);
                         });
                     new CronJob({
                         cronTime: '00 00 00 * * *',
@@ -324,14 +330,25 @@ var notificationController = function (shadowUserConfiguration) {
             });
     };
     var init = function () {
-        userModel.signIn(shadowUser.userName, shadowUser.password)
+        authentication.signIn(shadowUser.userName, shadowUser.password, shadowUser.membershipType)
             .then(function (cookies) {
-                shadowUser.cookies = cookies;
+                shadowUser.cookies = _.map(_.keys(cookies), function (cookieName) {
+                    return {
+                        name: cookieName,
+                        value: cookies[cookieName]
+                    };
+                });
                 fs.writeFileSync(shadowUserConfiguration, JSON.stringify(shadowUser, null, 4));
                 destiny = new Destiny(shadowUser.apiKey);
                 _getVendorSummaries()
                     .then(function () {
                         _schedule();
+                    })
+                    .fail(function (err) {
+                        /**
+                         * @todo Log
+                         */
+                        console.log(err);
                     });
             })
             .fail(function (err) {

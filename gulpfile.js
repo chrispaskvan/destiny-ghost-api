@@ -11,8 +11,8 @@ gulp.task('default', function () {
         env: {
             APPINSIGHTS: './settings/applicationInsights.json',
             BITLY: './settings/bitly.json',
-            DATABASE: './database/ghost.db',
-            DOMAIN: 'http://22d88940.ngrok.io',
+            DATABASE: './databases/ghost.db',
+            DOMAIN: 'http://b2461cba.ngrok.io',
             PORT: 1100,
             TWILIO: './settings/twilio.json'
         },
@@ -26,11 +26,11 @@ gulp.task('tests', function () {
     env({ vars: {
         APPINSIGHTS: './settings/applicationInsights.json',
         BITLY: './settings/bitly.json',
-        DATABASE: './database/ghost.db',
-        DOMAIN: 'http://22d88940.ngrok.io',
+        DATABASE: './databases/ghost.db',
+        DOMAIN: 'http://b2461cba.ngrok.io',
         PORT: 1100,
         TWILIO: './settings/twilio.json'
     }});
-    gulp.src('tests/*.js', { read: false })
+    gulp.src('tests/authenticationControllerTests.js', { read: false })
         .pipe(gulpMocha({ reporter: 'nyan' }));
 });

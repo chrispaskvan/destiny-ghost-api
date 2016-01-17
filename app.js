@@ -12,6 +12,10 @@ var ApplicationInsights = require('applicationinsights'),
 
 var app = express();
 var port = process.env.PORT || 1100;
+var virtualPath = process.env.VIRTUALPATH || '';
+app.get(virtualPath + '/', function (req, res) {
+    res.render('index', { virtualPath: virtualPath });
+});
 
 var appInsightsConfig = JSON.parse(fs.readFileSync(process.env.APPINSIGHTS || './settings/applicationInsights.json'));
 var appInsights = new ApplicationInsights.setup(appInsightsConfig.instrumentationKey)
@@ -27,25 +31,29 @@ app.use(bodyParser.urlencoded({
 }));
 app.use(cookieParser());
 
-app.use(function(req, res, next) {
+app.use(function (req, res, next) {
     var _json = res.json;
-    res.json = function(responseData) {
+    res.json = function (responseData) {
         res._json = JSON.stringify(responseData);
         _json.call(this, responseData);
-    }
+    };
     next();
 });
-app.use(function(req, res, next) {
+app.use(function (req, res, next) {
     var _end = res.end;
-    res.end = function(responseData) {
+    res.end = function (responseData) {
         res._end = responseData;
         _end.call(this, responseData);
-    }
+    };
     next();
 });
-
+/**
+ * Logs
+ * @type {Log|exports|module.exports}
+ */
 var logger = new Log();
 app.use(logger.requestLogger());
+app.use(logger.errorLogger());
 
 var destinyRouter = require('./routes/destinyRoutes')();
 app.use('/api/destiny', destinyRouter);

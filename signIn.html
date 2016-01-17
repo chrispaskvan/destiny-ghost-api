@@ -7,7 +7,7 @@
     <script src="//cdnjs.cloudflare.com/ajax/libs/knockout/3.3.0/knockout-min.js"></script>
 </head>
 <body>
-    <div id="account1">
+    <div id="anonymous1" style="display: none;">
         <div>
             <label for="userName1">User Name:</label>
             <input id="userName1" type="text" data-bind="value: userName, valueUpdate: 'afterkeydown'" />
@@ -17,16 +17,24 @@
             <input id="password1" type="password" data-bind="value: password, valueUpdate: 'afterkeydown'" />
         </div>
         <div>
-            <button id="submit1" data-bind="click: submit">Sign In</button>
+            <button id="signIn1" data-bind="click: signIn">Sign In</button>
+        </div>
+    </div>
+    <div id="authenticated1" style="display: none;">
+        <div>
+            <span data-bind="text: welcomeMessage"></span>
+        </div>
+        <div>
+            <button id="signOut1" data-bind="click: signOut">Sign Out</button>
         </div>
     </div>
     <script>
         jQuery(document).ready(function () {
-            var accountViewModel = function () {
+            var anonymousUserViewModel = function () {
                 var self = this;
                 self.userName = ko.observable().extend({ required: true });
                 self.password = ko.observable().extend({ required: true });
-                self.submit = function () {
+                self.signIn = function () {
                     var data = JSON.stringify({
                         userName: self.userName(),
                         password: self.password(),
@@ -42,7 +50,33 @@
                     });
                 };
             };
-            ko.applyBindings(new accountViewModel(), document.getElementById('account1'));
+            var authenticatedUserViewModel = function (displayName) {
+                var self = this;
+                self.welcomeMessage = ko.pureComputed(function () {
+                    return 'Welcome ' + displayName;
+                });
+                self.signOut = function () {
+                    document.cookie = "bungled=; expires=Thu, 10 Jul 1970 00:00:00 UTC";
+                    document.cookie = "bungledid=; expires=Thu, 02 Apr 2002 00:00:00 UTC";
+                    document.cookie = "bungleatk=; expires=Thu, 08 Aug 1999 00:00:00 UTC";
+                    window.location.reload();
+                };
+            };
+            if (document.cookie.indexOf('bungleatk') >= 0 &&
+                    document.cookie.indexOf('bungleatk') >= 0 &&
+                    document.cookie.indexOf('bungleatk') >= 0) {
+                jQuery.ajax({
+                    contentType: 'application/json; charset=utf-8',
+                    type: 'GET',
+                    url: 'http://localhost:1100/api/destiny/currentUser'
+                }).done(function (displayName) {
+                    ko.applyBindings(new authenticatedUserViewModel(displayName), document.getElementById('authenticated1'));
+                    jQuery("#authenticated1").fadeIn();
+                });
+            } else {
+                ko.applyBindings(new anonymousUserViewModel(), document.getElementById('anonymous1'));
+                jQuery("#anonymous1").fadeIn();
+            }
         });
     </script>
 </body>
