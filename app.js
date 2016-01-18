@@ -54,7 +54,13 @@ app.use(function (req, res, next) {
 var logger = new Log();
 app.use(logger.requestLogger());
 app.use(logger.errorLogger());
-
+/**
+ * Virtual Directory Path
+ */
+app.use(process.env.VIRTUALPATH || '', app._router);
+/**
+ * Routes
+ */
 var destinyRouter = require('./routes/destinyRoutes')();
 app.use('/api/destiny', destinyRouter);
 
