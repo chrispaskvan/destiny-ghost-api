@@ -356,7 +356,7 @@ var twilioController = function () {
                             .then(function (exotics) {
                                 var result = _.reduce(exotics, function (memo, exotic) {
                                     return memo + '\n' + exotic;
-                                }, ' ').trim();
+                                }, ' ').trim() || 'Xur is off conspiring with the 9. Check back Friday.';
                                 twiml.message(result.substr(0, 130));
                                 res.writeHead(200, {
                                     'Content-Type': 'text/xml'

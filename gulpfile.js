@@ -12,7 +12,7 @@ gulp.task('default', function () {
             APPINSIGHTS: './settings/applicationInsights.json',
             BITLY: './settings/bitly.json',
             DATABASE: './databases/ghost.db',
-            DOMAIN: 'http://04acad54.ngrok.io',
+            DOMAIN: 'http://38adec2c.ngrok.io',
             PORT: 1100,
             TWILIO: './settings/twilio.json'
         },
@@ -27,7 +27,7 @@ gulp.task('tests', function () {
         APPINSIGHTS: './settings/applicationInsights.json',
         BITLY: './settings/bitly.json',
         DATABASE: './databases/ghost.db',
-        DOMAIN: 'http://04acad54.ngrok.io',
+        DOMAIN: 'http://38adec2c.ngrok.io',
         PORT: 1100,
         TWILIO: './settings/twilio.json'
     }});

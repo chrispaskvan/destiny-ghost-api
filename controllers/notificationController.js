@@ -91,17 +91,6 @@ var notificationController = function (shadowUserConfiguration) {
                                                 return item.item.itemHash;
                                             });
                                             world.open(worldPath);
-
-                                            world.getItemByName('Fatebringer')
-                                                .then(function (item) {
-                                                    world.close();
-                                                    expect(item.itemName).to.equal('Fatebringer');
-                                                    done();
-                                                })
-                                                .fail(function (err) {
-                                                    done(err);
-                                                });
-
                                             var itemPromises = [];
                                             _.each(itemHashes, function (itemHash) {
                                                 itemPromises.push(world.getItemByHash(itemHash));
