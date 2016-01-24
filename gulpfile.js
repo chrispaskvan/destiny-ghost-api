@@ -12,7 +12,7 @@ gulp.task('default', function () {
             APPINSIGHTS: './settings/applicationInsights.json',
             BITLY: './settings/bitly.json',
             DATABASE: './databases/ghost.db',
-            DOMAIN: 'http://b2461cba.ngrok.io',
+            DOMAIN: 'http://04acad54.ngrok.io',
             PORT: 1100,
             TWILIO: './settings/twilio.json'
         },
@@ -27,10 +27,10 @@ gulp.task('tests', function () {
         APPINSIGHTS: './settings/applicationInsights.json',
         BITLY: './settings/bitly.json',
         DATABASE: './databases/ghost.db',
-        DOMAIN: 'http://b2461cba.ngrok.io',
+        DOMAIN: 'http://04acad54.ngrok.io',
         PORT: 1100,
         TWILIO: './settings/twilio.json'
     }});
-    gulp.src('tests/authenticationControllerTests.js', { read: false })
+    gulp.src('tests/worldModelTests.js', { read: false })
         .pipe(gulpMocha({ reporter: 'nyan' }));
 });

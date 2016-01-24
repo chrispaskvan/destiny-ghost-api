@@ -325,15 +325,23 @@ var twilioController = function () {
         if (twilio.validateRequest(authToken, header, process.env.DOMAIN + req.originalUrl, req.body)) {
             var counter = parseInt(req.cookies.counter, 10) || 0;
             var itemHash = req.cookies.itemHash;
-            if (itemHash && req.body.Body.trim().toLowerCase() === 'more') {
-                bitly.getShortUrl('http://db.planetdestiny.com/items/view/' + itemHash)
-                    .then(function (shortUrl) {
-                        twiml.message(shortUrl);
-                        res.writeHead(200, {
-                            'Content-Type': 'text/xml'
+            if (req.body.Body.trim().toLowerCase() === 'more') {
+                if (itemHash) {
+                    bitly.getShortUrl('http://db.planetdestiny.com/items/view/' + itemHash)
+                        .then(function (shortUrl) {
+                            twiml.message(shortUrl);
+                            res.writeHead(200, {
+                                'Content-Type': 'text/xml'
+                            });
+                            res.end(twiml.toString());
                         });
-                        res.end(twiml.toString());
+                } else {
+                    twiml.message('More what?');
+                    res.writeHead(200, {
+                        'Content-Type': 'text/xml'
                     });
+                    res.end(twiml.toString());
+                }
             } else {
                 if (counter > 121) {
                     twiml.message('Let me check with the Speaker regarding your standing with the Vanguard.');
@@ -392,6 +400,7 @@ var twilioController = function () {
                                 res.cookie('counter', counter);
                                 if (items.length === 1) {
                                     res.cookie('itemHash', items[0].itemHash);
+                                    items[0].itemCategory = new S(items[0].itemCategory).strip('Weapon').collapseWhitespace().s.trim();
                                     var template = '{{itemName}} {{tierTypeName}} {{itemCategory}}';
                                     return userModel.getUserByPhoneNumber(req.body.From)
                                         .then(function (user) {

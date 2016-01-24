@@ -25,4 +25,40 @@ describe('Get the Fusion Rifle category', function () {
                     });
             });
     });
+    it('Should return Fatebringer', function (done) {
+        var ghost = new Ghost();
+        var world = new World();
+        ghost.getLastManifest()
+            .then(function (lastManifest) {
+                world.open(path.join('./databases/', path.basename(lastManifest.mobileWorldContentPaths.en)));
+                world.getItemByName('Fatebringer')
+                    .then(function (items) {
+                        world.close();
+                        expect(items[0].itemName).to.equal('Fatebringer');
+                        done();
+                    })
+                    .fail(function (err) {
+                        done(err);
+                    });
+            });
+    });
+    it('Should return year 2 Hawkmoon', function (done) {
+        var ghost = new Ghost();
+        var world = new World();
+        ghost.getLastManifest()
+            .then(function (lastManifest) {
+                world.open(path.join('./databases/', path.basename(lastManifest.mobileWorldContentPaths.en)));
+                world.getItemByName('Hawkmoon')
+                    .then(function (items) {
+                        world.close();
+                        expect(items[0].itemName).to.equal('Hawkmoon');
+                        expect(items[0].qualityLevel).to.equal(0);
+                        expect(items.length).to.equal(1);
+                        done();
+                    })
+                    .fail(function (err) {
+                        done(err);
+                    });
+            });
+    });
 });

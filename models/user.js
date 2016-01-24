@@ -51,6 +51,7 @@ var User = function (databaseFullPath, twilioSettingsFullPath) {
     db.serialize(function () {
         db.run('CREATE TABLE IF NOT EXISTS DestinyGhostUser(id TEXT, json BLOB)');
         db.run('CREATE TABLE IF NOT EXISTS DestinyGhostUserMessage(id TEXT, json BLOB)');
+        db.run('CREATE TABLE IF NOT EXISTS DestinyGhostUserToken(id TEXT, json BLOB)');
     });
     /**
      * @private
@@ -60,8 +61,9 @@ var User = function (databaseFullPath, twilioSettingsFullPath) {
         type: 'object',
         properties: {
             emailAddress: {
-                type: 'string',
-                format: 'email'
+                format: 'email',
+                required: true,
+                type: 'string'
             },
             firstName: {
                 required: true,
@@ -260,6 +262,35 @@ var User = function (databaseFullPath, twilioSettingsFullPath) {
         sql.run(new Date().toISOString(), JSON.stringify(userMessage));
         sql.finalize();
     };
+    /**
+     *
+     * @param user
+     * @returns {*}
+     */
+    var createUserToken = function (user, callback) {
+        var deferred = Q.defer();
+        var validate = validator(schema);
+        if (!validate(user)) {
+            deferred.reject(new Error(JSON.stringify(validate.errors)));
+            return deferred.promise.nodeify(callback);
+        }
+        _getUserByPhoneNumber(user.phoneNumber)
+            .then(function (existingUser) {
+                if (existingUser) {
+                    deferred.reject(new Error('The phone number, ' + user.phoneNumber + ', is already registered.'));
+                    return deferred.promise.nodeify(callback);
+                }
+                var sql = db.prepare('INSERT INTO DestinyGhostUser VALUES (?, ?)');
+                sql.run(new Date().toISOString(), JSON.stringify(user));
+                sql.finalize();
+                deferred.resolve();
+            });
+        return deferred.promise.nodeify(callback);
+    };
+    /**
+     *
+     * @param phoneNumber {string}
+     */
     var deleteUser = function (phoneNumber) {
         var sql = db.prepare('DELETE FROM DestinyGhostUser WHERE json LIKE \'%"phoneNumber":"' +
             phoneNumber + '"%\'');
@@ -304,7 +335,7 @@ var User = function (databaseFullPath, twilioSettingsFullPath) {
      * @param user {Object}
      * @returns {*|Array}
      */
-    var updateUser = function (user) {
+    var updateUser = function (user, callback) {
         /**
          * @todo
          */
@@ -314,6 +345,7 @@ var User = function (databaseFullPath, twilioSettingsFullPath) {
         cleanPhoneNumber: cleanPhoneNumber,
         createUser: createUser,
         createUserMessage: createUserMessage,
+        createUserToken: createUserToken,
         deleteUser: deleteUser,
         getLastNotificationDate: getLastNotificationDate,
         getPhoneNumberType: getPhoneNumberType,

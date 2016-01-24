@@ -28,6 +28,8 @@
     "latest": "^0.2.0",
     "node-cache": "^3.0.0",
     "node-horseman": "^2.8.1",
+    "nodemailer": "^2.0.0",
+    "nodemailer-smtp-transport": "^2.0.0",
     "q": "^1.4.1",
     "request": "^2.61.0",
     "restify": "^4.0.3",

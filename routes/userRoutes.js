@@ -6,7 +6,8 @@
  */
 'use strict';
 var AuthenticationController = require('../controllers/authenticationController'),
-    express = require('express');
+    express = require('express'),
+    UserController = require('../controllers/userController');
 
 var routes = function () {
     var userRouter = express.Router();
@@ -17,6 +18,9 @@ var routes = function () {
     var authenticationController = new AuthenticationController();
     userRouter.route('/signIn')
         .post(authenticationController.signIn);
+    var userController = new UserController();
+    userRouter.route('/register')
+        .post(userController.register);
     return userRouter;
 };
 

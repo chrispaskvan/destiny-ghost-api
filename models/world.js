@@ -109,8 +109,17 @@ var World = function () {
                         if (rows === 0) {
                             deferred.resolve([]);
                         } else {
-                            deferred.resolve(_.filter(items, function (item) {
-                                return item.qualityLevel === 0;
+                            var groups = _.groupBy(items, function (item) {
+                                return item.itemName;
+                            });
+                            var keys = Object.keys(groups);
+                            deferred.resolve(_.map(keys, function (key) {
+                                return _.min(_.filter(items, function (item) {
+                                    console.log(key);
+                                    return item.itemName === key;
+                                }), function (item) {
+                                    return item.qualityLevel;
+                                });
                             }));
                         }
                     }

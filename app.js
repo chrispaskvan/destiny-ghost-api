@@ -8,6 +8,7 @@ var ApplicationInsights = require('applicationinsights'),
     express = require('express'),
     fs = require('fs'),
     Log = require('./models/log'),
+    log = Log(),
     path = require('path');
 
 var app = express();
@@ -68,7 +69,7 @@ var twilioRouter = require('./routes/twilioRoutes')();
 app.use('/api/twilio', twilioRouter);
 
 var userRouter = require('./routes/userRoutes')();
-app.use('/api/user', userRouter);
+app.use('/api/users', userRouter);
 
 app.use(function (err, req, res, next) {
     appInsights.client.trackRequest(req, res);

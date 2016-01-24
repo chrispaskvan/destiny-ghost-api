@@ -91,6 +91,77 @@ var notificationController = function (shadowUserConfiguration) {
                                                 return item.item.itemHash;
                                             });
                                             world.open(worldPath);
+
+                                            world.getItemByName('Fatebringer')
+                                                .then(function (item) {
+                                                    world.close();
+                                                    expect(item.itemName).to.equal('Fatebringer');
+                                                    done();
+                                                })
+                                                .fail(function (err) {
+                                                    done(err);
+                                                });
+
+                                            var itemPromises = [];
+                                            _.each(itemHashes, function (itemHash) {
+                                                itemPromises.push(world.getItemByHash(itemHash));
+                                            });
+                                            return Q.all(itemPromises)
+                                                .then(function (items) {
+                                                    world.close();
+                                                    var userPromises = [];
+                                                    _.each(users, function (user) {
+                                                        userPromises.push(userModel.getLastNotificationDate(user.phoneNumber, userModel.actions.Gunsmith)
+                                                            .then(function (notificationDate) {
+                                                                var now = new Date();
+                                                                var promises = [];
+                                                                if (notificationDate === undefined ||
+                                                                        (nextRefreshDate < now && notificationDate < nextRefreshDate)) {
+                                                                    promises.push(notifications.sendMessage('The following experimental weapons need testing in the field:\n' +
+                                                                        _.reduce(_.map(items, function (item) {
+                                                                            return item.itemName;
+                                                                        }), function (memo, itemName) {
+                                                                            return memo + itemName + '\n';
+                                                                        }, ' ').trim(), user.phoneNumber, user.type === 'mobile' ?
+                                                                                'https://www.bungie.net/common/destiny_content/icons/d37f64480d398f7186d0a21b418c0bad.png'
+                                                                        : undefined)
+                                                                        .then(function (message) {
+                                                                            return userModel.createUserMessage(user, message, userModel.actions.Gunsmith);
+                                                                        }));
+                                                                }
+                                                                return Q.all(promises);
+                                                            }));
+                                                    });
+                                                    return Q.all(userPromises);
+                                                });
+                                        }
+                                    });
+                            });
+                    });
+            });
+    };
+    /**
+     *
+     * @param users
+     * @param nextRefreshDate
+     * @returns {*|promise}
+     * @private
+     */
+    var _getFoundryOrders = function (users, nextRefreshDate) {
+        return ghost.getLastManifest()
+            .then(function (lastManifest) {
+                var worldPath = path.join('./databases/', path.basename(lastManifest.mobileWorldContentPaths.en));
+                return destiny.getCurrentUser(shadowUser.cookies)
+                    .then(function (currentUser) {
+                        return destiny.getCharacters(currentUser.membershipId)
+                            .then(function (characters) {
+                                return destiny.getFoundryOrders(characters[0].characterBase.characterId, shadowUser.cookies)
+                                    .then(function (items) {
+                                        if (items && items.length > 0) {
+                                            var itemHashes = _.map(items, function (item) {
+                                                return item.item.itemHash;
+                                            });
+                                            world.open(worldPath);
                                             var itemPromises = [];
                                             _.each(itemHashes, function (itemHash) {
                                                 itemPromises.push(world.getItemByHash(itemHash));
@@ -112,8 +183,66 @@ var notificationController = function (shadowUserConfiguration) {
                                                                         }), function (memo, itemName) {
                                                                             return memo + itemName + '\n';
                                                                         }, ' ').trim(), user.phoneNumber, user.type === 'mobile' ?
-                                                                                'https://www.bungie.net/common/destiny_content/icons/6f00d5e7916a92e4d47f1b07816f276d.png'
-                                                                        : undefined)
+                                                                                'https://www.bungie.net/common/destiny_content/icons/d37f64480d398f7186d0a21b418c0bad.png'
+                                                                            : undefined)
+                                                                        .then(function (message) {
+                                                                            return userModel.createUserMessage(user, message, userModel.actions.Gunsmith);
+                                                                        }));
+                                                                }
+                                                                return Q.all(promises);
+                                                            }));
+                                                    });
+                                                    return Q.all(userPromises);
+                                                });
+                                        }
+                                    });
+                            });
+                    });
+            });
+    };
+    /**
+     *
+     * @param users
+     * @param nextRefreshDate
+     * @returns {*|promise}
+     * @private
+     */
+    var _getIronBannerEventRewards = function (users, nextRefreshDate) {
+        return ghost.getLastManifest()
+            .then(function (lastManifest) {
+                var worldPath = path.join('./databases/', path.basename(lastManifest.mobileWorldContentPaths.en));
+                return destiny.getCurrentUser(shadowUser.cookies)
+                    .then(function (currentUser) {
+                        return destiny.getCharacters(currentUser.membershipId)
+                            .then(function (characters) {
+                                return destiny.getIronBannerEventRewards(characters[0].characterBase.characterId, shadowUser.cookies)
+                                    .then(function (items) {
+                                        if (items && items.length > 0) {
+                                            var itemHashes = _.map(items, function (item) {
+                                                return item.item.itemHash;
+                                            });
+                                            world.open(worldPath);
+                                            var itemPromises = [];
+                                            _.each(itemHashes, function (itemHash) {
+                                                itemPromises.push(world.getItemByHash(itemHash));
+                                            });
+                                            return Q.all(itemPromises)
+                                                .then(function (items) {
+                                                    world.close();
+                                                    var userPromises = [];
+                                                    _.each(users, function (user) {
+                                                        userPromises.push(userModel.getLastNotificationDate(user.phoneNumber, userModel.actions.Gunsmith)
+                                                            .then(function (notificationDate) {
+                                                                var now = new Date();
+                                                                var promises = [];
+                                                                if (notificationDate === undefined ||
+                                                                    (nextRefreshDate < now && notificationDate < nextRefreshDate)) {
+                                                                    promises.push(notifications.sendMessage('Lord Saladin rewards only the strong.\n' +
+                                                                            _.reduce(_.map(items, function (item) {
+                                                                                return item.itemName;
+                                                                            }), function (memo, itemName) {
+                                                                                return memo + itemName + '\n';
+                                                                            }, ' ').trim(), user.phoneNumber)
                                                                         .then(function (message) {
                                                                             return userModel.createUserMessage(user, message, userModel.actions.Gunsmith);
                                                                         }));
@@ -140,14 +269,8 @@ var notificationController = function (shadowUserConfiguration) {
                 return destiny.getCharacters(currentUser.membershipId)
                     .then(function (characters) {
                         return destiny.getVendorSummaries(characters[0].characterBase.characterId, shadowUser.cookies)
-                            .then(function (vendors) {
-                                var promises = [];
-                                _.each(vendors, function (vendor) {
-                                    if (new Date(vendor.nextRefreshDate).getFullYear() < 9999) {
-                                        promises.push(ghost.upsertVendor(vendor));
-                                    }
-                                });
-                                return Q.all(promises);
+                            .then(function (vendorSummaries) {
+                                return vendorSummaries;
                             });
                     });
             });
@@ -217,101 +340,132 @@ var notificationController = function (shadowUserConfiguration) {
             });
     };
     /**
+     * Restart the jobs.
+     * @private
+     */
+    var _restart = function () {
+        _getVendorSummaries()
+            .then(function (vendors) {
+                _schedule(vendors);
+            })
+            .fail(function (err) {
+                /**
+                 * @todo Log
+                 */
+                console.log(err);
+            });
+    };
+    /**
      * @constant
      * @type {string}
      * @description Banshee-44's Vendor Number
      */
-    var gunSmithHash = '570929315';
+    var gunSmithHash = 570929315;
+    /**
+     * @constant
+     * @type {string}
+     * @description Iron Banner's Vendor Number
+     */
+    var lordSaladinHash = 242140165;
     /**
      * @constant
      * @type {string}
      * @description Xur's Vendor Number
      */
-    var xurHash = '2796397637';
+    var xurHash = 2796397637;
     var gunSmithJob;
     var xurJob;
-    var _schedule = function () {
-        userModel.getSubscribedUsers()
+    var _schedule = function (vendors) {
+        return userModel.getSubscribedUsers()
             .then(function (users) {
                 if (users && users.length > 0) {
-                    var gunSmithSubscribers = _.filter(users, function (user) {
-                        return user.isSubscribedToBanshee44 === true;
-                    });
-                    ghost.getNextRefreshDate(gunSmithHash)
-                        .then(function (nextRefreshDate) {
-                            return _getFieldTestWeapons(gunSmithSubscribers, nextRefreshDate)
-                                .then(function () {
-                                    /**
-                                     * Add a 2 minute factor of safety.
-                                     */
-                                    nextRefreshDate.setSeconds(nextRefreshDate.getSeconds() + 120);
-                                    gunSmithJob = new CronJob({
-                                        cronTime: nextRefreshDate,
-                                        onTick: function () {
-                                            _getFieldTestWeapons(gunSmithSubscribers, nextRefreshDate);
-                                            setInterval(function () {
-                                                _getVendorSummaries()
-                                                    .then(function () {
-                                                        _schedule();
-                                                    });
-                                            }, 3600000);
-                                            this.stop();
-                                        },
-                                        onComplete: function () {
+                    _.each(vendors, function (vendor) {
+                        if (vendor.vendorHash === gunSmithHash) {
+                            var gunSmithSubscribers = _.filter(users, function (user) {
+                                return user.isSubscribedToBanshee44 === true;
+                            });
+                            ghost.getNextRefreshDate(gunSmithHash)
+                                .then(function (nextRefreshDate) {
+                                    return _getFieldTestWeapons(gunSmithSubscribers, nextRefreshDate)
+                                        .then(function () {
+                                            ghost.upsertVendor(vendor);
                                             /**
-                                             * @todo Log
+                                             * Add a 5 minute factor of safety.
                                              */
-                                            console.log('Job completed.');
-                                        },
-                                        start: true
-                                    });
-                                });
-                        })
-                        .fail(function (err) {
-                            /**
-                             * @todo Log
-                             */
-                            console.log(err);
-                        });
-                    var xurSubscribers = _.filter(users, function (user) {
-                        return user.isSubscribedToXur === true;
-                    });
-                    ghost.getNextRefreshDate(xurHash)
-                        .then(function (nextRefreshDate) {
-                            return _getXur(xurSubscribers, nextRefreshDate)
-                                .then(function () {
+                                            var notificationDate = new Date(vendor.nextRefreshDate);
+                                            notificationDate.setUTCMinutes(5);
+                                            gunSmithJob = new CronJob({
+                                                cronTime: notificationDate,
+                                                onTick: function () {
+                                                    _getFieldTestWeapons(gunSmithSubscribers, vendor.nextRefreshDate);
+                                                    /**
+                                                     * Restart again in an hour.
+                                                     */
+                                                    setInterval(function () {
+                                                        _restart();
+                                                    }, 3600000);
+                                                    this.stop();
+                                                },
+                                                onComplete: function () {
+                                                    /**
+                                                     * @todo Log
+                                                     */
+                                                    console.log('Job completed.');
+                                                },
+                                                start: true
+                                            });
+                                        });
+                                })
+                                .fail(function (err) {
                                     /**
-                                     * Add a 2 minute factor of safety.
+                                     * @todo Log
                                      */
-                                    nextRefreshDate.setSeconds(nextRefreshDate.getSeconds() + 120);
-                                    xurJob = new CronJob({
-                                        cronTime: nextRefreshDate,
-                                        onTick: function () {
-                                            _getXur(xurSubscribers, nextRefreshDate);
-                                            setInterval(function () {
-                                                _getVendorSummaries()
-                                                    .then(function () {
-                                                        _schedule();
-                                                    });
-                                            }, 3600000);
-                                            this.stop();
-                                        },
-                                        onComplete: function () {
-                                            /**
-                                             * @todo Log
-                                             */
-                                            console.log('Job completed.');
-                                        },
-                                        start: true
-                                    });
+                                    console.log(err);
                                 });
-                        })
-                        .fail(function (err) {
-                            /**
-                             * @todo Log
-                             */
-                            console.log(err);
-                        });
+
+                        } else if (vendor.vendorHash === xurHash) {
+                            var xurSubscribers = _.filter(users, function (user) {
+                                return user.isSubscribedToXur === true;
+                            });
+                            ghost.getNextRefreshDate(xurHash)
+                                .then(function (nextRefreshDate) {
+                                    return _getXur(xurSubscribers, nextRefreshDate)
+                                        .then(function () {
+                                            ghost.upsertVendor(vendor);
+                                            /**
+                                             * Add a 5 minute factor of safety.
+                                             */
+                                            var notificationDate = new Date(vendor.nextRefreshDate);
+                                            notificationDate.setUTCMinutes(5);
+                                            xurJob = new CronJob({
+                                                cronTime: notificationDate,
+                                                onTick: function () {
+                                                    _getXur(xurSubscribers, vendor.nextRefreshDate);
+                                                    setInterval(function () {
+                                                        _restart();
+                                                    }, 3600000);
+                                                    this.stop();
+                                                },
+                                                onComplete: function () {
+                                                    /**
+                                                     * @todo Log
+                                                     */
+                                                    console.log('Job completed.');
+                                                },
+                                                start: true
+                                            });
+                                        });
+                                })
+                                .fail(function (err) {
+                                    /**
+                                     * @todo Log
+                                     */
+                                    console.log(err);
+                                });
+                        } else {
+                            ghost.upsertVendor(vendor);
+                        }
+                    });
                     new CronJob({
                         cronTime: '00 00 00 * * *',
                         onTick: function () {
@@ -329,6 +483,9 @@ var notificationController = function (shadowUserConfiguration) {
                 }
             });
     };
+    /**
+     * Sign in and restart all jobs.
+     */
     var init = function () {
         authentication.signIn(shadowUser.userName, shadowUser.password, shadowUser.membershipType)
             .then(function (cookies) {
@@ -340,16 +497,7 @@ var notificationController = function (shadowUserConfiguration) {
                 });
                 fs.writeFileSync(shadowUserConfiguration, JSON.stringify(shadowUser, null, 4));
                 destiny = new Destiny(shadowUser.apiKey);
-                _getVendorSummaries()
-                    .then(function () {
-                        _schedule();
-                    })
-                    .fail(function (err) {
-                        /**
-                         * @todo Log
-                         */
-                        console.log(err);
-                    });
+                _restart();
             })
             .fail(function (err) {
                 /**
