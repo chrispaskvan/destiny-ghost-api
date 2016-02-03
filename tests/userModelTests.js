@@ -9,20 +9,6 @@ var _ = require('underscore'),
 var chance = new Chance();
 var userModel = new User(process.env.DATABASE);
 
-describe('Sign in to the Playstation Network', function () {
-    it('Should return valid Bungie authentication cookies', function (done) {
-        var shadowUser = JSON.parse(fs.readFileSync('settings/MadridMountain.json'));
-        this.timeout(0);
-        userModel.signIn(shadowUser.userName, shadowUser.password)
-            .then(function (tokens) {
-                expect(tokens.length).to.equal(3);
-                done();
-            })
-            .fail(function (err) {
-                done(err);
-            });
-    });
-});
 describe('Format a phone number', function () {
     it('Should return a properly formatted phone number', function (done) {
         var phoneNumber = chance.phone({ country: 'us', mobile: true });
@@ -69,6 +55,30 @@ describe('Create a new user', function () {
                                 done();
                             });
                     });
+            })
+            .fail(function (err) {
+                done(err);
+            });
+    });
+});
+describe('Get a new 32-bit globally unique identifier', function () {
+    it('Should return a random identification number', function (done) {
+        userModel.getRandomBlob(32)
+            .then(function (id) {
+                expect(id.length).to.equal(64);
+                done();
+            })
+            .fail(function (err) {
+                done(err);
+            });
+    });
+});
+describe('Get a new default 16-bit globally unique identifier', function () {
+    it('Should return a random identification number', function (done) {
+        userModel.getRandomBlob()
+            .then(function (id) {
+                expect(id.length).to.equal(32);
+                done();
             })
             .fail(function (err) {
                 done(err);

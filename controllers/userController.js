@@ -11,6 +11,7 @@
 'use strict';
 var _ = require('underscore'),
     jSend = require('../models/jsend'),
+    Notifications = require('../models/notifications'),
     PostMaster = require('../models/postMaster'),
     Tokens = require('../models/tokens'),
     Users = require('../models/user');
@@ -19,6 +20,11 @@ var _ = require('underscore'),
  * @constructor
  */
 var userController = function () {
+    /**
+     * Notifications Model
+     * @type {Notifications|exports|module.exports}
+     */
+    var notifications = new Notifications(process.env.DATABASE, process.env.TWILIO);
     /**
      * Post Office Model
      * @type {PostMaster|exports|module.exports}
@@ -39,6 +45,33 @@ var userController = function () {
      * @param req
      * @param res
      */
+    var confirm = function (req, res) {
+        var user = req.body;
+        users.getUserToken(user.phoneNumber)
+            .then(function (userToken) {
+                if (!_.isEqual(user.tokens, userToken.tokens)) {
+                    return res.json(new jSend.error('Bad tokens.'));
+                }
+                return users.getUserByPhoneNumber(user.phoneNumber)
+                    .then(function (user) {
+                        if (user) {
+                            return res.json(new jSend.error('You are already registered. Please sign in.'));
+                        }
+                        return users.createUser(user)
+                            .then(function () {
+                                return res.json(new jSend.success());
+                            });
+                    });
+            })
+            .fail(function (err) {
+                res.json(new jSend.error(err.message));
+            });
+    };
+    /**
+     *
+     * @param req
+     * @param res
+     */
     var register = function (req, res) {
         var user = req.body;
         _.extend(user, {
@@ -49,15 +82,19 @@ var userController = function () {
         });
         users.createUserToken(user)
             .then(function () {
-                res.json(jSend.success());
+                postMaster.register(user);
+                notifications.sendMessage('Enter ' +
+                    user.tokens.phoneNumber +
+                    ' to verify your Destiny Ghost phone number.',
+                    user.phoneNumber);
+                res.json(new jSend.success());
             })
             .fail(function (err) {
-                res.json(jSend.error(err.message));
+                res.json(new jSend.error(err.message));
             });
-        //postMaster.sendRegistration(user);
-        //notifications.sendRegistration(user);
     };
     return {
+        confirm: confirm,
         register: register
     };
 };

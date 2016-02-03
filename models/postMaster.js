@@ -21,21 +21,20 @@ var _ = require('underscore'),
 
 var PostMaster = function () {
     var transporter = nodemailer.createTransport(smtpTransport(smtpConfiguration));
-    var registrationText = 'Hi {{firstName}},\r\n' +
-        'Please enter the following verification code for your email address.\r\n' +
-        '{{token}}';
-    var registrationHtml = 'Hi {{firstName}},\r\n' +
-        'Please enter the following verification code for your email address.\r\n' +
-        '{{token}}';
+    var registrationText = 'Hi {{firstName}},\r\n\r\n' +
+        'Please enter the following verification code for your email address.\r\n\r\n';
+    var registrationHtml = '<img src=\'https://www.bungie.net/common/destiny_content/icons/4d6ee31e6bb0d28ffecd51a74a085a4f.png\'>Hi {{firstName}},\r\n\r\n' +
+        'Please enter the following verification code for your email address.\r\n\r\n';
     var mailOptions = {
         from: 'destiny-ghost@apricothill.com'
     };
 
-    var sendRegistration = function (user) {
+    var register = function (user) {
         _.extend(mailOptions, {
-            subject: 'Your Registration Code for Destiny Ghost',
-            text: new S(registrationText).template(user).s,
-            to: user.email
+            subject: 'Your Email Registration Code for Destiny Ghost',
+            text: new S(registrationText).template(user).s + user.tokens.emailAddress,
+            to: user.emailAddress,
+            html: new S(registrationHtml).template(user).s + user.tokens.emailAddress
         });
         transporter.sendMail(mailOptions, function (err, response) {
             if (err) {
@@ -46,7 +45,7 @@ var PostMaster = function () {
         });
     };
     return {
-        sendRegistration: sendRegistration
+        register: register
     };
 };
 

@@ -115,7 +115,6 @@ var World = function () {
                             var keys = Object.keys(groups);
                             deferred.resolve(_.map(keys, function (key) {
                                 return _.min(_.filter(items, function (item) {
-                                    console.log(key);
                                     return item.itemName === key;
                                 }), function (item) {
                                     return item.qualityLevel;

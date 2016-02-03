@@ -62,6 +62,12 @@ var Ghost = function (databaseFullPath) {
             } else {
                 deferred.resolve(JSON.parse(row.json));
             }
+        }, function (err) {
+            if (err) {
+                deferred.reject(err);
+            } else {
+                deferred.resolve();
+            }
         });
         return deferred.promise;
     };
@@ -80,6 +86,12 @@ var Ghost = function (databaseFullPath) {
                     } else {
                         deferred.resolve(new Date(JSON.parse(row.json).nextRefreshDate));
                     }
+                }, function (err) {
+                    if (err) {
+                        deferred.reject(err);
+                    } else {
+                        deferred.resolve();
+                    }
                 });
         } else {
             db.each('SELECT json FROM DestinyGhostVendor ORDER BY id LIMIT 1', function (err, row) {
@@ -87,6 +99,12 @@ var Ghost = function (databaseFullPath) {
                     deferred.reject(err);
                 } else {
                     deferred.resolve(new Date(JSON.parse(row.json).nextRefreshDate));
+                }
+            }, function (err) {
+                if (err) {
+                    deferred.reject(err);
+                } else {
+                    deferred.resolve();
                 }
             });
         }

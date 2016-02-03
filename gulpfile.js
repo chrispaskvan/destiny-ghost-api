@@ -22,7 +22,7 @@ gulp.task('default', function () {
     });
 });
 
-gulp.task('tests', function () {
+gulp.task('integrationTests', function () {
     env({ vars: {
         APPINSIGHTS: './settings/applicationInsights.json',
         BITLY: './settings/bitly.json',
@@ -31,6 +31,32 @@ gulp.task('tests', function () {
         PORT: 1100,
         TWILIO: './settings/twilio.json'
     }});
-    gulp.src('tests/worldModelTests.js', { read: false })
+    gulp.src('tests/*IntegrationTests.js', { read: false })
+        .pipe(gulpMocha({ reporter: 'nyan' }));
+});
+
+gulp.task('controllerTests', function () {
+    env({ vars: {
+        APPINSIGHTS: './settings/applicationInsights.json',
+        BITLY: './settings/bitly.json',
+        DATABASE: './databases/ghost.db',
+        DOMAIN: 'http://38adec2c.ngrok.io',
+        PORT: 1100,
+        TWILIO: './settings/twilio.json'
+    }});
+    gulp.src('tests/*ControllerTests.js', { read: false })
+        .pipe(gulpMocha({ reporter: 'nyan' }));
+});
+
+gulp.task('modelTests', function () {
+    env({ vars: {
+        APPINSIGHTS: './settings/applicationInsights.json',
+        BITLY: './settings/bitly.json',
+        DATABASE: './databases/ghost.db',
+        DOMAIN: 'http://38adec2c.ngrok.io',
+        PORT: 1100,
+        TWILIO: './settings/twilio.json'
+    }});
+    gulp.src('tests/*ModelTests.js', { read: false })
         .pipe(gulpMocha({ reporter: 'nyan' }));
 });

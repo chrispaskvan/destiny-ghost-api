@@ -274,17 +274,10 @@ var User = function (databaseFullPath, twilioSettingsFullPath) {
             deferred.reject(new Error(JSON.stringify(validate.errors)));
             return deferred.promise.nodeify(callback);
         }
-        _getUserByPhoneNumber(user.phoneNumber)
-            .then(function (existingUser) {
-                if (existingUser) {
-                    deferred.reject(new Error('The phone number, ' + user.phoneNumber + ', is already registered.'));
-                    return deferred.promise.nodeify(callback);
-                }
-                var sql = db.prepare('INSERT INTO DestinyGhostUser VALUES (?, ?)');
-                sql.run(new Date().toISOString(), JSON.stringify(user));
-                sql.finalize();
-                deferred.resolve();
-            });
+        var sql = db.prepare('INSERT INTO DestinyGhostUserToken VALUES (?, ?)');
+        sql.run(new Date().toISOString(), JSON.stringify(user));
+        sql.finalize();
+        deferred.resolve();
         return deferred.promise.nodeify(callback);
     };
     /**
@@ -296,6 +289,28 @@ var User = function (databaseFullPath, twilioSettingsFullPath) {
             phoneNumber + '"%\'');
         sql.run();
         sql.finalize();
+    };
+    /**
+     *
+     * @param numberOfBytes
+     * @returns {*|promise}
+     */
+    var getRandomBlob = function (numberOfBytes) {
+        var deferred = Q.defer();
+        db.each('SELECT lower(hex(randomblob(' + (numberOfBytes || 16).toString() + '))) AS id', function (err, row) {
+            if (err) {
+                deferred.reject(err);
+            } else {
+                deferred.resolve(row.id);
+            }
+        }, function (err) {
+            if (err) {
+                deferred.reject(err);
+            } else {
+                deferred.resolve();
+            }
+        });
+        return deferred.promise;
     };
     /**
      * Get subscribed users from the database.
@@ -331,6 +346,31 @@ var User = function (databaseFullPath, twilioSettingsFullPath) {
         return _getUserByPhoneNumber(phoneNumber);
     };
     /**
+     * Wrapper for internal function.
+     * @param phoneNumber
+     * @returns {*|Object}
+     */
+    var getUserToken = function (phoneNumber) {
+        var deferred = Q.defer();
+        db.each('SELECT json FROM DestinyGhostUserToken WHERE json LIKE \'%"phoneNumber":"' +
+            phoneNumber + '"%\' ORDER BY id DESC LIMIT 1', function (err, row) {
+                if (err) {
+                    deferred.reject(err);
+                } else {
+                    deferred.resolve(JSON.parse(row.json));
+                }
+            }, function (err, rows) {
+                if (err) {
+                    deferred.reject(err);
+                } else {
+                    if (rows === 0) {
+                        deferred.resolve();
+                    }
+                }
+            });
+        return deferred.promise;
+    };
+    /**
      * Sign the user in and retrieve the Bungie cookies.
      * @param user {Object}
      * @returns {*|Array}
@@ -349,8 +389,10 @@ var User = function (databaseFullPath, twilioSettingsFullPath) {
         deleteUser: deleteUser,
         getLastNotificationDate: getLastNotificationDate,
         getPhoneNumberType: getPhoneNumberType,
+        getRandomBlob: getRandomBlob,
         getSubscribedUsers: getSubscribedUsers,
         getUserByPhoneNumber: getUserByPhoneNumber,
+        getUserToken: getUserToken,
         updateUser: updateUser
     };
 };
