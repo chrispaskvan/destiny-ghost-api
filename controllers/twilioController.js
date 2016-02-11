@@ -30,7 +30,7 @@ var _ = require('underscore'),
     S = require('string'),
     shadowUser = require('../settings/ShadowUser.json'),
     twilio = require('twilio'),
-    User = require('../models/user'),
+    Users = require('../models/users'),
     World = require('../models/world');
 /**
  * @constructor
@@ -65,7 +65,7 @@ var twilioController = function () {
      * User Model
      * @type {User|exports|module.exports}
      */
-    var userModel = new User(process.env.DATABASE, process.env.TWILIO);
+    var userModel = new Users(process.env.DATABASE, process.env.TWILIO);
     var _getRandomResponseForAnError = function () {
         var responses = ['Sorry. I lost your message in the Ascendant realm. Blame Oryx.',
             'Skolas escaped the Prison of Elders again. He must be responsible for this mishap.',
@@ -343,9 +343,9 @@ var twilioController = function () {
                     res.end(twiml.toString());
                 }
             } else {
-                if (counter > 121) {
-                    twiml.message('Let me check with the Speaker regarding your standing with the Vanguard.');
-                    res.writeHead(200, {
+                if (counter > 25) {
+                    twiml.message('Let me check with the Speaker regarding your Guardian status.');
+                    res.writeHead(429, {
                         'Content-Type': 'text/xml'
                     });
                     res.end(twiml.toString());

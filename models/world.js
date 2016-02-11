@@ -10,7 +10,6 @@
  * @requires S
  * @requires sqlite3
  */
-'use strict';
 var _ = require('underscore'),
     fs = require('fs'),
     Q = require('q'),
@@ -20,6 +19,7 @@ var _ = require('underscore'),
  * @constructor
  */
 var World = function () {
+    'use strict';
     /**
      * @type {sqlite3.Database}
      */
@@ -178,6 +178,29 @@ var World = function () {
     };
     /**
      *
+     * @param vendorHash
+     * @returns {*|promise}
+     */
+    var getVendorIcon = function (vendorHash) {
+        var deferred = Q.defer();
+        db.each('SELECT json FROM DestinyVendorDefinition WHERE json LIKE \'%"vendorHash":' +
+            vendorHash + '%\' ORDER BY id LIMIT 1', function (err, row) {
+                if (err) {
+                    deferred.reject(err);
+                } else {
+                    deferred.resolve('https://www.bungie.net' + JSON.parse(row.json).summary.vendorIcon);
+                }
+            }, function (err) {
+                if (err) {
+                    deferred.reject(err);
+                } else {
+                    deferred.resolve();
+                }
+            });
+        return deferred.promise;
+    };
+    /**
+     *
      * @param fileName
      * @param callback
      * @returns {*|promise}
@@ -200,6 +223,7 @@ var World = function () {
         getItemByName: getItemByName,
         getItemByHash: getItemByHash,
         getItemCategory: getItemCategory,
+        getVendorIcon: getVendorIcon,
         open: openDatabase
     };
 };

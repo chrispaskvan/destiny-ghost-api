@@ -10,7 +10,6 @@ var _ = require('underscore'),
     ironBannerEventRewards = require('../mocks/ironBannerEventRewards.json'),
     Q = require('q'),
     rewire = require('rewire'),
-    sinon = require('sinon'),
     xur = require('../mocks/xur.json');
 
 chai.use(chaiAsPromised);
@@ -28,7 +27,7 @@ before(function (done) {
             deferred.resolve([{ characterBase: { characterId: getRandomId() }},
                 { characterBase: { characterId: getRandomId() }},
                 { characterBase: { characterId: getRandomId() }}
-            ]);
+                ]);
             return deferred.promise.nodeify(callback);
         };
         var getCurrentUser = function (cookieArray, callback) {

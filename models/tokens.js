@@ -6,19 +6,18 @@
  * @author Chris Paskvan
  * @requires crypto
  */
-'use strict';
-var crypto = require('crypto');
 /**
  * @constructor
  */
 var Tokens = function () {
+    'use strict';
     /**
      * Get a new token.
      * @returns {string}
      */
-    var getToken = function () {
+    var getToken = function (length) {
+        length = length || 6;
         var chars = '1234567890';
-        var length = 6;
         var randomBytes = crypto.randomBytes(length);
         var result = new Array(length);
         var cursor = 0;

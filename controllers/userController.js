@@ -8,18 +8,34 @@
  * @requires Horseman
  * @requires Q
  */
-'use strict';
 var _ = require('underscore'),
+    Destiny = require('../models/Destiny'),
+    Ghost = require('../models/ghost'),
     jSend = require('../models/jsend'),
+    jsonpatch = require('fast-json-patch'),
     Notifications = require('../models/notifications'),
-    PostMaster = require('../models/postMaster'),
+    path = require('path'),
+    Postmaster = require('../models/postmaster'),
+    shadowUser = require('../settings/ShadowUser.json'),
     Tokens = require('../models/tokens'),
-    Users = require('../models/user');
+    Users = require('../models/users'),
+    World = require('../models/world');
 
 /**
  * @constructor
  */
 var userController = function () {
+    'use strict';
+    /**
+     * Destiny Model
+     * @type {Destiny|exports|module.exports}
+     */
+    var destiny = new Destiny(shadowUser.apiKey);
+    /**
+     * Ghost Model
+     * @type {Ghost|exports|module.exports}
+     */
+    var ghost = new Ghost(process.env.DATABASE);
     /**
      * Notifications Model
      * @type {Notifications|exports|module.exports}
@@ -27,9 +43,9 @@ var userController = function () {
     var notifications = new Notifications(process.env.DATABASE, process.env.TWILIO);
     /**
      * Post Office Model
-     * @type {PostMaster|exports|module.exports}
+     * @type {Postmaster|exports|module.exports}
      */
-    var postMaster = new PostMaster();
+    var postmaster = new Postmaster();
     /**
      * Token Generator
      * @type {Token|exports|module.exports}
@@ -39,25 +55,37 @@ var userController = function () {
      *
      * @type {User|exports|module.exports}
      */
-    var users = new Users(process.env.DATABASE, process.env.TWILIO);
+    var userModel = new Users(process.env.DATABASE, process.env.TWILIO);
     /**
-     *
+     * World Model
+     * @type {World|exports|module.exports}
+     */
+    var world;
+    ghost.getWorldDatabasePath()
+        .then(function (path) {
+            world = new World(path);
+        });
+    /**
+     * Confirm regsitration request by creating an account if appropriate.
      * @param req
      * @param res
      */
     var confirm = function (req, res) {
         var user = req.body;
-        users.getUserToken(user.phoneNumber)
+        userModel.getUserToken(user.phoneNumber)
             .then(function (userToken) {
+                if (((new Date() - userToken.timeStamp) / (60 * 1000)) > 10) {
+                    return res.json(new jSend.error('Expired tokens.'));
+                }
                 if (!_.isEqual(user.tokens, userToken.tokens)) {
                     return res.json(new jSend.error('Bad tokens.'));
                 }
-                return users.getUserByPhoneNumber(user.phoneNumber)
+                return userModel.getUserByPhoneNumber(user.phoneNumber)
                     .then(function (user) {
                         if (user) {
                             return res.json(new jSend.error('You are already registered. Please sign in.'));
                         }
-                        return users.createUser(user)
+                        return userModel.createUser(userToken)
                             .then(function () {
                                 return res.json(new jSend.success());
                             });
@@ -71,23 +99,74 @@ var userController = function () {
      *
      * @param req
      * @param res
+     * @returns {*}
+     */
+    var patch = function (req, res) {
+        var gamerTag = req.params.gamerTag;
+        userModel.getUserByGamerTag(gamerTag)
+            .then(function (user) {
+                var patches = req.body;
+                jsonpatch.apply(user, patches);
+                return userModel.updateUser(user)
+                    .then(function () {
+                        res.json(new jSend.success(user));
+                    });
+            })
+            .fail(function (err) {
+                res.json(new jSend.error(err.message));
+            });
+    };
+    /**
+     * @constant
+     * @type {string}
+     * @description Postmaster Vendor Number
+     */
+    var postmasterHash = 2021251983;
+    /**
+     *
+     * @param req
+     * @param res
      */
     var register = function (req, res) {
         var user = req.body;
-        _.extend(user, {
-            tokens: {
-                emailAddress: tokens.getToken(),
-                phoneNumber: tokens.getToken()
-            }
-        });
-        users.createUserToken(user)
-            .then(function () {
-                postMaster.register(user);
-                notifications.sendMessage('Enter ' +
-                    user.tokens.phoneNumber +
-                    ' to verify your Destiny Ghost phone number.',
-                    user.phoneNumber);
-                res.json(new jSend.success());
+        if (!user.gamerTag) {
+            return res.status(409).json(new jSend.error('A gamer tag is required.'));
+        }
+        destiny.getMembershipIdFromDisplayName(user.gamerTag)
+            .then(function (membershipId) {
+                if (!membershipId) {
+                    return res.status(409).json(new jSend.error('The gamer tag' + user.gamerTag + 'is not registered with Bungie.'));
+                }
+                return userModel.getBlob()
+                    .then(function (blob) {
+                        _.extend(user, {
+                            membershipId: membershipId,
+                            tokens: {
+                                emailAddress: blob,
+                                phoneNumber: tokens.getToken()
+                            }
+                        });
+                        return userModel.createUserToken(user)
+                            .then(function () {
+                                return ghost.getLastManifest()
+                                    .then(function (lastManifest) {
+                                        var worldPath = path.join('./databases/', path.basename(lastManifest.mobileWorldContentPaths.en));
+                                        world.open(worldPath);
+                                        return world.getVendorIcon(postmasterHash)
+                                            .then(function (iconUrl) {
+                                                postmaster.register(user, iconUrl, '/register');
+                                                notifications.sendMessage('Enter ' +
+                                                    user.tokens.phoneNumber +
+                                                    ' to verify your Destiny Ghost phone number.',
+                                                    user.phoneNumber);
+                                                res.json(new jSend.success());
+                                            })
+                                            .fin(function () {
+                                                world.close();
+                                            });
+                                    });
+                            });
+                    });
             })
             .fail(function (err) {
                 res.json(new jSend.error(err.message));
@@ -95,6 +174,7 @@ var userController = function () {
     };
     return {
         confirm: confirm,
+        patch: patch,
         register: register
     };
 };

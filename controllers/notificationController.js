@@ -23,7 +23,7 @@ var _ = require('underscore'),
     Notifications = require('../models/notifications'),
     path = require('path'),
     Q = require('q'),
-    User = require('../models/user'),
+    Users = require('../models/users'),
     World = require('../models/world');
 /**
  * @type {*|CronJob}
@@ -66,9 +66,27 @@ var notificationController = function (shadowUserConfiguration) {
      * Use Model
      * @type {User|exports|module.exports}
      */
-    var userModel = new User(process.env.DATABASE, process.env.TWILIO);
+    var userModel = new Users(process.env.DATABASE, process.env.TWILIO);
     shadowUserConfiguration = shadowUserConfiguration || './settings/ShadowUser.json';
     var shadowUser = JSON.parse(fs.readFileSync(shadowUserConfiguration));
+    /**
+     * @constant
+     * @type {string}
+     * @description Banshee-44's Vendor Number
+     */
+    var gunSmithHash = 570929315;
+    /**
+     * @constant
+     * @type {string}
+     * @description Iron Banner's Vendor Number
+     */
+    var lordSaladinHash = 242140165;
+    /**
+     * @constant
+     * @type {string}
+     * @description Xur's Vendor Number
+     */
+    var xurHash = 2796397637;
     /**
      *
      * @param users
@@ -91,37 +109,40 @@ var notificationController = function (shadowUserConfiguration) {
                                                 return item.item.itemHash;
                                             });
                                             world.open(worldPath);
-                                            var itemPromises = [];
-                                            _.each(itemHashes, function (itemHash) {
-                                                itemPromises.push(world.getItemByHash(itemHash));
-                                            });
-                                            return Q.all(itemPromises)
-                                                .then(function (items) {
-                                                    world.close();
-                                                    var userPromises = [];
-                                                    _.each(users, function (user) {
-                                                        userPromises.push(userModel.getLastNotificationDate(user.phoneNumber, userModel.actions.Gunsmith)
-                                                            .then(function (notificationDate) {
-                                                                var now = new Date();
-                                                                var promises = [];
-                                                                if (notificationDate === undefined ||
-                                                                        (nextRefreshDate < now && notificationDate < nextRefreshDate)) {
-                                                                    promises.push(notifications.sendMessage('The following experimental weapons need testing in the field:\n' +
-                                                                        _.reduce(_.map(items, function (item) {
-                                                                            return item.itemName;
-                                                                        }), function (memo, itemName) {
-                                                                            return memo + itemName + '\n';
-                                                                        }, ' ').trim(), user.phoneNumber, user.type === 'mobile' ?
-                                                                                'https://www.bungie.net/common/destiny_content/icons/d37f64480d398f7186d0a21b418c0bad.png'
-                                                                        : undefined)
-                                                                        .then(function (message) {
-                                                                            return userModel.createUserMessage(user, message, userModel.actions.Gunsmith);
-                                                                        }));
-                                                                }
-                                                                return Q.all(promises);
-                                                            }));
+                                            return world.getVendorIcon(gunSmithHash)
+                                                .then(function (iconUrl) {
+                                                    var itemPromises = [];
+                                                    _.each(itemHashes, function (itemHash) {
+                                                        itemPromises.push(world.getItemByHash(itemHash));
                                                     });
-                                                    return Q.all(userPromises);
+                                                    return Q.all(itemPromises)
+                                                        .then(function (items) {
+                                                            var userPromises = [];
+                                                            _.each(users, function (user) {
+                                                                userPromises.push(userModel.getLastNotificationDate(user.phoneNumber, userModel.actions.Gunsmith)
+                                                                    .then(function (notificationDate) {
+                                                                        var now = new Date();
+                                                                        var promises = [];
+                                                                        if (notificationDate === undefined ||
+                                                                                (nextRefreshDate < now && notificationDate < nextRefreshDate)) {
+                                                                            promises.push(notifications.sendMessage('The following experimental weapons need testing in the field:\n' +
+                                                                                _.reduce(_.map(items, function (item) {
+                                                                                    return item.itemName;
+                                                                                }), function (memo, itemName) {
+                                                                                    return memo + itemName + '\n';
+                                                                                }, ' ').trim(), user.phoneNumber, user.type === 'mobile' ? iconUrl : undefined)
+                                                                                .then(function (message) {
+                                                                                    return userModel.createUserMessage(user, message, userModel.actions.Gunsmith);
+                                                                                }));
+                                                                        }
+                                                                        return Q.all(promises);
+                                                                    }));
+                                                            });
+                                                            return Q.all(userPromises);
+                                                        });
+                                                })
+                                                .fin(function () {
+                                                    world.close();
                                                 });
                                         }
                                     });
@@ -151,37 +172,40 @@ var notificationController = function (shadowUserConfiguration) {
                                                 return item.item.itemHash;
                                             });
                                             world.open(worldPath);
-                                            var itemPromises = [];
-                                            _.each(itemHashes, function (itemHash) {
-                                                itemPromises.push(world.getItemByHash(itemHash));
-                                            });
-                                            return Q.all(itemPromises)
-                                                .then(function (items) {
-                                                    world.close();
-                                                    var userPromises = [];
-                                                    _.each(users, function (user) {
-                                                        userPromises.push(userModel.getLastNotificationDate(user.phoneNumber, userModel.actions.Gunsmith)
-                                                            .then(function (notificationDate) {
-                                                                var now = new Date();
-                                                                var promises = [];
-                                                                if (notificationDate === undefined ||
-                                                                        (nextRefreshDate < now && notificationDate < nextRefreshDate)) {
-                                                                    promises.push(notifications.sendMessage('The foundry is accepting orders for...\n' +
-                                                                        _.reduce(_.map(items, function (item) {
-                                                                            return item.itemName;
-                                                                        }), function (memo, itemName) {
-                                                                            return memo + itemName + '\n';
-                                                                        }, ' ').trim(), user.phoneNumber, user.type === 'mobile' ?
-                                                                                'https://www.bungie.net/common/destiny_content/icons/d37f64480d398f7186d0a21b418c0bad.png'
-                                                                            : undefined)
-                                                                        .then(function (message) {
-                                                                            return userModel.createUserMessage(user, message, userModel.actions.Gunsmith);
-                                                                        }));
-                                                                }
-                                                                return Q.all(promises);
-                                                            }));
+                                            return world.getVendorIcon(gunSmithHash)
+                                                .then(function (iconUrl) {
+                                                    var itemPromises = [];
+                                                    _.each(itemHashes, function (itemHash) {
+                                                        itemPromises.push(world.getItemByHash(itemHash));
                                                     });
-                                                    return Q.all(userPromises);
+                                                    return Q.all(itemPromises)
+                                                        .then(function (items) {
+                                                            var userPromises = [];
+                                                            _.each(users, function (user) {
+                                                                userPromises.push(userModel.getLastNotificationDate(user.phoneNumber, userModel.actions.Gunsmith)
+                                                                    .then(function (notificationDate) {
+                                                                        var now = new Date();
+                                                                        var promises = [];
+                                                                        if (notificationDate === undefined ||
+                                                                                (nextRefreshDate < now && notificationDate < nextRefreshDate)) {
+                                                                            promises.push(notifications.sendMessage('The foundry is accepting orders for...\n' +
+                                                                                _.reduce(_.map(items, function (item) {
+                                                                                    return item.itemName;
+                                                                                }), function (memo, itemName) {
+                                                                                    return memo + itemName + '\n';
+                                                                                }, ' ').trim(), user.phoneNumber, user.type === 'mobile' ? iconUrl : undefined)
+                                                                                .then(function (message) {
+                                                                                    return userModel.createUserMessage(user, message, userModel.actions.Gunsmith);
+                                                                                }));
+                                                                        }
+                                                                        return Q.all(promises);
+                                                                    }));
+                                                            });
+                                                            return Q.all(userPromises);
+                                                        });
+                                                })
+                                                .fin(function () {
+                                                    world.close();
                                                 });
                                         }
                                     });
@@ -211,35 +235,40 @@ var notificationController = function (shadowUserConfiguration) {
                                                 return item.item.itemHash;
                                             });
                                             world.open(worldPath);
-                                            var itemPromises = [];
-                                            _.each(itemHashes, function (itemHash) {
-                                                itemPromises.push(world.getItemByHash(itemHash));
-                                            });
-                                            return Q.all(itemPromises)
-                                                .then(function (items) {
-                                                    world.close();
-                                                    var userPromises = [];
-                                                    _.each(users, function (user) {
-                                                        userPromises.push(userModel.getLastNotificationDate(user.phoneNumber, userModel.actions.Gunsmith)
-                                                            .then(function (notificationDate) {
-                                                                var now = new Date();
-                                                                var promises = [];
-                                                                if (notificationDate === undefined ||
-                                                                    (nextRefreshDate < now && notificationDate < nextRefreshDate)) {
-                                                                    promises.push(notifications.sendMessage('Lord Saladin rewards only the strong.\n' +
-                                                                            _.reduce(_.map(items, function (item) {
-                                                                                return item.itemName;
-                                                                            }), function (memo, itemName) {
-                                                                                return memo + itemName + '\n';
-                                                                            }, ' ').trim(), user.phoneNumber)
-                                                                        .then(function (message) {
-                                                                            return userModel.createUserMessage(user, message, userModel.actions.Gunsmith);
-                                                                        }));
-                                                                }
-                                                                return Q.all(promises);
-                                                            }));
+                                            return world.getVendorIcon(lordSaladinHash)
+                                                .then(function (iconUrl) {
+                                                    var itemPromises = [];
+                                                    _.each(itemHashes, function (itemHash) {
+                                                        itemPromises.push(world.getItemByHash(itemHash));
                                                     });
-                                                    return Q.all(userPromises);
+                                                    return Q.all(itemPromises)
+                                                        .then(function (items) {
+                                                            var userPromises = [];
+                                                            _.each(users, function (user) {
+                                                                userPromises.push(userModel.getLastNotificationDate(user.phoneNumber, userModel.actions.IronBanner)
+                                                                    .then(function (notificationDate) {
+                                                                        var now = new Date();
+                                                                        var promises = [];
+                                                                        if (notificationDate === undefined ||
+                                                                            (nextRefreshDate < now && notificationDate < nextRefreshDate)) {
+                                                                            promises.push(notifications.sendMessage('Lord Saladin rewards only the strong.\n' +
+                                                                                _.reduce(_.map(items, function (item) {
+                                                                                    return item.itemName;
+                                                                                }), function (memo, itemName) {
+                                                                                    return memo + itemName + '\n';
+                                                                                }, ' ').trim(), user.phoneNumber, user.type === 'mobile' ? iconUrl : undefined)
+                                                                                .then(function (message) {
+                                                                                    return userModel.createUserMessage(user, message, userModel.actions.IronBanner);
+                                                                                }));
+                                                                        }
+                                                                        return Q.all(promises);
+                                                                    }));
+                                                            });
+                                                            return Q.all(userPromises);
+                                                        });
+                                                })
+                                                .fin(function () {
+                                                    world.close();
                                                 });
                                         }
                                     });
@@ -283,33 +312,36 @@ var notificationController = function (shadowUserConfiguration) {
                                 return item.item.itemHash;
                             });
                             world.open(worldPath);
-                            var itemPromises = [];
-                            _.each(itemHashes, function (itemHash) {
-                                itemPromises.push(world.getItemByHash(itemHash));
-                            });
-                            return Q.all(itemPromises)
-                                .then(function (items) {
-                                    world.close();
-                                    _.each(users, function (user) {
-                                        userPromises.push(userModel.getLastNotificationDate(user.phoneNumber, userModel.actions.Xur)
-                                            .then(function (notificationDate) {
-                                                if (notificationDate === undefined ||
-                                                        (nextRefreshDate < now && notificationDate < nextRefreshDate)) {
-                                                    return notifications.sendMessage('Xur has arrived... for now...\n' +
-                                                        _.reduce(_.map(items, function (item) {
-                                                            return item.itemName;
-                                                        }), function (memo, itemName) {
-                                                            return memo + itemName + '\n';
-                                                        }, ' ').trim(), user.phoneNumber, user.type === 'mobile' ?
-                                                                'https://www.bungie.net/common/destiny_content/icons/4d6ee31e6bb0d28ffecd51a74a085a4f.png'
-                                                        : undefined)
-                                                        .then(function (message) {
-                                                            return userModel.createUserMessage(user, message, userModel.actions.Xur);
-                                                        });
-                                                }
-                                            }));
+                            return world.getVendorIcon(gunSmithHash)
+                                .then(function (iconUrl) {
+                                    var itemPromises = [];
+                                    _.each(itemHashes, function (itemHash) {
+                                        itemPromises.push(world.getItemByHash(itemHash));
                                     });
-                                    return Q.all(userPromises);
+                                    return Q.all(itemPromises)
+                                        .then(function (items) {
+                                            _.each(users, function (user) {
+                                                userPromises.push(userModel.getLastNotificationDate(user.phoneNumber, userModel.actions.Xur)
+                                                    .then(function (notificationDate) {
+                                                        if (notificationDate === undefined ||
+                                                                (nextRefreshDate < now && notificationDate < nextRefreshDate)) {
+                                                            return notifications.sendMessage('Xur has arrived... for now...\n' +
+                                                                _.reduce(_.map(items, function (item) {
+                                                                    return item.itemName;
+                                                                }), function (memo, itemName) {
+                                                                    return memo + itemName + '\n';
+                                                                }, ' ').trim(), user.phoneNumber, user.type === 'mobile' ? iconUrl : undefined)
+                                                                .then(function (message) {
+                                                                    return userModel.createUserMessage(user, message, userModel.actions.Xur);
+                                                                });
+                                                        }
+                                                    }));
+                                            });
+                                            return Q.all(userPromises);
+                                        });
+                                })
+                                .fin(function () {
+                                    world.close();
                                 });
                         }
                         _.each(users, function (user) {
@@ -344,24 +376,6 @@ var notificationController = function (shadowUserConfiguration) {
                 console.log(err);
             });
     };
-    /**
-     * @constant
-     * @type {string}
-     * @description Banshee-44's Vendor Number
-     */
-    var gunSmithHash = 570929315;
-    /**
-     * @constant
-     * @type {string}
-     * @description Iron Banner's Vendor Number
-     */
-    var lordSaladinHash = 242140165;
-    /**
-     * @constant
-     * @type {string}
-     * @description Xur's Vendor Number
-     */
-    var xurHash = 2796397637;
     var gunSmithJob;
     var xurJob;
     var _schedule = function (vendors) {

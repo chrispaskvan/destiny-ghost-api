@@ -7,7 +7,7 @@ var expect = require('chai').expect,
     Ghost = require('../models/ghost'),
     World = require('../models/World');
 
-describe('Get the Fusion Rifle category', function () {
+describe('It\'s Bungie\'s world, you\'re just querying it.', function () {
     it('Should return the Fusion Rifle category definition', function (done) {
         var ghost = new Ghost();
         var world = new World();
@@ -54,6 +54,23 @@ describe('Get the Fusion Rifle category', function () {
                         expect(items[0].itemName).to.equal('Hawkmoon');
                         expect(items[0].qualityLevel).to.equal(0);
                         expect(items.length).to.equal(1);
+                        done();
+                    })
+                    .fail(function (err) {
+                        done(err);
+                    });
+            });
+    });
+    it('Should return the icon of the Agent of Nine', function (done) {
+        var ghost = new Ghost();
+        var world = new World();
+        ghost.getLastManifest()
+            .then(function (lastManifest) {
+                world.open(path.join('./databases/', path.basename(lastManifest.mobileWorldContentPaths.en)));
+                world.getVendorIcon('2796397637')
+                    .then(function (url) {
+                        world.close();
+                        expect(url).to.exist;
                         done();
                     })
                     .fail(function (err) {

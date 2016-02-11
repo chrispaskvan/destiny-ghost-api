@@ -19,8 +19,12 @@ var routes = function () {
     userRouter.route('/signIn')
         .post(authenticationController.signIn);
     var userController = new UserController();
+    userRouter.route('/confirm')
+        .post(userController.confirm);
     userRouter.route('/register')
         .post(userController.register);
+    userRouter.route('/:gamerTag')
+        .patch(userController.patch);
     return userRouter;
 };
 

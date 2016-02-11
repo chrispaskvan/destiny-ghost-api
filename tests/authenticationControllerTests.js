@@ -6,8 +6,7 @@ var AuthenticationController = require('../controllers/AuthenticationController'
     chai = require('chai'),
     chaiAsPromised = require('chai-as-promised'),
     madridMountain = require('../settings/MadridMountain.json'),
-    Q = require('q'),
-    sinon = require('sinon');
+    Q = require('q');
 
 chai.use(chaiAsPromised);
 chai.should();

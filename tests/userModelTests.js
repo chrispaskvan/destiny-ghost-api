@@ -3,11 +3,11 @@ var _ = require('underscore'),
     Chance = require('chance'),
     expect = require('chai').expect,
     fs = require('fs'),
-    User = require('../models/User'),
+    Users = require('../models/users'),
     validator = require('validator');
 
 var chance = new Chance();
-var userModel = new User(process.env.DATABASE);
+var userModel = new Users(process.env.DATABASE);
 
 describe('Format a phone number', function () {
     it('Should return a properly formatted phone number', function (done) {
@@ -35,6 +35,7 @@ describe('Create a new user', function () {
     it('Should add a new valid user', function (done) {
         var user = {
             firstName: chance.first(),
+            emailAddress: chance.email(),
             lastName: chance.last(),
             phoneNumber: userModel.cleanPhoneNumber(chance.phone({
                 country: 'us',
@@ -46,9 +47,9 @@ describe('Create a new user', function () {
         };
         userModel.getSubscribedUsers()
             .then(function (usersBefore) {
-                userModel.createUser(user)
+                return userModel.createUser(user)
                     .then(function () {
-                        userModel.getSubscribedUsers()
+                        return userModel.getSubscribedUsers()
                             .then(function (usersAfter) {
                                 expect(usersAfter.length === (usersBefore.length + 1)).to.equal(true);
                                 userModel.deleteUser(user.phoneNumber);
@@ -63,8 +64,9 @@ describe('Create a new user', function () {
 });
 describe('Get a new 32-bit globally unique identifier', function () {
     it('Should return a random identification number', function (done) {
-        userModel.getRandomBlob(32)
+        userModel.getBlob(32)
             .then(function (id) {
+                console.log(id);
                 expect(id.length).to.equal(64);
                 done();
             })
@@ -73,10 +75,11 @@ describe('Get a new 32-bit globally unique identifier', function () {
             });
     });
 });
-describe('Get a new default 16-bit globally unique identifier', function () {
+describe('Get a new 16-bit globally unique identifier', function () {
     it('Should return a random identification number', function (done) {
-        userModel.getRandomBlob()
+        userModel.getBlob()
             .then(function (id) {
+                console.log(id);
                 expect(id.length).to.equal(32);
                 done();
             })

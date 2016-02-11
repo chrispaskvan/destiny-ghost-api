@@ -11,22 +11,22 @@
  * @requires twilio
  * @requires validator
  */
-'use strict';
 var _ = require('underscore'),
+    defaults = require('json-schema-defaults'),
     fs = require('fs'),
     Q = require('q'),
     sqlite3 = require('sqlite3'),
     twilio = require('twilio'),
     validator = require('is-my-json-valid');
 /**
+ *
  * @param databaseFullPath {string}
  * @param twilioSettingsFullPath {string}
- * @returns {{createUser: createUser, createUserMessage: createUserMessage,
-  * getPhoneNumberType: getPhoneNumberType, getSubscribedUsers: getSubscribedUsers,
-   * getUserByPhoneNumber: getUserByPhoneNumber, signIn: signIn}}
+ * @returns {{actions: {Gunsmith: string, Xur: string}, cleanPhoneNumber: cleanPhoneNumber, createUser: createUser, createUserMessage: createUserMessage, createUserToken: createUserToken, deleteUser: deleteUser, getBlob: getBlob, getLastNotificationDate: getLastNotificationDate, getPhoneNumberType: getPhoneNumberType, getSubscribedUsers: getSubscribedUsers, getUserByGamerTag: *, getUserByPhoneNumber: getUserByPhoneNumber, getUserToken: getUserToken, updateUser: updateUser}}
  * @constructor
  */
-var User = function (databaseFullPath, twilioSettingsFullPath) {
+var Users = function (databaseFullPath, twilioSettingsFullPath) {
+    'use strict';
     /**
      * @member - Full path of the local database.
      * @type {*|string}
@@ -62,6 +62,7 @@ var User = function (databaseFullPath, twilioSettingsFullPath) {
         properties: {
             emailAddress: {
                 format: 'email',
+                readOnly: true,
                 required: true,
                 type: 'string'
             },
@@ -70,21 +71,30 @@ var User = function (databaseFullPath, twilioSettingsFullPath) {
                 type: 'string'
             },
             gamerTag: {
-                type: 'string',
                 minLength: 3,
-                maxLength: 16
+                maxLength: 16,
+                required: true,
+                type: 'string'
             },
             isSubscribedToBanshee44: {
+                default: true,
                 type: 'boolean'
             },
             isSubscribedToFoundryOrders: {
+                default: true,
                 type: 'boolean'
             },
             isSubscribedToLordSaladin: {
+                default: true,
                 type: 'boolean'
             },
             isSubscribedToXur: {
+                default: true,
                 type: 'boolean'
+            },
+            membershipId: {
+                required: true,
+                type: 'integer'
             },
             membershipType: {
                 required: true,
@@ -97,14 +107,17 @@ var User = function (databaseFullPath, twilioSettingsFullPath) {
                 type: 'string'
             },
             phoneNumber: {
+                readOnly: true,
                 required: true,
                 type: 'string',
                 format: 'phone'
             },
             carrier: {
+                readOnly: true,
                 type: 'string'
             },
             type: {
+                readOnly: true,
                 type: 'string'
             }
         },
@@ -116,44 +129,6 @@ var User = function (databaseFullPath, twilioSettingsFullPath) {
      */
     var settings = JSON.parse(fs.readFileSync(twilioSettingsFullPath || './settings/twilio.json'));
     /**
-     * Get the phone number format into the Twilio standard.
-     * @param phoneNumber
-     * @returns {string}
-     * @private
-     */
-    var cleanPhoneNumber = function (phoneNumber) {
-        var cleaned = phoneNumber.replace(/\D/g, '');
-        return '+1' + cleaned;
-    };
-    /**
-     * Look up the user by their phone number.
-     * @param phoneNumber {string}
-     * @returns {*|object}
-     * @private
-     */
-    var _getUserByPhoneNumber = function (phoneNumber) {
-        var deferred = Q.defer();
-        db.each('SELECT json FROM DestinyGhostUser WHERE json LIKE \'%"phoneNumber":"' +
-            phoneNumber + '"%\' LIMIT 1', function (err, row) {
-                if (err) {
-                    deferred.reject(err);
-                } else {
-                    deferred.resolve(JSON.parse(row.json));
-                }
-            }, function (err, rows) {
-                if (err) {
-                    deferred.reject(err);
-                } else {
-                    if (rows === 0) {
-                        deferred.resolve();
-                    } else {
-                        deferred.reject(new Error('The phone number, ' + phoneNumber + ', is not unique.'));
-                    }
-                }
-            });
-        return deferred.promise;
-    };
-    /**
      * Allowed Actions
      * @type {{Gunsmith: string, Xur: string}}
      */
@@ -164,54 +139,14 @@ var User = function (databaseFullPath, twilioSettingsFullPath) {
         Xur: 'Xur'
     };
     /**
-     *
+     * Get the phone number format into the Twilio standard.
      * @param phoneNumber
-     * @param action
-     * @param callback
-     * @callback
+     * @returns {string}
+     * @private
      */
-    var getLastNotificationDate = function (phoneNumber, action, callback) {
-        var deferred = Q.defer();
-        if (!_.contains(_.values(actions), action)) {
-            deferred.reject(new Error(action.toString() + ' is an unknown action.'));
-            return deferred.promise.nodeify(callback);
-        }
-        db.each('SELECT id FROM DestinyGhostUserMessage WHERE json LIKE \'%"phoneNumber":"' +
-            phoneNumber + '"%\' AND json LIKE \'%"action":"' +
-            action.toString() + '"%\' ORDER BY id DESC LIMIT 1', function (err, row) {
-                if (err) {
-                    deferred.reject(err);
-                } else {
-                    deferred.resolve(new Date(row.id));
-                }
-            }, function (err) {
-                if (err) {
-                    deferred.reject(err);
-                } else {
-                    deferred.resolve();
-                }
-            });
-        return deferred.promise.nodeify(callback);
-    };
-    /**
-     * Get the carrier data for the provided phone number.
-     * @param phoneNumber
-     * @returns {*|Object}
-     */
-    var getPhoneNumberType = function (phoneNumber) {
-        var client = new twilio.LookupsClient(settings.accountSid, settings.authToken);
-        var deferred = Q.defer();
-        client.phoneNumbers(phoneNumber).get({
-            countryCode: 'US',
-            type: 'carrier'
-        }, function (error, number) {
-            if (error) {
-                deferred.resolve(error);
-            } else {
-                deferred.resolve(number.carrier);
-            }
-        });
-        return deferred.promise;
+    var cleanPhoneNumber = function (phoneNumber) {
+        var cleaned = phoneNumber.replace(/\D/g, '');
+        return '+1' + cleaned;
     };
     /**
      * Create the user in the database.
@@ -225,10 +160,24 @@ var User = function (databaseFullPath, twilioSettingsFullPath) {
             deferred.reject(new Error(JSON.stringify(validate.errors)));
             return deferred.promise.nodeify(callback);
         }
-        _getUserByPhoneNumber(user.phoneNumber)
+        getUserByPhoneNumber(user.phoneNumber)
             .then(function (existingUser) {
                 if (existingUser) {
                     deferred.reject(new Error('The phone number, ' + user.phoneNumber + ', is already registered.'));
+                    return deferred.promise.nodeify(callback);
+                }
+                return getUserByGamerTag(user.gamerTag);
+            })
+            .then(function (existingUser) {
+                if (existingUser) {
+                    deferred.reject(new Error('The gamer tag, ' + user.gamerTag + ', is already registered.'));
+                    return deferred.promise.nodeify(callback);
+                }
+                return getUserByEmailAddress(user.emailAddress);
+            })
+            .then(function (existingUser) {
+                if (existingUser) {
+                    deferred.reject(new Error('The email address, ' + user.emailAddress + ', is already registered.'));
                     return deferred.promise.nodeify(callback);
                 }
                 getPhoneNumberType(user.phoneNumber)
@@ -238,6 +187,7 @@ var User = function (databaseFullPath, twilioSettingsFullPath) {
                         schema.additionalProperties = false;
                         var filter = validator.filter(schema);
                         var filteredUser = filter(user);
+                        _.defaults(filteredUser, defaults(schema));
                         var sql = db.prepare('INSERT INTO DestinyGhostUser VALUES (?, ?)');
                         sql.run(new Date().toISOString(), JSON.stringify(filteredUser));
                         sql.finalize();
@@ -295,7 +245,7 @@ var User = function (databaseFullPath, twilioSettingsFullPath) {
      * @param numberOfBytes
      * @returns {*|promise}
      */
-    var getRandomBlob = function (numberOfBytes) {
+    var getBlob = function (numberOfBytes) {
         var deferred = Q.defer();
         db.each('SELECT lower(hex(randomblob(' + (numberOfBytes || 16).toString() + '))) AS id', function (err, row) {
             if (err) {
@@ -308,6 +258,56 @@ var User = function (databaseFullPath, twilioSettingsFullPath) {
                 deferred.reject(err);
             } else {
                 deferred.resolve();
+            }
+        });
+        return deferred.promise;
+    };
+    /**
+     *
+     * @param phoneNumber
+     * @param action
+     * @param callback
+     * @callback
+     */
+    var getLastNotificationDate = function (phoneNumber, action, callback) {
+        var deferred = Q.defer();
+        if (!_.contains(_.values(actions), action)) {
+            deferred.reject(new Error(action.toString() + ' is an unknown action.'));
+            return deferred.promise.nodeify(callback);
+        }
+        db.each('SELECT id FROM DestinyGhostUserMessage WHERE json LIKE \'%"phoneNumber":"' +
+            phoneNumber + '"%\' AND json LIKE \'%"action":"' +
+            action.toString() + '"%\' ORDER BY id DESC LIMIT 1', function (err, row) {
+                if (err) {
+                    deferred.reject(err);
+                } else {
+                    deferred.resolve(new Date(row.id));
+                }
+            }, function (err) {
+                if (err) {
+                    deferred.reject(err);
+                } else {
+                    deferred.resolve();
+                }
+            });
+        return deferred.promise.nodeify(callback);
+    };
+    /**
+     * Get the carrier data for the provided phone number.
+     * @param phoneNumber
+     * @returns {*|Object}
+     */
+    var getPhoneNumberType = function (phoneNumber) {
+        var client = new twilio.LookupsClient(settings.accountSid, settings.authToken);
+        var deferred = Q.defer();
+        client.phoneNumbers(phoneNumber).get({
+            countryCode: 'US',
+            type: 'carrier'
+        }, function (error, number) {
+            if (error) {
+                deferred.resolve(error);
+            } else {
+                deferred.resolve(number.carrier);
             }
         });
         return deferred.promise;
@@ -338,12 +338,85 @@ var User = function (databaseFullPath, twilioSettingsFullPath) {
         return deferred.promise;
     };
     /**
+     * Get the first user with the provided email address.
+     * @param emailAddress {string}
+     * @returns {*|Object}
+     */
+    var getUserByEmailAddress = function (emailAddress) {
+        var deferred = Q.defer();
+        db.each('SELECT json FROM DestinyGhostUser WHERE json LIKE \'%"emailAddress":"' +
+            emailAddress + '"%\' LIMIT 1', function (err, row) {
+                if (err) {
+                    deferred.reject(err);
+                } else {
+                    deferred.resolve(JSON.parse(row.json));
+                }
+            }, function (err, rows) {
+                if (err) {
+                    deferred.reject(err);
+                } else {
+                    if (rows === 0) {
+                        deferred.resolve();
+                    } else {
+                        deferred.reject(new Error('The email address, ' + emailAddress + ', is not unique.'));
+                    }
+                }
+            });
+        return deferred.promise;
+    };
+    /**
+     * Wrapper for internal function.
+     * @param gamerTag {string}
+     * @returns {*|Object}
+     */
+    var getUserByGamerTag = function (gamerTag) {
+        var deferred = Q.defer();
+        db.each('SELECT json FROM DestinyGhostUser WHERE json LIKE \'%"gamerTag":"' +
+            gamerTag + '"%\' LIMIT 1', function (err, row) {
+                if (err) {
+                    deferred.reject(err);
+                } else {
+                    deferred.resolve(JSON.parse(row.json));
+                }
+            }, function (err, rows) {
+                if (err) {
+                    deferred.reject(err);
+                } else {
+                    if (rows === 0) {
+                        deferred.resolve();
+                    } else {
+                        deferred.reject(new Error('The gamer tag, ' + gamerTag + ', is not unique.'));
+                    }
+                }
+            });
+        return deferred.promise;
+    };
+    /**
      * Wrapper for internal function.
      * @param phoneNumber
      * @returns {*|Object}
      */
     var getUserByPhoneNumber = function (phoneNumber) {
-        return _getUserByPhoneNumber(phoneNumber);
+        var deferred = Q.defer();
+        db.each('SELECT json FROM DestinyGhostUser WHERE json LIKE \'%"phoneNumber":"' +
+            phoneNumber + '"%\' LIMIT 1', function (err, row) {
+                if (err) {
+                    deferred.reject(err);
+                } else {
+                    deferred.resolve(JSON.parse(row.json));
+                }
+            }, function (err, rows) {
+                if (err) {
+                    deferred.reject(err);
+                } else {
+                    if (rows === 0) {
+                        deferred.resolve();
+                    } else {
+                        deferred.reject(new Error('The phone number, ' + phoneNumber + ', is not unique.'));
+                    }
+                }
+            });
+        return deferred.promise;
     };
     /**
      * Wrapper for internal function.
@@ -352,12 +425,14 @@ var User = function (databaseFullPath, twilioSettingsFullPath) {
      */
     var getUserToken = function (phoneNumber) {
         var deferred = Q.defer();
-        db.each('SELECT json FROM DestinyGhostUserToken WHERE json LIKE \'%"phoneNumber":"' +
+        db.each('SELECT id, json FROM DestinyGhostUserToken WHERE json LIKE \'%"phoneNumber":"' +
             phoneNumber + '"%\' ORDER BY id DESC LIMIT 1', function (err, row) {
                 if (err) {
                     deferred.reject(err);
                 } else {
-                    deferred.resolve(JSON.parse(row.json));
+                    var user = JSON.parse(row.json);
+                    user.timeStamp = new Date(row.id);
+                    deferred.resolve(user);
                 }
             }, function (err, rows) {
                 if (err) {
@@ -371,14 +446,22 @@ var User = function (databaseFullPath, twilioSettingsFullPath) {
         return deferred.promise;
     };
     /**
-     * Sign the user in and retrieve the Bungie cookies.
+     *
      * @param user {Object}
      * @returns {*|Array}
      */
     var updateUser = function (user, callback) {
+        var deferred = Q.defer();
+        var validate = validator(schema);
+        if (!validate(user)) {
+            deferred.reject(new Error(JSON.stringify(validate.errors)));
+            return deferred.promise.nodeify(callback);
+        }
         /**
          * @todo
          */
+        deferred.resolve();
+        return deferred.promise.nodeify(callback);
     };
     return {
         actions: actions,
@@ -387,14 +470,16 @@ var User = function (databaseFullPath, twilioSettingsFullPath) {
         createUserMessage: createUserMessage,
         createUserToken: createUserToken,
         deleteUser: deleteUser,
+        getBlob: getBlob,
         getLastNotificationDate: getLastNotificationDate,
         getPhoneNumberType: getPhoneNumberType,
-        getRandomBlob: getRandomBlob,
         getSubscribedUsers: getSubscribedUsers,
+        getUserByEmailAddress: getUserByEmailAddress,
+        getUserByGamerTag: getUserByGamerTag,
         getUserByPhoneNumber: getUserByPhoneNumber,
         getUserToken: getUserToken,
         updateUser: updateUser
     };
 };
 
-module.exports = User;
+module.exports = Users;
