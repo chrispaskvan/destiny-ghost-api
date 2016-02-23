@@ -198,15 +198,71 @@ var twilioController = function () {
             });
     };
     var _getIronBannerEventRewards = function () {
-        var deferred = Q.defer();
-        deferred.resolve({ rewards: { weapons: ['A', 'B', 'C'],
-            armor: {
-                hunter: ['A1', 'B1', 'C1'],
-                titan: ['A2', 'B2', 'C2'],
-                warlock:  ['A3', 'B3', 'C3']
-            }},
-            iconUrl: 'https://www.bungie.net/common/destiny_content/icons/3fa5782bfdbc0d087c8794e26ed61529.png'});
-        return deferred.promise;
+        return destiny.getCurrentUser(shadowUser.cookies)
+            .then(function (currentUser) {
+                return destiny.getCharacters(currentUser.membershipId)
+                    .then(function (characters) {
+                        var characterPromises = [];
+                        _.each(characters, function (character) {
+                            characterPromises.push(destiny.getIronBannerEventRewards(character.characterBase.characterId, shadowUser.cookies));
+                        });
+                        return Q.all(characterPromises)
+                            .then(function (characterItems) {
+                                if (characterItems === undefined || characterItems.length === 0) {
+                                    res.json(jSend.fail('Lord Saladin is not currently in the tower. The Iron Banner is unavailable.'));
+                                    return;
+                                }
+                                var items = _.flatten(characterItems);
+                                var itemHashes = _.uniq(_.map(items, function (item) {
+                                    return item.item.itemHash;
+                                }));
+                                return ghost.getWorldDatabasePath()
+                                    .then(function (worldDatabasePath) {
+                                        world.open(worldDatabasePath);
+                                        var promises = [];
+                                        _.each(itemHashes, function (itemHash) {
+                                            promises.push(world.getItemByHash(itemHash));
+                                        });
+                                        return Q.all(promises)
+                                            .then(function (items) {
+                                                return world.getVendorIcon(lordSaladinHash)
+                                                    .then(function (iconUrl) {
+                                                        var weapons = _.filter(items, function (item) {
+                                                            return _.contains(item.itemCategoryHashes, 1);
+                                                        });
+                                                        var hunterArmor = _.filter(items, function (item) {
+                                                            return _.contains(item.itemCategoryHashes, 20) &&
+                                                                _.contains(item.itemCategoryHashes, 23);
+                                                        });
+                                                        var titanArmor = _.filter(items, function (item) {
+                                                            return _.contains(item.itemCategoryHashes, 20) &&
+                                                                _.contains(item.itemCategoryHashes, 22);
+                                                        });
+                                                        var warlockArmor = _.filter(items, function (item) {
+                                                            return _.contains(item.itemCategoryHashes, 20) &&
+                                                                _.contains(item.itemCategoryHashes, 21);
+                                                        });
+                                                        return {
+                                                            rewards: { weapons: _.map(weapons, function (item) {
+                                                                return item.itemName;
+                                                            }), armor: { hunter: _.map(hunterArmor, function (item) {
+                                                                return item.itemName;
+                                                            }), titan: _.map(titanArmor, function (item) {
+                                                                return item.itemName;
+                                                            }), warlock: _.map(warlockArmor, function (item) {
+                                                                return item.itemName;
+                                                            })}},
+                                                            iconUrl: iconUrl
+                                                        };
+                                                    })
+                                                    .fin(function () {
+                                                        world.close();
+                                                    });
+                                            });
+                                    });
+                            });
+                    });
+            });
     };
     /**
      *
