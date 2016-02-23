@@ -6,7 +6,7 @@ var app = require('../app.js'),
     req = require('supertest'),
     should = require('should'),
     superagent = require('superagent'),
-    user = require('../settings/ShadowUser.json');
+    user = require('../settings/shadowUser.psn.json');
 
 describe('integration tests?', function () {
     it('Should ', function (done) {

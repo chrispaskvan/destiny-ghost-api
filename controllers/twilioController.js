@@ -28,7 +28,7 @@ var _ = require('underscore'),
     path = require('path'),
     Q = require('q'),
     S = require('string'),
-    shadowUser = require('../settings/ShadowUser.json'),
+    shadowUser = require('../settings/shadowUser.psn.json'),
     twilio = require('twilio'),
     Users = require('../models/users'),
     World = require('../models/world');
@@ -60,12 +60,35 @@ var twilioController = function () {
      * @member {Object}
      * @type {{accountSid: string, authToken string, phoneNumber string}} settings
      */
-    var authToken = JSON.parse(fs.readFileSync(process.env.TWILIO || './settings/twilio.json')).authToken;
+    var authToken = JSON.parse(fs.readFileSync(process.env.TWILIO || './settings/twilio.production.json')).authToken;
     /**
      * User Model
      * @type {User|exports|module.exports}
      */
     var userModel = new Users(process.env.DATABASE, process.env.TWILIO);
+    /**
+     * @constant
+     * @type {string}
+     * @description Banshee-44's Vendor Number
+     */
+    var gunSmithHash = 570929315;
+    /**
+     * @constant
+     * @type {string}
+     * @description Iron Banner's Vendor Number
+     */
+    var lordSaladinHash = 242140165;
+    /**
+     * @constant
+     * @type {string}
+     * @description Xur's Vendor Number
+     */
+    var xurHash = 2796397637;
+    /**
+     *
+     * @returns {string}
+     * @private
+     */
     var _getRandomResponseForAnError = function () {
         var responses = ['Sorry. I lost your message in the Ascendant realm. Blame Oryx.',
             'Skolas escaped the Prison of Elders again. He must be responsible for this mishap.',
@@ -110,9 +133,15 @@ var twilioController = function () {
                                             });
                                             return Q.all(itemPromises)
                                                 .then(function (items) {
-                                                    return _.map(items, function (item) {
-                                                        return item.itemName;
-                                                    });
+                                                    return world.getVendorIcon(gunSmithHash)
+                                                        .then(function (iconUrl) {
+                                                            return {
+                                                                items: _.map(items, function (item) {
+                                                                    return item.itemName;
+                                                                }),
+                                                                iconUrl: iconUrl
+                                                            };
+                                                        });
                                                 })
                                                 .fin(function () {
                                                     world.close();
@@ -149,9 +178,15 @@ var twilioController = function () {
                                             });
                                             return Q.all(itemPromises)
                                                 .then(function (items) {
-                                                    return _.map(items, function (item) {
-                                                        return item.itemName;
-                                                    });
+                                                    return world.getVendorIcon(gunSmithHash)
+                                                        .then(function (iconUrl) {
+                                                            return {
+                                                                items: _.map(items, function (item) {
+                                                                    return item.itemName;
+                                                                }),
+                                                                iconUrl: iconUrl
+                                                            };
+                                                        });
                                                 })
                                                 .fin(function () {
                                                     world.close();
@@ -161,6 +196,17 @@ var twilioController = function () {
                             });
                     });
             });
+    };
+    var _getIronBannerEventRewards = function () {
+        var deferred = Q.defer();
+        deferred.resolve({ rewards: { weapons: ['A', 'B', 'C'],
+            armor: {
+                hunter: ['A1', 'B1', 'C1'],
+                titan: ['A2', 'B2', 'C2'],
+                warlock:  ['A3', 'B3', 'C3']
+            }},
+            iconUrl: 'https://www.bungie.net/common/destiny_content/icons/3fa5782bfdbc0d087c8794e26ed61529.png'});
+        return deferred.promise;
     };
     /**
      *
@@ -191,44 +237,6 @@ var twilioController = function () {
                     itemType: item.itemType,
                     tierTypeName: item.tierTypeName
                 }];
-            });
-    };
-    /**
-     *
-     * @param itemName
-     * @returns {*|promise}
-     */
-    var _queryItem = function (itemName) {
-        return ghost.getLastManifest()
-            .then(function (lastManifest) {
-                var worldPath = path.join('./databases/', path.basename(lastManifest.mobileWorldContentPaths.en));
-                world.open(worldPath);
-                return world.getItemByName(itemName)
-                    .then(function (items) {
-                        if (items.length > 0) {
-                            if (items.length > 1) {
-                                var groups = _.groupBy(items, function (item) {
-                                    return item.itemName;
-                                });
-                                var keys = Object.keys(groups);
-                                if (keys.length === 1) {
-                                    return _getItem(items[0], world)
-                                        .then(function (item) {
-                                            return item;
-                                        });
-                                }
-                                return items;
-                            }
-                            return _getItem(items[0], world)
-                                .then(function (item) {
-                                    return item;
-                                });
-                        }
-                        return [];
-                    })
-                    .fin(function () {
-                        world.close();
-                    });
             });
     };
     /**
@@ -282,15 +290,72 @@ var twilioController = function () {
                             });
                             return Q.all(itemPromises)
                                 .then(function (items) {
-                                    return _.map(items, function (item) {
-                                        return item.itemName;
+                                    var promises = _.map(items, function (item) {
+                                        if (item.itemName === 'Exotic Engram' ||
+                                                item.itemName === 'Legacy Engram') {
+                                            return world.getItemByHash(item.itemHash)
+                                                .then(function (itemDetail) {
+                                                    return (new S(item.itemName).chompRight('Engram') + itemDetail.itemTypeName);
+                                                });
+                                        }
+                                        var deferred = Q.defer();
+                                        deferred.resolve(item.itemName);
+                                        return deferred.promise;
                                     });
+                                    return Q.all(promises)
+                                        .then(function (items) {
+                                            return world.getVendorIcon(xurHash)
+                                                .then(function (iconUrl) {
+                                                    return {
+                                                        items: items,
+                                                        iconUrl: iconUrl
+                                                    };
+                                                });
+                                        });
                                 })
                                 .fin(function () {
                                     world.close();
                                 });
                         }
                         return [];
+                    });
+            });
+    };
+    /**
+     * Search for an item that matches the name provided.
+     * @param itemName
+     * @returns {*|promise}
+     */
+    var _queryItem = function (itemName) {
+        return ghost.getLastManifest()
+            .then(function (lastManifest) {
+                var worldPath = path.join('./databases/', path.basename(lastManifest.mobileWorldContentPaths.en));
+                world.open(worldPath);
+                return world.getItemByName(itemName)
+                    .then(function (items) {
+                        if (items.length > 0) {
+                            if (items.length > 1) {
+                                var groups = _.groupBy(items, function (item) {
+                                    return item.itemName;
+                                });
+                                var keys = Object.keys(groups);
+                                if (keys.length === 1) {
+                                    return _getItem(items[0], world)
+                                        .then(function (item) {
+                                            return item;
+                                        });
+                                }
+                                return items;
+                            }
+                            return _getItem(items[0], world)
+                                .then(function (item) {
+                                    return item;
+                                });
+                        }
+                        return [];
+                    })
+                    .fin(function () {
+                        world.close();
                     });
             });
     };
@@ -334,6 +399,9 @@ var twilioController = function () {
                                 'Content-Type': 'text/xml'
                             });
                             res.end(twiml.toString());
+                        })
+                        .fail(function (err) {
+                            res.status(500).end(err.toString());
                         });
                 } else {
                     twiml.message('More what?');
@@ -344,7 +412,7 @@ var twilioController = function () {
                 }
             } else {
                 if (counter > 25) {
-                    twiml.message('Let me check with the Speaker regarding your Guardian status.');
+                    twiml.message('Let me check with the Speaker regarding your good standing as a Guardian.');
                     res.writeHead(429, {
                         'Content-Type': 'text/xml'
                     });
@@ -353,45 +421,83 @@ var twilioController = function () {
                     var searchTerm = req.body.Body.trim().toLowerCase();
                     if (searchTerm === 'xur') {
                         _getXur()
-                            .then(function (exotics) {
-                                var result = _.reduce(exotics, function (memo, exotic) {
-                                    return memo + '\n' + exotic;
-                                }, ' ').trim() || 'Xur is off conspiring with the 9. Check back Friday.';
-                                twiml.message(result.substr(0, 130));
+                            .then(function (vendor) {
+                                var result = _.reduce(vendor.items, function (memo, exotic) {
+                                        return memo + '\n' + exotic;
+                                    }, ' ').trim() || 'Xur is off conspiring with the 9. Check back Friday.';
+                                twiml.message(function () {
+                                    this.body(result.substr(0, 130));
+                                    this.media(vendor.iconUrl);
+                                });
                                 res.writeHead(200, {
                                     'Content-Type': 'text/xml'
                                 });
                                 res.end(twiml.toString());
+                            })
+                            .fail(function (err) {
+                                res.status(500).end(err.toString());
                             });
                     } else if (searchTerm === 'field test weapons') {
                         _getFieldTestWeapons()
-                            .then(function (fieldTestWeapons) {
-                                var result = _.reduce(fieldTestWeapons, function (memo, weapon) {
+                            .then(function (vendor) {
+                                var result = _.reduce(vendor.items, function (memo, weapon) {
                                     return memo + '\n' + weapon;
                                 }, ' ').trim();
-                                twiml.message(result.substr(0, 130));
+                                twiml.message(function () {
+                                    this.body(result.substr(0, 130));
+                                    this.media(vendor.iconUrl);
+                                });
                                 res.writeHead(200, {
                                     'Content-Type': 'text/xml'
                                 });
                                 res.end(twiml.toString());
                             })
                             .fail(function (err) {
-                                res.end(err.toString());
+                                res.status(500).end(err.toString());
                             });
                     } else if (searchTerm === 'foundry orders') {
                         _getFoundryOrders()
-                            .then(function (foundryOrders) {
-                                var result = _.reduce(foundryOrders, function (memo, foundryItem) {
+                            .then(function (vendor) {
+                                var result = _.reduce(vendor.items, function (memo, foundryItem) {
                                     return memo + '\n' + foundryItem;
                                 }, ' ').trim();
-                                twiml.message(result.substr(0, 130));
+                                twiml.message(function () {
+                                    this.body(result.substr(0, 130));
+                                    this.media(vendor.iconUrl);
+                                });
                                 res.writeHead(200, {
                                     'Content-Type': 'text/xml'
                                 });
                                 res.end(twiml.toString());
                             })
                             .fail(function (err) {
-                                res.end(err.toString());
+                                res.status(500).end(err.toString());
+                            });
+                    } else if (searchTerm === 'iron banner') {
+                        _getIronBannerEventRewards()
+                            .then(function (vendor) {
+                                twiml.message(function () {
+                                    this.body(_.reduce(vendor.rewards.weapons, function (memo, weapon) {
+                                        return memo + '\n' + weapon;
+                                    }, ' ').trim().substr(0, 130));
+                                    this.media(vendor.iconUrl);
+                                });
+                                twiml.message('Hunter\n------\n' +  _.reduce(vendor.rewards.armor.hunter, function (memo, classArmor) {
+                                    return memo + '\n' + classArmor;
+                                }, ' ').trim().substr(0, 130));
+                                twiml.message('Titan\n-----\n' +  _.reduce(vendor.rewards.armor.titan, function (memo, classArmor) {
+                                    return memo + '\n' + classArmor;
+                                }, ' ').trim().substr(0, 130));
+                                twiml.message('Warlock\n-------\n' +  _.reduce(vendor.rewards.armor.warlock, function (memo, classArmor) {
+                                    return memo + '\n' + classArmor;
+                                }, ' ').trim().substr(0, 130));
+                                res.writeHead(200, {
+                                    'Content-Type': 'text/xml'
+                                });
+                                res.end(twiml.toString());
+                            })
+                            .fail(function (err) {
+                                res.status(500).end(err.toString());
                             });
                     } else {
                         _queryItem(searchTerm)
@@ -417,7 +523,8 @@ var twilioController = function () {
                                             });
                                             res.end(twiml.toString());
                                         });
-                                } else if (items.length > 1) {
+                                }
+                                if (items.length > 1) {
                                     var groups = _.groupBy(items, function (item) {
                                         return item.itemName;
                                     });
@@ -439,7 +546,7 @@ var twilioController = function () {
                                 }
                             })
                             .fail(function (err) {
-                                res.end(err.toString());
+                                res.status(500).end(err.toString());
                             });
                     }
                 }

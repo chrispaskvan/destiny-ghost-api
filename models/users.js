@@ -127,7 +127,7 @@ var Users = function (databaseFullPath, twilioSettingsFullPath) {
      * @member {Object}
      * @type {{accountSid: string, authToken string, phoneNumber string}} settings
      */
-    var settings = JSON.parse(fs.readFileSync(twilioSettingsFullPath || './settings/twilio.json'));
+    var settings = JSON.parse(fs.readFileSync(twilioSettingsFullPath || './settings/twilio.production.json'));
     /**
      * Allowed Actions
      * @type {{Gunsmith: string, Xur: string}}
@@ -215,6 +215,7 @@ var Users = function (databaseFullPath, twilioSettingsFullPath) {
     /**
      *
      * @param user
+     * @param callback
      * @returns {*}
      */
     var createUserToken = function (user, callback) {
@@ -267,7 +268,7 @@ var Users = function (databaseFullPath, twilioSettingsFullPath) {
      * @param phoneNumber
      * @param action
      * @param callback
-     * @callback
+     * @returns {*}
      */
     var getLastNotificationDate = function (phoneNumber, action, callback) {
         var deferred = Q.defer();
@@ -448,6 +449,7 @@ var Users = function (databaseFullPath, twilioSettingsFullPath) {
     /**
      *
      * @param user {Object}
+     * @param callback
      * @returns {*|Array}
      */
     var updateUser = function (user, callback) {

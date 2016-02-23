@@ -22,6 +22,8 @@ var routes = function () {
      */
     destinyRouter.route('/characters/')
         .get(destinyController.getCharacters);
+    destinyRouter.route('/:membershipType/characters/:displayName')
+        .get(destinyController.getCharacters);
     destinyRouter.route('/currentUser/')
         .get(destinyController.getCurrentUser);
     destinyRouter.route('/fieldTestWeapons/')
@@ -37,7 +39,7 @@ var routes = function () {
      * @type {notificationController|exports|module.exports}
      */
     var notificationController = new NotificationController();
-    notificationController.init('./settings/ShadowUser.json');
+    notificationController.init('./settings/shadowUser.psn.json');
     return destinyRouter;
 };
 

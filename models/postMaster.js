@@ -19,22 +19,23 @@ var _ = require('underscore'),
     smtpConfiguration = require('../settings/smtp.json'),
     smtpTransport = require('nodemailer-smtp-transport');
 
-var PostMaster = function () {
+var Postmaster = function () {
     var transporter = nodemailer.createTransport(smtpTransport(smtpConfiguration));
     var registrationText = 'Hi {{firstName}},\r\n\r\n' +
-        'Please enter the following verification code for your email address.\r\n\r\n';
-    var registrationHtml = '<img src=\'https://www.bungie.net/common/destiny_content/icons/4d6ee31e6bb0d28ffecd51a74a085a4f.png\'>Hi {{firstName}},\r\n\r\n' +
-        'Please enter the following verification code for your email address.\r\n\r\n';
+        'Open the link below to continue the registration process.\r\n\r\n';
+    var registrationHtml = 'Hi {{firstName}},<br /><br />' +
+        'Please click the link below to continue the registration process.<br /><br />';
     var mailOptions = {
         from: 'destiny-ghost@apricothill.com'
     };
 
-    var register = function (user) {
+    var register = function (user, image, url) {
         _.extend(mailOptions, {
-            subject: 'Your Email Registration Code for Destiny Ghost',
-            text: new S(registrationText).template(user).s + user.tokens.emailAddress,
+            subject: 'Destiny Ghost Registration',
+            text: new S(registrationText).template(user).s + process.env.DOMAIN + url + '?token=' + user.tokens.emailAddress,
             to: user.emailAddress,
-            html: new S(registrationHtml).template(user).s + user.tokens.emailAddress
+            html: (image ? '<img src=\'' + image + '\' style=\'background-color: slategray;\'><br />' : '') +
+                new S(registrationHtml).template(user).s + process.env.DOMAIN + url + '?token=' + user.tokens.emailAddress
         });
         transporter.sendMail(mailOptions, function (err, response) {
             if (err) {
@@ -49,4 +50,4 @@ var PostMaster = function () {
     };
 };
 
-module.exports = PostMaster;
+module.exports = Postmaster;

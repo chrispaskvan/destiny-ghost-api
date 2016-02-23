@@ -14,7 +14,6 @@
  * @requires request
  * @requires util
  */
-'use strict';
 var _ = require('underscore'),
     NodeCache = require('node-cache'),
     Q = require('q'),
@@ -26,6 +25,7 @@ var _ = require('underscore'),
  * @constructor
  */
 var Destiny = function (apiKey) {
+    'use strict';
     if (!apiKey || !_.isString(apiKey)) {
         throw new Error('The API key is missing.');
     }
@@ -34,6 +34,16 @@ var Destiny = function (apiKey) {
      * @member {string} apiKey - The Destiny API key.
      */
     self.apiKey = apiKey;
+    /**
+     * Available Membership Types
+     * @type {{TigerXbox: number, TigerPsn: number}}
+     * @description Membership types as defined by the Bungie Destiny API
+     * outlined at {@link http://bungienetplatform.wikia.com/wiki/BungieMembershipType}.
+     */
+    var membershipTypes = {
+        TigerXbox: 1,
+        TigerPsn: 2
+    };
     /**
      * @constant
      * @type {string}
@@ -133,6 +143,7 @@ var Destiny = function (apiKey) {
      * @function
      * @param membershipId {string}
      * @param characterId {string}
+     * @param cookies {Array}
      * @param callback
      * @returns {*|promise}
      * @description Get the details for the member's character provided.
@@ -204,18 +215,19 @@ var Destiny = function (apiKey) {
     /**
      * @function
      * @param displayName {string}
+     * @membershipType {integer}
      * @param callback
      * @returns {*|promise}
      * @description Get the Bungie member number from the user's display name.
      */
-    var getMembershipIdFromDisplayName = function (displayName, callback) {
+    var getMembershipIdFromDisplayName = function (displayName, membershipType, callback) {
         var deferred = Q.defer();
         var opts = {
             headers: {
                 'x-api-key': self.apiKey
             },
-            url: util.format('%s/Destiny/2/Stats/GetMembershipIdByDisplayName/%s/',
-                servicePlatform, encodeURIComponent(displayName))
+            url: util.format('%s/Destiny/%s/Stats/GetMembershipIdByDisplayName/%s/',
+                servicePlatform, membershipType, encodeURIComponent(displayName))
         };
         request(opts, function (err, res, body) {
             if (!err && res.statusCode === 200) {
@@ -228,6 +240,7 @@ var Destiny = function (apiKey) {
     };
     /**
      * @function
+     * @param cookies {Array}
      * @returns {*|promise}
      * @description Get the current user based on the Bungie cookies.
      */
@@ -253,7 +266,10 @@ var Destiny = function (apiKey) {
                         responseBody.Message, responseBody.Status));
                 } else {
                     var user = responseBody.Response;
-                    getMembershipIdFromDisplayName(user.psnId)
+                    /**
+                     * @todo xBox
+                     */
+                    getMembershipIdFromDisplayName(user.psnId, membershipTypes.TigerPsn)
                         .then(function (membershipId) {
                             if (user) {
                                 deferred.resolve({

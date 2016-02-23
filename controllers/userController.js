@@ -16,7 +16,7 @@ var _ = require('underscore'),
     Notifications = require('../models/notifications'),
     path = require('path'),
     Postmaster = require('../models/postmaster'),
-    shadowUser = require('../settings/ShadowUser.json'),
+    shadowUser = require('../settings/shadowUser.psn.json'),
     Tokens = require('../models/tokens'),
     Users = require('../models/users'),
     World = require('../models/world');
@@ -96,10 +96,11 @@ var userController = function () {
             });
     };
     /**
-     *
+     * Uses JSON patch as described {@link https://github.com/Starcounter-Jack/JSON-Patch here}.
      * @param req
      * @param res
      * @returns {*}
+     * @todo Deny operations on immutable properties.
      */
     var patch = function (req, res) {
         var gamerTag = req.params.gamerTag;
@@ -132,7 +133,7 @@ var userController = function () {
         if (!user.gamerTag) {
             return res.status(409).json(new jSend.error('A gamer tag is required.'));
         }
-        destiny.getMembershipIdFromDisplayName(user.gamerTag)
+        destiny.getMembershipIdFromDisplayName(user.gamerTag, user.membershipType)
             .then(function (membershipId) {
                 if (!membershipId) {
                     return res.status(409).json(new jSend.error('The gamer tag' + user.gamerTag + 'is not registered with Bungie.'));

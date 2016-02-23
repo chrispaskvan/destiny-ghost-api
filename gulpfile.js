@@ -14,7 +14,7 @@ gulp.task('default', function () {
             DATABASE: './databases/ghost.db',
             DOMAIN: 'http://50e9402d.ngrok.io',
             PORT: 1100,
-            TWILIO: './settings/twilio.json'
+            TWILIO: './settings/twilio.production.json'
         },
         ignore: ['./node_modules/**']
     }).on('restart', function () {
@@ -29,7 +29,7 @@ gulp.task('integrationTests', function () {
         DATABASE: './databases/ghost.db',
         DOMAIN: 'http://50e9402d.ngrok.io',
         PORT: 1100,
-        TWILIO: './settings/twilio.json'
+        TWILIO: './settings/twilio.production.json'
     }});
     gulp.src('tests/*IntegrationTests.js', { read: false })
         .pipe(gulpMocha({ reporter: 'nyan' }));
@@ -42,7 +42,7 @@ gulp.task('controllerTests', function () {
         DATABASE: './databases/ghost.db',
         DOMAIN: 'http://50e9402d.ngrok.io',
         PORT: 1100,
-        TWILIO: './settings/twilio.json'
+        TWILIO: './settings/twilio.production.json'
     }});
     gulp.src('tests/*ControllerTests.js', { read: false })
         .pipe(gulpMocha({ reporter: 'nyan' }));
@@ -55,7 +55,7 @@ gulp.task('modelTests', function () {
         DATABASE: './databases/ghost.db',
         DOMAIN: 'http://50e9402d.ngrok.io',
         PORT: 1100,
-        TWILIO: './settings/twilio.json'
+        TWILIO: './settings/twilio.production.json'
     }});
     gulp.src('tests/*ModelTests.js', { read: false })
         .pipe(gulpMocha({ reporter: 'nyan' }));

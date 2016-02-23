@@ -67,7 +67,7 @@ var notificationController = function (shadowUserConfiguration) {
      * @type {User|exports|module.exports}
      */
     var userModel = new Users(process.env.DATABASE, process.env.TWILIO);
-    shadowUserConfiguration = shadowUserConfiguration || './settings/ShadowUser.json';
+    shadowUserConfiguration = shadowUserConfiguration || './settings/shadowUser.psn.json';
     var shadowUser = JSON.parse(fs.readFileSync(shadowUserConfiguration));
     /**
      * @constant
@@ -250,7 +250,7 @@ var notificationController = function (shadowUserConfiguration) {
                                                                         var now = new Date();
                                                                         var promises = [];
                                                                         if (notificationDate === undefined ||
-                                                                            (nextRefreshDate < now && notificationDate < nextRefreshDate)) {
+                                                                                (nextRefreshDate < now && notificationDate < nextRefreshDate)) {
                                                                             promises.push(notifications.sendMessage('Lord Saladin rewards only the strong.\n' +
                                                                                 _.reduce(_.map(items, function (item) {
                                                                                     return item.itemName;
@@ -312,7 +312,7 @@ var notificationController = function (shadowUserConfiguration) {
                                 return item.item.itemHash;
                             });
                             world.open(worldPath);
-                            return world.getVendorIcon(gunSmithHash)
+                            return world.getVendorIcon(xurHash)
                                 .then(function (iconUrl) {
                                     var itemPromises = [];
                                     _.each(itemHashes, function (itemHash) {

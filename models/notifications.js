@@ -87,7 +87,7 @@ var Notifications = function (databaseFullPath, twilioSettingsFullPath) {
      * @member {Object}
      * @type {{accountSid: string, authToken string, phoneNumber string}} settings
      */
-    var settings = JSON.parse(fs.readFileSync(twilioSettingsFullPath || './settings/twilio.json'));
+    var settings = JSON.parse(fs.readFileSync(twilioSettingsFullPath || './settings/twilio.production.json'));
     /**
      * Twilio Client
      * @type {twilio}

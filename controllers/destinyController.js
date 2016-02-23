@@ -8,9 +8,9 @@
  * @requires fs
  * @requires Ghost
  * @requires jSend
- * @requires path
  * @requires Q
  * @requires request
+ * @requires S
  * @requires User
  * @requires World
  * @requires yauzl
@@ -22,10 +22,10 @@ var _ = require('underscore'),
     fs = require('fs'),
     Ghost = require('../models/ghost'),
     jSend = require('../models/jsend'),
-    path = require('path'),
     Q = require('q'),
     request = require('request'),
-    shadowUser = require('../settings/ShadowUser.json'),
+    S = require('string'),
+    shadowUser = require('../settings/shadowUser.psn.json'),
     World = require('../models/world'),
     yauzl = require('yauzl');
 
@@ -45,6 +45,47 @@ var destinyController = function () {
      * @type {World|exports|module.exports}
      */
     var world = new World();
+    /**
+     *
+     * @param membershipId
+     * @returns {Request|*}
+     * @private
+     */
+    var _getCharacters = function (membershipId) {
+        return destiny.getCharacters(membershipId)
+            .then(function (characters) {
+                return ghost.getWorldDatabasePath()
+                    .then(function (worldDatabasePath) {
+                        world.open(worldDatabasePath);
+                        var characterBases = _.map(characters, function (character) {
+                            return {
+                                characterId: character.characterBase.characterId,
+                                classHash: character.characterBase.classHash,
+                                emblem: character.emblemPath,
+                                backgroundPath: character.backgroundPath,
+                                powerLevel: character.characterBase.powerLevel
+                            };
+                        });
+                        var promises = [];
+                        _.each(characterBases, function (characterBase) {
+                            promises.push(world.getClassByHash(characterBase.classHash));
+                        });
+                        return Q.all(promises)
+                            .then(function (characterClasses) {
+                                world.close();
+                                _.each(characterBases, function (characterBase, index) {
+                                    characterBase.className = characterClasses[index].className;
+                                });
+                                return characterBases;
+                            });
+                    });
+            });
+    };
+    /**
+     *
+     * @param req
+     * @private
+     */
     var _getCookies = function (req) {
         var cookies = _.pick(cookie.parse(req.headers.cookie), 'bungled', 'bungledid', 'bungleatk');
         return _.map(_.keys(cookies), function (cookieName) {
@@ -70,58 +111,40 @@ var destinyController = function () {
         }).value;
     };
     /**
-     * Get the Bungie membership number from the user display name.
-     * @param displayName {string}
-     * @returns {*|string}
-     * @private
-     */
-    var _getMembershipId = function (displayName) {
-        return destiny.getMembershipIdFromDisplayName(displayName)
-            .then(function (result) {
-                return result;
-            });
-    };
-    /**
      * Get characters for the current user.
      * @returns {*|Array}
      * @private
      */
     var getCharacters = function (req, res) {
-        var cookies = _getCookies(req);
-        destiny.getCurrentUser(cookies)
-            .then(function (currentUser) {
-                return destiny.getCharacters(currentUser.membershipId)
-                    .then(function (characters) {
-                        return ghost.getWorldDatabasePath()
-                            .then(function (worldDatabasePath) {
-                                world.open(worldDatabasePath);
-                                var characterBases = _.map(characters, function (character) {
-                                    return {
-                                        characterId: character.characterBase.characterId,
-                                        classHash: character.characterBase.classHash,
-                                        emblem: character.emblemPath,
-                                        backgroundPath: character.backgroundPath,
-                                        powerLevel: character.characterBase.powerLevel
-                                    };
-                                });
-                                var promises = [];
-                                _.each(characterBases, function (characterBase) {
-                                    promises.push(world.getClassByHash(characterBase.classHash));
-                                });
-                                return Q.all(promises)
-                                    .then(function (characterClasses) {
-                                        world.close();
-                                        _.each(characterBases, function (characterBase, index) {
-                                            characterBase.className = characterClasses[index].className;
-                                        });
-                                        res.json(characterBases);
-                                    });
+        var displayName = req.params.displayName;
+        var membershipType = req.params.membershipType;
+        if (displayName && membershipType) {
+            destiny.getMembershipIdFromDisplayName(displayName, membershipType)
+                .then(function (membershipId) {
+                    if (parseInt(membershipId, 10)) {
+                        return _getCharacters(membershipId)
+                            .then(function (characters) {
+                                res.json(characters);
                             });
-                    });
-            })
-            .fail(function (err) {
-                res.json(jSend.fail(err));
-            });
+                    }
+                    res.status(404).json(new jSend.error('Membership not found.'));
+                })
+                .fail(function (err) {
+                    res.json(jSend.fail(err));
+                });
+        } else {
+            var cookies = _getCookies(req);
+            destiny.getCurrentUser(cookies)
+                .then(function (currentUser) {
+                    return _getCharacters(currentUser.membershipId)
+                        .then(function (characters) {
+                            res.json(characters);
+                        });
+                })
+                .fail(function (err) {
+                    res.json(jSend.fail(err));
+                });
+        }
     };
     /**
      *
@@ -271,13 +294,13 @@ var destinyController = function () {
                                                 });
                                                 res.json({ weapons: _.map(weapons, function (item) {
                                                     return item.itemName;
-                                                }), armor: [{ hunter: _.map(hunterArmor, function (item) {
+                                                }), armor: { hunter: _.map(hunterArmor, function (item) {
                                                     return item.itemName;
                                                 }), titan: _.map(titanArmor, function (item) {
                                                     return item.itemName;
                                                 }), warlock: _.map(warlockArmor, function (item) {
                                                     return item.itemName;
-                                                })}]});
+                                                })}});
                                             });
                                     });
                             });
@@ -319,10 +342,25 @@ var destinyController = function () {
                                 });
                                 return Q.all(promises)
                                     .then(function (items) {
+                                        var itemPromises = _.map(items, function (item) {
+                                            if (item.itemName === 'Exotic Engram' ||
+                                                    item.itemName === 'Legacy Engram') {
+                                                return world.getItemByHash(item.itemHash)
+                                                    .then(function (itemDetail) {
+                                                        return (new S(item.itemName).chompRight('Engram') + itemDetail.itemTypeName);
+                                                    });
+                                            }
+                                            var deferred = Q.defer();
+                                            deferred.resolve(item.itemName);
+                                            return deferred.promise;
+                                        });
+                                        return Q.all(itemPromises)
+                                            .then(function (items) {
+                                                res.json(items);
+                                            });
+                                    })
+                                    .fin(function () {
                                         world.close();
-                                        res.json(_.map(items, function (item) {
-                                            return item.itemName;
-                                        }));
                                     });
                             });
                     });

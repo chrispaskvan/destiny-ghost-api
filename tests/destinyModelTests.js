@@ -3,7 +3,7 @@
  */
 var expect = require('chai').expect,
     Destiny = require('../models/destiny'),
-    user = require('../settings/ShadowUser.json');
+    user = require('../settings/shadowUser.psn.json');
 
 describe('Destiny Model Tests', function () {
     describe('Get the latest manifest definition', function () {
