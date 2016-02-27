@@ -10,6 +10,7 @@
  * @requires Notifications
  * @requires path
  * @requires Q
+ * @requires S
  * @requires twilio
  * @requires User
  * @requires World
@@ -209,8 +210,7 @@ var twilioController = function () {
                         return Q.all(characterPromises)
                             .then(function (characterItems) {
                                 if (characterItems === undefined || characterItems.length === 0) {
-                                    res.json(jSend.fail('Lord Saladin is not currently in the tower. The Iron Banner is unavailable.'));
-                                    return;
+                                    return undefined;
                                 }
                                 var items = _.flatten(characterItems);
                                 var itemHashes = _.uniq(_.map(items, function (item) {
@@ -373,7 +373,7 @@ var twilioController = function () {
                                     world.close();
                                 });
                         }
-                        return [];
+                        return undefined;
                     });
             });
     };
@@ -445,168 +445,175 @@ var twilioController = function () {
         var twiml = new twilio.TwimlResponse();
         if (twilio.validateRequest(authToken, header, process.env.DOMAIN + req.originalUrl, req.body)) {
             var counter = parseInt(req.cookies.counter, 10) || 0;
-            var itemHash = req.cookies.itemHash;
-            if (req.body.Body.trim().toLowerCase() === 'more') {
-                if (itemHash) {
-                    bitly.getShortUrl('http://db.planetdestiny.com/items/view/' + itemHash)
-                        .then(function (shortUrl) {
-                            twiml.message(shortUrl);
+            userModel.getUserByPhoneNumber(req.body.From)
+                .then(function (user) {
+                    if (!user) {
+                        if (!req.cookies.unregisteredUser) {
+                            twiml.message('Register your phone at app.destiny-ghost.com/register');
                             res.writeHead(200, {
                                 'Content-Type': 'text/xml'
                             });
                             res.end(twiml.toString());
-                        })
-                        .fail(function (err) {
-                            res.status(500).end(err.toString());
-                        });
-                } else {
-                    twiml.message('More what?');
-                    res.writeHead(200, {
-                        'Content-Type': 'text/xml'
-                    });
-                    res.end(twiml.toString());
-                }
-            } else {
-                if (counter > 25) {
-                    twiml.message('Let me check with the Speaker regarding your good standing as a Guardian.');
-                    res.writeHead(429, {
-                        'Content-Type': 'text/xml'
-                    });
-                    res.end(twiml.toString());
-                } else {
-                    var searchTerm = req.body.Body.trim().toLowerCase();
-                    if (searchTerm === 'xur') {
-                        _getXur()
-                            .then(function (vendor) {
-                                var result = _.reduce(vendor.items, function (memo, exotic) {
-                                        return memo + '\n' + exotic;
-                                    }, ' ').trim() || 'Xur is off conspiring with the 9. Check back Friday.';
-                                twiml.message(function () {
-                                    this.body(result.substr(0, 130));
-                                    this.media(vendor.iconUrl);
-                                });
-                                res.writeHead(200, {
-                                    'Content-Type': 'text/xml'
-                                });
-                                res.end(twiml.toString());
-                            })
-                            .fail(function (err) {
-                                res.status(500).end(err.toString());
-                            });
-                    } else if (searchTerm === 'field test weapons') {
-                        _getFieldTestWeapons()
-                            .then(function (vendor) {
-                                var result = _.reduce(vendor.items, function (memo, weapon) {
-                                    return memo + '\n' + weapon;
-                                }, ' ').trim();
-                                twiml.message(function () {
-                                    this.body(result.substr(0, 130));
-                                    this.media(vendor.iconUrl);
-                                });
-                                res.writeHead(200, {
-                                    'Content-Type': 'text/xml'
-                                });
-                                res.end(twiml.toString());
-                            })
-                            .fail(function (err) {
-                                res.status(500).end(err.toString());
-                            });
-                    } else if (searchTerm === 'foundry orders') {
-                        _getFoundryOrders()
-                            .then(function (vendor) {
-                                var result = _.reduce(vendor.items, function (memo, foundryItem) {
-                                    return memo + '\n' + foundryItem;
-                                }, ' ').trim();
-                                twiml.message(function () {
-                                    this.body(result.substr(0, 130));
-                                    this.media(vendor.iconUrl);
-                                });
-                                res.writeHead(200, {
-                                    'Content-Type': 'text/xml'
-                                });
-                                res.end(twiml.toString());
-                            })
-                            .fail(function (err) {
-                                res.status(500).end(err.toString());
-                            });
-                    } else if (searchTerm === 'iron banner') {
-                        _getIronBannerEventRewards()
-                            .then(function (vendor) {
-                                twiml.message(function () {
-                                    this.body(_.reduce(vendor.rewards.weapons, function (memo, weapon) {
-                                        return memo + '\n' + weapon;
-                                    }, ' ').trim().substr(0, 130));
-                                    this.media(vendor.iconUrl);
-                                });
-                                twiml.message('Hunter\n------\n' +  _.reduce(vendor.rewards.armor.hunter, function (memo, classArmor) {
-                                    return memo + '\n' + classArmor;
-                                }, ' ').trim().substr(0, 130));
-                                twiml.message('Titan\n-----\n' +  _.reduce(vendor.rewards.armor.titan, function (memo, classArmor) {
-                                    return memo + '\n' + classArmor;
-                                }, ' ').trim().substr(0, 130));
-                                twiml.message('Warlock\n-------\n' +  _.reduce(vendor.rewards.armor.warlock, function (memo, classArmor) {
-                                    return memo + '\n' + classArmor;
-                                }, ' ').trim().substr(0, 130));
-                                res.writeHead(200, {
-                                    'Content-Type': 'text/xml'
-                                });
-                                res.end(twiml.toString());
-                            })
-                            .fail(function (err) {
-                                res.status(500).end(err.toString());
-                            });
-                    } else {
-                        _queryItem(searchTerm)
-                            .then(function (items) {
-                                counter = counter + 1;
-                                res.cookie('counter', counter);
-                                if (items.length === 1) {
-                                    res.cookie('itemHash', items[0].itemHash);
-                                    items[0].itemCategory = new S(items[0].itemCategory).strip('Weapon').collapseWhitespace().s.trim();
-                                    var template = '{{itemName}} {{tierTypeName}} {{itemCategory}}';
-                                    return userModel.getUserByPhoneNumber(req.body.From)
-                                        .then(function (user) {
-                                            if (user.type === 'landline') {
-                                                twiml.message((new S(template).template(items[0]).s).substr(0, 130));
-                                            } else {
-                                                twiml.message(function () {
-                                                    this.body(new S(template).template(items[0]).s)
-                                                        .media(items[0].icon);
-                                                });
-                                            }
+                        } else {
+                            res.writeHead(403);
+                            res.end();
+                        }
+                        return;
+                    }
+                    var itemHash = req.cookies.itemHash;
+                    var message = req.body.Body.trim();
+                    if (new S(message).startsWith('more')) {
+                        if (itemHash) {
+                            return bitly.getShortUrl('http://db.destinytracker.com/items/' + itemHash)
+                                .then(function (planetDestinyShortUrl) {
+                                    twiml.message('Planet Destiny: ' + planetDestinyShortUrl);
+                                    return bitly.getShortUrl('http://db.planetdestiny.com/items/view/' + itemHash)
+                                        .then(function (destinyTrackerShortUrl) {
+                                            twiml.message('Destiny Tracker: ' + destinyTrackerShortUrl);
                                             res.writeHead(200, {
                                                 'Content-Type': 'text/xml'
                                             });
                                             res.end(twiml.toString());
                                         });
-                                }
-                                if (items.length > 1) {
-                                    var groups = _.groupBy(items, function (item) {
-                                        return item.itemName;
-                                    });
-                                    var keys = Object.keys(groups);
-                                    var result = _.reduce(keys, function (memo, key) {
-                                        return memo + '\n' + key;
-                                    }, ' ').trim();
-                                    twiml.message(result.substr(0, 130));
-                                    res.writeHead(200, {
-                                        'Content-Type': 'text/xml'
-                                    });
-                                    res.end(twiml.toString());
-                                } else {
-                                    twiml.message(_getRandomResponseForNoResults());
-                                    res.writeHead(200, {
-                                        'Content-Type': 'text/xml'
-                                    });
-                                    res.end(twiml.toString());
-                                }
-                            })
-                            .fail(function (err) {
-                                res.status(500).end(err.toString());
+                                });
+                        }
+                        twiml.message('More what?');
+                        res.writeHead(200, {
+                            'Content-Type': 'text/xml'
+                        });
+                        res.end(twiml.toString());
+                    } else {
+                        if (counter > 25) {
+                            twiml.message('Let me check with the Speaker regarding your good standing as a Guardian.');
+                            res.writeHead(429, {
+                                'Content-Type': 'text/xml'
                             });
+                            res.end(twiml.toString());
+                        } else {
+                            var searchTerm = req.body.Body.trim().toLowerCase();
+                            if (searchTerm === 'xur') {
+                                return _getXur()
+                                    .then(function (vendor) {
+                                        var result = _.reduce(vendor.items, function (memo, exotic) {
+                                                return memo + '\n' + exotic;
+                                            }, ' ').trim() || 'Xur is off conspiring with the 9. Check back Friday.';
+                                        twiml.message(function () {
+                                            this.body(result.substr(0, 130));
+                                            this.media(vendor.iconUrl);
+                                        });
+                                        res.writeHead(200, {
+                                            'Content-Type': 'text/xml'
+                                        });
+                                        res.end(twiml.toString());
+                                    });
+                            }
+                            if (searchTerm === 'field test weapons') {
+                                return _getFieldTestWeapons()
+                                    .then(function (vendor) {
+                                        var result = _.reduce(vendor.items, function (memo, weapon) {
+                                            return memo + '\n' + weapon;
+                                        }, ' ').trim();
+                                        twiml.message(function () {
+                                            this.body(result.substr(0, 130));
+                                            this.media(vendor.iconUrl);
+                                        });
+                                        res.writeHead(200, {
+                                            'Content-Type': 'text/xml'
+                                        });
+                                        res.end(twiml.toString());
+                                    })
+                                    .fail(function (err) {
+                                        res.status(500).end(err.toString());
+                                    });
+                            }
+                            if (searchTerm === 'foundry orders') {
+                                return _getFoundryOrders()
+                                    .then(function (vendor) {
+                                        var result = _.reduce(vendor.items, function (memo, foundryItem) {
+                                            return memo + '\n' + foundryItem;
+                                        }, ' ').trim();
+                                        twiml.message(function () {
+                                            this.body(result.substr(0, 130));
+                                            this.media(vendor.iconUrl);
+                                        });
+                                        res.writeHead(200, {
+                                            'Content-Type': 'text/xml'
+                                        });
+                                        res.end(twiml.toString());
+                                    });
+                            }
+                            if (searchTerm === 'iron banner') {
+                                return _getIronBannerEventRewards()
+                                    .then(function (vendor) {
+                                        twiml.message(function () {
+                                            this.body(_.reduce(vendor.rewards.weapons, function (memo, weapon) {
+                                                return memo + '\n' + weapon;
+                                            }, ' ').trim().substr(0, 130));
+                                            this.media(vendor.iconUrl);
+                                        });
+                                        twiml.message('Hunter\n------\n' +  _.reduce(vendor.rewards.armor.hunter, function (memo, classArmor) {
+                                            return memo + '\n' + classArmor;
+                                        }, ' ').trim().substr(0, 130));
+                                        twiml.message('Titan\n-----\n' +  _.reduce(vendor.rewards.armor.titan, function (memo, classArmor) {
+                                            return memo + '\n' + classArmor;
+                                        }, ' ').trim().substr(0, 130));
+                                        twiml.message('Warlock\n-------\n' +  _.reduce(vendor.rewards.armor.warlock, function (memo, classArmor) {
+                                            return memo + '\n' + classArmor;
+                                        }, ' ').trim().substr(0, 130));
+                                        res.writeHead(200, {
+                                            'Content-Type': 'text/xml'
+                                        });
+                                        res.end(twiml.toString());
+                                    });
+                            }
+                            return _queryItem(searchTerm)
+                                .then(function (items) {
+                                    counter = counter + 1;
+                                    res.cookie('counter', counter);
+                                    if (items.length === 1) {
+                                        res.cookie('itemHash', items[0].itemHash);
+                                        items[0].itemCategory = new S(items[0].itemCategory).strip('Weapon').collapseWhitespace().s.trim();
+                                        var template = '{{itemName}} {{tierTypeName}} {{itemCategory}}';
+                                        if (user.type === 'landline') {
+                                            twiml.message((new S(template).template(items[0]).s).substr(0, 130));
+                                        } else {
+                                            twiml.message(function () {
+                                                this.body(new S(template).template(items[0]).s)
+                                                    .media(items[0].icon);
+                                            });
+                                        }
+                                        res.writeHead(200, {
+                                            'Content-Type': 'text/xml'
+                                        });
+                                        res.end(twiml.toString());
+                                    }
+                                    if (items.length > 1) {
+                                        var groups = _.groupBy(items, function (item) {
+                                            return item.itemName;
+                                        });
+                                        var keys = Object.keys(groups);
+                                        var result = _.reduce(keys, function (memo, key) {
+                                            return memo + '\n' + key;
+                                        }, ' ').trim();
+                                        twiml.message(result.substr(0, 130));
+                                        res.writeHead(200, {
+                                            'Content-Type': 'text/xml'
+                                        });
+                                        res.end(twiml.toString());
+                                    } else {
+                                        twiml.message(_getRandomResponseForNoResults());
+                                        res.writeHead(200, {
+                                            'Content-Type': 'text/xml'
+                                        });
+                                        res.end(twiml.toString());
+                                    }
+                                });
+                        }
                     }
-                }
-            }
+                })
+                .fail(function (err) {
+                    res.status(500).end(err.toString());
+                });
         } else {
             res.writeHead(403);
             res.end();
