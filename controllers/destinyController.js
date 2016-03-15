@@ -212,12 +212,12 @@ var destinyController = function () {
                 return destiny.getCharacters(currentUser.membershipId)
                     .then(function (characters) {
                         return destiny.getFoundryOrders(characters[0].characterBase.characterId, cookies)
-                            .then(function (items) {
-                                if (items === undefined || items.length === 0) {
-                                    res.json(jSend.fail('Banshee-44 is the Gunsmith.'));
+                            .then(function (foundryOrders) {
+                                if (foundryOrders.items.length === 0) {
+                                    res.json(foundryOrders);
                                     return;
                                 }
-                                var itemHashes = _.map(items, function (item) {
+                                var itemHashes = _.map(foundryOrders.items, function (item) {
                                     return item.item.itemHash;
                                 });
                                 return ghost.getWorldDatabasePath()

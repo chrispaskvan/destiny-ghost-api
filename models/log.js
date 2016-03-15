@@ -124,11 +124,20 @@ var Log = function () {
                 /**
                  * Make sure responses get logged too.
                  */
-                res.on('finish', function () {
+                var logResponse = function () {
                     res.responseTime = new Date() - startTime;
                     res.requestId = req.requestId;
                     log.info({ res: res });
-                });
+                    /**
+                     * Prevent the following warning:
+                     * possible EventEmitter memory leak detected. 11 finish listeners added.
+                     * @see {link:http://www.jongleberry.com/understanding-possible-eventemitter-leaks.html}
+                     */
+                    res.removeListener('finish', logResponse);
+                    res.setMaxListeners(res.getMaxListeners() - 1);
+                };
+                res.setMaxListeners(res.getMaxListeners() + 1);
+                res.on('finish', logResponse);
                 next();
             };
         };

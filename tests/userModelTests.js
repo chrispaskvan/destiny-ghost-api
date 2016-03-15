@@ -36,12 +36,14 @@ describe('Create a new user', function () {
         var user = {
             firstName: chance.first(),
             emailAddress: chance.email(),
+            gamerTag: 'PocketInfinity',
             lastName: chance.last(),
             phoneNumber: userModel.cleanPhoneNumber(chance.phone({
                 country: 'us',
                 mobile: true
             })),
             isSubscribedToXur: true,
+            membershipId: '11',
             membershipType: 2,
             isSubscribedToBanshee44: true
         };
@@ -66,7 +68,6 @@ describe('Get a new 32-bit globally unique identifier', function () {
     it('Should return a random identification number', function (done) {
         userModel.getBlob(32)
             .then(function (id) {
-                console.log(id);
                 expect(id.length).to.equal(64);
                 done();
             })
@@ -79,7 +80,6 @@ describe('Get a new 16-bit globally unique identifier', function () {
     it('Should return a random identification number', function (done) {
         userModel.getBlob()
             .then(function (id) {
-                console.log(id);
                 expect(id.length).to.equal(32);
                 done();
             })

@@ -8,7 +8,6 @@ var ApplicationInsights = require('applicationinsights'),
     express = require('express'),
     fs = require('fs'),
     Log = require('./models/log'),
-    log = Log(),
     path = require('path');
 
 var app = express();
@@ -31,39 +30,33 @@ app.use(bodyParser.urlencoded({
     extended: true
 }));
 app.use(cookieParser());
-
+/**
+ * Set Access Headers
+ */
 app.use(function (req, res, next) {
-    var _json = res.json;
-    res.json = function (responseData) {
-        res._json = JSON.stringify(responseData);
-        _json.call(this, responseData);
-    };
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, PATCH, DELETE');
+    res.setHeader('Access-Control-Allow-Credentials', true);
     next();
 });
-app.use(function (req, res, next) {
-    var _end = res.end;
-    res.end = function (responseData) {
-        res._end = responseData;
-        _end.call(this, responseData);
-    };
-    next();
-});
+/**
+ * Virtual Directory Path
+ */
+app.use(process.env.VIRTUALPATH || '', app._router);
 /**
  * Logs
  * @type {Log|exports|module.exports}
  */
 var logger = new Log();
 app.use(logger.requestLogger());
-app.use(logger.errorLogger());
-/**
- * Virtual Directory Path
- */
-app.use(process.env.VIRTUALPATH || '', app._router);
 /**
  * Routes
  */
 var destinyRouter = require('./routes/destinyRoutes')();
 app.use('/api/destiny', destinyRouter);
+
+var notificationRouter = require('./routes/notificationRoutes')();
+app.use('/api/notifications', notificationRouter);
 
 var twilioRouter = require('./routes/twilioRoutes')();
 app.use('/api/twilio', twilioRouter);

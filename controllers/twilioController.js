@@ -461,15 +461,15 @@ var twilioController = function () {
                         return;
                     }
                     var itemHash = req.cookies.itemHash;
-                    var message = req.body.Body.trim();
+                    var message = req.body.Body.trim().toLowerCase();
                     if (new S(message).startsWith('more')) {
                         if (itemHash) {
                             return bitly.getShortUrl('http://db.destinytracker.com/items/' + itemHash)
                                 .then(function (planetDestinyShortUrl) {
-                                    twiml.message('Planet Destiny: ' + planetDestinyShortUrl);
+                                    twiml.message('Destiny Tracker\n' + planetDestinyShortUrl);
                                     return bitly.getShortUrl('http://db.planetdestiny.com/items/view/' + itemHash)
                                         .then(function (destinyTrackerShortUrl) {
-                                            twiml.message('Destiny Tracker: ' + destinyTrackerShortUrl);
+                                            twiml.message('Planet Destiny\n' + destinyTrackerShortUrl);
                                             res.writeHead(200, {
                                                 'Content-Type': 'text/xml'
                                             });

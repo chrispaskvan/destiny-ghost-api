@@ -398,11 +398,14 @@ var Destiny = function (apiKey) {
                                 var data = responseBody.Response.data;
                                 if (data) {
                                     var saleItemCategories = data.saleItemCategories;
-                                    var foundryOrders = _.find(saleItemCategories, function (saleItemCategory) {
-                                        return saleItemCategory.categoryTitle === 'Foundry Orders';
-                                    });
-                                    destinyCache.set('getFoundryOrders', foundryOrders.saleItems);
-                                    deferred.resolve(foundryOrders.saleItems);
+                                    var foundryOrders = {
+                                        items: _.find(saleItemCategories, function (saleItemCategory) {
+                                            return saleItemCategory.categoryTitle === 'Foundry Orders';
+                                        }) || [],
+                                        nextRefreshDate: data.nextRefreshDate
+                                    };
+                                    destinyCache.set('getFoundryOrders', foundryOrders);
+                                    deferred.resolve(foundryOrders);
                                 } else {
                                     deferred.resolve([]);
                                 }

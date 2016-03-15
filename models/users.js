@@ -94,7 +94,7 @@ var Users = function (databaseFullPath, twilioSettingsFullPath) {
             },
             membershipId: {
                 required: true,
-                type: 'integer'
+                type: 'string'
             },
             membershipType: {
                 required: true,
@@ -183,13 +183,14 @@ var Users = function (databaseFullPath, twilioSettingsFullPath) {
                 getPhoneNumberType(user.phoneNumber)
                     .then(function (carrier) {
                         user.carrier = carrier.name;
+                        user.dateRegistered = new Date().toISOString();
                         user.type = carrier.type;
                         schema.additionalProperties = false;
                         var filter = validator.filter(schema);
                         var filteredUser = filter(user);
                         _.defaults(filteredUser, defaults(schema));
                         var sql = db.prepare('INSERT INTO DestinyGhostUser VALUES (?, ?)');
-                        sql.run(new Date().toISOString(), JSON.stringify(filteredUser));
+                        sql.run(user.phoneNumber, JSON.stringify(filteredUser));
                         sql.finalize();
                         deferred.resolve();
                     });
@@ -232,12 +233,22 @@ var Users = function (databaseFullPath, twilioSettingsFullPath) {
         return deferred.promise.nodeify(callback);
     };
     /**
-     *
+     * Delete expired tokens.
+     */
+    var deleteExpiredUserTokens = function () {
+        /**
+         * @todo
+         */
+        var sql = db.prepare('DELETE FROM DestinyGhostUserToken WHERE id < \'' + new Date().toISOString() + '\'');
+        sql.run();
+        sql.finalize();
+    };
+    /**
+     * Delete a user.
      * @param phoneNumber {string}
      */
     var deleteUser = function (phoneNumber) {
-        var sql = db.prepare('DELETE FROM DestinyGhostUser WHERE json LIKE \'%"phoneNumber":"' +
-            phoneNumber + '"%\'');
+        var sql = db.prepare('DELETE FROM DestinyGhostUser WHERE id = \'' + phoneNumber + '\'');
         sql.run();
         sql.finalize();
     };
@@ -373,7 +384,7 @@ var Users = function (databaseFullPath, twilioSettingsFullPath) {
     var getUserByGamerTag = function (gamerTag) {
         var deferred = Q.defer();
         db.each('SELECT json FROM DestinyGhostUser WHERE json LIKE \'%"gamerTag":"' +
-            gamerTag + '"%\' LIMIT 1', function (err, row) {
+            gamerTag + '"%\'', function (err, row) {
                 if (err) {
                     deferred.reject(err);
                 } else {
@@ -385,7 +396,7 @@ var Users = function (databaseFullPath, twilioSettingsFullPath) {
                 } else {
                     if (rows === 0) {
                         deferred.resolve();
-                    } else {
+                    } else if (rows > 1) {
                         deferred.reject(new Error('The gamer tag, ' + gamerTag + ', is not unique.'));
                     }
                 }
@@ -471,6 +482,7 @@ var Users = function (databaseFullPath, twilioSettingsFullPath) {
         createUser: createUser,
         createUserMessage: createUserMessage,
         createUserToken: createUserToken,
+        deleteExpiredUserTokens: deleteExpiredUserTokens,
         deleteUser: deleteUser,
         getBlob: getBlob,
         getLastNotificationDate: getLastNotificationDate,

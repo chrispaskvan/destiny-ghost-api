@@ -1,6 +1,7 @@
 /**
  * Created by chris on 10/3/15.
  */
+'use strict';
 var app = require('../app.js'),
     expect = require('chai').expect,
     req = require('supertest'),
@@ -8,23 +9,23 @@ var app = require('../app.js'),
     superagent = require('superagent'),
     user = require('../settings/shadowUser.psn.json');
 
-describe('integration tests?', function () {
-    it('Should ', function (done) {
+describe('Destiny Integration Tests', function () {
+    it('Should return Xur\'s cache: all or nothing', function (done) {
         req(app).get('/api/destiny/xur/')
             .expect(200)
             .end(function (err, res) {
                 should.not.exist(err);
-                expect(JSON.parse(res.text).length).to.equal(5);
+                expect([0, 5]).to.include(JSON.parse(res.text).items.length);
                 done();
             });
     });
 });
 
 var agent = superagent.agent();
-describe('integration tests?', function () {
-    it('Should ', function (done) {
-        this.timeout(0);
-        req(app).post('/api/user/signIn/')
+describe('Destiny Integration Tests', function () {
+    it('Should return current foundry items available for order', function (done) {
+        this.timeout(10000);
+        req(app).post('/api/users/signIn/')
             .send(user)
             .expect(200)
             .end(function (err, res) {
@@ -36,7 +37,7 @@ describe('integration tests?', function () {
                 req1.expect(200)
                     .end(function (err, res) {
                         should.not.exist(err);
-                        expect(JSON.parse(res.text).length).to.equal(5);
+                        expect([0, 5]).to.include(JSON.parse(res.text).items.length);
                         done();
                     });
             });

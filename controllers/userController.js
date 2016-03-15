@@ -96,6 +96,60 @@ var userController = function () {
             });
     };
     /**
+     * Check if the email address is registered to a current user.
+     * @param req
+     * @param res
+     */
+    var getEmailAddress = function (req, res) {
+        var emailAddress = req.params.emailAddress;
+        userModel.getUserByEmailAddress(emailAddress)
+            .then(function (user) {
+                if (user) {
+                    return res.status(204);
+                }
+                return res.status(404);
+            })
+            .fail(function (err) {
+                res.json(new jSend.error(err.message));
+            });
+    };
+    /**
+     * Check if the gamer tag is registered to a current user.
+     * @param req
+     * @param res
+     */
+    var getGamerTag = function (req, res) {
+        var gamerTag = req.params.gamerTag;
+        userModel.getUserByGamerTag(gamerTag)
+            .then(function (user) {
+                if (user) {
+                    return res.status(204).end();
+                }
+                return res.status(404).end();
+            })
+            .fail(function (err) {
+                res.json(new jSend.error(err.message));
+            });
+    };
+    /**
+     * Check if the phone number is registered to a current user.
+     * @param req
+     * @param res
+     */
+    var getPhoneNumber = function (req, res) {
+        var phoneNumber = req.params.phoneNumber;
+        userModel.getUserByPhoneNumber(phoneNumber)
+            .then(function (user) {
+                if (user) {
+                    return res.status(204);
+                }
+                return res.status(404);
+            })
+            .fail(function (err) {
+                res.json(new jSend.error(err.message));
+            });
+    };
+    /**
      * Uses JSON patch as described {@link https://github.com/Starcounter-Jack/JSON-Patch here}.
      * @param req
      * @param res
@@ -175,6 +229,9 @@ var userController = function () {
     };
     return {
         confirm: confirm,
+        getEmailAddress: getEmailAddress,
+        getGamerTag: getGamerTag,
+        getPhoneNumber: getPhoneNumber,
         patch: patch,
         register: register
     };

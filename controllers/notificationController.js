@@ -20,6 +20,7 @@ var _ = require('underscore'),
     Destiny = require('../models/destiny'),
     fs = require('fs'),
     Ghost = require('../models/ghost'),
+    notificationHeaders = require('../settings/notificationHeaders.json'),
     Notifications = require('../models/notifications'),
     path = require('path'),
     Q = require('q'),
@@ -87,6 +88,16 @@ var notificationController = function (shadowUserConfiguration) {
      * @description Xur's Vendor Number
      */
     var xurHash = 2796397637;
+    /**
+     *
+     * @type {{FieldTestWeapons: number, FoundryOrders: number, IronBannerEventRewards: number, Xur: number}}
+     */
+    var subscriptions = {
+        FieldTestWeapons: 1,
+        FoundryOrders: 2,
+        IronBannerEventRewards: 3,
+        Xur: 4
+    };
     /**
      *
      * @param users
@@ -296,7 +307,7 @@ var notificationController = function (shadowUserConfiguration) {
     /**
      *
      * @param users
-     * @param nextRefreshDate
+     * @param nextRefreshDate {date} [undefined]
      * @private
      */
     var _getXur = function (users, nextRefreshDate) {
@@ -321,7 +332,12 @@ var notificationController = function (shadowUserConfiguration) {
                                     return Q.all(itemPromises)
                                         .then(function (items) {
                                             _.each(users, function (user) {
-                                                userPromises.push(userModel.getLastNotificationDate(user.phoneNumber, userModel.actions.Xur)
+                                                userPromises.push((nextRefreshDate ? userModel.getLastNotificationDate(user.phoneNumber, userModel.actions.Xur) :
+                                                        (function () {
+                                                            var deferred = Q.defer();
+                                                            deferred.resolve(undefined);
+                                                            return deferred.promise;
+                                                        })())
                                                     .then(function (notificationDate) {
                                                         if (notificationDate === undefined ||
                                                                 (nextRefreshDate < now && notificationDate < nextRefreshDate)) {
@@ -487,6 +503,69 @@ var notificationController = function (shadowUserConfiguration) {
             });
     };
     /**
+     *
+     * @param req
+     * @param res
+     */
+    var create = function (req, res) {
+        _.each(_.keys(notificationHeaders), function (headerName) {
+            if (req.headers[headerName] !== notificationHeaders[headerName]) {
+                res.writeHead(403);
+                return res.end();
+            }
+        });
+        var subscription = parseInt(req.params.subscription, 10);
+        if (subscription === NaN) {
+            return res.end(); // @todo
+        }
+        userModel.getSubscribedUsers()
+            .then(function (users) {
+                if (users && users.length > 0) {
+                    if (parseInt(subscription, 10) === subscriptions.FieldTestWeapons) {
+                        var bansheeSubscribers = _.filter(users, function (user) {
+                            return user.isSubscribedToBanshee44 === true;
+                        });
+                        return _getFieldTestWeapons(bansheeSubscribers)
+                            .then(function () {
+                                res.end('Success\n');
+                            });
+                    }
+                    if (parseInt(subscription, 10) === subscriptions.FoundryOrders) {
+                        var foundrySubscribers = _.filter(users, function (user) {
+                            return user.isSubscribedToBanshee44 === true;
+                        });
+                        return _getFoundryOrders(foundrySubscribers)
+                            .then(function () {
+                                res.end('Success\n');
+                            });
+                    }
+                    if (parseInt(subscription, 10) === subscriptions.IronBannerEventRewards) {
+                        var lordSaladinSubscribers = _.filter(users, function (user) {
+                            return user.isSubscribedToLordSaladin === true;
+                        });
+                        return _getIronBannerEventRewards(lordSaladinSubscribers)
+                            .then(function () {
+                                res.end('Success\n');
+                            });
+                    }
+                    if (parseInt(subscription, 10) === subscriptions.Xur) {
+                        var xurSubscribers = _.filter(users, function (user) {
+                            return user.isSubscribedToXur === true;
+                        });
+                        return _getXur(xurSubscribers)
+                            .then(function () {
+                                res.end('Success\n');
+                            });
+                    }
+                } else {
+                    res.end('Success\n');
+                }
+            })
+            .fail(function (err) {
+                res.status(401).send(err.message);
+            });
+    };
+    /**
      * Sign in and restart all jobs.
      */
     var init = function () {
@@ -510,6 +589,7 @@ var notificationController = function (shadowUserConfiguration) {
             });
     };
     return {
+        create: create,
         init: init
     };
 };

@@ -6,6 +6,7 @@
  * @author Chris Paskvan
  * @requires crypto
  */
+var crypto = require('crypto');
 /**
  * @constructor
  */

@@ -84,7 +84,7 @@ describe('Destiny Controller Tests', function () {
             };
             destinyController.getIronBannerEventRewards(req, res);
             deferred.promise.should.become({
-                armor: [{
+                armor: {
                     hunter: [],
                     titan: [
                         'Iron Companion Greaves',
@@ -92,11 +92,12 @@ describe('Destiny Controller Tests', function () {
                         'Iron Camelot Helm'
                     ],
                     warlock: []
-                }],
+                },
                 weapons: [
                     'Haakon\'s Hatchet',
                     'Deidris\'s Retort'
-                ]}).notify(done);
+                ]
+            }).notify(done);
         });
     });
     describe('What foundry orders is Banshee-44 accepting?', function () {
@@ -140,7 +141,7 @@ describe('Destiny Controller Tests', function () {
                 'Knucklehead Radar',
                 'Apotheosis Veil',
                 'Dragon\'s Breath',
-                'Legacy Engram']).notify(done);
+                'Legacy Heavy Weapon Engram']).notify(done);
         });
     });
 });

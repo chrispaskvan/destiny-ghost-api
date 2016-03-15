@@ -19,6 +19,12 @@ var routes = function () {
     userRouter.route('/signIn')
         .post(authenticationController.signIn);
     var userController = new UserController();
+    userRouter.route('/:emailAddress/emailAddress')
+        .get(userController.getEmailAddress);
+    userRouter.route('/:gamerTag/gamerTag')
+        .get(userController.getGamerTag);
+    userRouter.route('/:phoneNumber/phoneNumber')
+        .get(userController.getPhoneNumber);
     userRouter.route('/confirm')
         .post(userController.confirm);
     userRouter.route('/register')
