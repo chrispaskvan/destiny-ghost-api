@@ -15,7 +15,6 @@
  * @requires World
  * @requires yauzl
  */
-'use strict';
 var _ = require('underscore'),
     cookie = require('cookie'),
     Destiny = require('../models/destiny'),
@@ -25,16 +24,16 @@ var _ = require('underscore'),
     Q = require('q'),
     request = require('request'),
     S = require('string'),
-    shadowUser = require('../settings/shadowUser.psn.json'),
     World = require('../models/world'),
     yauzl = require('yauzl');
 
-var destinyController = function () {
+var destinyController = function (loggingProvider) {
+    'use strict';
     /**
      * Destiny Model
      * @type {Destiny|exports|module.exports}
      */
-    var destiny = new Destiny(shadowUser.apiKey);
+    var destiny = new Destiny();
     /**
      * Ghost Model
      * @type {Ghost|exports|module.exports}
@@ -127,10 +126,13 @@ var destinyController = function () {
                                 res.json(characters);
                             });
                     }
-                    res.status(404).json(new jSend.error('Membership not found.'));
+                    res.status(404).json(new jSend.fail('Membership not found.'));
                 })
                 .fail(function (err) {
-                    res.json(jSend.fail(err));
+                    res.json(jSend.error(err));
+                    if (loggingProvider) {
+                        loggingProvider.info(err);
+                    }
                 });
         } else {
             var cookies = _getCookies(req);
@@ -142,7 +144,10 @@ var destinyController = function () {
                         });
                 })
                 .fail(function (err) {
-                    res.json(jSend.fail(err));
+                    res.json(jSend.error(err));
+                    if (loggingProvider) {
+                        loggingProvider.info(err);
+                    }
                 });
         }
     };
@@ -156,6 +161,12 @@ var destinyController = function () {
         destiny.getCurrentUser(cookies)
             .then(function (currentUser) {
                 res.json(currentUser.displayName);
+            })
+            .fail(function (err) {
+                res.json(jSend.error(err));
+                if (loggingProvider) {
+                    loggingProvider.info(err);
+                }
             });
     };
     /**
@@ -197,7 +208,10 @@ var destinyController = function () {
                     });
             })
             .fail(function (err) {
-                res.json(jSend.fail(err));
+                res.json(jSend.error(err));
+                if (loggingProvider) {
+                    loggingProvider.info(err);
+                }
             });
     };
     /**
@@ -239,7 +253,10 @@ var destinyController = function () {
                     });
             })
             .fail(function (err) {
-                res.json(jSend.fail(err));
+                res.json(jSend.error(err));
+                if (loggingProvider) {
+                    loggingProvider.info(err);
+                }
             });
     };
     /**
@@ -307,7 +324,10 @@ var destinyController = function () {
                     });
             })
             .fail(function (err) {
-                res.json(jSend.fail(err));
+                res.json(jSend.error(err));
+                if (loggingProvider) {
+                    loggingProvider.info(err);
+                }
             });
     };
     /**
@@ -366,14 +386,17 @@ var destinyController = function () {
                     });
             })
             .fail(function (err) {
-                res.json(jSend.fail(err));
+                res.json(jSend.error(err));
+                if (loggingProvider) {
+                    loggingProvider.info(err);
+                }
             });
     };
     /**
      * Insert or update the Destiny manifest.
      */
     var upsertManifest = function () {
-        destiny.getManifest()
+        return destiny.getManifest()
             .then(function (manifest) {
                 return ghost.getLastManifest()
                     .then(function (lastManifest) {
@@ -410,9 +433,9 @@ var destinyController = function () {
                     });
             })
             .fail(function (err) {
-                /**
-                 * @todo Log
-                 */
+                if (loggingProvider) {
+                    loggingProvider.info(err);
+                }
             });
     };
     /**

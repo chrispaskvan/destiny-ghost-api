@@ -15,6 +15,7 @@
  * @requires util
  */
 var _ = require('underscore'),
+    bungie = require('../settings/bungie.json'),
     NodeCache = require('node-cache'),
     Q = require('q'),
     request = require('request'),
@@ -26,14 +27,14 @@ var _ = require('underscore'),
  */
 var Destiny = function (apiKey) {
     'use strict';
-    if (!apiKey || !_.isString(apiKey)) {
-        throw new Error('The API key is missing.');
-    }
     var self = this;
     /**
      * @member {string} apiKey - The Destiny API key.
      */
-    self.apiKey = apiKey;
+    self.apiKey = apiKey || bungie.apiKey;
+    if (!self.apiKey || !_.isString(self.apiKey)) {
+        throw new Error('The API key is missing.');
+    }
     /**
      * Available Membership Types
      * @type {{TigerXbox: number, TigerPsn: number}}

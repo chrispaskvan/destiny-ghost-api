@@ -1,22 +1,31 @@
 /**
  * Created by chris on 9/25/15.
  */
-'use strict';
-var DestinyController = require('../controllers/destinyController'),
-    express = require('express'),
-    NotificationController = require('../controllers/notificationController');
+var bungie = require('../settings/bungie.json'),
+    bunyan = require('bunyan'),
+    DestinyController = require('../controllers/destinyController'),
+    express = require('express');
 
 var routes = function () {
+    'use strict';
     var destinyRouter = express.Router();
+    /**
+     * Notification Log
+     */
+    var loggingProvider = bunyan.createLogger({
+        name: 'destiny-ghost-api',
+        streams: [
+            {
+                level: 'info',
+                path: './logs/destiny-ghost-api-destiny.log'
+            }
+        ]
+    });
     /**
      * Set up routes and initialize the controller.
      * @type {destinyController|exports|module.exports}
      */
-    var destinyController = new DestinyController();
-    /**
-     * Check for any changes to the Bungie Destiny manifest definition.
-     */
-    destinyController.upsertManifest();
+    var destinyController = new DestinyController(loggingProvider);
     /**
      * Routes
      */
@@ -34,12 +43,6 @@ var routes = function () {
         .get(destinyController.getIronBannerEventRewards);
     destinyRouter.route('/xur/')
         .get(destinyController.getXur);
-    /**
-     * Initialize the controller.
-     * @type {notificationController|exports|module.exports}
-     */
-    var notificationController = new NotificationController();
-    notificationController.init('./settings/shadowUser.psn.json');
     return destinyRouter;
 };
 

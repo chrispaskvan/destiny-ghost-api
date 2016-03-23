@@ -8,9 +8,9 @@ var expect = require('chai').expect,
 
 var postmasterModel = new Postmaster();
 
-describe('Get a new default 6-digit token', function () {
-    it('Should return a random 6-digit number', function (done) {
-        postmasterModel.register(users[0], '', 'http://www.google.com')
+describe('Postmaster delivery test', function () {
+    it('Should return a message Id', function (done) {
+        postmasterModel.register(users[0], '', '')
             .then(function (messageId) {
                 expect(messageId).to.equal('mobile');
                 done();

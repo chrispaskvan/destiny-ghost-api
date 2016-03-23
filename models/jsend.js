@@ -14,12 +14,12 @@ var JSend = {
     },
     fail: function (data) {
         this.status = 'fail';
-        this.data = data;
+        this.data = data || null;
         return this;
     },
     success: function (data) {
         this.status = 'success';
-        this.data = data;
+        this.data = data || null;
         return this;
     }
 };

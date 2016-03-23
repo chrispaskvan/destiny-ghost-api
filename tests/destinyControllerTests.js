@@ -114,12 +114,15 @@ describe('Destiny Controller Tests', function () {
                 }
             };
             destinyController.getFoundryOrders(req, res);
-            deferred.promise.should.become([
-                'SUROS PDX-41',
-                'SUROS JLB-42',
-                'SUROS JLB-47',
-                'Häkke Strongbow-D',
-                'Häkke Tamar-D']).notify(done);
+            deferred.promise.should.become(
+                [
+                    'SUROS PDX-41',
+                    'SUROS JLB-42',
+                    'SUROS JLB-47',
+                    'Häkke Strongbow-D',
+                    'Häkke Tamar-D'
+                ]
+            ).notify(done);
         });
     });
     describe('What exotics are up for sale by the Agent of 9?', function () {
@@ -136,12 +139,15 @@ describe('Destiny Controller Tests', function () {
                 }
             };
             destinyController.getXur(req, res);
-            deferred.promise.should.become([
-                'No Backup Plans',
-                'Knucklehead Radar',
-                'Apotheosis Veil',
-                'Dragon\'s Breath',
-                'Legacy Heavy Weapon Engram']).notify(done);
+            deferred.promise.should.become(
+                [
+                    'No Backup Plans',
+                    'Knucklehead Radar',
+                    'Apotheosis Veil',
+                    'Dragon\'s Breath',
+                    'Legacy Heavy Weapon Engram'
+                ]
+            ).notify(done);
         });
     });
 });
