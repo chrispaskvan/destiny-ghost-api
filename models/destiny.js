@@ -402,7 +402,7 @@ var Destiny = function (apiKey) {
                                     var foundryOrders = {
                                         items: _.find(saleItemCategories, function (saleItemCategory) {
                                             return saleItemCategory.categoryTitle === 'Foundry Orders';
-                                        }) || [],
+                                        }).saleItems || [],
                                         nextRefreshDate: data.nextRefreshDate
                                     };
                                     destinyCache.set('getFoundryOrders', foundryOrders);

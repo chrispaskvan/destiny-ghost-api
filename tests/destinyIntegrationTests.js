@@ -37,7 +37,7 @@ describe('Destiny Integration Tests', function () {
                 req1.expect(200)
                     .end(function (err, res) {
                         should.not.exist(err);
-                        expect([0, 5]).to.include(JSON.parse(res.text).items.length);
+                        expect([0, 5]).to.include(JSON.parse(res.text).length);
                         done();
                     });
             });

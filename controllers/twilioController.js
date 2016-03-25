@@ -167,9 +167,9 @@ var twilioController = function () {
                         return destiny.getCharacters(currentUser.membershipId)
                             .then(function (characters) {
                                 return destiny.getFoundryOrders(characters[0].characterBase.characterId, shadowUser.cookies)
-                                    .then(function (items) {
-                                        if (items && items.length > 0) {
-                                            var itemHashes = _.map(items, function (item) {
+                                    .then(function (foundryOrders) {
+                                        if (foundryOrders && foundryOrders.items && foundryOrders.items.length > 0) {
+                                            var itemHashes = _.map(foundryOrders.items, function (item) {
                                                 return item.item.itemHash;
                                             });
                                             world.open(worldPath);
@@ -333,47 +333,51 @@ var twilioController = function () {
         return ghost.getLastManifest()
             .then(function (lastManifest) {
                 var worldPath = path.join('./databases/', path.basename(lastManifest.mobileWorldContentPaths.en));
-                return destiny.getXur()
-                    .then(function (items) {
-                        if (items && items.length > 0) {
-                            var itemHashes = _.map(items, function (item) {
-                                return item.item.itemHash;
-                            });
-                            world.open(worldPath);
-                            var itemPromises = [];
-                            _.each(itemHashes, function (itemHash) {
-                                itemPromises.push(world.getItemByHash(itemHash));
-                            });
-                            return Q.all(itemPromises)
-                                .then(function (items) {
-                                    var promises = _.map(items, function (item) {
-                                        if (item.itemName === 'Exotic Engram' ||
-                                                item.itemName === 'Legacy Engram') {
-                                            return world.getItemByHash(item.itemHash)
-                                                .then(function (itemDetail) {
-                                                    return (new S(item.itemName).chompRight('Engram') + itemDetail.itemTypeName);
-                                                });
-                                        }
-                                        var deferred = Q.defer();
-                                        deferred.resolve(item.itemName);
-                                        return deferred.promise;
+                world.open(worldPath);
+                return world.getVendorIcon(xurHash)
+                    .then(function (iconUrl) {
+                        return destiny.getXur()
+                            .then(function (items) {
+                                if (items && items.length > 0) {
+                                    var itemHashes = _.map(items, function (item) {
+                                        return item.item.itemHash;
                                     });
-                                    return Q.all(promises)
+                                    var itemPromises = [];
+                                    _.each(itemHashes, function (itemHash) {
+                                        itemPromises.push(world.getItemByHash(itemHash));
+                                    });
+                                    return Q.all(itemPromises)
                                         .then(function (items) {
-                                            return world.getVendorIcon(xurHash)
-                                                .then(function (iconUrl) {
+                                            var promises = _.map(items, function (item) {
+                                                if (item.itemName === 'Exotic Engram' ||
+                                                        item.itemName === 'Legacy Engram') {
+                                                    return world.getItemByHash(item.itemHash)
+                                                        .then(function (itemDetail) {
+                                                            return (new S(item.itemName).chompRight('Engram') + itemDetail.itemTypeName);
+                                                        });
+                                                }
+                                                var deferred = Q.defer();
+                                                deferred.resolve(item.itemName);
+                                                return deferred.promise;
+                                            });
+                                            return Q.all(promises)
+                                                .then(function (items) {
                                                     return {
                                                         items: items,
                                                         iconUrl: iconUrl
                                                     };
                                                 });
                                         });
-                                })
-                                .fin(function () {
-                                    world.close();
-                                });
-                        }
-                        return undefined;
+                                } else {
+                                    return {
+                                        items: [],
+                                        iconUrl: iconUrl
+                                    };
+                                }
+                            });
+                    })
+                    .fin(function () {
+                        world.close();
                     });
             });
     };
@@ -494,9 +498,10 @@ var twilioController = function () {
                             if (searchTerm === 'xur') {
                                 return _getXur()
                                     .then(function (vendor) {
-                                        var result = _.reduce(vendor.items, function (memo, exotic) {
+                                        var result = vendor.items && vendor.items.length > 0 ?
+                                            _.reduce(vendor.items, function (memo, exotic) {
                                                 return memo + '\n' + exotic;
-                                            }, ' ').trim() || 'Xur is off conspiring with the 9. Check back Friday.';
+                                            }, ' ').trim() : 'Xur is off conspiring with the 9. Check back Friday.';
                                         twiml.message(function () {
                                             this.body(result.substr(0, 130));
                                             this.media(vendor.iconUrl);
@@ -545,25 +550,36 @@ var twilioController = function () {
                             if (searchTerm === 'iron banner') {
                                 return _getIronBannerEventRewards()
                                     .then(function (vendor) {
-                                        twiml.message(function () {
-                                            this.body(_.reduce(vendor.rewards.weapons, function (memo, weapon) {
-                                                return memo + '\n' + weapon;
+                                        if (vendor && vendor.rewards && vendor.rewards.weapons && vendor.rewards.weapons.length > 0) {
+                                            twiml.message(function () {
+                                                this.body(_.reduce(vendor.rewards.weapons, function (memo, weapon) {
+                                                    return memo + '\n' + weapon;
+                                                }, ' ').trim().substr(0, 130));
+                                                this.media(vendor.iconUrl);
+                                            });
+                                            twiml.message('Hunter\n------\n' + _.reduce(vendor.rewards.armor.hunter, function (memo, classArmor) {
+                                                return memo + '\n' + classArmor;
                                             }, ' ').trim().substr(0, 130));
-                                            this.media(vendor.iconUrl);
-                                        });
-                                        twiml.message('Hunter\n------\n' +  _.reduce(vendor.rewards.armor.hunter, function (memo, classArmor) {
-                                            return memo + '\n' + classArmor;
-                                        }, ' ').trim().substr(0, 130));
-                                        twiml.message('Titan\n-----\n' +  _.reduce(vendor.rewards.armor.titan, function (memo, classArmor) {
-                                            return memo + '\n' + classArmor;
-                                        }, ' ').trim().substr(0, 130));
-                                        twiml.message('Warlock\n-------\n' +  _.reduce(vendor.rewards.armor.warlock, function (memo, classArmor) {
-                                            return memo + '\n' + classArmor;
-                                        }, ' ').trim().substr(0, 130));
-                                        res.writeHead(200, {
-                                            'Content-Type': 'text/xml'
-                                        });
-                                        res.end(twiml.toString());
+                                            twiml.message('Titan\n-----\n' + _.reduce(vendor.rewards.armor.titan, function (memo, classArmor) {
+                                                return memo + '\n' + classArmor;
+                                            }, ' ').trim().substr(0, 130));
+                                            twiml.message('Warlock\n-------\n' + _.reduce(vendor.rewards.armor.warlock, function (memo, classArmor) {
+                                                return memo + '\n' + classArmor;
+                                            }, ' ').trim().substr(0, 130));
+                                            res.writeHead(200, {
+                                                'Content-Type': 'text/xml'
+                                            });
+                                            res.end(twiml.toString());
+                                        } else {
+                                            twiml.message(function () {
+                                                this.body('Lord Saladin will be back soon enough.');
+                                                this.media(vendor.iconUrl);
+                                            });
+                                            res.writeHead(200, {
+                                                'Content-Type': 'text/xml'
+                                            });
+                                            res.end(twiml.toString());
+                                        }
                                     });
                             }
                             return _queryItem(searchTerm)

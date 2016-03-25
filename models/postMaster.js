@@ -1,25 +1,25 @@
 /**
- * A module for managing custom Bitlinks.
+ * A module for managing custom email delivery.
  *
- * @module Bitly
- * @summary Create a Short URL
+ * @module Postmaster
+ * @summary Send email specific to base operations.
  * @author Chris Paskvan
- * @description Manage custom Bitlinks for a Bitly account identified
- * by an access token within the JSON settings file. For additional reference
- * go to {@link http://dev.bitly.com/api.html}.
- * @requires fs
+ * @requires _
+ * @requires @nodemailer
  * @requires Q
+ * @requires S
  * @requires request
- * @requires util
+ * @requires nodemailer-smtp-transport
  */
-'use strict';
 var _ = require('underscore'),
     nodemailer = require('nodemailer'),
+    Q = require('q'),
     S = require('string'),
     smtpConfiguration = require('../settings/smtp.json'),
     smtpTransport = require('nodemailer-smtp-transport');
 
 var Postmaster = function () {
+    'use strict';
     var transporter = nodemailer.createTransport(smtpTransport(smtpConfiguration));
     var registrationText = 'Hi {{firstName}},\r\n\r\n' +
         'Open the link below to continue the registration process.\r\n\r\n';
@@ -30,20 +30,25 @@ var Postmaster = function () {
     };
 
     var register = function (user, image, url) {
+        var deferred = Q.defer();
         _.extend(mailOptions, {
+            tls: {
+                rejectUnauthorized: false
+            },
             subject: 'Destiny Ghost Registration',
             text: new S(registrationText).template(user).s + process.env.DOMAIN + url + '?token=' + user.tokens.emailAddress,
             to: user.emailAddress,
             html: (image ? '<img src=\'' + image + '\' style=\'background-color: slategray;\'><br />' : '') +
                 new S(registrationHtml).template(user).s + process.env.DOMAIN + url + '?token=' + user.tokens.emailAddress
         });
-        transporter.sendMail(mailOptions, function (err, response) {
+        transporter.sendMail(mailOptions, function (err, info) {
             if (err) {
-                console.log(err);
+                deferred.reject(err);
             } else {
-                console.log(response.response);
+                deferred.resolve(info.response);
             }
         });
+        return deferred.promise;
     };
     return {
         register: register

@@ -191,14 +191,14 @@ var notificationController = function (loggingProvider) {
                         return destiny.getCharacters(currentUser.membershipId)
                             .then(function (characters) {
                                 return destiny.getFoundryOrders(characters[0].characterBase.characterId, shadowUser.cookies)
-                                    .then(function (items) {
+                                    .then(function (foundryOrders) {
                                         world.open(worldPath);
                                         return world.getVendorIcon(gunSmithHash)
                                             .then(function (iconUrl) {
                                                 var now = new Date();
                                                 var userPromises = [];
-                                                if (items && items.length > 0) {
-                                                    var itemHashes = _.map(items, function (item) {
+                                                if (foundryOrders.items && foundryOrders.items.length > 0) {
+                                                    var itemHashes = _.map(foundryOrders.items, function (item) {
                                                         return item.item.itemHash;
                                                     });
                                                     var itemPromises = [];
@@ -523,7 +523,7 @@ var notificationController = function (loggingProvider) {
         var now = new Date();
         var lastRefreshDate = shadowUser.lastRefreshDate === undefined ? new Date() : new Date(shadowUser.lastRefreshDate);
         var days = parseInt((now.getTime() - lastRefreshDate.getTime()) / (24 * 3600 * 1000));
-        if (days > 2) {
+        if (shadowUser.cookies && days < 2) {
             var deferred = Q.defer();
             deferred.resolve(shadowUser);
             return deferred.promise;
