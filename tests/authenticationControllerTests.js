@@ -1,5 +1,5 @@
 /**
- * Destiny Controller Tests
+ * Authentication Controller Tests
  */
 'use strict';
 var AuthenticationController = require('../controllers/AuthenticationController'),

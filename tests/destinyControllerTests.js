@@ -21,7 +21,7 @@ var getRandomId = function () {
 var destinyController;
 before(function (done) {
     var chance = new Chance();
-    var destinyMock = function (apiKey) {
+    var destinyMock = function () {
         var getCharacters = function (membershipId, callback) {
             var deferred = Q.defer();
             deferred.resolve([{ characterBase: { characterId: getRandomId() }},

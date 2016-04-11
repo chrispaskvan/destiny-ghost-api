@@ -32,6 +32,7 @@ var authenticationController = function () {
         var cookies = [];
         _.each(_.keys(bungieCookies), function (cookieName) {
             cookies.push(cookie.serialize(cookieName, bungieCookies[cookieName], {
+                expires: new Date(Date.now() + 12096e5),
                 path: '/'
             }));
         });

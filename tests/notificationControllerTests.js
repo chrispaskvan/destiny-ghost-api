@@ -1,8 +1,5 @@
 /**
- * Created by chris on 3/14/16.
- */
-/**
- * Destiny Controller Tests
+ * Notification Controller Tests
  */
 'use strict';
 var _ = require('underscore'),
@@ -26,7 +23,7 @@ var getRandomId = function () {
 var notificationController;
 before(function (done) {
     var chance = new Chance();
-    var destinyMock = function (apiKey) {
+    var destinyMock = function () {
         var getCharacters = function (membershipId, callback) {
             var deferred = Q.defer();
             deferred.resolve(
@@ -38,7 +35,7 @@ before(function (done) {
             );
             return deferred.promise.nodeify(callback);
         };
-        var getCurrentUser = function (cookieArray, callback) {
+        var getCurrentUser = function (cookies, callback) {
             var deferred = Q.defer();
             deferred.resolve({
                 displayName: chance.first(),
@@ -116,6 +113,7 @@ describe('Notification Controller Tests', function () {
             var deferred = Q.defer();
             var res = {
                 writeHead: function () {
+                    return null;
                 },
                 end: function (responseText) {
                     deferred.resolve(responseText);

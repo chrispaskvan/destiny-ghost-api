@@ -1,5 +1,5 @@
 /**
- * World Tests
+ * World Model Tests
  */
 'use strict';
 var expect = require('chai').expect,

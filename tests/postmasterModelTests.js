@@ -1,5 +1,5 @@
 /**
- * Created by chris on 3/5/16.
+ * Postmaster Model Tests
  */
 'use strict';
 var expect = require('chai').expect,
@@ -10,9 +10,11 @@ var postmasterModel = new Postmaster();
 
 describe('Postmaster delivery test', function () {
     it('Should return a message Id', function (done) {
-        postmasterModel.register(users[0], '', '')
-            .then(function (messageId) {
-                expect(messageId).to.equal('mobile');
+        this.timeout(10000);
+        var user = users[0];
+        postmasterModel.register(user, '', '')
+            .then(function (response) {
+                expect(response.accepted[0]).to.equal(user.emailAddress);
                 done();
             })
             .fail(function (err) {

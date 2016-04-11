@@ -160,7 +160,7 @@ var destinyController = function (loggingProvider) {
         var cookies = _getCookies(req);
         destiny.getCurrentUser(cookies)
             .then(function (currentUser) {
-                res.json(currentUser.displayName);
+                res.json(new jSend.success({ displayName: currentUser.displayName }));
             })
             .fail(function (err) {
                 res.json(jSend.error(err));
@@ -272,14 +272,12 @@ var destinyController = function (loggingProvider) {
                     .then(function (characters) {
                         var characterPromises = [];
                         _.each(characters, function (character) {
-                            characterPromises.push(destiny.getIronBannerEventRewards(character.characterBase.characterId, cookies));
+                            characterPromises.push(
+                                destiny.getIronBannerEventRewards(character.characterBase.characterId, cookies)
+                            );
                         });
                         return Q.all(characterPromises)
                             .then(function (characterItems) {
-                                if (characterItems === undefined || characterItems.length === 0) {
-                                    res.json(jSend.fail('Lord Saladin is not currently in the tower. The Iron Banner is unavailable.'));
-                                    return;
-                                }
                                 var items = _.flatten(characterItems);
                                 var itemHashes = _.uniq(_.map(items, function (item) {
                                     return item.item.itemHash;
@@ -367,7 +365,8 @@ var destinyController = function (loggingProvider) {
                                                     item.itemName === 'Legacy Engram') {
                                                 return world.getItemByHash(item.itemHash)
                                                     .then(function (itemDetail) {
-                                                        return (new S(item.itemName).chompRight('Engram') + itemDetail.itemTypeName);
+                                                        return (new S(item.itemName).chompRight('Engram') +
+                                                            itemDetail.itemTypeName);
                                                     });
                                             }
                                             var deferred = Q.defer();
@@ -400,11 +399,12 @@ var destinyController = function (loggingProvider) {
             .then(function (manifest) {
                 return ghost.getLastManifest()
                     .then(function (lastManifest) {
+                        var databasePath = './databases/';
+                        var relativeUrl = manifest.mobileWorldContentPaths.en;
+                        var fileName = databasePath + relativeUrl.substring(relativeUrl.lastIndexOf('/') + 1);
                         if (!lastManifest || lastManifest.version !== manifest.version ||
-                                lastManifest.mobileWorldContentPaths.en !== manifest.mobileWorldContentPaths.en) {
-                            var databasePath = './databases/';
-                            var relativeUrl = manifest.mobileWorldContentPaths.en;
-                            var fileName = databasePath + relativeUrl.substring(relativeUrl.lastIndexOf('/') + 1);
+                                lastManifest.mobileWorldContentPaths.en !== manifest.mobileWorldContentPaths.en ||
+                                !fs.existsSync(fileName)) {
                             var file = fs.createWriteStream(fileName + '.zip');
                             var stream = request('https://www.bungie.net' + relativeUrl, function () {
                                 // ToDo: A log entry here would be nice.

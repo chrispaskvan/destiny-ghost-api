@@ -1,13 +1,15 @@
+/**
+ * User Model Tests
+ */
 'use strict';
-var _ = require('underscore'),
-    Chance = require('chance'),
+var Chance = require('chance'),
     expect = require('chai').expect,
     fs = require('fs'),
     Users = require('../models/users'),
     validator = require('validator');
 
 var chance = new Chance();
-var userModel = new Users(process.env.DATABASE);
+var userModel = new Users(process.env.DATABASE, process.env.TWILIO);
 
 describe('Format a phone number', function () {
     it('Should return a properly formatted phone number', function (done) {

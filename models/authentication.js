@@ -61,8 +61,9 @@ var authentication = function () {
             })
             .catch(function (err) {
                 /**
-                 * @todo Log specific error here.
+                 * @todo Log error.
                  */
+                console.log(err);
                 deferred.reject(new Error('Playstation Network authentication failed for user ' + userName));
             });
         return deferred.promise.nodeify(callback);
@@ -77,11 +78,12 @@ var authentication = function () {
     var xBoxSignIn = function (userName, password, callback) {
         var deferred = Q.defer();
         var horseman = new Horseman();
-        horseman.open('https://login.live.com/oauth20_authorize.srf?client_id=000000004013231D&scope=Xboxlive.signin%20Xboxlive.offline_access&response_type=code&redirect_uri=https://www.bungie.net/en/User/SignIn/Xuid&display=touch&locale=en')
+        horseman.open('https://login.live.com/oauth20_authorize.srf?client_id=000000004013231D&scope=Xboxlive.signin%20Xboxlive.offline_access&response_type=code&redirect_uri=https://www.bungie.net/en/User/SignIn/Xuid&display=touch&locale=en')// jscs:ignore maximumLineLength
             .waitForSelector('#i0116')
             .type('input[id="i0116"]', userName)
             .type('input[id="i0118"]', password)
             .click('#idSIButton9')
+            .waitForNextPage()
             .waitForNextPage()
             .cookies()
             .then(function (cookies) {
@@ -101,8 +103,9 @@ var authentication = function () {
             })
             .catch(function (err) {
                 /**
-                 * @todo Log specific error here.
+                 * @todo Log error.
                  */
+                console.log(err);
                 deferred.reject(new Error('Xbox Live authentication failed for user ' + userName));
             });
         return deferred.promise.nodeify(callback);

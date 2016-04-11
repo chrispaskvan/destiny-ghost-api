@@ -16,7 +16,6 @@ var _ = require('underscore'),
     Notifications = require('../models/notifications'),
     path = require('path'),
     Postmaster = require('../models/postmaster'),
-    shadowUser = require('../settings/shadowUser.psn.json'),
     Tokens = require('../models/tokens'),
     Users = require('../models/users'),
     World = require('../models/world');
@@ -30,7 +29,7 @@ var userController = function () {
      * Destiny Model
      * @type {Destiny|exports|module.exports}
      */
-    var destiny = new Destiny(shadowUser.apiKey);
+    var destiny = new Destiny();
     /**
      * Ghost Model
      * @type {Ghost|exports|module.exports}
@@ -72,7 +71,7 @@ var userController = function () {
      */
     var confirm = function (req, res) {
         var user = req.body;
-        userModel.getUserToken(user.phoneNumber)
+        userModel.getUserTokenByPhoneNumber(user.phoneNumber)
             .then(function (userToken) {
                 if (((new Date() - userToken.timeStamp) / (60 * 1000)) > 10) {
                     return res.json(new jSend.error('Expired tokens.'));
@@ -90,6 +89,30 @@ var userController = function () {
                                 return res.json(new jSend.success());
                             });
                     });
+            })
+            .fail(function (err) {
+                res.json(new jSend.error(err.message));
+            });
+    };
+    /**
+     * User requests to sign in with an authentication token.
+     * @param req
+     * @param res
+     * @returns {*}
+     */
+    var enter = function (req, res) {
+        var gamerTag = req.body.gamerTag;
+        var membershipType = req.body.membershipType;
+        var phoneNumberToken = req.body.tokens ? req.body.tokens.phoneNumber : undefined;
+        if (!gamerTag || !membershipType || !phoneNumberToken) {
+            return res.status(409).json(new jSend.error('A gamer tag is required.'));
+        }
+        return userModel.getUserByPhoneNumberToken(phoneNumberToken)
+            .then(function (user) {
+                if (!user) {
+                    return res.status(404);
+                }
+
             })
             .fail(function (err) {
                 res.json(new jSend.error(err.message));
@@ -150,21 +173,73 @@ var userController = function () {
             });
     };
     /**
-     * Uses JSON patch as described {@link https://github.com/Starcounter-Jack/JSON-Patch here}.
+     * Return the user token matching the email address hash key.
      * @param req
      * @param res
      * @returns {*}
-     * @todo Deny operations on immutable properties.
      */
-    var patch = function (req, res) {
-        var gamerTag = req.params.gamerTag;
-        userModel.getUserByGamerTag(gamerTag)
+    var getUserByEmailAddressToken = function (req, res) {
+        var emailAddressToken = req.params.emailAddressToken;
+        if (!emailAddressToken) {
+            return res.status(404);
+        }
+        userModel.getUserTokenByEmailAddressToken(emailAddressToken)
             .then(function (user) {
-                var patches = req.body;
-                jsonpatch.apply(user, patches);
-                return userModel.updateUser(user)
-                    .then(function () {
-                        res.json(new jSend.success(user));
+                res.josn(new jSend.success(_.omit(user, 'tokens')));
+            })
+            .fail(function (err) {
+                res.json(new jSend.error(err.message));
+            });
+    };
+    /**
+     * User requests an authentication code.
+     * @param req
+     * @param res
+     * @returns {*}
+     */
+    var knock = function (req, res) {
+        var gamerTag = req.body.gamerTag;
+        var membershipType = req.body.membershipType;
+        if (!gamerTag || !membershipType) {
+            return res.status(409).json(new jSend.error('A gamer tag is required.'));
+        }
+        destiny.getMembershipIdFromDisplayName(gamerTag, membershipType)
+            .then(function (membershipId) {
+                if (!membershipId) {
+                    return res.status(409).json(new jSend.error('The gamer tag' + gamerTag +
+                        'is not registered with Bungie.'));
+                }
+                return userModel.getUserByGamerTag()
+                    .then(function (user) {
+                        if (!user) {
+                            return res.status(404).json(new jSend.fail('That gamer tag is not registered.'));
+                        }
+                        _.extend(user, {
+                            tokens: {
+                                emailAddress: undefined,
+                                phoneNumber: tokens.getToken()
+                            }
+                        });
+                        return userModel.createUserToken(user)
+                            .then(function () {
+                                return ghost.getLastManifest()
+                                    .then(function (lastManifest) {
+                                        var worldPath = path.join('./databases/',
+                                            path.basename(lastManifest.mobileWorldContentPaths.en));
+                                        world.open(worldPath);
+                                        return world.getVendorIcon(postmasterHash)
+                                            .then(function (iconUrl) {
+                                                notifications.sendMessage('Enter ' +
+                                                    user.tokens.phoneNumber +
+                                                    ' to verify your Destiny Ghost phone number.',
+                                                    user.phoneNumber, user.type === 'mobile' ? iconUrl : undefined);
+                                                res.json(new jSend.success());
+                                            })
+                                            .fin(function () {
+                                                world.close();
+                                            });
+                                    });
+                            });
                     });
             })
             .fail(function (err) {
@@ -176,21 +251,22 @@ var userController = function () {
      * @type {string}
      * @description Postmaster Vendor Number
      */
-    var postmasterHash = 2021251983;
+    var postmasterHash = '2021251983';
     /**
-     *
+     * User initial registration request.
      * @param req
      * @param res
      */
     var register = function (req, res) {
         var user = req.body;
-        if (!user.gamerTag) {
+        if (!user.gamerTag || !user.membershipType) {
             return res.status(409).json(new jSend.error('A gamer tag is required.'));
         }
         destiny.getMembershipIdFromDisplayName(user.gamerTag, user.membershipType)
             .then(function (membershipId) {
                 if (!membershipId) {
-                    return res.status(409).json(new jSend.error('The gamer tag' + user.gamerTag + 'is not registered with Bungie.'));
+                    return res.status(409).json(new jSend.error('The gamer tag' + user.gamerTag +
+                        'is not registered with Bungie.'));
                 }
                 return userModel.getBlob()
                     .then(function (blob) {
@@ -205,7 +281,8 @@ var userController = function () {
                             .then(function () {
                                 return ghost.getLastManifest()
                                     .then(function (lastManifest) {
-                                        var worldPath = path.join('./databases/', path.basename(lastManifest.mobileWorldContentPaths.en));
+                                        var worldPath = path.join('./databases/',
+                                            path.basename(lastManifest.mobileWorldContentPaths.en));
                                         world.open(worldPath);
                                         return world.getVendorIcon(postmasterHash)
                                             .then(function (iconUrl) {
@@ -213,7 +290,7 @@ var userController = function () {
                                                 notifications.sendMessage('Enter ' +
                                                     user.tokens.phoneNumber +
                                                     ' to verify your Destiny Ghost phone number.',
-                                                    user.phoneNumber);
+                                                    user.phoneNumber, user.type === 'mobile' ? iconUrl : undefined);
                                                 res.json(new jSend.success());
                                             })
                                             .fin(function () {
@@ -227,13 +304,41 @@ var userController = function () {
                 res.json(new jSend.error(err.message));
             });
     };
+    /**
+     * Uses JSON patch as described {@link https://github.com/Starcounter-Jack/JSON-Patch here}.
+     * @param req
+     * @param res
+     * @returns {*}
+     * @todo Deny operations on immutable properties.
+     */
+    var update = function (req, res) {
+        var gamerTag = req.params.gamerTag;
+        userModel.getUserByGamerTag(gamerTag)
+            .then(function (user) {
+                if (!user) {
+                    return res.status(404).json(new jSend.fail('User not found.'));
+                }
+                var patches = req.body;
+                jsonpatch.apply(user, patches);
+                return userModel.updateUser(user)
+                    .then(function () {
+                        res.json(new jSend.success(user));
+                    });
+            })
+            .fail(function (err) {
+                res.json(new jSend.error(err.message));
+            });
+    };
     return {
         confirm: confirm,
+        enter: enter,
         getEmailAddress: getEmailAddress,
         getGamerTag: getGamerTag,
         getPhoneNumber: getPhoneNumber,
-        patch: patch,
-        register: register
+        getUserByEmailAddressToken: getUserByEmailAddressToken,
+        knock: knock,
+        register: register,
+        update: update
     };
 };
 

@@ -1,3 +1,6 @@
+/**
+ * Token Model Tests
+ */
 'use strict';
 var expect = require('chai').expect,
     Tokens = require('../models/Tokens');

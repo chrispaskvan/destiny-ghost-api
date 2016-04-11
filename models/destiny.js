@@ -21,17 +21,16 @@ var _ = require('underscore'),
     request = require('request'),
     util = require('util');
 /**
- * @param apiKey {string}
  * @throws Invalid argument(s) provided.
  * @constructor
  */
-var Destiny = function (apiKey) {
+var Destiny = function () {
     'use strict';
     var self = this;
     /**
      * @member {string} apiKey - The Destiny API key.
      */
-    self.apiKey = apiKey || bungie.apiKey;
+    self.apiKey = bungie.apiKey;
     if (!self.apiKey || !_.isString(self.apiKey)) {
         throw new Error('The API key is missing.');
     }
@@ -398,11 +397,13 @@ var Destiny = function (apiKey) {
                             } else {
                                 var data = responseBody.Response.data;
                                 if (data) {
-                                    var saleItemCategories = data.saleItemCategories;
-                                    var foundryOrders = {
-                                        items: _.find(saleItemCategories, function (saleItemCategory) {
+                                    var foundryOrdersCategory = _.find(data.saleItemCategories,
+                                        function (saleItemCategory) {
                                             return saleItemCategory.categoryTitle === 'Foundry Orders';
-                                        }).saleItems || [],
+                                        });
+                                    var foundryOrders = {
+                                        items: (typeof foundryOrdersCategory === 'object') ?
+                                                foundryOrdersCategory.saleItems : [],
                                         nextRefreshDate: data.nextRefreshDate
                                     };
                                     destinyCache.set('getFoundryOrders', foundryOrders);

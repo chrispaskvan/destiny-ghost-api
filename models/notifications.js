@@ -124,18 +124,21 @@ var Notifications = function (databaseFullPath, twilioSettingsFullPath) {
      * @param message {string}
      */
     var updateMessage = function (message) {
+        var deferred = Q.defer();
         if (!message.SmsSid) {
-            throw new Error('The message\'s unique identifier is missing.');
+            deferred.reject(new Error('The message\'s unique identifier is missing.'));
+            return deferred.promise;
         }
-        _getMessage(message.SmsSid)
+        return _getMessage(message.SmsSid)
             .then(function (originalMessage) {
                 originalMessage.status = message.SmsStatus;
                 db.run('UPDATE DestinyGhostMessage SET json = \'' +
-                    JSON.stringify(originalMessage).replace('\'', '\'\'') +
+                    JSON.stringify(originalMessage).replace(new RegExp('\'', 'g'), '\'\'') +
                     '\' WHERE json LIKE \'%"sid":"' +  originalMessage.sid + '"%\'', function (err) {
                         if (err) {
                             throw err;
                         }
+                        return;
                     });
             });
     };

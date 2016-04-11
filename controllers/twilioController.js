@@ -15,7 +15,6 @@
  * @requires User
  * @requires World
  */
-'use strict';
 var _ = require('underscore'),
     /**
      * Bitly Model
@@ -29,7 +28,7 @@ var _ = require('underscore'),
     path = require('path'),
     Q = require('q'),
     S = require('string'),
-    shadowUser = require('../settings/shadowUser.psn.json'),
+    shadowUsers = require('../settings/shadowUsers.json'),
     twilio = require('twilio'),
     Users = require('../models/users'),
     World = require('../models/world');
@@ -37,11 +36,12 @@ var _ = require('underscore'),
  * @constructor
  */
 var twilioController = function () {
+    'use strict';
     /**
      * Destiny Model
      * @type {Destiny|exports|module.exports}
      */
-    var destiny = new Destiny(shadowUser.apiKey);
+    var destiny = new Destiny();
     /**
      * Ghost Model
      * @type {Ghost|exports|module.exports}
@@ -72,19 +72,19 @@ var twilioController = function () {
      * @type {string}
      * @description Banshee-44's Vendor Number
      */
-    var gunSmithHash = 570929315;
+    var gunSmithHash = '570929315';
     /**
      * @constant
      * @type {string}
      * @description Iron Banner's Vendor Number
      */
-    var lordSaladinHash = 242140165;
+    var lordSaladinHash = '242140165';
     /**
      * @constant
      * @type {string}
      * @description Xur's Vendor Number
      */
-    var xurHash = 2796397637;
+    var xurHash = '2796397637';
     /**
      *
      * @returns {string}
@@ -113,7 +113,7 @@ var twilioController = function () {
      * @returns {Request|*}
      * @private
      */
-    var _getFieldTestWeapons = function () {
+    var _getFieldTestWeapons = function (shadowUser) {
         return ghost.getLastManifest()
             .then(function (lastManifest) {
                 var worldPath = path.join('./databases/', path.basename(lastManifest.mobileWorldContentPaths.en));
@@ -121,7 +121,8 @@ var twilioController = function () {
                     .then(function (currentUser) {
                         return destiny.getCharacters(currentUser.membershipId)
                             .then(function (characters) {
-                                return destiny.getFieldTestWeapons(characters[0].characterBase.characterId, shadowUser.cookies)
+                                return destiny.getFieldTestWeapons(characters[0].characterBase.characterId,
+                                        shadowUser.cookies)
                                     .then(function (items) {
                                         if (items && items.length > 0) {
                                             var itemHashes = _.map(items, function (item) {
@@ -158,7 +159,7 @@ var twilioController = function () {
      * @returns {Request|*}
      * @private
      */
-    var _getFoundryOrders = function () {
+    var _getFoundryOrders = function (shadowUser) {
         return ghost.getLastManifest()
             .then(function (lastManifest) {
                 var worldPath = path.join('./databases/', path.basename(lastManifest.mobileWorldContentPaths.en));
@@ -166,7 +167,8 @@ var twilioController = function () {
                     .then(function (currentUser) {
                         return destiny.getCharacters(currentUser.membershipId)
                             .then(function (characters) {
-                                return destiny.getFoundryOrders(characters[0].characterBase.characterId, shadowUser.cookies)
+                                return destiny.getFoundryOrders(characters[0].characterBase.characterId,
+                                        shadowUser.cookies)
                                     .then(function (foundryOrders) {
                                         if (foundryOrders && foundryOrders.items && foundryOrders.items.length > 0) {
                                             var itemHashes = _.map(foundryOrders.items, function (item) {
@@ -198,14 +200,17 @@ var twilioController = function () {
                     });
             });
     };
-    var _getIronBannerEventRewards = function () {
+    var _getIronBannerEventRewards = function (shadowUser) {
         return destiny.getCurrentUser(shadowUser.cookies)
             .then(function (currentUser) {
                 return destiny.getCharacters(currentUser.membershipId)
                     .then(function (characters) {
                         var characterPromises = [];
                         _.each(characters, function (character) {
-                            characterPromises.push(destiny.getIronBannerEventRewards(character.characterBase.characterId, shadowUser.cookies));
+                            characterPromises.push(
+                                destiny.getIronBannerEventRewards(character.characterBase.characterId,
+                                    shadowUser.cookies)
+                            );
                         });
                         return Q.all(characterPromises)
                             .then(function (characterItems) {
@@ -353,7 +358,8 @@ var twilioController = function () {
                                                         item.itemName === 'Legacy Engram') {
                                                     return world.getItemByHash(item.itemHash)
                                                         .then(function (itemDetail) {
-                                                            return (new S(item.itemName).chompRight('Engram') + itemDetail.itemTypeName);
+                                                            return (new S(item.itemName).chompRight('Engram') +
+                                                                itemDetail.itemTypeName);
                                                         });
                                                 }
                                                 var deferred = Q.defer();
@@ -368,12 +374,11 @@ var twilioController = function () {
                                                     };
                                                 });
                                         });
-                                } else {
-                                    return {
-                                        items: [],
-                                        iconUrl: iconUrl
-                                    };
                                 }
+                                return {
+                                    items: [],
+                                    iconUrl: iconUrl
+                                };
                             });
                     })
                     .fin(function () {
@@ -494,14 +499,18 @@ var twilioController = function () {
                             });
                             res.end(twiml.toString());
                         } else {
+                            var shadowUser = _.find(shadowUsers, function (shadowUser) {
+                                return shadowUser.membershipType === user.membershipType;
+                            });
                             var searchTerm = req.body.Body.trim().toLowerCase();
                             if (searchTerm === 'xur') {
                                 return _getXur()
                                     .then(function (vendor) {
                                         var result = vendor.items && vendor.items.length > 0 ?
-                                            _.reduce(vendor.items, function (memo, exotic) {
-                                                return memo + '\n' + exotic;
-                                            }, ' ').trim() : 'Xur is off conspiring with the 9. Check back Friday.';
+                                                    _.reduce(vendor.items, function (memo, exotic) {
+                                                        return memo + '\n' + exotic;
+                                                    }, ' ').trim() :
+                                                    'Xur is off conspiring with the 9. Check back Friday.';
                                         twiml.message(function () {
                                             this.body(result.substr(0, 130));
                                             this.media(vendor.iconUrl);
@@ -513,7 +522,7 @@ var twilioController = function () {
                                     });
                             }
                             if (searchTerm === 'field test weapons') {
-                                return _getFieldTestWeapons()
+                                return _getFieldTestWeapons(shadowUser)
                                     .then(function (vendor) {
                                         var result = _.reduce(vendor.items, function (memo, weapon) {
                                             return memo + '\n' + weapon;
@@ -532,7 +541,7 @@ var twilioController = function () {
                                     });
                             }
                             if (searchTerm === 'foundry orders') {
-                                return _getFoundryOrders()
+                                return _getFoundryOrders(shadowUser)
                                     .then(function (vendor) {
                                         var result = _.reduce(vendor.items, function (memo, foundryItem) {
                                             return memo + '\n' + foundryItem;
@@ -548,24 +557,29 @@ var twilioController = function () {
                                     });
                             }
                             if (searchTerm === 'iron banner') {
-                                return _getIronBannerEventRewards()
+                                return _getIronBannerEventRewards(shadowUser)
                                     .then(function (vendor) {
-                                        if (vendor && vendor.rewards && vendor.rewards.weapons && vendor.rewards.weapons.length > 0) {
+                                        if (vendor && vendor.rewards && vendor.rewards.weapons &&
+                                                vendor.rewards.weapons.length > 0) {
                                             twiml.message(function () {
                                                 this.body(_.reduce(vendor.rewards.weapons, function (memo, weapon) {
                                                     return memo + '\n' + weapon;
                                                 }, ' ').trim().substr(0, 130));
                                                 this.media(vendor.iconUrl);
                                             });
-                                            twiml.message('Hunter\n------\n' + _.reduce(vendor.rewards.armor.hunter, function (memo, classArmor) {
-                                                return memo + '\n' + classArmor;
-                                            }, ' ').trim().substr(0, 130));
-                                            twiml.message('Titan\n-----\n' + _.reduce(vendor.rewards.armor.titan, function (memo, classArmor) {
-                                                return memo + '\n' + classArmor;
-                                            }, ' ').trim().substr(0, 130));
-                                            twiml.message('Warlock\n-------\n' + _.reduce(vendor.rewards.armor.warlock, function (memo, classArmor) {
-                                                return memo + '\n' + classArmor;
-                                            }, ' ').trim().substr(0, 130));
+                                            twiml.message('Hunter\n------\n' + _.reduce(vendor.rewards.armor.hunter,
+                                                function (memo, classArmor) {
+                                                    return memo + '\n' + classArmor;
+                                                },
+                                                ' ').trim().substr(0, 130));
+                                            twiml.message('Titan\n-----\n' + _.reduce(vendor.rewards.armor.titan,
+                                                function (memo, classArmor) {
+                                                    return memo + '\n' + classArmor;
+                                                }, ' ').trim().substr(0, 130));
+                                            twiml.message('Warlock\n-------\n' + _.reduce(vendor.rewards.armor.warlock,
+                                                function (memo, classArmor) {
+                                                    return memo + '\n' + classArmor;
+                                                }, ' ').trim().substr(0, 130));
                                             res.writeHead(200, {
                                                 'Content-Type': 'text/xml'
                                             });
@@ -588,7 +602,8 @@ var twilioController = function () {
                                     res.cookie('counter', counter);
                                     if (items.length === 1) {
                                         res.cookie('itemHash', items[0].itemHash);
-                                        items[0].itemCategory = new S(items[0].itemCategory).strip('Weapon').collapseWhitespace().s.trim();
+                                        items[0].itemCategory = new S(items[0].itemCategory).strip('Weapon')
+                                            .collapseWhitespace().s.trim();
                                         var template = '{{itemName}} {{tierTypeName}} {{itemCategory}}';
                                         if (user.type === 'landline') {
                                             twiml.message((new S(template).template(items[0]).s).substr(0, 130));
@@ -644,7 +659,7 @@ var twilioController = function () {
         var header = req.headers['x-twilio-signature'];
         var twiml = new twilio.TwimlResponse();
         if (twilio.validateRequest(authToken, header, process.env.DOMAIN + req.originalUrl, req.body)) {
-            setTimeout(notifications.updateMessage(req.body), 1000);
+            notifications.updateMessage(req.body);
             res.writeHead(200, {
                 'Content-Type': 'text/xml'
             });

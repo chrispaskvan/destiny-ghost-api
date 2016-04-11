@@ -81,19 +81,19 @@ var notificationController = function (loggingProvider) {
      * @type {string}
      * @description Banshee-44's Vendor Number
      */
-    var gunSmithHash = 570929315;
+    var gunSmithHash = '570929315';
     /**
      * @constant
      * @type {string}
      * @description Iron Banner's Vendor Number
      */
-    var lordSaladinHash = 242140165;
+    var lordSaladinHash = '242140165';
     /**
      * @constant
      * @type {string}
      * @description Xur's Vendor Number
      */
-    var xurHash = 2796397637;
+    var xurHash = '2796397637';
     /**
      *
      * @type {{FieldTestWeapons: number, FoundryOrders: number, IronBannerEventRewards: number, Xur: number}}
@@ -278,17 +278,22 @@ var notificationController = function (loggingProvider) {
                     .then(function (currentUser) {
                         return destiny.getCharacters(currentUser.membershipId)
                             .then(function (characters) {
-                                return destiny.getIronBannerEventRewards(characters[0].characterBase.characterId, shadowUser.cookies)
-                                    .then(function (items) {
+                                var characterPromises = [];
+                                _.each(characters, function (character) {
+                                    characterPromises.push(destiny.getIronBannerEventRewards(character.characterBase.characterId, shadowUser.cookies));
+                                });
+                                return Q.all(characterPromises)
+                                    .then(function (characterItems) {
+                                        var items = _.flatten(characterItems);
                                         world.open(worldPath);
                                         return world.getVendorIcon(lordSaladinHash)
                                             .then(function (iconUrl) {
                                                 var now = new Date();
                                                 var userPromises = [];
                                                 if (items && items.length > 0) {
-                                                    var itemHashes = _.map(items, function (item) {
+                                                    var itemHashes = _.uniq(_.map(items, function (item) {
                                                         return item.item.itemHash;
-                                                    });
+                                                    }));
                                                     var itemPromises = [];
                                                     _.each(itemHashes, function (itemHash) {
                                                         itemPromises.push(world.getItemByHash(itemHash));
@@ -306,12 +311,58 @@ var notificationController = function (loggingProvider) {
                                                                         var promises = [];
                                                                         if (notificationDate === undefined ||
                                                                                 (nextRefreshDate < now && notificationDate < nextRefreshDate)) {
-                                                                            promises.push(notifications.sendMessage('Lord Saladin rewards only the strong.\n' +
-                                                                                _.reduce(_.map(items, function (item) {
+                                                                            var weapons = _.filter(items, function (item) {
+                                                                                return _.contains(item.itemCategoryHashes, 1);
+                                                                            });
+                                                                            var hunterArmor = _.filter(items, function (item) {
+                                                                                return _.contains(item.itemCategoryHashes, 20) &&
+                                                                                    _.contains(item.itemCategoryHashes, 23);
+                                                                            });
+                                                                            var titanArmor = _.filter(items, function (item) {
+                                                                                return _.contains(item.itemCategoryHashes, 20) &&
+                                                                                    _.contains(item.itemCategoryHashes, 22);
+                                                                            });
+                                                                            var warlockArmor = _.filter(items, function (item) {
+                                                                                return _.contains(item.itemCategoryHashes, 20) &&
+                                                                                    _.contains(item.itemCategoryHashes, 21);
+                                                                            });
+                                                                            var vendor = {
+                                                                                rewards: { weapons: _.map(weapons, function (item) {
                                                                                     return item.itemName;
-                                                                                }), function (memo, itemName) {
-                                                                                    return memo + itemName + '\n';
-                                                                                }, ' ').trim(), user.phoneNumber, user.type === 'mobile' ? iconUrl : undefined)
+                                                                                }), armor: { hunter: _.map(hunterArmor, function (item) {
+                                                                                    return item.itemName;
+                                                                                }), titan: _.map(titanArmor, function (item) {
+                                                                                    return item.itemName;
+                                                                                }), warlock: _.map(warlockArmor, function (item) {
+                                                                                    return item.itemName;
+                                                                                })}},
+                                                                                iconUrl: iconUrl
+                                                                            };
+                                                                            promises.push(notifications.sendMessage('Lord Saladin rewards only the strong.\n' + _.reduce(vendor.rewards.weapons, function (memo, weapon) {
+                                                                                return memo + '\n' + weapon;
+                                                                            }, ' ').trim().substr(0, 130), user.phoneNumber, user.type === 'mobile' ? iconUrl : undefined)
+                                                                                .then(function (message) {
+                                                                                    return userModel.createUserMessage(user, message, userModel.actions.IronBanner);
+                                                                                }));
+                                                                            promises.push(notifications.sendMessage('Hunters:\n' + _.reduce(vendor.rewards.armor.hunter,
+                                                                                function (memo, classArmor) {
+                                                                                    return memo + '\n' + classArmor;
+                                                                                },
+                                                                                ' ').trim().substr(0, 130), user.phoneNumber)
+                                                                                .then(function (message) {
+                                                                                    return userModel.createUserMessage(user, message, userModel.actions.IronBanner);
+                                                                                }));
+                                                                            promises.push(notifications.sendMessage('Titans:\n' + _.reduce(vendor.rewards.armor.titan,
+                                                                                function (memo, classArmor) {
+                                                                                    return memo + '\n' + classArmor;
+                                                                                }, ' ').trim().substr(0, 130), user.phoneNumber)
+                                                                                .then(function (message) {
+                                                                                    return userModel.createUserMessage(user, message, userModel.actions.IronBanner);
+                                                                                }));
+                                                                            promises.push(notifications.sendMessage('Warlocks:\n' + _.reduce(vendor.rewards.armor.warlock,
+                                                                                function (memo, classArmor) {
+                                                                                    return memo + '\n' + classArmor;
+                                                                                }, ' ').trim().substr(0, 130), user.phoneNumber)
                                                                                 .then(function (message) {
                                                                                     return userModel.createUserMessage(user, message, userModel.actions.IronBanner);
                                                                                 }));
@@ -522,7 +573,7 @@ var notificationController = function (loggingProvider) {
     var _validateShadowUser = function (shadowUser) {
         var now = new Date();
         var lastRefreshDate = shadowUser.lastRefreshDate === undefined ? new Date() : new Date(shadowUser.lastRefreshDate);
-        var days = parseInt((now.getTime() - lastRefreshDate.getTime()) / (24 * 3600 * 1000));
+        var days = parseInt((now.getTime() - lastRefreshDate.getTime()) / (24 * 3600 * 1000), 10);
         if (shadowUser.cookies && days < 2) {
             var deferred = Q.defer();
             deferred.resolve(shadowUser);

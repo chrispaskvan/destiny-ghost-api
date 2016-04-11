@@ -1,5 +1,5 @@
 /**
- * Created by chris on 10/3/15.
+ * Destiny Integration Tests
  */
 'use strict';
 var app = require('../app.js'),
@@ -7,7 +7,7 @@ var app = require('../app.js'),
     req = require('supertest'),
     should = require('should'),
     superagent = require('superagent'),
-    user = require('../settings/shadowUser.psn.json');
+    users = require('../settings/shadowUsers.json');
 
 describe('Destiny Integration Tests', function () {
     it('Should return Xur\'s cache: all or nothing', function (done) {
@@ -25,8 +25,8 @@ var agent = superagent.agent();
 describe('Destiny Integration Tests', function () {
     it('Should return current foundry items available for order', function (done) {
         this.timeout(10000);
-        req(app).post('/api/users/signIn/')
-            .send(user)
+        req(app).post('/api/users/signIn/bungie')
+            .send(users[0])
             .expect(200)
             .end(function (err, res) {
                 should.not.exist(err);
@@ -37,7 +37,7 @@ describe('Destiny Integration Tests', function () {
                 req1.expect(200)
                     .end(function (err, res) {
                         should.not.exist(err);
-                        expect([0, 5]).to.include(JSON.parse(res.text).length);
+                        expect([0, 5]).to.include(res.body.items.length);
                         done();
                     });
             });

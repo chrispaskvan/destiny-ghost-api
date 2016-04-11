@@ -4,11 +4,11 @@
  * for instructions on how to debug these routes locally. Remember
  * to update the DOMAIN environment variable.
  */
-'use strict';
 var express = require('express'),
     TwilioController = require('../controllers/twilioController');
 
 var routes = function () {
+    'use strict';
     var twilioRouter = express.Router();
     var twilioController = new TwilioController();
     twilioRouter.route('/destiny/r')
