@@ -435,6 +435,7 @@ TwilioController.prototype = (function () {
      * @param res
      */
     var request = function (req, res) {
+        var self = this;
         var header = req.headers['x-twilio-signature'];
         var twiml = new twilio.TwimlResponse();
         if (twilio.validateRequest(this.authToken, header, process.env.DOMAIN + req.originalUrl, req.body)) {
@@ -489,7 +490,7 @@ TwilioController.prototype = (function () {
                             });
                             var searchTerm = req.body.Body.trim().toLowerCase();
                             if (searchTerm === 'xur') {
-                                return _getXur()
+                                return _getXur.call(self)
                                     .then(function (vendor) {
                                         var result = vendor.items && vendor.items.length > 0 ?
                                                     _.reduce(vendor.items, function (memo, exotic) {
@@ -507,7 +508,7 @@ TwilioController.prototype = (function () {
                                     });
                             }
                             if (searchTerm === 'field test weapons') {
-                                return _getFieldTestWeapons(shadowUser)
+                                return _getFieldTestWeapons.call(self, shadowUser)
                                     .then(function (vendor) {
                                         var result = _.reduce(vendor.items, function (memo, weapon) {
                                             return memo + '\n' + weapon;
@@ -526,7 +527,7 @@ TwilioController.prototype = (function () {
                                     });
                             }
                             if (searchTerm === 'foundry orders') {
-                                return _getFoundryOrders(shadowUser)
+                                return _getFoundryOrders.call(self, shadowUser)
                                     .then(function (vendor) {
                                         var result = _.reduce(vendor.items, function (memo, foundryItem) {
                                             return memo + '\n' + foundryItem;
@@ -542,7 +543,7 @@ TwilioController.prototype = (function () {
                                     });
                             }
                             if (searchTerm === 'iron banner') {
-                                return _getIronBannerEventRewards(shadowUser)
+                                return _getIronBannerEventRewards.call(self, shadowUser)
                                     .then(function (vendor) {
                                         if (vendor && vendor.rewards && vendor.rewards.weapons &&
                                                 vendor.rewards.weapons.length > 0) {
@@ -581,7 +582,7 @@ TwilioController.prototype = (function () {
                                         }
                                     });
                             }
-                            return _queryItem(searchTerm)
+                            return _queryItem.call(self, searchTerm)
                                 .then(function (items) {
                                     counter = counter + 1;
                                     res.cookie('counter', counter);
