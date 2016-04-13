@@ -8,7 +8,6 @@
  * @requires Horseman
  * @requires Q
  */
-'use strict';
 var _ = require('underscore'),
     cookie = require('cookie'),
     Horseman = require('node-horseman'),
@@ -16,7 +15,16 @@ var _ = require('underscore'),
 /**
  * @constructor
  */
-var authentication = function () {
+function Authentication() {
+    'use strict';
+    return this;
+}
+/**
+ * @namespace
+ * @type {{membershipTypes, signIn}}
+ */
+Authentication.prototype = (function () {
+    'use strict';
     /**
      * Available Membership Types
      * @type {{TigerXbox: number, TigerPsn: number}}
@@ -153,6 +161,5 @@ var authentication = function () {
         membershipTypes: membershipTypes,
         signIn: signIn
     };
-};
-
-module.exports = authentication;
+}());
+module.exports = Authentication;

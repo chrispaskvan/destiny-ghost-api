@@ -27,23 +27,37 @@ var _ = require('underscore'),
     World = require('../models/world'),
     yauzl = require('yauzl');
 
-var destinyController = function (loggingProvider) {
+/**
+ * @param loggingProvider
+ * @constructor
+ */
+function DestinyController(loggingProvider) {
     'use strict';
+    this.loggingProvider = loggingProvider;
     /**
      * Destiny Model
      * @type {Destiny|exports|module.exports}
      */
-    var destiny = new Destiny();
+    this.destiny = new Destiny();
     /**
      * Ghost Model
      * @type {Ghost|exports|module.exports}
      */
-    var ghost = new Ghost(process.env.DATABASE);
+    this.ghost = new Ghost(process.env.DATABASE);
     /**
      * World Model
      * @type {World|exports|module.exports}
      */
-    var world = new World();
+    this.world = new World();
+    return this;
+}
+/**
+ * @namespace
+ * @type {{getCharacters, getCurrentUser, getFieldTestWeapons, getFoundryOrders, getIronBannerEventRewards,
+ * getXur, upsertManifest}}
+ */
+DestinyController.prototype = (function () {
+    'use strict';
     /**
      *
      * @param membershipId
@@ -51,11 +65,12 @@ var destinyController = function (loggingProvider) {
      * @private
      */
     var _getCharacters = function (membershipId) {
-        return destiny.getCharacters(membershipId)
+        var self = this;
+        return this.destiny.getCharacters(membershipId)
             .then(function (characters) {
-                return ghost.getWorldDatabasePath()
+                return self.ghost.getWorldDatabasePath()
                     .then(function (worldDatabasePath) {
-                        world.open(worldDatabasePath);
+                        self.world.open(worldDatabasePath);
                         var characterBases = _.map(characters, function (character) {
                             return {
                                 characterId: character.characterBase.characterId,
@@ -67,11 +82,11 @@ var destinyController = function (loggingProvider) {
                         });
                         var promises = [];
                         _.each(characterBases, function (characterBase) {
-                            promises.push(world.getClassByHash(characterBase.classHash));
+                            promises.push(self.world.getClassByHash(characterBase.classHash));
                         });
                         return Q.all(promises)
                             .then(function (characterClasses) {
-                                world.close();
+                                self.world.close();
                                 _.each(characterBases, function (characterBase, index) {
                                     characterBase.className = characterClasses[index].className;
                                 });
@@ -95,30 +110,16 @@ var destinyController = function (loggingProvider) {
         });
     };
     /**
-     * Get the value of the cookie given the name.
-     * @param cookies {Array}
-     * @param cookieName {string}
-     * @returns {*|string}
-     * @private
-     */
-    var _getCookieValueByName = function (cookies, cookieName) {
-        if (!(cookies && cookies.constructor === Array)) {
-            return undefined;
-        }
-        return _.find(cookies, function (cookie) {
-            return cookie.name === cookieName;
-        }).value;
-    };
-    /**
      * Get characters for the current user.
      * @returns {*|Array}
      * @private
      */
     var getCharacters = function (req, res) {
+        var self = this;
         var displayName = req.params.displayName;
         var membershipType = req.params.membershipType;
         if (displayName && membershipType) {
-            destiny.getMembershipIdFromDisplayName(displayName, membershipType)
+            this.destiny.getMembershipIdFromDisplayName(displayName, membershipType)
                 .then(function (membershipId) {
                     if (parseInt(membershipId, 10)) {
                         return _getCharacters(membershipId)
@@ -130,13 +131,13 @@ var destinyController = function (loggingProvider) {
                 })
                 .fail(function (err) {
                     res.json(jSend.error(err));
-                    if (loggingProvider) {
-                        loggingProvider.info(err);
+                    if (self.loggingProvider) {
+                        self.loggingProvider.info(err);
                     }
                 });
         } else {
             var cookies = _getCookies(req);
-            destiny.getCurrentUser(cookies)
+            this.destiny.getCurrentUser(cookies)
                 .then(function (currentUser) {
                     return _getCharacters(currentUser.membershipId)
                         .then(function (characters) {
@@ -145,8 +146,8 @@ var destinyController = function (loggingProvider) {
                 })
                 .fail(function (err) {
                     res.json(jSend.error(err));
-                    if (loggingProvider) {
-                        loggingProvider.info(err);
+                    if (self.loggingProvider) {
+                        self.loggingProvider.info(err);
                     }
                 });
         }
@@ -157,15 +158,16 @@ var destinyController = function (loggingProvider) {
      * @param res
      */
     var getCurrentUser = function (req, res) {
+        var self = this;
         var cookies = _getCookies(req);
-        destiny.getCurrentUser(cookies)
+        this.destiny.getCurrentUser(cookies)
             .then(function (currentUser) {
                 res.json(new jSend.success({ displayName: currentUser.displayName }));
             })
             .fail(function (err) {
                 res.json(jSend.error(err));
-                if (loggingProvider) {
-                    loggingProvider.info(err);
+                if (self.loggingProvider) {
+                    self.loggingProvider.info(err);
                 }
             });
     };
@@ -175,12 +177,13 @@ var destinyController = function (loggingProvider) {
      * @param res
      */
     var getFieldTestWeapons = function (req, res) {
+        var self = this;
         var cookies = _getCookies(req);
-        destiny.getCurrentUser(cookies)
+        this.destiny.getCurrentUser(cookies)
             .then(function (currentUser) {
-                return destiny.getCharacters(currentUser.membershipId)
+                return self.destiny.getCharacters(currentUser.membershipId)
                     .then(function (characters) {
-                        return destiny.getFieldTestWeapons(characters[0].characterBase.characterId, cookies)
+                        return self.destiny.getFieldTestWeapons(characters[0].characterBase.characterId, cookies)
                             .then(function (items) {
                                 if (items === undefined || items.length === 0) {
                                     res.json(jSend.fail('Banshee-44 is the Gunsmith.'));
@@ -189,16 +192,16 @@ var destinyController = function (loggingProvider) {
                                 var itemHashes = _.map(items, function (item) {
                                     return item.item.itemHash;
                                 });
-                                return ghost.getWorldDatabasePath()
+                                return self.ghost.getWorldDatabasePath()
                                     .then(function (worldDatabasePath) {
-                                        world.open(worldDatabasePath);
+                                        self.world.open(worldDatabasePath);
                                         var promises = [];
                                         _.each(itemHashes, function (itemHash) {
-                                            promises.push(world.getItemByHash(itemHash));
+                                            promises.push(self.world.getItemByHash(itemHash));
                                         });
                                         return Q.all(promises)
                                             .then(function (items) {
-                                                world.close();
+                                                self.world.close();
                                                 res.json(_.map(items, function (item) {
                                                     return item.itemName;
                                                 }));
@@ -209,8 +212,8 @@ var destinyController = function (loggingProvider) {
             })
             .fail(function (err) {
                 res.json(jSend.error(err));
-                if (loggingProvider) {
-                    loggingProvider.info(err);
+                if (self.loggingProvider) {
+                    self.loggingProvider.info(err);
                 }
             });
     };
@@ -220,12 +223,13 @@ var destinyController = function (loggingProvider) {
      * @param res
      */
     var getFoundryOrders = function (req, res) {
+        var self = this;
         var cookies = _getCookies(req);
-        destiny.getCurrentUser(cookies)
+        this.destiny.getCurrentUser(cookies)
             .then(function (currentUser) {
-                return destiny.getCharacters(currentUser.membershipId)
+                return self.destiny.getCharacters(currentUser.membershipId)
                     .then(function (characters) {
-                        return destiny.getFoundryOrders(characters[0].characterBase.characterId, cookies)
+                        return self.destiny.getFoundryOrders(characters[0].characterBase.characterId, cookies)
                             .then(function (foundryOrders) {
                                 if (foundryOrders.items.length === 0) {
                                     res.json(foundryOrders);
@@ -234,16 +238,16 @@ var destinyController = function (loggingProvider) {
                                 var itemHashes = _.map(foundryOrders.items, function (item) {
                                     return item.item.itemHash;
                                 });
-                                return ghost.getWorldDatabasePath()
+                                return self.ghost.getWorldDatabasePath()
                                     .then(function (worldDatabasePath) {
-                                        world.open(worldDatabasePath);
+                                        self.world.open(worldDatabasePath);
                                         var promises = [];
                                         _.each(itemHashes, function (itemHash) {
-                                            promises.push(world.getItemByHash(itemHash));
+                                            promises.push(self.world.getItemByHash(itemHash));
                                         });
                                         return Q.all(promises)
                                             .then(function (items) {
-                                                world.close();
+                                                self.world.close();
                                                 res.json(_.map(items, function (item) {
                                                     return item.itemName;
                                                 }));
@@ -254,8 +258,8 @@ var destinyController = function (loggingProvider) {
             })
             .fail(function (err) {
                 res.json(jSend.error(err));
-                if (loggingProvider) {
-                    loggingProvider.info(err);
+                if (self.loggingProvider) {
+                    self.loggingProvider.info(err);
                 }
             });
     };
@@ -265,15 +269,16 @@ var destinyController = function (loggingProvider) {
      * @param res
      */
     var getIronBannerEventRewards = function (req, res) {
+        var self = this;
         var cookies = _getCookies(req);
-        destiny.getCurrentUser(cookies)
+        this.destiny.getCurrentUser(cookies)
             .then(function (currentUser) {
-                return destiny.getCharacters(currentUser.membershipId)
+                return self.destiny.getCharacters(currentUser.membershipId)
                     .then(function (characters) {
                         var characterPromises = [];
                         _.each(characters, function (character) {
                             characterPromises.push(
-                                destiny.getIronBannerEventRewards(character.characterBase.characterId, cookies)
+                                self.destiny.getIronBannerEventRewards(character.characterBase.characterId, cookies)
                             );
                         });
                         return Q.all(characterPromises)
@@ -282,16 +287,16 @@ var destinyController = function (loggingProvider) {
                                 var itemHashes = _.uniq(_.map(items, function (item) {
                                     return item.item.itemHash;
                                 }));
-                                return ghost.getWorldDatabasePath()
+                                return self.ghost.getWorldDatabasePath()
                                     .then(function (worldDatabasePath) {
-                                        world.open(worldDatabasePath);
+                                        self.world.open(worldDatabasePath);
                                         var promises = [];
                                         _.each(itemHashes, function (itemHash) {
-                                            promises.push(world.getItemByHash(itemHash));
+                                            promises.push(self.world.getItemByHash(itemHash));
                                         });
                                         return Q.all(promises)
                                             .then(function (items) {
-                                                world.close();
+                                                self.world.close();
                                                 var weapons = _.filter(items, function (item) {
                                                     return _.contains(item.itemCategoryHashes, 1);
                                                 });
@@ -323,8 +328,8 @@ var destinyController = function (loggingProvider) {
             })
             .fail(function (err) {
                 res.json(jSend.error(err));
-                if (loggingProvider) {
-                    loggingProvider.info(err);
+                if (self.loggingProvider) {
+                    self.loggingProvider.info(err);
                 }
             });
     };
@@ -339,10 +344,12 @@ var destinyController = function (loggingProvider) {
      * @param req
      * @param res
      */
+    /*jslint unparam: true*/
     var getXur = function (req, res) {
-        ghost.getNextRefreshDate(xurHash)
+        var self = this;
+        this.ghost.getNextRefreshDate(xurHash)
             .then(function (nextRefreshDate) {
-                return destiny.getXur()
+                return self.destiny.getXur()
                     .then(function (items) {
                         if (items === undefined || items.length === 0) {
                             res.status(200).json({ items: [], nextRefreshDate: nextRefreshDate });
@@ -351,19 +358,19 @@ var destinyController = function (loggingProvider) {
                         var itemHashes = _.map(items, function (item) {
                             return item.item.itemHash;
                         });
-                        return ghost.getWorldDatabasePath()
+                        return self.ghost.getWorldDatabasePath()
                             .then(function (worldDatabasePath) {
-                                world.open(worldDatabasePath);
+                                self.world.open(worldDatabasePath);
                                 var promises = [];
                                 _.each(itemHashes, function (itemHash) {
-                                    promises.push(world.getItemByHash(itemHash));
+                                    promises.push(self.world.getItemByHash(itemHash));
                                 });
                                 return Q.all(promises)
                                     .then(function (items) {
                                         var itemPromises = _.map(items, function (item) {
                                             if (item.itemName === 'Exotic Engram' ||
                                                     item.itemName === 'Legacy Engram') {
-                                                return world.getItemByHash(item.itemHash)
+                                                return self.world.getItemByHash(item.itemHash)
                                                     .then(function (itemDetail) {
                                                         return (new S(item.itemName).chompRight('Engram') +
                                                             itemDetail.itemTypeName);
@@ -379,25 +386,27 @@ var destinyController = function (loggingProvider) {
                                             });
                                     })
                                     .fin(function () {
-                                        world.close();
+                                        self.world.close();
                                     });
                             });
                     });
             })
             .fail(function (err) {
                 res.json(jSend.error(err));
-                if (loggingProvider) {
-                    loggingProvider.info(err);
+                if (self.loggingProvider) {
+                    self.loggingProvider.info(err);
                 }
             });
     };
+    /*jslint unparam: false*/
     /**
      * Insert or update the Destiny manifest.
      */
     var upsertManifest = function () {
-        return destiny.getManifest()
+        var self = this;
+        return this.destiny.getManifest()
             .then(function (manifest) {
-                return ghost.getLastManifest()
+                return self.ghost.getLastManifest()
                     .then(function (lastManifest) {
                         var databasePath = './databases/';
                         var relativeUrl = manifest.mobileWorldContentPaths.en;
@@ -417,7 +426,7 @@ var destinyController = function (loggingProvider) {
                                             zipFile.openReadStream(entry, function (err, readStream) {
                                                 if (!err) {
                                                     readStream.pipe(fs.createWriteStream(databasePath + entry.fileName));
-                                                    ghost.createManifest(manifest);
+                                                    self.ghost.createManifest(manifest);
                                                     fs.unlink(fileName + '.zip');
                                                 } else {
                                                     throw err;
@@ -433,8 +442,8 @@ var destinyController = function (loggingProvider) {
                     });
             })
             .fail(function (err) {
-                if (loggingProvider) {
-                    loggingProvider.info(err);
+                if (self.loggingProvider) {
+                    self.loggingProvider.info(err);
                 }
             });
     };
@@ -450,6 +459,5 @@ var destinyController = function (loggingProvider) {
         getXur: getXur,
         upsertManifest: upsertManifest
     };
-};
-
-module.exports = destinyController;
+}());
+module.exports = DestinyController;

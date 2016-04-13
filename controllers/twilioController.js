@@ -35,38 +35,47 @@ var _ = require('underscore'),
 /**
  * @constructor
  */
-var twilioController = function () {
+function TwilioController(loggingProvider) {
     'use strict';
+    this.loggingProvider = loggingProvider;
     /**
      * Destiny Model
      * @type {Destiny|exports|module.exports}
      */
-    var destiny = new Destiny();
+    this.destiny = new Destiny();
     /**
      * Ghost Model
      * @type {Ghost|exports|module.exports}
      */
-    var ghost = new Ghost(process.env.DATABASE);
+    this.ghost = new Ghost(process.env.DATABASE);
     /**
      * World Model
      * @type {World|exports|module.exports}
      */
-    var world = new World();
+    this.world = new World();
     /**
      * Notifications Model
      * @type {Notifications|exports|module.exports}
      */
-    var notifications = new Notifications(process.env.DATABASE, process.env.TWILIO);
+    this.notifications = new Notifications(process.env.DATABASE, process.env.TWILIO);
     /**
      * @member {Object}
      * @type {{accountSid: string, authToken string, phoneNumber string}} settings
      */
-    var authToken = JSON.parse(fs.readFileSync(process.env.TWILIO || './settings/twilio.production.json')).authToken;
+    this.authToken = JSON.parse(fs.readFileSync(process.env.TWILIO || './settings/twilio.production.json')).authToken;
     /**
      * User Model
      * @type {User|exports|module.exports}
      */
-    var userModel = new Users(process.env.DATABASE, process.env.TWILIO);
+    this.users = new Users(process.env.DATABASE, process.env.TWILIO);
+    return this;
+}
+/**
+ * @namespace
+ * @type {{fallback, request, statusCallback}}
+ */
+TwilioController.prototype = (function () {
+    'use strict';
     /**
      * @constant
      * @type {string}
@@ -114,28 +123,29 @@ var twilioController = function () {
      * @private
      */
     var _getFieldTestWeapons = function (shadowUser) {
-        return ghost.getLastManifest()
+        var self = this;
+        return this.ghost.getLastManifest()
             .then(function (lastManifest) {
                 var worldPath = path.join('./databases/', path.basename(lastManifest.mobileWorldContentPaths.en));
-                return destiny.getCurrentUser(shadowUser.cookies)
+                return self.destiny.getCurrentUser(shadowUser.cookies)
                     .then(function (currentUser) {
-                        return destiny.getCharacters(currentUser.membershipId)
+                        return self.destiny.getCharacters(currentUser.membershipId)
                             .then(function (characters) {
-                                return destiny.getFieldTestWeapons(characters[0].characterBase.characterId,
+                                return self.destiny.getFieldTestWeapons(characters[0].characterBase.characterId,
                                         shadowUser.cookies)
                                     .then(function (items) {
                                         if (items && items.length > 0) {
                                             var itemHashes = _.map(items, function (item) {
                                                 return item.item.itemHash;
                                             });
-                                            world.open(worldPath);
+                                            self.world.open(worldPath);
                                             var itemPromises = [];
                                             _.each(itemHashes, function (itemHash) {
-                                                itemPromises.push(world.getItemByHash(itemHash));
+                                                itemPromises.push(self.world.getItemByHash(itemHash));
                                             });
                                             return Q.all(itemPromises)
                                                 .then(function (items) {
-                                                    return world.getVendorIcon(gunSmithHash)
+                                                    return self.world.getVendorIcon(gunSmithHash)
                                                         .then(function (iconUrl) {
                                                             return {
                                                                 items: _.map(items, function (item) {
@@ -146,7 +156,7 @@ var twilioController = function () {
                                                         });
                                                 })
                                                 .fin(function () {
-                                                    world.close();
+                                                    self.world.close();
                                                 });
                                         }
                                     });
@@ -160,28 +170,29 @@ var twilioController = function () {
      * @private
      */
     var _getFoundryOrders = function (shadowUser) {
-        return ghost.getLastManifest()
+        var self = this;
+        return this.ghost.getLastManifest()
             .then(function (lastManifest) {
                 var worldPath = path.join('./databases/', path.basename(lastManifest.mobileWorldContentPaths.en));
-                return destiny.getCurrentUser(shadowUser.cookies)
+                return self.destiny.getCurrentUser(shadowUser.cookies)
                     .then(function (currentUser) {
-                        return destiny.getCharacters(currentUser.membershipId)
+                        return self.destiny.getCharacters(currentUser.membershipId)
                             .then(function (characters) {
-                                return destiny.getFoundryOrders(characters[0].characterBase.characterId,
+                                return self.destiny.getFoundryOrders(characters[0].characterBase.characterId,
                                         shadowUser.cookies)
                                     .then(function (foundryOrders) {
                                         if (foundryOrders && foundryOrders.items && foundryOrders.items.length > 0) {
                                             var itemHashes = _.map(foundryOrders.items, function (item) {
                                                 return item.item.itemHash;
                                             });
-                                            world.open(worldPath);
+                                            self.world.open(worldPath);
                                             var itemPromises = [];
                                             _.each(itemHashes, function (itemHash) {
-                                                itemPromises.push(world.getItemByHash(itemHash));
+                                                itemPromises.push(self.world.getItemByHash(itemHash));
                                             });
                                             return Q.all(itemPromises)
                                                 .then(function (items) {
-                                                    return world.getVendorIcon(gunSmithHash)
+                                                    return self.world.getVendorIcon(gunSmithHash)
                                                         .then(function (iconUrl) {
                                                             return {
                                                                 items: _.map(items, function (item) {
@@ -192,7 +203,7 @@ var twilioController = function () {
                                                         });
                                                 })
                                                 .fin(function () {
-                                                    world.close();
+                                                    self.world.close();
                                                 });
                                         }
                                     });
@@ -201,14 +212,15 @@ var twilioController = function () {
             });
     };
     var _getIronBannerEventRewards = function (shadowUser) {
-        return destiny.getCurrentUser(shadowUser.cookies)
+        var self = this;
+        return this.destiny.getCurrentUser(shadowUser.cookies)
             .then(function (currentUser) {
-                return destiny.getCharacters(currentUser.membershipId)
+                return self.destiny.getCharacters(currentUser.membershipId)
                     .then(function (characters) {
                         var characterPromises = [];
                         _.each(characters, function (character) {
                             characterPromises.push(
-                                destiny.getIronBannerEventRewards(character.characterBase.characterId,
+                                self.destiny.getIronBannerEventRewards(character.characterBase.characterId,
                                     shadowUser.cookies)
                             );
                         });
@@ -221,16 +233,16 @@ var twilioController = function () {
                                 var itemHashes = _.uniq(_.map(items, function (item) {
                                     return item.item.itemHash;
                                 }));
-                                return ghost.getWorldDatabasePath()
+                                return self.ghost.getWorldDatabasePath()
                                     .then(function (worldDatabasePath) {
-                                        world.open(worldDatabasePath);
+                                        self.world.open(worldDatabasePath);
                                         var promises = [];
                                         _.each(itemHashes, function (itemHash) {
-                                            promises.push(world.getItemByHash(itemHash));
+                                            promises.push(self.world.getItemByHash(itemHash));
                                         });
                                         return Q.all(promises)
                                             .then(function (items) {
-                                                return world.getVendorIcon(lordSaladinHash)
+                                                return self.world.getVendorIcon(lordSaladinHash)
                                                     .then(function (iconUrl) {
                                                         var weapons = _.filter(items, function (item) {
                                                             return _.contains(item.itemCategoryHashes, 1);
@@ -261,7 +273,7 @@ var twilioController = function () {
                                                         };
                                                     })
                                                     .fin(function () {
-                                                        world.close();
+                                                        self.world.close();
                                                     });
                                             });
                                     });
@@ -302,46 +314,18 @@ var twilioController = function () {
     };
     /**
      *
-     * @param itemHash
-     * @returns {*|promise}
-     */
-    var _getItemByHash = function (itemHash) {
-        return ghost.getLastManifest()
-            .then(function (lastManifest) {
-                var worldPath = path.join('./databases/', path.basename(lastManifest.mobileWorldContentPaths.en));
-                world.open(worldPath);
-                return world.getItemByHash(itemHash)
-                    .then(function (item) {
-                        return world.getClassByType(2)
-                            .then(function (characterClass) {
-                                return {
-                                    classType: characterClass.className,
-                                    icon: 'https://www.bungie.net' + item.icon,
-                                    itemHash: itemHash,
-                                    itemName: item.itemName,
-                                    itemType: item.itemType,
-                                    tierTypeName: item.tierTypeName
-                                };
-                            });
-                    })
-                    .fin(function () {
-                        world.close();
-                    });
-            });
-    };
-    /**
-     *
      * @returns {Request|*}
      * @private
      */
     var _getXur = function () {
-        return ghost.getLastManifest()
+        var self = this;
+        return this.ghost.getLastManifest()
             .then(function (lastManifest) {
                 var worldPath = path.join('./databases/', path.basename(lastManifest.mobileWorldContentPaths.en));
-                world.open(worldPath);
-                return world.getVendorIcon(xurHash)
+                self.world.open(worldPath);
+                return self.world.getVendorIcon(xurHash)
                     .then(function (iconUrl) {
-                        return destiny.getXur()
+                        return self.destiny.getXur()
                             .then(function (items) {
                                 if (items && items.length > 0) {
                                     var itemHashes = _.map(items, function (item) {
@@ -349,14 +333,14 @@ var twilioController = function () {
                                     });
                                     var itemPromises = [];
                                     _.each(itemHashes, function (itemHash) {
-                                        itemPromises.push(world.getItemByHash(itemHash));
+                                        itemPromises.push(self.world.getItemByHash(itemHash));
                                     });
                                     return Q.all(itemPromises)
                                         .then(function (items) {
                                             var promises = _.map(items, function (item) {
                                                 if (item.itemName === 'Exotic Engram' ||
                                                         item.itemName === 'Legacy Engram') {
-                                                    return world.getItemByHash(item.itemHash)
+                                                    return self.world.getItemByHash(item.itemHash)
                                                         .then(function (itemDetail) {
                                                             return (new S(item.itemName).chompRight('Engram') +
                                                                 itemDetail.itemTypeName);
@@ -382,7 +366,7 @@ var twilioController = function () {
                             });
                     })
                     .fin(function () {
-                        world.close();
+                        self.world.close();
                     });
             });
     };
@@ -392,11 +376,12 @@ var twilioController = function () {
      * @returns {*|promise}
      */
     var _queryItem = function (itemName) {
-        return ghost.getLastManifest()
+        var self = this;
+        return this.ghost.getLastManifest()
             .then(function (lastManifest) {
                 var worldPath = path.join('./databases/', path.basename(lastManifest.mobileWorldContentPaths.en));
-                world.open(worldPath);
-                return world.getItemByName(itemName)
+                self.world.open(worldPath);
+                return self.world.getItemByName(itemName)
                     .then(function (items) {
                         if (items.length > 0) {
                             if (items.length > 1) {
@@ -405,14 +390,14 @@ var twilioController = function () {
                                 });
                                 var keys = Object.keys(groups);
                                 if (keys.length === 1) {
-                                    return _getItem(items[0], world)
+                                    return _getItem(items[0], self.world)
                                         .then(function (item) {
                                             return item;
                                         });
                                 }
                                 return items;
                             }
-                            return _getItem(items[0], world)
+                            return _getItem(items[0], self.world)
                                 .then(function (item) {
                                     return item;
                                 });
@@ -420,7 +405,7 @@ var twilioController = function () {
                         return [];
                     })
                     .fin(function () {
-                        world.close();
+                        self.world.close();
                     });
             });
     };
@@ -432,7 +417,7 @@ var twilioController = function () {
     var fallback = function (req, res) {
         var header = req.headers['x-twilio-signature'];
         var twiml = new twilio.TwimlResponse();
-        if (twilio.validateRequest(authToken, header, process.env.DOMAIN + req.originalUrl, req.body)) {
+        if (twilio.validateRequest(this.authToken, header, process.env.DOMAIN + req.originalUrl, req.body)) {
             twiml.message(_getRandomResponseForAnError());
             res.writeHead(200, {
                 'Content-Type': 'text/xml'
@@ -452,9 +437,9 @@ var twilioController = function () {
     var request = function (req, res) {
         var header = req.headers['x-twilio-signature'];
         var twiml = new twilio.TwimlResponse();
-        if (twilio.validateRequest(authToken, header, process.env.DOMAIN + req.originalUrl, req.body)) {
+        if (twilio.validateRequest(this.authToken, header, process.env.DOMAIN + req.originalUrl, req.body)) {
             var counter = parseInt(req.cookies.counter, 10) || 0;
-            userModel.getUserByPhoneNumber(req.body.From)
+            this.users.getUserByPhoneNumber(req.body.From)
                 .then(function (user) {
                     if (!user) {
                         if (!req.cookies.unregisteredUser) {
@@ -658,8 +643,8 @@ var twilioController = function () {
     var statusCallback = function (req, res) {
         var header = req.headers['x-twilio-signature'];
         var twiml = new twilio.TwimlResponse();
-        if (twilio.validateRequest(authToken, header, process.env.DOMAIN + req.originalUrl, req.body)) {
-            notifications.updateMessage(req.body);
+        if (twilio.validateRequest(this.authToken, header, process.env.DOMAIN + req.originalUrl, req.body)) {
+            this.notifications.updateMessage(JSON.stringify(req.body));
             res.writeHead(200, {
                 'Content-Type': 'text/xml'
             });
@@ -675,6 +660,5 @@ var twilioController = function () {
         request: request,
         statusCallback: statusCallback
     };
-};
-
-module.exports = twilioController;
+}());
+module.exports = TwilioController;

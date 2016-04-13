@@ -24,7 +24,7 @@ var _ = require('underscore'),
  * @param twilioSettingsFullPath {string}
  * @constructor
  */
-var Users = function (databaseFullPath, twilioSettingsFullPath) {
+function Users(databaseFullPath, twilioSettingsFullPath) {
     'use strict';
     /**
      * @member - Full path of the local database.
@@ -52,6 +52,23 @@ var Users = function (databaseFullPath, twilioSettingsFullPath) {
         db.run('CREATE TABLE IF NOT EXISTS DestinyGhostUserMessage(id TEXT, json BLOB)');
         db.run('CREATE TABLE IF NOT EXISTS DestinyGhostUserToken(id TEXT, json BLOB)');
     });
+    this.db = db;
+    /**
+     * @member {Object}
+     * @type {{accountSid: string, authToken string, phoneNumber string}} settings
+     */
+    this.settings = JSON.parse(fs.readFileSync(twilioSettingsFullPath || './settings/twilio.production.json'));
+    return this;
+}
+/**
+ * @namespace
+ * @type {{actions, cleanPhoneNumber, createUser, createUserMessage, createUserToken, deleteExpiredUserTokens,
+ * deleteUser, getBlob, getLastNotificationDate, getPhoneNumberType, getSubscribedUsers, getUserByEmailAddress,
+ * getUserByGamerTag, getUserByPhoneNumber, getUserTokenByEmailAddressToken, getUserTokenByPhoneNumber,
+ * getUserTokenByPhoneNumberToken, updateUser}}
+ */
+Users.prototype = (function () {
+    'use strict';
     /**
      * @private
      */
@@ -123,11 +140,6 @@ var Users = function (databaseFullPath, twilioSettingsFullPath) {
         additionalProperties: true
     };
     /**
-     * @member {Object}
-     * @type {{accountSid: string, authToken string, phoneNumber string}} settings
-     */
-    var settings = JSON.parse(fs.readFileSync(twilioSettingsFullPath || './settings/twilio.production.json'));
-    /**
      * Allowed Actions
      * @type {{Gunsmith: string, Xur: string}}
      */
@@ -153,33 +165,34 @@ var Users = function (databaseFullPath, twilioSettingsFullPath) {
      * @param callback
      */
     var createUser = function (user, callback) {
+        var self = this;
         var deferred = Q.defer();
         var validate = validator(schema);
         if (!validate(user)) {
             deferred.reject(new Error(JSON.stringify(validate.errors)));
             return deferred.promise.nodeify(callback);
         }
-        getUserByPhoneNumber(user.phoneNumber)
+        this.getUserByPhoneNumber(user.phoneNumber)
             .then(function (existingUser) {
                 if (existingUser) {
                     deferred.reject(new Error('The phone number, ' + user.phoneNumber + ', is already registered.'));
                     return deferred.promise.nodeify(callback);
                 }
-                return getUserByGamerTag(user.gamerTag);
+                return self.getUserByGamerTag(user.gamerTag, user.membershipType);
             })
             .then(function (existingUser) {
                 if (existingUser) {
                     deferred.reject(new Error('The gamer tag, ' + user.gamerTag + ', is already registered.'));
                     return deferred.promise.nodeify(callback);
                 }
-                return getUserByEmailAddress(user.emailAddress);
+                return self.getUserByEmailAddress(user.emailAddress);
             })
             .then(function (existingUser) {
                 if (existingUser) {
                     deferred.reject(new Error('The email address, ' + user.emailAddress + ', is already registered.'));
                     return deferred.promise.nodeify(callback);
                 }
-                getPhoneNumberType(user.phoneNumber)
+                self.getPhoneNumberType(user.phoneNumber)
                     .then(function (carrier) {
                         user.carrier = carrier.name;
                         user.dateRegistered = new Date().toISOString();
@@ -188,7 +201,7 @@ var Users = function (databaseFullPath, twilioSettingsFullPath) {
                         var filter = validator.filter(schema);
                         var filteredUser = filter(user);
                         _.defaults(filteredUser, defaults(schema));
-                        var sql = db.prepare('INSERT INTO DestinyGhostUser VALUES (?, ?)');
+                        var sql = self.db.prepare('INSERT INTO DestinyGhostUser VALUES (?, ?)');
                         sql.run(user.phoneNumber, JSON.stringify(filteredUser));
                         sql.finalize();
                         deferred.resolve();
@@ -208,7 +221,7 @@ var Users = function (databaseFullPath, twilioSettingsFullPath) {
             phoneNumber: user.phoneNumber,
             sid: message.sid
         };
-        var sql = db.prepare('INSERT INTO DestinyGhostUserMessage VALUES (?, ?)');
+        var sql = this.db.prepare('INSERT INTO DestinyGhostUserMessage VALUES (?, ?)');
         sql.run(new Date().toISOString(), JSON.stringify(userMessage));
         sql.finalize();
     };
@@ -225,7 +238,7 @@ var Users = function (databaseFullPath, twilioSettingsFullPath) {
             deferred.reject(new Error(JSON.stringify(validate.errors)));
             return deferred.promise.nodeify(callback);
         }
-        var sql = db.prepare('INSERT INTO DestinyGhostUserToken VALUES (?, ?)');
+        var sql = this.db.prepare('INSERT INTO DestinyGhostUserToken VALUES (?, ?)');
         sql.run(new Date().toISOString(), JSON.stringify(user));
         sql.finalize();
         deferred.resolve();
@@ -238,7 +251,7 @@ var Users = function (databaseFullPath, twilioSettingsFullPath) {
         /**
          * @todo
          */
-        var sql = db.prepare('DELETE FROM DestinyGhostUserToken WHERE id < \'' + new Date().toISOString() + '\'');
+        var sql = this.db.prepare('DELETE FROM DestinyGhostUserToken WHERE id < \'' + new Date().toISOString() + '\'');
         sql.run();
         sql.finalize();
     };
@@ -247,7 +260,7 @@ var Users = function (databaseFullPath, twilioSettingsFullPath) {
      * @param phoneNumber {string}
      */
     var deleteUser = function (phoneNumber) {
-        var sql = db.prepare('DELETE FROM DestinyGhostUser WHERE id = \'' + phoneNumber + '\'');
+        var sql = this.db.prepare('DELETE FROM DestinyGhostUser WHERE id = \'' + phoneNumber + '\'');
         sql.run();
         sql.finalize();
     };
@@ -258,19 +271,20 @@ var Users = function (databaseFullPath, twilioSettingsFullPath) {
      */
     var getBlob = function (numberOfBytes) {
         var deferred = Q.defer();
-        db.each('SELECT lower(hex(randomblob(' + (numberOfBytes || 16).toString() + '))) AS id', function (err, row) {
-            if (err) {
-                deferred.reject(err);
-            } else {
-                deferred.resolve(row.id);
-            }
-        }, function (err) {
-            if (err) {
-                deferred.reject(err);
-            } else {
-                deferred.resolve();
-            }
-        });
+        this.db.each('SELECT lower(hex(randomblob(' + (numberOfBytes || 16).toString() +
+            '))) AS id', function (err, row) {
+                if (err) {
+                    deferred.reject(err);
+                } else {
+                    deferred.resolve(row.id);
+                }
+            }, function (err) {
+                if (err) {
+                    deferred.reject(err);
+                } else {
+                    deferred.resolve();
+                }
+            });
         return deferred.promise;
     };
     /**
@@ -286,7 +300,7 @@ var Users = function (databaseFullPath, twilioSettingsFullPath) {
             deferred.reject(new Error(action.toString() + ' is an unknown action.'));
             return deferred.promise.nodeify(callback);
         }
-        db.each('SELECT id FROM DestinyGhostUserMessage WHERE json LIKE \'%"phoneNumber":"' +
+        this.db.each('SELECT id FROM DestinyGhostUserMessage WHERE json LIKE \'%"phoneNumber":"' +
             phoneNumber + '"%\' AND json LIKE \'%"action":"' +
             action.toString() + '"%\' ORDER BY id DESC LIMIT 1', function (err, row) {
                 if (err) {
@@ -309,7 +323,7 @@ var Users = function (databaseFullPath, twilioSettingsFullPath) {
      * @returns {*|Object}
      */
     var getPhoneNumberType = function (phoneNumber) {
-        var client = new twilio.LookupsClient(settings.accountSid, settings.authToken);
+        var client = new twilio.LookupsClient(this.settings.accountSid, this.settings.authToken);
         var deferred = Q.defer();
         client.phoneNumbers(phoneNumber).get({
             countryCode: 'US',
@@ -330,7 +344,7 @@ var Users = function (databaseFullPath, twilioSettingsFullPath) {
     var getSubscribedUsers = function () {
         var deferred = Q.defer();
         var users = [];
-        db.each('SELECT json FROM DestinyGhostUser', function (err, row) {
+        this.db.each('SELECT json FROM DestinyGhostUser', function (err, row) {
             if (err) {
                 deferred.reject(err);
             } else {
@@ -355,7 +369,7 @@ var Users = function (databaseFullPath, twilioSettingsFullPath) {
      */
     var getUserByEmailAddress = function (emailAddress) {
         var deferred = Q.defer();
-        db.all('SELECT json FROM DestinyGhostUser WHERE json LIKE \'%"emailAddress":"' +
+        this.db.all('SELECT json FROM DestinyGhostUser WHERE json LIKE \'%"emailAddress":"' +
             emailAddress + '"%\'', function (err, rows) {
                 if (err) {
                     deferred.reject(err);
@@ -376,12 +390,41 @@ var Users = function (databaseFullPath, twilioSettingsFullPath) {
     /**
      * Get the user by the gamer tag.
      * @param gamerTag {string}
+     * @param membershipType {integer}
      * @returns {*|Object}
      */
-    var getUserByGamerTag = function (gamerTag) {
+    var getUserByGamerTag = function (gamerTag, membershipType) {
         var deferred = Q.defer();
-        db.all('SELECT json FROM DestinyGhostUser WHERE json LIKE \'%"gamerTag":"' +
+        this.db.all('SELECT json FROM DestinyGhostUser WHERE json LIKE \'%"gamerTag":"' +
             gamerTag + '"%\'', function (err, rows) {
+                if (err) {
+                    deferred.reject(err);
+                } else {
+                    if (rows.length === 0) {
+                        deferred.resolve();
+                    } else {
+                        var userRows = _.filter(rows, function (row) {
+                            return JSON.parse(row.json).membershipType === membershipType;
+                        });
+                        if (userRows.length === 1) {
+                            deferred.resolve(JSON.parse(userRows[0].json));
+                        } else {
+                            deferred.reject(new Error('The gamer tag, ' + gamerTag + ', is not unique.'));
+                        }
+                    }
+                }
+            });
+        return deferred.promise;
+    };
+    /**
+     * Get the user by the membership Id.
+     * @param membershipId
+     * @returns {*|Object}
+     */
+    var getUserByMembershipId = function (membershipId) {
+        var deferred = Q.defer();
+        this.db.all('SELECT json FROM DestinyGhostUser WHERE json LIKE \'%"membershipId":"' +
+            membershipId + '"%\'', function (err, rows) {
                 if (err) {
                     deferred.reject(err);
                 } else {
@@ -391,7 +434,7 @@ var Users = function (databaseFullPath, twilioSettingsFullPath) {
                         if (rows.length === 1) {
                             deferred.resolve(JSON.parse(_.first(rows).json));
                         } else {
-                            deferred.reject(new Error('The gamer tag, ' + gamerTag + ', is not unique.'));
+                            deferred.reject(new Error('The membership Id, ' + membershipId + ', is not unique.'));
                         }
                     }
                 }
@@ -405,7 +448,7 @@ var Users = function (databaseFullPath, twilioSettingsFullPath) {
      */
     var getUserByPhoneNumber = function (phoneNumber) {
         var deferred = Q.defer();
-        db.all('SELECT json FROM DestinyGhostUser WHERE json LIKE \'%"phoneNumber":"' +
+        this.db.all('SELECT json FROM DestinyGhostUser WHERE json LIKE \'%"phoneNumber":"' +
             phoneNumber + '"%\'', function (err, rows) {
                 if (err) {
                     deferred.reject(err);
@@ -430,7 +473,7 @@ var Users = function (databaseFullPath, twilioSettingsFullPath) {
      */
     var getUserTokenByEmailAddressToken = function (emailAddressToken) {
         var deferred = Q.defer();
-        db.each('SELECT id, json FROM DestinyGhostUserToken WHERE json LIKE \'%"emailAddress":"' +
+        this.db.each('SELECT id, json FROM DestinyGhostUserToken WHERE json LIKE \'%"emailAddress":"' +
             emailAddressToken + '"%\' ORDER BY id DESC LIMIT 1', function (err, row) {
                 if (err) {
                     deferred.reject(err);
@@ -457,7 +500,7 @@ var Users = function (databaseFullPath, twilioSettingsFullPath) {
      */
     var getUserTokenByPhoneNumber = function (phoneNumber) {
         var deferred = Q.defer();
-        db.each('SELECT id, json FROM DestinyGhostUserToken WHERE json LIKE \'%"phoneNumber":"' +
+        this.db.each('SELECT id, json FROM DestinyGhostUserToken WHERE json LIKE \'%"phoneNumber":"' +
             phoneNumber + '"%\' ORDER BY id DESC LIMIT 1', function (err, row) {
                 if (err) {
                     deferred.reject(err);
@@ -484,7 +527,7 @@ var Users = function (databaseFullPath, twilioSettingsFullPath) {
      */
     var getUserTokenByPhoneNumberToken = function (phoneNumberToken) {
         var deferred = Q.defer();
-        db.each('SELECT id, json FROM DestinyGhostUserToken WHERE json LIKE \'%"phoneNumber":"' +
+        this.db.each('SELECT id, json FROM DestinyGhostUserToken WHERE json LIKE \'%"phoneNumber":"' +
             phoneNumberToken + '"%\' ORDER BY id DESC LIMIT 1', function (err, row) {
                 if (err) {
                     deferred.reject(err);
@@ -537,12 +580,12 @@ var Users = function (databaseFullPath, twilioSettingsFullPath) {
         getSubscribedUsers: getSubscribedUsers,
         getUserByEmailAddress: getUserByEmailAddress,
         getUserByGamerTag: getUserByGamerTag,
+        getUserByMembershipId: getUserByMembershipId,
         getUserByPhoneNumber: getUserByPhoneNumber,
         getUserTokenByEmailAddressToken: getUserTokenByEmailAddressToken,
         getUserTokenByPhoneNumber: getUserTokenByPhoneNumber,
         getUserTokenByPhoneNumberToken: getUserTokenByPhoneNumberToken,
         updateUser: updateUser
     };
-};
-
+}());
 module.exports = Users;

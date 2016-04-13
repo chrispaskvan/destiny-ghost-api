@@ -9,7 +9,7 @@
  * @requires Q
  */
 var _ = require('underscore'),
-    Destiny = require('../models/Destiny'),
+    Destiny = require('../models/destiny'),
     Ghost = require('../models/ghost'),
     jSend = require('../models/jsend'),
     jsonpatch = require('fast-json-patch'),
@@ -23,55 +23,61 @@ var _ = require('underscore'),
 /**
  * @constructor
  */
-var userController = function () {
+function UserController() {
     'use strict';
     /**
      * Destiny Model
      * @type {Destiny|exports|module.exports}
      */
-    var destiny = new Destiny();
+    this.destiny = new Destiny();
     /**
      * Ghost Model
      * @type {Ghost|exports|module.exports}
      */
-    var ghost = new Ghost(process.env.DATABASE);
+    this.ghost = new Ghost(process.env.DATABASE);
     /**
      * Notifications Model
      * @type {Notifications|exports|module.exports}
      */
-    var notifications = new Notifications(process.env.DATABASE, process.env.TWILIO);
+    this.notifications = new Notifications(process.env.DATABASE, process.env.TWILIO);
     /**
      * Post Office Model
      * @type {Postmaster|exports|module.exports}
      */
-    var postmaster = new Postmaster();
+    this.postmaster = new Postmaster();
     /**
      * Token Generator
      * @type {Token|exports|module.exports}
      */
-    var tokens = new Tokens();
+    this.tokens = new Tokens();
     /**
      *
      * @type {User|exports|module.exports}
      */
-    var userModel = new Users(process.env.DATABASE, process.env.TWILIO);
+    this.users = new Users(process.env.DATABASE, process.env.TWILIO);
     /**
      * World Model
      * @type {World|exports|module.exports}
      */
-    var world;
-    ghost.getWorldDatabasePath()
-        .then(function (path) {
-            world = new World(path);
-        });
+    this.world = new World();
+    return this;
+}
+/**
+ * @namespace
+ * @type {{confirm, enter, getEmailAddress, getGamerTag, getPhoneNumber, getUserByEmailAddressToken,
+ * knock, register, update}}
+ */
+UserController.prototype = (function () {
+    'use strict';
     /**
      * Confirm regsitration request by creating an account if appropriate.
      * @param req
      * @param res
      */
     var confirm = function (req, res) {
+        var self = this;
         var user = req.body;
-        userModel.getUserTokenByPhoneNumber(user.phoneNumber)
+        this.users.getUserTokenByPhoneNumber(user.phoneNumber)
             .then(function (userToken) {
                 if (((new Date() - userToken.timeStamp) / (60 * 1000)) > 10) {
                     return res.json(new jSend.error('Expired tokens.'));
@@ -79,12 +85,12 @@ var userController = function () {
                 if (!_.isEqual(user.tokens, userToken.tokens)) {
                     return res.json(new jSend.error('Bad tokens.'));
                 }
-                return userModel.getUserByPhoneNumber(user.phoneNumber)
+                return self.users.getUserByPhoneNumber(user.phoneNumber)
                     .then(function (user) {
                         if (user) {
                             return res.json(new jSend.error('You are already registered. Please sign in.'));
                         }
-                        return userModel.createUser(userToken)
+                        return self.users.createUser(userToken)
                             .then(function () {
                                 return res.json(new jSend.success());
                             });
@@ -107,7 +113,7 @@ var userController = function () {
         if (!gamerTag || !membershipType || !phoneNumberToken) {
             return res.status(409).json(new jSend.error('A gamer tag is required.'));
         }
-        return userModel.getUserByPhoneNumberToken(phoneNumberToken)
+        return this.users.getUserByPhoneNumberToken(phoneNumberToken)
             .then(function (user) {
                 if (!user) {
                     return res.status(404);
@@ -125,7 +131,10 @@ var userController = function () {
      */
     var getEmailAddress = function (req, res) {
         var emailAddress = req.params.emailAddress;
-        userModel.getUserByEmailAddress(emailAddress)
+        if (!emailAddress) {
+            return res.status(409).json(new jSend.error('An email address is required.'));
+        }
+        this.users.getUserByEmailAddress(emailAddress)
             .then(function (user) {
                 if (user) {
                     return res.status(204);
@@ -143,7 +152,11 @@ var userController = function () {
      */
     var getGamerTag = function (req, res) {
         var gamerTag = req.params.gamerTag;
-        userModel.getUserByGamerTag(gamerTag)
+        var membershipType = req.body.membershipType;
+        if (!gamerTag || !membershipType) {
+            return res.status(409).json(new jSend.error('A gamer tag is required.'));
+        }
+        this.users.getUserByGamerTag(gamerTag, membershipType)
             .then(function (user) {
                 if (user) {
                     return res.status(204).end();
@@ -161,7 +174,10 @@ var userController = function () {
      */
     var getPhoneNumber = function (req, res) {
         var phoneNumber = req.params.phoneNumber;
-        userModel.getUserByPhoneNumber(phoneNumber)
+        if (!phoneNumber) {
+            return res.status(409).json(new jSend.error('A phone number is required.'));
+        }
+        this.users.getUserByPhoneNumber(phoneNumber)
             .then(function (user) {
                 if (user) {
                     return res.status(204);
@@ -183,64 +199,9 @@ var userController = function () {
         if (!emailAddressToken) {
             return res.status(404);
         }
-        userModel.getUserTokenByEmailAddressToken(emailAddressToken)
+        this.users.getUserTokenByEmailAddressToken(emailAddressToken)
             .then(function (user) {
                 res.josn(new jSend.success(_.omit(user, 'tokens')));
-            })
-            .fail(function (err) {
-                res.json(new jSend.error(err.message));
-            });
-    };
-    /**
-     * User requests an authentication code.
-     * @param req
-     * @param res
-     * @returns {*}
-     */
-    var knock = function (req, res) {
-        var gamerTag = req.body.gamerTag;
-        var membershipType = req.body.membershipType;
-        if (!gamerTag || !membershipType) {
-            return res.status(409).json(new jSend.error('A gamer tag is required.'));
-        }
-        destiny.getMembershipIdFromDisplayName(gamerTag, membershipType)
-            .then(function (membershipId) {
-                if (!membershipId) {
-                    return res.status(409).json(new jSend.error('The gamer tag' + gamerTag +
-                        'is not registered with Bungie.'));
-                }
-                return userModel.getUserByGamerTag()
-                    .then(function (user) {
-                        if (!user) {
-                            return res.status(404).json(new jSend.fail('That gamer tag is not registered.'));
-                        }
-                        _.extend(user, {
-                            tokens: {
-                                emailAddress: undefined,
-                                phoneNumber: tokens.getToken()
-                            }
-                        });
-                        return userModel.createUserToken(user)
-                            .then(function () {
-                                return ghost.getLastManifest()
-                                    .then(function (lastManifest) {
-                                        var worldPath = path.join('./databases/',
-                                            path.basename(lastManifest.mobileWorldContentPaths.en));
-                                        world.open(worldPath);
-                                        return world.getVendorIcon(postmasterHash)
-                                            .then(function (iconUrl) {
-                                                notifications.sendMessage('Enter ' +
-                                                    user.tokens.phoneNumber +
-                                                    ' to verify your Destiny Ghost phone number.',
-                                                    user.phoneNumber, user.type === 'mobile' ? iconUrl : undefined);
-                                                res.json(new jSend.success());
-                                            })
-                                            .fin(function () {
-                                                world.close();
-                                            });
-                                    });
-                            });
-                    });
             })
             .fail(function (err) {
                 res.json(new jSend.error(err.message));
@@ -253,48 +214,105 @@ var userController = function () {
      */
     var postmasterHash = '2021251983';
     /**
+     * User requests an authentication code.
+     * @param req
+     * @param res
+     * @returns {*}
+     */
+    var knock = function (req, res) {
+        var self = this;
+        var gamerTag = req.body.gamerTag;
+        var membershipType = req.body.membershipType;
+        if (!gamerTag || !membershipType) {
+            return res.status(409).json(new jSend.error('A gamer tag is required.'));
+        }
+        this.destiny.getMembershipIdFromDisplayName(gamerTag, membershipType)
+            .then(function (membershipId) {
+                if (!membershipId) {
+                    return res.status(409).json(new jSend.error('The gamer tag' + gamerTag +
+                        'is not registered with Bungie.'));
+                }
+                return self.users.getUserByGamerTag(gamerTag, membershipType)
+                    .then(function (user) {
+                        if (!user) {
+                            return res.status(404).json(new jSend.fail('That gamer tag is not registered.'));
+                        }
+                        _.extend(user, {
+                            tokens: {
+                                emailAddress: undefined,
+                                phoneNumber: self.tokens.getToken()
+                            }
+                        });
+                        return self.users.createUserToken(user)
+                            .then(function () {
+                                return self.ghost.getLastManifest()
+                                    .then(function (lastManifest) {
+                                        var worldPath = path.join('./databases/',
+                                            path.basename(lastManifest.mobileWorldContentPaths.en));
+                                        self.world.open(worldPath);
+                                        return self.world.getVendorIcon(postmasterHash)
+                                            .then(function (iconUrl) {
+                                                self.notifications.sendMessage('Enter ' +
+                                                    user.tokens.phoneNumber +
+                                                    ' to verify your Destiny Ghost phone number.',
+                                                    user.phoneNumber, user.type === 'mobile' ? iconUrl : '');
+                                                res.json(new jSend.success());
+                                            })
+                                            .fin(function () {
+                                                self.world.close();
+                                            });
+                                    });
+                            });
+                    });
+            })
+            .fail(function (err) {
+                res.json(new jSend.error(err.message));
+            });
+    };
+    /**
      * User initial registration request.
      * @param req
      * @param res
      */
     var register = function (req, res) {
+        var self = this;
         var user = req.body;
         if (!user.gamerTag || !user.membershipType) {
             return res.status(409).json(new jSend.error('A gamer tag is required.'));
         }
-        destiny.getMembershipIdFromDisplayName(user.gamerTag, user.membershipType)
+        this.destiny.getMembershipIdFromDisplayName(user.gamerTag, user.membershipType)
             .then(function (membershipId) {
                 if (!membershipId) {
                     return res.status(409).json(new jSend.error('The gamer tag' + user.gamerTag +
                         'is not registered with Bungie.'));
                 }
-                return userModel.getBlob()
+                return self.users.getBlob()
                     .then(function (blob) {
                         _.extend(user, {
                             membershipId: membershipId,
                             tokens: {
                                 emailAddress: blob,
-                                phoneNumber: tokens.getToken()
+                                phoneNumber: self.tokens.getToken()
                             }
                         });
-                        return userModel.createUserToken(user)
+                        return self.users.createUserToken(user)
                             .then(function () {
-                                return ghost.getLastManifest()
+                                return self.ghost.getLastManifest()
                                     .then(function (lastManifest) {
                                         var worldPath = path.join('./databases/',
                                             path.basename(lastManifest.mobileWorldContentPaths.en));
-                                        world.open(worldPath);
-                                        return world.getVendorIcon(postmasterHash)
+                                        self.world.open(worldPath);
+                                        return self.world.getVendorIcon(postmasterHash)
                                             .then(function (iconUrl) {
-                                                postmaster.register(user, iconUrl, '/register');
-                                                notifications.sendMessage('Enter ' +
+                                                self.postmaster.register(user, iconUrl, '/register');
+                                                self.notifications.sendMessage('Enter ' +
                                                     user.tokens.phoneNumber +
                                                     ' to verify your Destiny Ghost phone number.',
-                                                    user.phoneNumber, user.type === 'mobile' ? iconUrl : undefined);
+                                                    user.phoneNumber, user.type === 'mobile' ? iconUrl : '');
                                                 res.json(new jSend.success());
                                             })
                                             .fin(function () {
-                                                world.close();
+                                                self.world.close();
                                             });
                                     });
                             });
@@ -312,15 +330,19 @@ var userController = function () {
      * @todo Deny operations on immutable properties.
      */
     var update = function (req, res) {
-        var gamerTag = req.params.gamerTag;
-        userModel.getUserByGamerTag(gamerTag)
+        var self = this;
+        var membershipId = req.params.membershipId;
+        if (!membershipId) {
+            return res.status(409).json(new jSend.error('Membership is required.'));
+        }
+        this.users.getUserByMembershipId(membershipId)
             .then(function (user) {
                 if (!user) {
                     return res.status(404).json(new jSend.fail('User not found.'));
                 }
                 var patches = req.body;
                 jsonpatch.apply(user, patches);
-                return userModel.updateUser(user)
+                return self.users.updateUser(user)
                     .then(function () {
                         res.json(new jSend.success(user));
                     });
@@ -340,6 +362,5 @@ var userController = function () {
         register: register,
         update: update
     };
-};
-
-module.exports = userController;
+}());
+module.exports = UserController;

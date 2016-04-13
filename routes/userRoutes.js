@@ -14,26 +14,46 @@ var routes = function () {
      */
     var authenticationController = new AuthenticationController();
     userRouter.route('/signIn/bungie')
-        .post(authenticationController.signIn);
+        .post(function (req, res) {
+            authenticationController.signIn(req, res);
+        });
     var userController = new UserController();
     userRouter.route('/:emailAddress/emailAddress')
-        .get(userController.getEmailAddress);
+        .get(function (req, res) {
+            userController.getEmailAddress(req, res);
+        });
     userRouter.route('/:gamerTag/gamerTag')
-        .get(userController.getGamerTag);
+        .get(function (req, res) {
+            userController.getGamerTag(req, res);
+        });
     userRouter.route('/:phoneNumber/phoneNumber')
-        .get(userController.getPhoneNumber);
+        .get(function (req, res) {
+            userController.getPhoneNumber(req, res);
+        });
     userRouter.route('/confirm')
-        .post(userController.confirm);
+        .post(function (req, res) {
+            userController.confirm(req, res);
+        });
     userRouter.route('/register')
-        .post(userController.register);
+        .post(function (req, res) {
+            userController.register(req, res);
+        });
     userRouter.route('/:gamerTag')
-        .patch(userController.update);
+        .patch(function (req, res) {
+            userController.update(req, res);
+        });
     userRouter.route('/register/:emailAddressToken')
-        .get(userController.getUserByEmailAddressToken);
+        .get(function (req, res) {
+            userController.getUserByEmailAddressToken(req, res);
+        });
     userRouter.route('/knock')
-        .post(userController.knock);
+        .post(function (req, res) {
+            userController.knock(req, res);
+        });
     userRouter.route('/enter')
-        .post(userController.enter);
+        .post(function (req, res) {
+            userController.enter(req, res);
+        });
     return userRouter;
 };
 

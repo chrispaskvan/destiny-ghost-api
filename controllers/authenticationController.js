@@ -8,19 +8,23 @@
  * @requires Horseman
  * @requires Q
  */
-'use strict';
 var _ = require('underscore'),
     Authentication = require('../models/authentication'),
     cookie = require('cookie');
 /**
  * @constructor
  */
-var authenticationController = function () {
+function AuthenticationController() {
+    'use strict';
     /**
      * Authentication Model
      * @type {Authentication|exports|module.exports}
      */
-    var authentication = new Authentication();
+    this.authentication = new Authentication();
+    return this;
+}
+AuthenticationController.prototype = (function () {
+    'use strict';
     /**
      * @function
      * @returns {Array}
@@ -47,7 +51,7 @@ var authenticationController = function () {
         var userName = req.body.userName;
         var password = req.body.password;
         var membershipType = req.body.membershipType;
-        authentication.signIn(userName, password, membershipType)
+        this.authentication.signIn(userName, password, membershipType)
             .then(function (cookies) {
                 res.header('Set-Cookie', _getCookieHeader(cookies));
                 res.end('Success\n');
@@ -59,6 +63,5 @@ var authenticationController = function () {
     return {
         signIn: signIn
     };
-};
-
-module.exports = authenticationController;
+}());
+module.exports = AuthenticationController;

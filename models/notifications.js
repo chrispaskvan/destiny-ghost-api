@@ -11,7 +11,6 @@
  * @requires sqlite3
  * @requires twilio
  */
-'use strict';
 var fs = require('fs'),
     Q = require('q'),
     sqlite3 = require('sqlite3'),
@@ -19,11 +18,11 @@ var fs = require('fs'),
 /**
  * @param databaseFullPath {string}
  * @param twilioSettingsFullPath {string}
- * @returns {{createMessage: createMessage, purgeMessages: purgeMessages,
-  * sendMessage: sendMessage, updateMessage: updateMessage}}
+ * @returns {Notifications}
  * @constructor
  */
-var Notifications = function (databaseFullPath, twilioSettingsFullPath) {
+function Notifications(databaseFullPath, twilioSettingsFullPath) {
+    'use strict';
     /**
      * @member - Full path of the local database.
      * @type {*|string}
@@ -42,6 +41,25 @@ var Notifications = function (databaseFullPath, twilioSettingsFullPath) {
     db.serialize(function () {
         db.run('CREATE TABLE IF NOT EXISTS DestinyGhostMessage(id TEXT, json BLOB)');
     });
+    this.db = db;
+    /**
+     * @member {Object}
+     * @type {{accountSid: string, authToken string, phoneNumber string}} settings
+     */
+    this.settings = JSON.parse(fs.readFileSync(twilioSettingsFullPath || './settings/twilio.production.json'));
+    /**
+     * Twilio Client
+     * @type {twilio}
+     */
+    this.twilioClient = twilio(this.settings.accountSid, this.settings.authToken);
+    return this;
+}
+/**
+ * @namespace
+ * @type {{createMessage, purgeMessages, sendMessage, updateMessage}}
+ */
+Notifications.prototype = (function () {
+    'use strict';
     /**
      * Get the message from the database with the provided Twilio SID.
      * @param sid {string}
@@ -50,7 +68,7 @@ var Notifications = function (databaseFullPath, twilioSettingsFullPath) {
      */
     var _getMessage = function (sid) {
         var deferred = Q.defer();
-        db.each('SELECT json FROM DestinyGhostMessage WHERE json LIKE \'%"sid":"' + sid + '"%\' LIMIT 1',
+        this.db.each('SELECT json FROM DestinyGhostMessage WHERE json LIKE \'%"sid":"' + sid + '"%\' LIMIT 1',
             function (err, row) {
                 if (err) {
                     deferred.reject(err);
@@ -65,7 +83,7 @@ var Notifications = function (databaseFullPath, twilioSettingsFullPath) {
      * @param message {Object}
      */
     var createMessage = function (message) {
-        var sql = db.prepare('INSERT INTO DestinyGhostMessage VALUES (?, ?)');
+        var sql = this.db.prepare('INSERT INTO DestinyGhostMessage VALUES (?, ?)');
         sql.run(new Date().toISOString(), JSON.stringify(message));
         sql.finalize();
     };
@@ -75,8 +93,8 @@ var Notifications = function (databaseFullPath, twilioSettingsFullPath) {
     var purgeMessages = function () {
         var cutoff = new Date();
         cutoff.setDate(cutoff.getDate() - 14);
-        db.run('DELETE FROM DestinyGhostMessage WHERE (substr(id, 1, 4) || substr(id, 6, 2) || substr(id, 9, 2)) < \'' +
-                cutoff.toISOString().slice(0, 10).replace(/-/g, '') + '\'',
+        this.db.run('DELETE FROM DestinyGhostMessage WHERE (substr(id, 1, 4) || substr(id, 6, 2) ||' +
+                'substr(id, 9, 2)) < \'' + cutoff.toISOString().slice(0, 10).replace(/-/g, '') + '\'',
             function (err) {
                 if (err) {
                     throw err;
@@ -84,35 +102,26 @@ var Notifications = function (databaseFullPath, twilioSettingsFullPath) {
             });
     };
     /**
-     * @member {Object}
-     * @type {{accountSid: string, authToken string, phoneNumber string}} settings
-     */
-    var settings = JSON.parse(fs.readFileSync(twilioSettingsFullPath || './settings/twilio.production.json'));
-    /**
-     * Twilio Client
-     * @type {twilio}
-     */
-    var twilioClient = twilio(settings.accountSid, settings.authToken);
-    /**
      * @param body {string}
      * @param to {string}
      * @param mediaUrl {string}
      * @returns {*}
      */
     var sendMessage = function (body, to, mediaUrl) {
+        var self = this;
         var deferred = Q.defer();
         var m = {
             to: to,
-            from: settings.phoneNumber,
+            from: this.settings.phoneNumber,
             body: body,
             statusCallback: process.env.DOMAIN + '/api/twilio/destiny/s'
         };
         if (mediaUrl) {
             m.mediaUrl = mediaUrl;
         }
-        twilioClient.messages.create(m, function (err, message) {
+        this.twilioClient.messages.create(m, function (err, message) {
             if (!err) {
-                createMessage(message);
+                self.createMessage(message);
                 deferred.resolve(message);
             } else {
                 deferred.reject(err);
@@ -124,6 +133,7 @@ var Notifications = function (databaseFullPath, twilioSettingsFullPath) {
      * @param message {string}
      */
     var updateMessage = function (message) {
+        var self = this;
         var deferred = Q.defer();
         if (!message.SmsSid) {
             deferred.reject(new Error('The message\'s unique identifier is missing.'));
@@ -132,13 +142,12 @@ var Notifications = function (databaseFullPath, twilioSettingsFullPath) {
         return _getMessage(message.SmsSid)
             .then(function (originalMessage) {
                 originalMessage.status = message.SmsStatus;
-                db.run('UPDATE DestinyGhostMessage SET json = \'' +
+                self.db.run('UPDATE DestinyGhostMessage SET json = \'' +
                     JSON.stringify(originalMessage).replace(new RegExp('\'', 'g'), '\'\'') +
                     '\' WHERE json LIKE \'%"sid":"' +  originalMessage.sid + '"%\'', function (err) {
                         if (err) {
                             throw err;
                         }
-                        return;
                     });
             });
     };
@@ -148,6 +157,5 @@ var Notifications = function (databaseFullPath, twilioSettingsFullPath) {
         sendMessage: sendMessage,
         updateMessage: updateMessage
     };
-};
-
+}());
 module.exports = Notifications;

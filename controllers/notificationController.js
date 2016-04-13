@@ -26,56 +26,61 @@ var _ = require('underscore'),
     Q = require('q'),
     Users = require('../models/users'),
     World = require('../models/world');
+
 /**
- *
+ * @constructor
  * @param loggingProvider
- * @returns {{create: create, init: init}}
  */
-var notificationController = function (loggingProvider) {
+function NotificationController(loggingProvider) {
     'use strict';
+    this.loggingProvider = loggingProvider;
     /**
      * Authentication Model
      * @type {Authentication|exports|module.exports}
      */
-    var authentication = new Authentication();
+    this.authentication = new Authentication();
     /**
      * Destiny Model
      * @type {Destiny|exports|module.exports}
      */
-    var destiny = new Destiny();
+    this.destiny = new Destiny();
     /**
      * Ghost Model
      * @type {Ghost|exports|module.exports}
      */
-    var ghost = new Ghost(process.env.DATABASE);
+    this.ghost = new Ghost(process.env.DATABASE);
     /**
      * Notifications Model
      * @type {Notifications|exports|module.exports}
      */
-    var notifications = new Notifications(process.env.DATABASE, process.env.TWILIO);
+    this.notifications = new Notifications(process.env.DATABASE, process.env.TWILIO);
     /**
      * World Model
      * @type {World|exports|module.exports}
      */
-    var world;
-    ghost.getWorldDatabasePath()
-        .then(function (path) {
-            world = new World(path);
-        });
+    this.world = new World();
     /**
      * Use Model
      * @type {User|exports|module.exports}
      */
-    var userModel = new Users(process.env.DATABASE, process.env.TWILIO);
+    this.users = new Users(process.env.DATABASE, process.env.TWILIO);
     /**
      * Shadow Users
      * @type {*|string}
      */
-    var shadowUserConfiguration = './settings/shadowUsers.json';
-    var shadowUsers = JSON.parse(fs.readFileSync(shadowUserConfiguration));
-    if (!(shadowUsers && shadowUsers.constructor === Array)) {
+    this.shadowUserConfiguration = './settings/shadowUsers.json';
+    this.shadowUsers = JSON.parse(fs.readFileSync(this.shadowUserConfiguration));
+    if (!(this.shadowUsers && this.shadowUsers.constructor === Array)) {
         throw new Error('Unexpected shadow following me.');
     }
+    return this;
+}
+/**
+ * @namespace
+ * @type {{confirm, enter, getEmailAddress, getGamerTag, getPhoneNumber, getUserByEmailAddressToken, knock, register, update}}
+ */
+NotificationController.prototype = (function () {
+    'use strict';
     /**
      * @constant
      * @type {string}
@@ -112,51 +117,52 @@ var notificationController = function (loggingProvider) {
      * @private
      */
     var _getFieldTestWeapons = function (users, nextRefreshDate) {
-        var shadowUser = shadowUsers[0];
-        return ghost.getLastManifest()
+        var self = this;
+        var shadowUser = this.shadowUsers[0];
+        return this.ghost.getLastManifest()
             .then(function (lastManifest) {
                 var worldPath = path.join('./databases/', path.basename(lastManifest.mobileWorldContentPaths.en));
-                return destiny.getCurrentUser(shadowUser.cookies)
+                return self.destiny.getCurrentUser(shadowUser.cookies)
                     .then(function (currentUser) {
-                        return destiny.getCharacters(currentUser.membershipId)
+                        return self.destiny.getCharacters(currentUser.membershipId)
                             .then(function (characters) {
-                                return destiny.getFieldTestWeapons(characters[0].characterBase.characterId,
+                                return self.destiny.getFieldTestWeapons(characters[0].characterBase.characterId,
                                         shadowUser.cookies)
                                     .then(function (items) {
                                         if (items && items.length > 0) {
                                             var itemHashes = _.map(items, function (item) {
                                                 return item.item.itemHash;
                                             });
-                                            world.open(worldPath);
-                                            return world.getVendorIcon(gunSmithHash)
+                                            self.world.open(worldPath);
+                                            return self.world.getVendorIcon(gunSmithHash)
                                                 .then(function (iconUrl) {
                                                     var itemPromises = [];
                                                     _.each(itemHashes, function (itemHash) {
-                                                        itemPromises.push(world.getItemByHash(itemHash));
+                                                        itemPromises.push(self.world.getItemByHash(itemHash));
                                                     });
                                                     return Q.all(itemPromises)
                                                         .then(function (items) {
                                                             var userPromises = [];
                                                             _.each(users, function (user) {
-                                                                userPromises.push((nextRefreshDate ? userModel.getLastNotificationDate(user.phoneNumber, userModel.actions.Gunsmith) :
+                                                                userPromises.push((nextRefreshDate ? self.users.getLastNotificationDate(user.phoneNumber, self.users.actions.Gunsmith) :
                                                                         (function () {
                                                                             var deferred = Q.defer();
                                                                             deferred.resolve(undefined);
                                                                             return deferred.promise;
-                                                                        })())
+                                                                        }()))
                                                                     .then(function (notificationDate) {
                                                                         var now = new Date();
                                                                         var promises = [];
                                                                         if (notificationDate === undefined ||
                                                                                 (nextRefreshDate < now && notificationDate < nextRefreshDate)) {
-                                                                            promises.push(notifications.sendMessage('The following experimental weapons need testing in the field:\n' +
+                                                                            promises.push(self.notifications.sendMessage('The following experimental weapons need testing in the field:\n' +
                                                                                 _.reduce(_.map(items, function (item) {
                                                                                     return item.itemName;
                                                                                 }), function (memo, itemName) {
                                                                                     return memo + itemName + '\n';
-                                                                                }, ' ').trim(), user.phoneNumber, user.type === 'mobile' ? iconUrl : undefined)
+                                                                                }, ' ').trim(), user.phoneNumber, user.type === 'mobile' ? iconUrl : '')
                                                                                 .then(function (message) {
-                                                                                    return userModel.createUserMessage(user, message, userModel.actions.Gunsmith);
+                                                                                    return self.users.createUserMessage(user, message, self.users.actions.Gunsmith);
                                                                                 }));
                                                                         }
                                                                         return Q.all(promises);
@@ -166,7 +172,7 @@ var notificationController = function (loggingProvider) {
                                                         });
                                                 })
                                                 .fin(function () {
-                                                    world.close();
+                                                    self.world.close();
                                                 });
                                         }
                                     });
@@ -182,18 +188,19 @@ var notificationController = function (loggingProvider) {
      * @private
      */
     var _getFoundryOrders = function (users, nextRefreshDate) {
-        var shadowUser = shadowUsers[0];
-        return ghost.getLastManifest()
+        var self = this;
+        var shadowUser = this.shadowUsers[0];
+        return this.ghost.getLastManifest()
             .then(function (lastManifest) {
                 var worldPath = path.join('./databases/', path.basename(lastManifest.mobileWorldContentPaths.en));
-                return destiny.getCurrentUser(shadowUser.cookies)
+                return self.destiny.getCurrentUser(shadowUser.cookies)
                     .then(function (currentUser) {
-                        return destiny.getCharacters(currentUser.membershipId)
+                        return self.destiny.getCharacters(currentUser.membershipId)
                             .then(function (characters) {
-                                return destiny.getFoundryOrders(characters[0].characterBase.characterId, shadowUser.cookies)
+                                return self.destiny.getFoundryOrders(characters[0].characterBase.characterId, shadowUser.cookies)
                                     .then(function (foundryOrders) {
-                                        world.open(worldPath);
-                                        return world.getVendorIcon(gunSmithHash)
+                                        self.world.open(worldPath);
+                                        return self.world.getVendorIcon(gunSmithHash)
                                             .then(function (iconUrl) {
                                                 var now = new Date();
                                                 var userPromises = [];
@@ -203,29 +210,29 @@ var notificationController = function (loggingProvider) {
                                                     });
                                                     var itemPromises = [];
                                                     _.each(itemHashes, function (itemHash) {
-                                                        itemPromises.push(world.getItemByHash(itemHash));
+                                                        itemPromises.push(self.world.getItemByHash(itemHash));
                                                     });
                                                     return Q.all(itemPromises)
                                                         .then(function (items) {
                                                             _.each(users, function (user) {
-                                                                userPromises.push((nextRefreshDate ? userModel.getLastNotificationDate(user.phoneNumber, userModel.actions.Foundry) :
+                                                                userPromises.push((nextRefreshDate ? self.users.getLastNotificationDate(user.phoneNumber, self.users.actions.Foundry) :
                                                                         (function () {
                                                                             var deferred = Q.defer();
                                                                             deferred.resolve(undefined);
                                                                             return deferred.promise;
-                                                                        })())
+                                                                        }()))
                                                                     .then(function (notificationDate) {
                                                                         var promises = [];
                                                                         if (notificationDate === undefined ||
                                                                                 (nextRefreshDate < now && notificationDate < nextRefreshDate)) {
-                                                                            promises.push(notifications.sendMessage('The foundry is accepting orders for...\n' +
+                                                                            promises.push(self.notifications.sendMessage('The foundry is accepting orders for...\n' +
                                                                                 _.reduce(_.map(items, function (item) {
                                                                                     return item.itemName;
                                                                                 }), function (memo, itemName) {
                                                                                     return memo + itemName + '\n';
-                                                                                }, ' ').trim(), user.phoneNumber, user.type === 'mobile' ? iconUrl : undefined)
+                                                                                }, ' ').trim(), user.phoneNumber, user.type === 'mobile' ? iconUrl : '')
                                                                                 .then(function (message) {
-                                                                                    return userModel.createUserMessage(user, message, userModel.actions.Gunsmith);
+                                                                                    return self.users.createUserMessage(user, message, self.users.actions.Gunsmith);
                                                                                 }));
                                                                         }
                                                                         return Q.all(promises);
@@ -235,19 +242,19 @@ var notificationController = function (loggingProvider) {
                                                         });
                                                 }
                                                 _.each(users, function (user) {
-                                                    userPromises.push((nextRefreshDate ? userModel.getLastNotificationDate(user.phoneNumber, userModel.actions.Xur) :
+                                                    userPromises.push((nextRefreshDate ? self.users.getLastNotificationDate(user.phoneNumber, self.users.actions.Xur) :
                                                             (function () {
                                                                 var deferred = Q.defer();
                                                                 deferred.resolve(undefined);
                                                                 return deferred.promise;
-                                                            })())
+                                                            }()))
                                                         .then(function (notificationDate) {
                                                             if (notificationDate === undefined ||
                                                                     (nextRefreshDate < now && notificationDate < nextRefreshDate)) {
-                                                                notifications.sendMessage('I favor the Häkke foundry in general. You? Regardless, we\'ll to have to wait and see what Banshee-44 has to offer.',
-                                                                        user.phoneNumber, user.type === 'mobile' ? iconUrl : undefined)
+                                                                self.notifications.sendMessage('I favor the Häkke foundry in general. You? Regardless, we\'ll to have to wait and see what Banshee-44 has to offer.',
+                                                                        user.phoneNumber, user.type === 'mobile' ? iconUrl : '')
                                                                     .then(function (message) {
-                                                                        return userModel.createUserMessage(user, message, userModel.actions.Xur);
+                                                                        return self.users.createUserMessage(user, message, self.users.actions.Xur);
                                                                     });
                                                             }
                                                         }));
@@ -255,7 +262,7 @@ var notificationController = function (loggingProvider) {
                                                 return Q.all(userPromises);
                                             })
                                             .fin(function () {
-                                                world.close();
+                                                self.world.close();
                                             });
                                     });
                             });
@@ -270,23 +277,24 @@ var notificationController = function (loggingProvider) {
      * @private
      */
     var _getIronBannerEventRewards = function (users, nextRefreshDate) {
-        var shadowUser = shadowUsers[0];
-        return ghost.getLastManifest()
+        var self = this;
+        var shadowUser = this.shadowUsers[0];
+        return this.ghost.getLastManifest()
             .then(function (lastManifest) {
                 var worldPath = path.join('./databases/', path.basename(lastManifest.mobileWorldContentPaths.en));
-                return destiny.getCurrentUser(shadowUser.cookies)
+                return self.destiny.getCurrentUser(shadowUser.cookies)
                     .then(function (currentUser) {
-                        return destiny.getCharacters(currentUser.membershipId)
+                        return self.destiny.getCharacters(currentUser.membershipId)
                             .then(function (characters) {
                                 var characterPromises = [];
                                 _.each(characters, function (character) {
-                                    characterPromises.push(destiny.getIronBannerEventRewards(character.characterBase.characterId, shadowUser.cookies));
+                                    characterPromises.push(self.destiny.getIronBannerEventRewards(character.characterBase.characterId, shadowUser.cookies));
                                 });
                                 return Q.all(characterPromises)
                                     .then(function (characterItems) {
                                         var items = _.flatten(characterItems);
-                                        world.open(worldPath);
-                                        return world.getVendorIcon(lordSaladinHash)
+                                        self.world.open(worldPath);
+                                        return self.world.getVendorIcon(lordSaladinHash)
                                             .then(function (iconUrl) {
                                                 var now = new Date();
                                                 var userPromises = [];
@@ -296,17 +304,17 @@ var notificationController = function (loggingProvider) {
                                                     }));
                                                     var itemPromises = [];
                                                     _.each(itemHashes, function (itemHash) {
-                                                        itemPromises.push(world.getItemByHash(itemHash));
+                                                        itemPromises.push(self.world.getItemByHash(itemHash));
                                                     });
                                                     return Q.all(itemPromises)
                                                         .then(function (items) {
                                                             _.each(users, function (user) {
-                                                                userPromises.push((nextRefreshDate ? userModel.getLastNotificationDate(user.phoneNumber, userModel.actions.IronBanner) :
+                                                                userPromises.push((nextRefreshDate ? self.users.getLastNotificationDate(user.phoneNumber, self.users.actions.IronBanner) :
                                                                         (function () {
                                                                             var deferred = Q.defer();
                                                                             deferred.resolve(undefined);
                                                                             return deferred.promise;
-                                                                        })())
+                                                                        }()))
                                                                     .then(function (notificationDate) {
                                                                         var promises = [];
                                                                         if (notificationDate === undefined ||
@@ -338,33 +346,33 @@ var notificationController = function (loggingProvider) {
                                                                                 })}},
                                                                                 iconUrl: iconUrl
                                                                             };
-                                                                            promises.push(notifications.sendMessage('Lord Saladin rewards only the strong.\n' + _.reduce(vendor.rewards.weapons, function (memo, weapon) {
+                                                                            promises.push(self.notifications.sendMessage('Lord Saladin rewards only the strong.\n' + _.reduce(vendor.rewards.weapons, function (memo, weapon) {
                                                                                 return memo + '\n' + weapon;
-                                                                            }, ' ').trim().substr(0, 130), user.phoneNumber, user.type === 'mobile' ? iconUrl : undefined)
+                                                                            }, ' ').trim().substr(0, 130), user.phoneNumber, user.type === 'mobile' ? iconUrl : '')
                                                                                 .then(function (message) {
-                                                                                    return userModel.createUserMessage(user, message, userModel.actions.IronBanner);
+                                                                                    return self.users.createUserMessage(user, message, self.users.actions.IronBanner);
                                                                                 }));
-                                                                            promises.push(notifications.sendMessage('Hunters:\n' + _.reduce(vendor.rewards.armor.hunter,
+                                                                            promises.push(self.notifications.sendMessage('Hunters:\n' + _.reduce(vendor.rewards.armor.hunter,
                                                                                 function (memo, classArmor) {
                                                                                     return memo + '\n' + classArmor;
                                                                                 },
                                                                                 ' ').trim().substr(0, 130), user.phoneNumber)
                                                                                 .then(function (message) {
-                                                                                    return userModel.createUserMessage(user, message, userModel.actions.IronBanner);
+                                                                                    return self.users.createUserMessage(user, message, self.users.actions.IronBanner);
                                                                                 }));
-                                                                            promises.push(notifications.sendMessage('Titans:\n' + _.reduce(vendor.rewards.armor.titan,
+                                                                            promises.push(self.notifications.sendMessage('Titans:\n' + _.reduce(vendor.rewards.armor.titan,
                                                                                 function (memo, classArmor) {
                                                                                     return memo + '\n' + classArmor;
                                                                                 }, ' ').trim().substr(0, 130), user.phoneNumber)
                                                                                 .then(function (message) {
-                                                                                    return userModel.createUserMessage(user, message, userModel.actions.IronBanner);
+                                                                                    return self.users.createUserMessage(user, message, self.users.actions.IronBanner);
                                                                                 }));
-                                                                            promises.push(notifications.sendMessage('Warlocks:\n' + _.reduce(vendor.rewards.armor.warlock,
+                                                                            promises.push(self.notifications.sendMessage('Warlocks:\n' + _.reduce(vendor.rewards.armor.warlock,
                                                                                 function (memo, classArmor) {
                                                                                     return memo + '\n' + classArmor;
                                                                                 }, ' ').trim().substr(0, 130), user.phoneNumber)
                                                                                 .then(function (message) {
-                                                                                    return userModel.createUserMessage(user, message, userModel.actions.IronBanner);
+                                                                                    return self.users.createUserMessage(user, message, self.users.actions.IronBanner);
                                                                                 }));
                                                                         }
                                                                         return Q.all(promises);
@@ -374,19 +382,19 @@ var notificationController = function (loggingProvider) {
                                                         });
                                                 }
                                                 _.each(users, function (user) {
-                                                    userPromises.push((nextRefreshDate ? userModel.getLastNotificationDate(user.phoneNumber, userModel.actions.Xur) :
+                                                    userPromises.push((nextRefreshDate ? self.users.getLastNotificationDate(user.phoneNumber, self.users.actions.Xur) :
                                                             (function () {
                                                                 var deferred = Q.defer();
                                                                 deferred.resolve(undefined);
                                                                 return deferred.promise;
-                                                            })())
+                                                            }()))
                                                         .then(function (notificationDate) {
                                                             if (notificationDate === undefined ||
                                                                     (nextRefreshDate < now && notificationDate < nextRefreshDate)) {
-                                                                notifications.sendMessage('Lord Saladin is off hosting a Iron Banner Crucible challenge in another galaxy far, far away.',
-                                                                        user.phoneNumber, user.type === 'mobile' ? iconUrl : undefined)
+                                                                self.notifications.sendMessage('Lord Saladin is off hosting a Iron Banner Crucible challenge in another galaxy far, far away.',
+                                                                        user.phoneNumber, user.type === 'mobile' ? iconUrl : '')
                                                                     .then(function (message) {
-                                                                        return userModel.createUserMessage(user, message, userModel.actions.Xur);
+                                                                        return self.users.createUserMessage(user, message, self.users.actions.Xur);
                                                                     });
                                                             }
                                                         }));
@@ -394,7 +402,7 @@ var notificationController = function (loggingProvider) {
                                                 return Q.all(userPromises);
                                             })
                                             .fin(function () {
-                                                world.close();
+                                                self.world.close();
                                             });
                                     });
                             });
@@ -403,35 +411,19 @@ var notificationController = function (loggingProvider) {
     };
     /**
      *
-     * @returns {*|promise}
-     * @private
-     */
-    var _getVendorSummaries = function () {
-        return destiny.getCurrentUser(shadowUsers[0].cookies)
-            .then(function (currentUser) {
-                return destiny.getCharacters(currentUser.membershipId)
-                    .then(function (characters) {
-                        return destiny.getVendorSummaries(characters[0].characterBase.characterId, shadowUsers[0].cookies)
-                            .then(function (vendorSummaries) {
-                                return vendorSummaries;
-                            });
-                    });
-            });
-    };
-    /**
-     *
-     * @param users
+     * @param subscribedUsers
      * @param nextRefreshDate {date} [undefined]
      * @private
      */
-    var _getXur = function (users, nextRefreshDate) {
-        return ghost.getLastManifest()
+    var _getXur = function (subscribedUsers, nextRefreshDate) {
+        var self = this;
+        return this.ghost.getLastManifest()
             .then(function (lastManifest) {
                 var worldPath = path.join('./databases/', path.basename(lastManifest.mobileWorldContentPaths.en));
-                return destiny.getXur()
+                return self.destiny.getXur()
                     .then(function (items) {
-                        world.open(worldPath);
-                        return world.getVendorIcon(xurHash)
+                        self.world.open(worldPath);
+                        return self.world.getVendorIcon(xurHash)
                             .then(function (iconUrl) {
                                 var now = new Date();
                                 var userPromises = [];
@@ -441,28 +433,28 @@ var notificationController = function (loggingProvider) {
                                     });
                                     var itemPromises = [];
                                     _.each(itemHashes, function (itemHash) {
-                                        itemPromises.push(world.getItemByHash(itemHash));
+                                        itemPromises.push(self.world.getItemByHash(itemHash));
                                     });
                                     return Q.all(itemPromises)
                                         .then(function (items) {
-                                            _.each(users, function (user) {
-                                                userPromises.push((nextRefreshDate ? userModel.getLastNotificationDate(user.phoneNumber, userModel.actions.Xur) :
+                                            _.each(subscribedUsers, function (user) {
+                                                userPromises.push((nextRefreshDate ? self.users.getLastNotificationDate(user.phoneNumber, self.users.actions.Xur) :
                                                         (function () {
                                                             var deferred = Q.defer();
                                                             deferred.resolve(undefined);
                                                             return deferred.promise;
-                                                        })())
+                                                        }()))
                                                     .then(function (notificationDate) {
                                                         if (notificationDate === undefined ||
                                                                 (nextRefreshDate < now && notificationDate < nextRefreshDate)) {
-                                                            return notifications.sendMessage('Xur has arrived... for now...\n' +
+                                                            return self.notifications.sendMessage('Xur has arrived... for now...\n' +
                                                                 _.reduce(_.map(items, function (item) {
                                                                     return item.itemName;
                                                                 }), function (memo, itemName) {
                                                                     return memo + itemName + '\n';
-                                                                }, ' ').trim(), user.phoneNumber, user.type === 'mobile' ? iconUrl : undefined)
+                                                                }, ' ').trim(), user.phoneNumber, user.type === 'mobile' ? iconUrl : '')
                                                                 .then(function (message) {
-                                                                    return userModel.createUserMessage(user, message, userModel.actions.Xur);
+                                                                    return self.users.createUserMessage(user, message, self.users.actions.Xur);
                                                                 });
                                                         }
                                                     }));
@@ -470,19 +462,19 @@ var notificationController = function (loggingProvider) {
                                             return Q.all(userPromises);
                                         });
                                 }
-                                _.each(users, function (user) {
-                                    userPromises.push((nextRefreshDate ? userModel.getLastNotificationDate(user.phoneNumber, userModel.actions.Xur) :
+                                _.each(subscribedUsers, function (user) {
+                                    userPromises.push((nextRefreshDate ? self.users.getLastNotificationDate(user.phoneNumber, self.users.actions.Xur) :
                                             (function () {
                                                 var deferred = Q.defer();
                                                 deferred.resolve(undefined);
                                                 return deferred.promise;
-                                            })())
+                                            }()))
                                         .then(function (notificationDate) {
                                             if (notificationDate === undefined ||
                                                     (nextRefreshDate < now && notificationDate < nextRefreshDate)) {
-                                                notifications.sendMessage('Xur hasn\'t opened shop yet.', user.phoneNumber, user.type === 'mobile' ? iconUrl : undefined)
+                                                self.notifications.sendMessage('Xur hasn\'t opened shop yet.', user.phoneNumber, user.type === 'mobile' ? iconUrl : '')
                                                     .then(function (message) {
-                                                        return userModel.createUserMessage(user, message, userModel.actions.Xur);
+                                                        return self.users.createUserMessage(user, message, self.users.actions.Xur);
                                                     });
                                             }
                                         }));
@@ -490,7 +482,7 @@ var notificationController = function (loggingProvider) {
                                 return Q.all(userPromises);
                             })
                             .fin(function () {
-                                world.close();
+                                self.world.close();
                             });
                     });
             });
@@ -501,6 +493,7 @@ var notificationController = function (loggingProvider) {
      * @param res
      */
     var create = function (req, res) {
+        var self = this;
         _.each(_.keys(notificationHeaders), function (headerName) {
             if (req.headers[headerName] !== notificationHeaders[headerName]) {
                 res.writeHead(403);
@@ -511,14 +504,14 @@ var notificationController = function (loggingProvider) {
         if (isNaN(subscription)) {
             res.json(new JSend.fail('That subscription is not recognized.'));
         }
-        signIn()
+        this.signIn()
             .then(function () {
-                return userModel.getSubscribedUsers();
+                return self.users.getSubscribedUsers();
             })
-            .then(function (users) {
-                if (users && users.length > 0) {
+            .then(function (subscribedUsers) {
+                if (subscribedUsers && subscribedUsers.length > 0) {
                     if (parseInt(subscription, 10) === subscriptions.FieldTestWeapons) {
-                        var bansheeSubscribers = _.filter(users, function (user) {
+                        var bansheeSubscribers = _.filter(subscribedUsers, function (user) {
                             return user.isSubscribedToBanshee44 === true;
                         });
                         return _getFieldTestWeapons(bansheeSubscribers)
@@ -527,7 +520,7 @@ var notificationController = function (loggingProvider) {
                             });
                     }
                     if (parseInt(subscription, 10) === subscriptions.FoundryOrders) {
-                        var foundrySubscribers = _.filter(users, function (user) {
+                        var foundrySubscribers = _.filter(subscribedUsers, function (user) {
                             return user.isSubscribedToBanshee44 === true;
                         });
                         return _getFoundryOrders(foundrySubscribers)
@@ -536,7 +529,7 @@ var notificationController = function (loggingProvider) {
                             });
                     }
                     if (parseInt(subscription, 10) === subscriptions.IronBannerEventRewards) {
-                        var lordSaladinSubscribers = _.filter(users, function (user) {
+                        var lordSaladinSubscribers = _.filter(subscribedUsers, function (user) {
                             return user.isSubscribedToLordSaladin === true;
                         });
                         return _getIronBannerEventRewards(lordSaladinSubscribers)
@@ -545,7 +538,7 @@ var notificationController = function (loggingProvider) {
                             });
                     }
                     if (parseInt(subscription, 10) === subscriptions.Xur) {
-                        var xurSubscribers = _.filter(users, function (user) {
+                        var xurSubscribers = _.filter(subscribedUsers, function (user) {
                             return user.isSubscribedToXur === true;
                         });
                         return _getXur(xurSubscribers)
@@ -559,8 +552,8 @@ var notificationController = function (loggingProvider) {
             })
             .fail(function (err) {
                 res.json(new JSend.error(err.message));
-                if (loggingProvider) {
-                    loggingProvider.info(err);
+                if (self.loggingProvider) {
+                    self.loggingProvider.info(err);
                 }
             });
     };
@@ -579,7 +572,7 @@ var notificationController = function (loggingProvider) {
             deferred.resolve(shadowUser);
             return deferred.promise;
         }
-        return authentication.signIn(shadowUser.userName, shadowUser.password, shadowUser.membershipType)
+        return this.authentication.signIn(shadowUser.userName, shadowUser.password, shadowUser.membershipType)
             .then(function (cookies) {
                 return _.extend(shadowUser, {
                     cookies: _.map(_.keys(cookies), function (cookieName) {
@@ -596,19 +589,19 @@ var notificationController = function (loggingProvider) {
      * Sign in and restart all jobs.
      */
     var signIn = function () {
+        var self = this;
         var promises = [];
-        _.each(shadowUsers, function (shadowUser) {
+        _.each(this.shadowUsers, function (shadowUser) {
             promises.push(_validateShadowUser(shadowUser));
         });
         return Q.all(promises)
             .then(function (shadowUsers) {
-                fs.writeFileSync(shadowUserConfiguration, JSON.stringify(shadowUsers, null, 2));
+                fs.writeFileSync(self.shadowUserConfiguration, JSON.stringify(shadowUsers, null, 2));
             });
     };
     return {
         create: create,
         signIn: signIn
     };
-};
-
-module.exports = notificationController;
+}());
+module.exports = NotificationController;

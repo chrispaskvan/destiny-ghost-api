@@ -18,18 +18,22 @@ var _ = require('underscore'),
 /**
  * @constructor
  */
-var World = function () {
+function World() {
     'use strict';
-    /**
-     * @type {sqlite3.Database}
-     */
-    var db;
+    return this;
+}
+/**
+ * @namespace
+ * @type {{close, getClassByHash, getClassByType, getItemByName, getItemByHash, getItemCategory, getVendorIcon, open}}
+ */
+World.prototype = (function () {
+    'use strict';
     /**
      * @function
      */
     var closeDatabase = function () {
-        if (db) {
-            db.close();
+        if (this.db) {
+            this.db.close();
         }
     };
     /**
@@ -38,10 +42,11 @@ var World = function () {
      * @private
      */
     var _getClasses = function () {
+        var self = this;
         var deferred = Q.defer();
-        db.serialize(function () {
+        this.db.serialize(function () {
             var classes = [];
-            db.each('SELECT json FROM DestinyClassDefinition', function (err, row) {
+            self.db.each('SELECT json FROM DestinyClassDefinition', function (err, row) {
                 if (err) {
                     deferred.reject(err);
                 } else {
@@ -78,7 +83,7 @@ var World = function () {
      */
     var getClassByType = function (classType) {
         var deferred = Q.defer();
-        _getClasses()
+        this._getClasses()
             .then(function (classes) {
                 deferred.resolve(_.find(classes, function (characterClass) {
                     return characterClass.classType === classType;
@@ -92,11 +97,12 @@ var World = function () {
      * @returns {*|Object}
      */
     var getItemByName = function (itemName) {
+        var self = this;
         var deferred = Q.defer();
-        db.serialize(function () {
+        this.db.serialize(function () {
             var items = [];
             var it = new S(itemName).replaceAll('\'', '\'\'').s;
-            db.each('SELECT json FROM DestinyInventoryItemDefinition WHERE json LIKE \'%"itemName":"%' +
+            self.db.each('SELECT json FROM DestinyInventoryItemDefinition WHERE json LIKE \'%"itemName":"%' +
                 it + '%"%\'', function (err, row) {
                     if (err) {
                         deferred.reject(err);
@@ -132,9 +138,10 @@ var World = function () {
      * @returns {*}
      */
     var getItemByHash = function (itemHash) {
+        var self = this;
         var deferred = Q.defer();
-        db.serialize(function () {
-            db.each('SELECT json FROM DestinyInventoryItemDefinition WHERE json LIKE \'%"itemHash":' +
+        this.db.serialize(function () {
+            self.db.each('SELECT json FROM DestinyInventoryItemDefinition WHERE json LIKE \'%"itemHash":' +
                 itemHash + '%\' LIMIT 1', function (err, row) {
                     if (err) {
                         deferred.reject(err);
@@ -151,9 +158,10 @@ var World = function () {
      * @returns {*}
      */
     var getItemCategory = function (itemCategoryHash) {
+        var self = this;
         var deferred = Q.defer();
-        db.serialize(function () {
-            db.each('SELECT json FROM DestinyItemCategoryDefinition WHERE id = ' +
+        this.db.serialize(function () {
+            self.db.each('SELECT json FROM DestinyItemCategoryDefinition WHERE id = ' +
                 itemCategoryHash, function (err, row) {
                     if (err) {
                         deferred.reject(err);
@@ -183,7 +191,7 @@ var World = function () {
      */
     var getVendorIcon = function (vendorHash) {
         var deferred = Q.defer();
-        db.each('SELECT json FROM DestinyVendorDefinition WHERE json LIKE \'%"vendorHash":' +
+        this.db.each('SELECT json FROM DestinyVendorDefinition WHERE json LIKE \'%"vendorHash":' +
             vendorHash + '%\' ORDER BY id LIMIT 1', function (err, row) {
                 if (err) {
                     deferred.reject(err);
@@ -211,7 +219,7 @@ var World = function () {
             deferred.reject(new Error('Database file not found.'));
             return deferred.promise.nodeify(callback);
         }
-        db = new sqlite3.Database(fileName, function () {
+        this.db = new sqlite3.Database(fileName, function () {
             deferred.resolve();
         });
         return deferred.promise.nodeify(callback);
@@ -226,6 +234,5 @@ var World = function () {
         getVendorIcon: getVendorIcon,
         open: openDatabase
     };
-};
-
+}());
 module.exports = World;

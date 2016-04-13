@@ -26,9 +26,17 @@ var Postmaster = function () {
     var registrationHtml = 'Hi {{firstName}},<br /><br />' +
         'Please click the link below to continue the registration process.<br /><br />';
     var mailOptions = {
-        from: 'destiny-ghost@apricothill.com'
+        from: 'admin@apricothill.com'
     };
-
+    var getRandomColor = function () {
+        var letters = '0123456789ABCDEF';
+        var color = '#';
+        var index;
+        for (index = 0; index < 6; index += 1) {
+            color += letters[Math.floor(Math.random() * 16)];
+        }
+        return color;
+    };
     var register = function (user, image, url) {
         var deferred = Q.defer();
         _.extend(mailOptions, {
@@ -36,16 +44,19 @@ var Postmaster = function () {
                 rejectUnauthorized: false
             },
             subject: 'Destiny Ghost Registration',
-            text: new S(registrationText).template(user).s + process.env.DOMAIN + url + '?token=' + user.tokens.emailAddress,
+            text: new S(registrationText).template(user).s + process.env.DOMAIN + url +
+                '?token=' + user.tokens.emailAddress,
             to: user.emailAddress,
-            html: (image ? '<img src=\'' + image + '\' style=\'background-color: slategray;\'><br />' : '') +
-                new S(registrationHtml).template(user).s + process.env.DOMAIN + url + '?token=' + user.tokens.emailAddress
+            html: (image ? '<img src=\'' + image + '\' style=\'background-color: ' +
+                getRandomColor() + ';\'><br />' : '') +
+                new S(registrationHtml).template(user).s + process.env.DOMAIN + url +
+                '?token=' + user.tokens.emailAddress
         });
-        transporter.sendMail(mailOptions, function (err, info) {
+        transporter.sendMail(mailOptions, function (err, response) {
             if (err) {
                 deferred.reject(err);
             } else {
-                deferred.resolve(info.response);
+                deferred.resolve(response);
             }
         });
         return deferred.promise;

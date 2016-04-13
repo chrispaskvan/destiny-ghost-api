@@ -11,7 +11,6 @@
  * @requires Q
  * @requires sqlite3
  */
-'use strict';
 var fs = require('fs'),
     path = require('path'),
     Q = require('q'),
@@ -21,7 +20,8 @@ var fs = require('fs'),
  * @param databaseFullPath
  * @constructor
  */
-var Ghost = function (databaseFullPath) {
+function Ghost(databaseFullPath) {
+    'use strict';
     /**
      * @member - Full path of the local database.
      * @type {*|string}
@@ -41,12 +41,21 @@ var Ghost = function (databaseFullPath) {
         db.run('CREATE TABLE IF NOT EXISTS DestinyManifestDefinition(id TEXT, json BLOB)');
         db.run('CREATE TABLE IF NOT EXISTS DestinyGhostVendor(id TEXT, json BLOB)');
     });
+    this.db = db;
+    return this;
+}
+/**
+ * @namespace
+ * @type {{createManifest, getLastManifest, getNextRefreshDate, getWorldDatabasePath, upsertVendor}}
+ */
+Ghost.prototype = (function () {
+    'use strict';
     /**
      * Create manifest record in the database.
      * @param manifest {string}
      */
     var createManifest = function (manifest) {
-        var sql = db.prepare('INSERT INTO DestinyManifestDefinition VALUES (?, ?)');
+        var sql = this.db.prepare('INSERT INTO DestinyManifestDefinition VALUES (?, ?)');
         sql.run(new Date().toISOString(), JSON.stringify(manifest));
         sql.finalize();
     };
@@ -56,7 +65,7 @@ var Ghost = function (databaseFullPath) {
      */
     var getLastManifest = function () {
         var deferred = Q.defer();
-        db.each('SELECT json FROM DestinyManifestDefinition ORDER BY id DESC LIMIT 1', function (err, row) {
+        this.db.each('SELECT json FROM DestinyManifestDefinition ORDER BY id DESC LIMIT 1', function (err, row) {
             if (err) {
                 deferred.reject(err);
             } else {
@@ -79,7 +88,7 @@ var Ghost = function (databaseFullPath) {
     var getNextRefreshDate = function (vendorHash) {
         var deferred = Q.defer();
         if (vendorHash) {
-            db.each('SELECT json FROM DestinyGhostVendor WHERE json LIKE \'%"vendorHash":' +
+            this.db.each('SELECT json FROM DestinyGhostVendor WHERE json LIKE \'%"vendorHash":' +
                 vendorHash + '%\' ORDER BY id LIMIT 1', function (err, row) {
                     if (err) {
                         deferred.reject(err);
@@ -94,7 +103,7 @@ var Ghost = function (databaseFullPath) {
                     }
                 });
         } else {
-            db.each('SELECT json FROM DestinyGhostVendor ORDER BY id LIMIT 1', function (err, row) {
+            this.db.each('SELECT json FROM DestinyGhostVendor ORDER BY id LIMIT 1', function (err, row) {
                 if (err) {
                     deferred.reject(err);
                 } else {
@@ -115,7 +124,7 @@ var Ghost = function (databaseFullPath) {
      * @returns {*|promise}
      */
     var getWorldDatabasePath = function () {
-        return getLastManifest()
+        return this.getLastManifest()
             .then(function (lastManifest) {
                 return lastManifest ?
                         path.join('./databases/', path.basename(lastManifest.mobileWorldContentPaths.en))
@@ -128,13 +137,14 @@ var Ghost = function (databaseFullPath) {
      * @returns {*|promise}
      */
     var upsertVendor = function (vendor) {
+        var self = this;
         var deferred = Q.defer();
-        db.each('SELECT json FROM DestinyGhostVendor WHERE json LIKE \'%"vendorHash":' +
+        this.db.each('SELECT json FROM DestinyGhostVendor WHERE json LIKE \'%"vendorHash":' +
             vendor.vendorHash + '%\' LIMIT 1', function (err) {
                 if (err) {
                     deferred.reject(err);
                 } else {
-                    db.run('UPDATE DestinyGhostVendor SET json = \'' + JSON.stringify(vendor) +
+                    self.db.run('UPDATE DestinyGhostVendor SET json = \'' + JSON.stringify(vendor) +
                         '\', id = \'' + vendor.nextRefreshDate +
                         '\' WHERE json LIKE \'%"vendorHash":' +
                         vendor.vendorHash + '%\'', function (err) {
@@ -150,7 +160,7 @@ var Ghost = function (databaseFullPath) {
                     deferred.reject(err);
                 } else {
                     if (rows === 0) {
-                        var sql = db.prepare('INSERT INTO DestinyGhostVendor VALUES (?, ?)');
+                        var sql = self.db.prepare('INSERT INTO DestinyGhostVendor VALUES (?, ?)');
                         sql.run(vendor.nextRefreshDate, JSON.stringify(vendor));
                         sql.finalize();
                         deferred.resolve();
@@ -171,5 +181,5 @@ var Ghost = function (databaseFullPath) {
         getWorldDatabasePath: getWorldDatabasePath,
         upsertVendor: upsertVendor
     };
-};
+}());
 module.exports = Ghost;

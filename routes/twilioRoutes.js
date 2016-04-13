@@ -12,11 +12,17 @@ var routes = function () {
     var twilioRouter = express.Router();
     var twilioController = new TwilioController();
     twilioRouter.route('/destiny/r')
-        .post(twilioController.request);
+        .post(function (req, res) {
+            twilioController.request(req, res);
+        });
     twilioRouter.route('/destiny/s')
-        .post(twilioController.statusCallback);
+        .post(function (req, res) {
+            twilioController.statusCallback(req, res);
+        });
     twilioRouter.route('/destiny/f')
-        .post(twilioController.fallback);
+        .post(function (req, res) {
+            twilioController.fallback(req, res);
+        });
     return twilioRouter;
 };
 

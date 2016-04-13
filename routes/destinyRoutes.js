@@ -29,20 +29,30 @@ var routes = function () {
     /**
      * Routes
      */
-    destinyRouter.route('/characters/')
-        .get(destinyController.getCharacters);
     destinyRouter.route('/:membershipType/characters/:displayName')
-        .get(destinyController.getCharacters);
+        .get(function (req, res) {
+            destinyController.getCharacters(req, res);
+        });
     destinyRouter.route('/currentUser/')
-        .get(destinyController.getCurrentUser);
+        .get(function (req, res) {
+            destinyController.getCurrentUser(req, res);
+        });
     destinyRouter.route('/fieldTestWeapons/')
-        .get(destinyController.getFieldTestWeapons);
+        .get(function (req, res) {
+            destinyController.getFieldTestWeapons(req, res);
+        });
     destinyRouter.route('/foundryOrders/')
-        .get(destinyController.getFoundryOrders);
+        .get(function (req, res) {
+            destinyController.getFoundryOrders(req, res);
+        });
     destinyRouter.route('/ironBannerEventRewards/')
-        .get(destinyController.getIronBannerEventRewards);
+        .get(function (req, res) {
+            destinyController.getIronBannerEventRewards(req, res);
+        });
     destinyRouter.route('/xur/')
-        .get(destinyController.getXur);
+        .get(function (req, res) {
+            destinyController.getXur(req, res);
+        });
     return destinyRouter;
 };
 

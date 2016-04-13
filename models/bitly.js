@@ -51,5 +51,4 @@ var Bitly = function (bitylSettingsFullPath) {
         getShortUrl: getShortUrl
     };
 };
-
 module.exports = Bitly;

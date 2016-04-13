@@ -10,7 +10,15 @@ var crypto = require('crypto');
 /**
  * @constructor
  */
-var Tokens = function () {
+function Tokens() {
+    'use strict';
+    return this;
+}
+/**
+ * @namespace
+ * @type {{getToken}}
+ */
+Tokens.prototype = (function () {
     'use strict';
     /**
      * Get a new token.
@@ -22,7 +30,8 @@ var Tokens = function () {
         var randomBytes = crypto.randomBytes(length);
         var result = new Array(length);
         var cursor = 0;
-        for (var index = 0; index < length; index++) {
+        var index;
+        for (index = 0; index < length; index += 1) {
             cursor += randomBytes[index];
             result[index] = chars[cursor % chars.length];
         }
@@ -31,6 +40,5 @@ var Tokens = function () {
     return {
         getToken: getToken
     };
-};
-
+}());
 module.exports = Tokens;

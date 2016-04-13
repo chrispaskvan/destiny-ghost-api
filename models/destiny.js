@@ -21,19 +21,25 @@ var _ = require('underscore'),
     request = require('request'),
     util = require('util');
 /**
- * @throws Invalid argument(s) provided.
  * @constructor
  */
-var Destiny = function () {
+function Destiny() {
     'use strict';
-    var self = this;
     /**
      * @member {string} apiKey - The Destiny API key.
      */
-    self.apiKey = bungie.apiKey;
-    if (!self.apiKey || !_.isString(self.apiKey)) {
+    this.apiKey = bungie.apiKey;
+    if (!this.apiKey || !_.isString(this.apiKey)) {
         throw new Error('The API key is missing.');
     }
+    return this;
+}
+/**
+ * @throws API key not found.
+ * @constructor
+ */
+Destiny.prototype = (function () {
+    'use strict';
     /**
      * Available Membership Types
      * @type {{TigerXbox: number, TigerPsn: number}}
@@ -117,7 +123,7 @@ var Destiny = function () {
         var opts = {
             headers: {
                 cookie: _getCookieHeader(cookies),
-                'x-api-key': self.apiKey,
+                'x-api-key': this.apiKey,
                 'x-csrf': _getCookieValueByName(cookies, 'bungled')
             },
             url: util.format('%s/Destiny/2/Account/%s/Character/%s/Activities/',
@@ -157,7 +163,7 @@ var Destiny = function () {
         var opts = {
             headers: {
                 cookie: _getCookieHeader(cookies),
-                'x-api-key': self.apiKey,
+                'x-api-key': this.apiKey,
                 'x-csrf': _getCookieValueByName(cookies, 'bungled')
             },
             url: util.format('%s/Destiny/2/Account/%s/Character/%s/Complete/',
@@ -192,7 +198,7 @@ var Destiny = function () {
         var deferred = Q.defer();
         var opts = {
             headers: {
-                'x-api-key': self.apiKey
+                'x-api-key': this.apiKey
             },
             url: util.format('%s/Destiny/2/Account/%s/Summary/', servicePlatform,
                 membershipId)
@@ -215,7 +221,7 @@ var Destiny = function () {
     /**
      * @function
      * @param displayName {string}
-     * @membershipType {integer}
+     * @param membershipType {integer}
      * @param callback
      * @returns {*|promise}
      * @description Get the Bungie member number from the user's display name.
@@ -224,7 +230,7 @@ var Destiny = function () {
         var deferred = Q.defer();
         var opts = {
             headers: {
-                'x-api-key': self.apiKey
+                'x-api-key': this.apiKey
             },
             url: util.format('%s/Destiny/%s/Stats/GetMembershipIdByDisplayName/%s/',
                 servicePlatform, membershipType, encodeURIComponent(displayName))
@@ -241,10 +247,12 @@ var Destiny = function () {
     /**
      * @function
      * @param cookies {Array}
+     * @param callback
      * @returns {*|promise}
      * @description Get the current user based on the Bungie cookies.
      */
     var getCurrentUser = function (cookies, callback) {
+        var self = this;
         var deferred = Q.defer();
         if (!cookies || !_.isArray(cookies)) {
             deferred.reject(new Error('The Bungie cookies are missing.'));
@@ -253,7 +261,7 @@ var Destiny = function () {
         var opts = {
             headers: {
                 cookie: _getCookieHeader(cookies),
-                'x-api-key': self.apiKey,
+                'x-api-key': this.apiKey,
                 'x-csrf': _getCookieValueByName(cookies, 'bungled')
             },
             url: util.format('%s/User/GetBungieNetUser/', servicePlatform)
@@ -269,7 +277,7 @@ var Destiny = function () {
                     /**
                      * @todo xBox
                      */
-                    getMembershipIdFromDisplayName(user.psnId, membershipTypes.TigerPsn)
+                    self.getMembershipIdFromDisplayName(user.psnId, membershipTypes.TigerPsn)
                         .then(function (membershipId) {
                             if (user) {
                                 deferred.resolve({
@@ -303,6 +311,7 @@ var Destiny = function () {
      * @description Return the current field test weapons available from the gunsmith.
      */
     var getFieldTestWeapons = function (characterId, cookies, callback) {
+        var self = this;
         var deferred = Q.defer();
         if (!cookies || !_.isArray(cookies)) {
             deferred.reject(new Error('The Bungie cookies are missing.'));
@@ -363,6 +372,7 @@ var Destiny = function () {
      * @description Return the current field test weapons available from the gunsmith.
      */
     var getFoundryOrders = function (characterId, cookies, callback) {
+        var self = this;
         var deferred = Q.defer();
         if (!cookies || !_.isArray(cookies)) {
             deferred.reject(new Error('The Bungie cookies are missing.'));
@@ -436,7 +446,7 @@ var Destiny = function () {
         var opts = {
             headers: {
                 cookie: _getCookieHeader(cookies),
-                'x-api-key': self.apiKey,
+                'x-api-key': this.apiKey,
                 'x-csrf': _getCookieValueByName(cookies, 'bungled')
             },
             url: util.format('%s/Destiny/2/Account/%s/Character/%s/Inventory/',
@@ -473,6 +483,7 @@ var Destiny = function () {
      * @description Return the current field test weapons available from the gunsmith.
      */
     var getIronBannerEventRewards = function (characterId, cookies, callback) {
+        var self = this;
         var deferred = Q.defer();
         if (!cookies || !_.isArray(cookies)) {
             deferred.reject(new Error('The Bungie cookies are missing.'));
@@ -528,6 +539,7 @@ var Destiny = function () {
     /**
      * @function
      * @param itemHash {string}
+     * @param cookies {Array}
      * @param callback
      * @returns {*|promise}
      */
@@ -536,7 +548,7 @@ var Destiny = function () {
         var opts = {
             headers: {
                 cookie: _getCookieHeader(cookies),
-                'x-api-key': self.apiKey,
+                'x-api-key': this.apiKey,
                 'x-csrf': _getCookieValueByName(cookies, 'bungled')
             },
             url: util.format('%s/Destiny/Manifest/2/%s/', servicePlatform, itemHash)
@@ -562,6 +574,7 @@ var Destiny = function () {
      * @description Get the latest Destiny manifest definition.
      */
     var getManifest = function (callback) {
+        var self = this;
         var deferred = Q.defer();
         destinyCache.get('getManifest', function (err, manifest) {
             if (err) {
@@ -609,7 +622,7 @@ var Destiny = function () {
         var opts = {
             headers: {
                 cookie: _getCookieHeader(cookies),
-                'x-api-key': self.apiKey,
+                'x-api-key': this.apiKey,
                 'x-csrf': _getCookieValueByName(cookies, 'bungled')
             },
             url: util.format('%s/Destiny/2/Account/%s/Character/%s/Progression/',
@@ -641,7 +654,7 @@ var Destiny = function () {
         var opts = {
             headers: {
                 cookie: _getCookieHeader(cookies),
-                'x-api-key': self.apiKey,
+                'x-api-key': this.apiKey,
                 'x-csrf': _getCookieValueByName(cookies, 'bungled')
             },
             url: util.format('%s/Destiny/2/MyAccount/Character/%s/Vendors/Summaries/',
@@ -685,7 +698,7 @@ var Destiny = function () {
         var opts = {
             headers: {
                 cookie: _getCookieHeader(cookies),
-                'x-api-key': self.apiKey,
+                'x-api-key': this.apiKey,
                 'x-csrf': _getCookieValueByName(cookies, 'bungled')
             },
             url: util.format('%s/Destiny/stats/uniqueweapons/2/%s/%s/',
@@ -717,6 +730,7 @@ var Destiny = function () {
      * @description Get the exotic gear and waepons available for sale from XUr.
      */
     var getXur = function (callback) {
+        var self = this;
         var deferred = Q.defer();
         destinyCache.get('getXur', function (err, items) {
             if (err) {
@@ -781,6 +795,5 @@ var Destiny = function () {
         getWeapons: getWeapons,
         getXur: getXur
     };
-};
-
+}());
 module.exports = Destiny;
