@@ -356,21 +356,21 @@ NotificationController.prototype = (function () {
                                                                                 function (memo, classArmor) {
                                                                                     return memo + '\n' + classArmor;
                                                                                 },
-                                                                                ' ').trim().substr(0, 130), user.phoneNumber)
+                                                                                ' ').trim().substr(0, 130), user.phoneNumber, '')
                                                                                 .then(function (message) {
                                                                                     return self.users.createUserMessage(user, message, self.users.actions.IronBanner);
                                                                                 }));
                                                                             promises.push(self.notifications.sendMessage('Titans:\n' + _.reduce(vendor.rewards.armor.titan,
                                                                                 function (memo, classArmor) {
                                                                                     return memo + '\n' + classArmor;
-                                                                                }, ' ').trim().substr(0, 130), user.phoneNumber)
+                                                                                }, ' ').trim().substr(0, 130), user.phoneNumber, '')
                                                                                 .then(function (message) {
                                                                                     return self.users.createUserMessage(user, message, self.users.actions.IronBanner);
                                                                                 }));
                                                                             promises.push(self.notifications.sendMessage('Warlocks:\n' + _.reduce(vendor.rewards.armor.warlock,
                                                                                 function (memo, classArmor) {
                                                                                     return memo + '\n' + classArmor;
-                                                                                }, ' ').trim().substr(0, 130), user.phoneNumber)
+                                                                                }, ' ').trim().substr(0, 130), user.phoneNumber, '')
                                                                                 .then(function (message) {
                                                                                     return self.users.createUserMessage(user, message, self.users.actions.IronBanner);
                                                                                 }));
@@ -489,76 +489,6 @@ NotificationController.prototype = (function () {
     };
     /**
      *
-     * @param req
-     * @param res
-     */
-    var create = function (req, res) {
-        var self = this;
-        _.each(_.keys(notificationHeaders), function (headerName) {
-            if (req.headers[headerName] !== notificationHeaders[headerName]) {
-                res.writeHead(403);
-                return res.end();
-            }
-        });
-        var subscription = parseInt(req.params.subscription, 10);
-        if (isNaN(subscription)) {
-            res.json(new JSend.fail('That subscription is not recognized.'));
-        }
-        this.signIn()
-            .then(function () {
-                return self.users.getSubscribedUsers();
-            })
-            .then(function (subscribedUsers) {
-                if (subscribedUsers && subscribedUsers.length > 0) {
-                    if (parseInt(subscription, 10) === subscriptions.FieldTestWeapons) {
-                        var bansheeSubscribers = _.filter(subscribedUsers, function (user) {
-                            return user.isSubscribedToBanshee44 === true;
-                        });
-                        return _getFieldTestWeapons(bansheeSubscribers)
-                            .then(function () {
-                                res.json(new JSend.success());
-                            });
-                    }
-                    if (parseInt(subscription, 10) === subscriptions.FoundryOrders) {
-                        var foundrySubscribers = _.filter(subscribedUsers, function (user) {
-                            return user.isSubscribedToBanshee44 === true;
-                        });
-                        return _getFoundryOrders(foundrySubscribers)
-                            .then(function () {
-                                res.json(new JSend.success());
-                            });
-                    }
-                    if (parseInt(subscription, 10) === subscriptions.IronBannerEventRewards) {
-                        var lordSaladinSubscribers = _.filter(subscribedUsers, function (user) {
-                            return user.isSubscribedToLordSaladin === true;
-                        });
-                        return _getIronBannerEventRewards(lordSaladinSubscribers)
-                            .then(function () {
-                                res.json(new JSend.success());
-                            });
-                    }
-                    if (parseInt(subscription, 10) === subscriptions.Xur) {
-                        var xurSubscribers = _.filter(subscribedUsers, function (user) {
-                            return user.isSubscribedToXur === true;
-                        });
-                        return _getXur(xurSubscribers)
-                            .then(function () {
-                                res.json(new JSend.success());
-                            });
-                    }
-                } else {
-                    res.json(new JSend.success());
-                }
-            })
-            .fail(function (err) {
-                res.json(new JSend.error(err.message));
-                if (self.loggingProvider) {
-                    self.loggingProvider.info(err);
-                }
-            });
-    };
-    /**
-     *
      * @param shadowUser
      * @returns {*}
      * @private
@@ -592,11 +522,81 @@ NotificationController.prototype = (function () {
         var self = this;
         var promises = [];
         _.each(this.shadowUsers, function (shadowUser) {
-            promises.push(_validateShadowUser(shadowUser));
+            promises.push(_validateShadowUser.call(self, shadowUser));
         });
         return Q.all(promises)
             .then(function (shadowUsers) {
                 fs.writeFileSync(self.shadowUserConfiguration, JSON.stringify(shadowUsers, null, 2));
+            });
+    };
+    /**
+     *
+     * @param req
+     * @param res
+     */
+    var create = function (req, res) {
+        var self = this;
+        _.each(_.keys(notificationHeaders), function (headerName) {
+            if (req.headers[headerName] !== notificationHeaders[headerName]) {
+                res.writeHead(403);
+                return res.end();
+            }
+        });
+        var subscription = parseInt(req.params.subscription, 10);
+        if (isNaN(subscription)) {
+            res.json(new JSend.fail('That subscription is not recognized.'));
+        }
+        this.signIn()
+            .then(function () {
+                return self.users.getSubscribedUsers();
+            })
+            .then(function (subscribedUsers) {
+                if (subscribedUsers && subscribedUsers.length > 0) {
+                    if (parseInt(subscription, 10) === subscriptions.FieldTestWeapons) {
+                        var bansheeSubscribers = _.filter(subscribedUsers, function (user) {
+                            return user.isSubscribedToBanshee44 === true;
+                        });
+                        return _getFieldTestWeapons.call(self, bansheeSubscribers)
+                            .then(function () {
+                                res.json(new JSend.success());
+                            });
+                    }
+                    if (parseInt(subscription, 10) === subscriptions.FoundryOrders) {
+                        var foundrySubscribers = _.filter(subscribedUsers, function (user) {
+                            return user.isSubscribedToBanshee44 === true;
+                        });
+                        return _getFoundryOrders.call(self, foundrySubscribers)
+                            .then(function () {
+                                res.json(new JSend.success());
+                            });
+                    }
+                    if (parseInt(subscription, 10) === subscriptions.IronBannerEventRewards) {
+                        var lordSaladinSubscribers = _.filter(subscribedUsers, function (user) {
+                            return user.isSubscribedToLordSaladin === true;
+                        });
+                        return _getIronBannerEventRewards.call(self, lordSaladinSubscribers)
+                            .then(function () {
+                                res.json(new JSend.success());
+                            });
+                    }
+                    if (parseInt(subscription, 10) === subscriptions.Xur) {
+                        var xurSubscribers = _.filter(subscribedUsers, function (user) {
+                            return user.isSubscribedToXur === true;
+                        });
+                        return _getXur.call(self, xurSubscribers)
+                            .then(function () {
+                                res.json(new JSend.success());
+                            });
+                    }
+                } else {
+                    res.json(new JSend.success());
+                }
+            })
+            .fail(function (err) {
+                res.json(new JSend.error(err.message));
+                if (self.loggingProvider) {
+                    self.loggingProvider.info(err);
+                }
             });
     };
     return {

@@ -416,8 +416,10 @@ DestinyController.prototype = (function () {
                                 !fs.existsSync(fileName)) {
                             var file = fs.createWriteStream(fileName + '.zip');
                             var stream = request('https://www.bungie.net' + relativeUrl, function () {
-                                // ToDo: A log entry here would be nice.
-                                console.log('done1');
+                                /*
+                                 * @todo Log entry here.
+                                 */
+                                console.log('Content downloaded from ' + relativeUrl);
                             }).pipe(file);
                             stream.on('finish', function () {
                                 yauzl.open(fileName + '.zip', function (err, zipFile) {
