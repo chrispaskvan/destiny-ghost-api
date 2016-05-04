@@ -1,8 +1,7 @@
 /**
  * Created by chris on 9/25/15.
  */
-var bungie = require('../settings/bungie.json'),
-    bunyan = require('bunyan'),
+var bunyan = require('bunyan'),
     DestinyController = require('../controllers/destinyController'),
     express = require('express');
 

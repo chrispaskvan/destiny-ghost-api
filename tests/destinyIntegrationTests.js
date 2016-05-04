@@ -2,7 +2,8 @@
  * Destiny Integration Tests
  */
 'use strict';
-var app = require('../app.js'),
+var _ = require('underscore'),
+    app = require('../app.js'),
     expect = require('chai').expect,
     req = require('supertest'),
     should = require('should'),
@@ -24,9 +25,11 @@ describe('Destiny Integration Tests', function () {
 var agent = superagent.agent();
 describe('Destiny Integration Tests', function () {
     it('Should return current foundry items available for order', function (done) {
-        this.timeout(10000);
+        this.timeout(20000);
         req(app).post('/api/users/signIn/bungie')
-            .send(users[0])
+            .send(_.find(users, function (user) {
+                return user.membershipType === 2;
+            }))
             .expect(200)
             .end(function (err, res) {
                 should.not.exist(err);
@@ -43,3 +46,4 @@ describe('Destiny Integration Tests', function () {
             });
     });
 });
+

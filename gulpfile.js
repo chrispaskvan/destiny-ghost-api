@@ -4,7 +4,7 @@ var env = require('gulp-env'),
     gulpMocha = require('gulp-mocha'),
     nodemon = require('gulp-nodemon');
 
-gulp.task('default', function () {
+gulp.task('default', function runDefault() {
     nodemon({
         script: 'app.js',
         ext: 'js',
@@ -17,12 +17,12 @@ gulp.task('default', function () {
             TWILIO: './settings/twilio.production.json'
         },
         ignore: ['./node_modules/**']
-    }).on('restart', function () {
+    }).on('restart', function restart() {
         console.log('Restarting ...');
     });
 });
 
-gulp.task('integrationTests', function () {
+gulp.task('integrationTests', function runIntegrationTests() {
     env({ vars: {
         APPINSIGHTS: './settings/applicationInsights.json',
         BITLY: './settings/bitly.json',
@@ -35,7 +35,7 @@ gulp.task('integrationTests', function () {
         .pipe(gulpMocha({ reporter: 'nyan' }));
 });
 
-gulp.task('controllerTests', function () {
+gulp.task('controllerTests', function runControllerTests() {
     env({ vars: {
         APPINSIGHTS: './settings/applicationInsights.json',
         BITLY: './settings/bitly.json',
@@ -48,7 +48,7 @@ gulp.task('controllerTests', function () {
         .pipe(gulpMocha({ reporter: 'nyan' }));
 });
 
-gulp.task('modelTests', function () {
+gulp.task('modelTests', function runModelTests() {
     env({ vars: {
         APPINSIGHTS: './settings/applicationInsights.json',
         BITLY: './settings/bitly.json',

@@ -22,7 +22,7 @@ var routes = function () {
         .get(function (req, res) {
             userController.getEmailAddress(req, res);
         });
-    userRouter.route('/:gamerTag/gamerTag')
+    userRouter.route('/:gamerTag/gamerTag/:membershipType')
         .get(function (req, res) {
             userController.getGamerTag(req, res);
         });

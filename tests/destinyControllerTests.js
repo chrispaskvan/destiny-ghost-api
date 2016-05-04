@@ -22,7 +22,7 @@ var destinyController;
 before(function (done) {
     var chance = new Chance();
     var destinyMock = function () {
-        var getCharacters = function (membershipId, callback) {
+        var getCharacters = function (membershipId, membershipType, callback) {
             var deferred = Q.defer();
             deferred.resolve([{ characterBase: { characterId: getRandomId() }},
                 { characterBase: { characterId: getRandomId() }},

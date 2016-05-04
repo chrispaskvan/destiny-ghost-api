@@ -25,9 +25,7 @@ var Postmaster = function () {
         'Open the link below to continue the registration process.\r\n\r\n';
     var registrationHtml = 'Hi {{firstName}},<br /><br />' +
         'Please click the link below to continue the registration process.<br /><br />';
-    var mailOptions = {
-        from: 'admin@apricothill.com'
-    };
+    var mailOptions = {};
     var getRandomColor = function () {
         var letters = '0123456789ABCDEF';
         var color = '#';
@@ -40,6 +38,7 @@ var Postmaster = function () {
     var register = function (user, image, url) {
         var deferred = Q.defer();
         _.extend(mailOptions, {
+            from: smtpConfiguration.from,
             tls: {
                 rejectUnauthorized: false
             },

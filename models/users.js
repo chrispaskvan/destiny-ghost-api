@@ -58,7 +58,6 @@ function Users(databaseFullPath, twilioSettingsFullPath) {
      * @type {{accountSid: string, authToken string, phoneNumber string}} settings
      */
     this.settings = JSON.parse(fs.readFileSync(twilioSettingsFullPath || './settings/twilio.production.json'));
-    return this;
 }
 /**
  * @namespace
@@ -72,7 +71,7 @@ Users.prototype = (function () {
     /**
      * @private
      */
-    var schema = {
+    var userSchema = {
         name: 'User',
         type: 'object',
         properties: {
@@ -92,19 +91,7 @@ Users.prototype = (function () {
                 required: true,
                 type: 'string'
             },
-            isSubscribedToBanshee44: {
-                default: true,
-                type: 'boolean'
-            },
-            isSubscribedToFoundryOrders: {
-                default: true,
-                type: 'boolean'
-            },
-            isSubscribedToLordSaladin: {
-                default: true,
-                type: 'boolean'
-            },
-            isSubscribedToXur: {
+            isSubscribed: {
                 default: true,
                 type: 'boolean'
             },
@@ -122,6 +109,14 @@ Users.prototype = (function () {
                 required: true,
                 type: 'string'
             },
+            notifications: {
+                required: true,
+                type: 'array',
+                uniqueItems: true,
+                items: {
+                    type: 'object'
+                }
+            },
             phoneNumber: {
                 readOnly: true,
                 required: true,
@@ -138,6 +133,21 @@ Users.prototype = (function () {
             }
         },
         additionalProperties: true
+    };
+    var notificationSchema = {
+        name: 'User',
+        type: 'object',
+        properties: {
+            name: {
+                required: true,
+                type: 'string'
+            },
+            enabled: {
+                required: true,
+                type: 'boolean'
+            }
+        },
+        additionalProperties: false
     };
     /**
      * Allowed Actions
@@ -167,9 +177,14 @@ Users.prototype = (function () {
     var createUser = function (user, callback) {
         var self = this;
         var deferred = Q.defer();
-        var validate = validator(schema);
-        if (!validate(user)) {
-            deferred.reject(new Error(JSON.stringify(validate.errors)));
+        var validateUser = validator(userSchema);
+        if (!validateUser(user)) {
+            deferred.reject(new Error(JSON.stringify(validateUser.errors)));
+            return deferred.promise.nodeify(callback);
+        }
+        var validateNotifications = validator(notificationSchema);
+        if (!validateNotifications(user.notifications)) {
+            deferred.reject(new Error(JSON.stringify(validateNotifications.errors)));
             return deferred.promise.nodeify(callback);
         }
         this.getUserByPhoneNumber(user.phoneNumber)
@@ -197,10 +212,10 @@ Users.prototype = (function () {
                         user.carrier = carrier.name;
                         user.dateRegistered = new Date().toISOString();
                         user.type = carrier.type;
-                        schema.additionalProperties = false;
-                        var filter = validator.filter(schema);
+                        userSchema.additionalProperties = false;
+                        var filter = validator.filter(userSchema);
                         var filteredUser = filter(user);
-                        _.defaults(filteredUser, defaults(schema));
+                        _.defaults(filteredUser, defaults(userSchema));
                         var sql = self.db.prepare('INSERT INTO DestinyGhostUser VALUES (?, ?)');
                         sql.run(user.phoneNumber, JSON.stringify(filteredUser));
                         sql.finalize();
@@ -233,7 +248,7 @@ Users.prototype = (function () {
      */
     var createUserToken = function (user, callback) {
         var deferred = Q.defer();
-        var validate = validator(schema);
+        var validate = validator(userSchema);
         if (!validate(user)) {
             deferred.reject(new Error(JSON.stringify(validate.errors)));
             return deferred.promise.nodeify(callback);
@@ -248,10 +263,8 @@ Users.prototype = (function () {
      * Delete expired tokens.
      */
     var deleteExpiredUserTokens = function () {
-        /**
-         * @todo
-         */
-        var sql = this.db.prepare('DELETE FROM DestinyGhostUserToken WHERE id < \'' + new Date().toISOString() + '\'');
+        var now = new Date((new Date()) - 1000 * 3600 * 2);
+        var sql = this.db.prepare('DELETE FROM DestinyGhostUserToken WHERE id < \'' + now.toISOString() + '\'');
         sql.run();
         sql.finalize();
     };
@@ -472,26 +485,29 @@ Users.prototype = (function () {
      * @returns {*|promise}
      */
     var getUserTokenByEmailAddressToken = function (emailAddressToken) {
-        var deferred = Q.defer();
-        this.db.each('SELECT id, json FROM DestinyGhostUserToken WHERE json LIKE \'%"emailAddress":"' +
-            emailAddressToken + '"%\' ORDER BY id DESC LIMIT 1', function (err, row) {
-                if (err) {
-                    deferred.reject(err);
-                } else {
-                    var user = JSON.parse(row.json);
-                    user.timeStamp = new Date(row.id);
-                    deferred.resolve(user);
-                }
-            }, function (err, rows) {
-                if (err) {
-                    deferred.reject(err);
-                } else {
-                    if (rows === 0) {
-                        deferred.resolve();
-                    }
-                }
+        return deleteExpiredUserTokens()
+            .then(function () {
+                var deferred = Q.defer();
+                this.db.each('SELECT id, json FROM DestinyGhostUserToken WHERE json LIKE \'%"emailAddress":"' +
+                    emailAddressToken + '"%\' ORDER BY id DESC LIMIT 1', function (err, row) {
+                        if (err) {
+                            deferred.reject(err);
+                        } else {
+                            var user = JSON.parse(row.json);
+                            user.timeStamp = new Date(row.id);
+                            deferred.resolve(user);
+                        }
+                    }, function (err, rows) {
+                        if (err) {
+                            deferred.reject(err);
+                        } else {
+                            if (rows === 0) {
+                                deferred.resolve();
+                            }
+                        }
+                    });
+                return deferred.promise;
             });
-        return deferred.promise;
     };
     /**
      * Get the user token by the phone number.
@@ -499,26 +515,29 @@ Users.prototype = (function () {
      * @returns {*|Object}
      */
     var getUserTokenByPhoneNumber = function (phoneNumber) {
-        var deferred = Q.defer();
-        this.db.each('SELECT id, json FROM DestinyGhostUserToken WHERE json LIKE \'%"phoneNumber":"' +
-            phoneNumber + '"%\' ORDER BY id DESC LIMIT 1', function (err, row) {
-                if (err) {
-                    deferred.reject(err);
-                } else {
-                    var user = JSON.parse(row.json);
-                    user.timeStamp = new Date(row.id);
-                    deferred.resolve(user);
-                }
-            }, function (err, rows) {
-                if (err) {
-                    deferred.reject(err);
-                } else {
-                    if (rows === 0) {
-                        deferred.resolve();
-                    }
-                }
+        return deleteExpiredUserTokens()
+            .then(function () {
+                var deferred = Q.defer();
+                this.db.each('SELECT id, json FROM DestinyGhostUserToken WHERE json LIKE \'%"phoneNumber":"' +
+                    phoneNumber + '"%\' ORDER BY id DESC LIMIT 1', function (err, row) {
+                        if (err) {
+                            deferred.reject(err);
+                        } else {
+                            var user = JSON.parse(row.json);
+                            user.timeStamp = new Date(row.id);
+                            deferred.resolve(user);
+                        }
+                    }, function (err, rows) {
+                        if (err) {
+                            deferred.reject(err);
+                        } else {
+                            if (rows === 0) {
+                                deferred.resolve();
+                            }
+                        }
+                    });
+                return deferred.promise;
             });
-        return deferred.promise;
     };
     /**
      * Get the user token by the phone number token.
@@ -526,26 +545,29 @@ Users.prototype = (function () {
      * @returns {*|promise}
      */
     var getUserTokenByPhoneNumberToken = function (phoneNumberToken) {
-        var deferred = Q.defer();
-        this.db.each('SELECT id, json FROM DestinyGhostUserToken WHERE json LIKE \'%"phoneNumber":"' +
-            phoneNumberToken + '"%\' ORDER BY id DESC LIMIT 1', function (err, row) {
-                if (err) {
-                    deferred.reject(err);
-                } else {
-                    var user = JSON.parse(row.json);
-                    user.timeStamp = new Date(row.id);
-                    deferred.resolve(user);
-                }
-            }, function (err, rows) {
-                if (err) {
-                    deferred.reject(err);
-                } else {
-                    if (rows === 0) {
-                        deferred.resolve();
-                    }
-                }
+        return deleteExpiredUserTokens()
+            .then(function () {
+                var deferred = Q.defer();
+                this.db.each('SELECT id, json FROM DestinyGhostUserToken WHERE json LIKE \'%"phoneNumber":"' +
+                    phoneNumberToken + '"%\' ORDER BY id DESC LIMIT 1', function (err, row) {
+                        if (err) {
+                            deferred.reject(err);
+                        } else {
+                            var user = JSON.parse(row.json);
+                            user.timeStamp = new Date(row.id);
+                            deferred.resolve(user);
+                        }
+                    }, function (err, rows) {
+                        if (err) {
+                            deferred.reject(err);
+                        } else {
+                            if (rows === 0) {
+                                deferred.resolve();
+                            }
+                        }
+                    });
+                return deferred.promise;
             });
-        return deferred.promise;
     };
     /**
      * Update the user.
@@ -555,7 +577,7 @@ Users.prototype = (function () {
      */
     var updateUser = function (user, callback) {
         var deferred = Q.defer();
-        var validate = validator(schema);
+        var validate = validator(userSchema);
         if (!validate(user)) {
             deferred.reject(new Error(JSON.stringify(validate.errors)));
             return deferred.promise.nodeify(callback);

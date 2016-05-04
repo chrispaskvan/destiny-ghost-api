@@ -42,7 +42,6 @@ function Ghost(databaseFullPath) {
         db.run('CREATE TABLE IF NOT EXISTS DestinyGhostVendor(id TEXT, json BLOB)');
     });
     this.db = db;
-    return this;
 }
 /**
  * @namespace

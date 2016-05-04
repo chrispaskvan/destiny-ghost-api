@@ -12,7 +12,7 @@ var crypto = require('crypto');
  */
 function Tokens() {
     'use strict';
-    return this;
+    return;
 }
 /**
  * @namespace

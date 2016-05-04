@@ -20,7 +20,7 @@ var _ = require('underscore'),
  */
 function World() {
     'use strict';
-    return this;
+    return;
 }
 /**
  * @namespace
@@ -68,7 +68,7 @@ World.prototype = (function () {
      */
     var getClassByHash = function (classHash) {
         var deferred = Q.defer();
-        _getClasses()
+        _getClasses.call(this)
             .then(function (classes) {
                 deferred.resolve(_.find(classes, function (characterClass) {
                     return characterClass.classHash === classHash;

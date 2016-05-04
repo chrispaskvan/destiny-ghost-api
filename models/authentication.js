@@ -17,7 +17,7 @@ var _ = require('underscore'),
  */
 function Authentication() {
     'use strict';
-    return this;
+    return;
 }
 /**
  * @namespace

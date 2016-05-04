@@ -49,7 +49,6 @@ function DestinyController(loggingProvider) {
      * @type {World|exports|module.exports}
      */
     this.world = new World();
-    return this;
 }
 /**
  * @namespace
@@ -60,13 +59,14 @@ DestinyController.prototype = (function () {
     'use strict';
     /**
      *
-     * @param membershipId
+     * @param membershipId {string}
+     * @param membershipType {integer}
      * @returns {Request|*}
      * @private
      */
-    var _getCharacters = function (membershipId) {
+    var _getCharacters = function (membershipId, membershipType) {
         var self = this;
-        return this.destiny.getCharacters(membershipId)
+        return this.destiny.getCharacters(membershipId, membershipType)
             .then(function (characters) {
                 return self.ghost.getWorldDatabasePath()
                     .then(function (worldDatabasePath) {
@@ -122,7 +122,7 @@ DestinyController.prototype = (function () {
             this.destiny.getMembershipIdFromDisplayName(displayName, membershipType)
                 .then(function (membershipId) {
                     if (parseInt(membershipId, 10)) {
-                        return _getCharacters(membershipId)
+                        return _getCharacters.call(self, membershipId, membershipType)
                             .then(function (characters) {
                                 res.json(characters);
                             });
@@ -227,7 +227,7 @@ DestinyController.prototype = (function () {
         var cookies = _getCookies(req);
         this.destiny.getCurrentUser(cookies)
             .then(function (currentUser) {
-                return self.destiny.getCharacters(currentUser.membershipId)
+                return self.destiny.getCharacters(currentUser.membershipId, currentUser.membershipType)
                     .then(function (characters) {
                         return self.destiny.getFoundryOrders(characters[0].characterBase.characterId, cookies)
                             .then(function (foundryOrders) {
@@ -421,7 +421,7 @@ DestinyController.prototype = (function () {
                                  */
                                 console.log('Content downloaded from ' + relativeUrl);
                             }).pipe(file);
-                            stream.on('finish', function () {
+                            stream.on('finish', function decompress() {
                                 yauzl.open(fileName + '.zip', function (err, zipFile) {
                                     if (!err) {
                                         zipFile.on('entry', function (entry) {

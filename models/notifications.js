@@ -52,7 +52,6 @@ function Notifications(databaseFullPath, twilioSettingsFullPath) {
      * @type {twilio}
      */
     this.twilioClient = twilio(this.settings.accountSid, this.settings.authToken);
-    return this;
 }
 /**
  * @namespace

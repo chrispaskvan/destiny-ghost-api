@@ -26,6 +26,15 @@ app.use(bodyParser.urlencoded({
 }));
 app.use(cookieParser());
 /**
+ * Set Access Headers
+ */
+app.use(function (req, res, next) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, PATCH, DELETE');
+    res.setHeader('Access-Control-Allow-Credentials', true);
+    next();
+});
+/**
  * Logs
  * @type {Log|exports|module.exports}
  */
@@ -51,13 +60,17 @@ app.get('/signIn', function (req, res) {
     res.sendFile(path.join(__dirname + '/signIn.html'));
 });
 
+app.get('/ping', function (req, res) {
+    res.json({pong: Date.now()});
+});
+
 app.use(function (err, req, res, next) {
     appInsights.client.trackRequest(req, res);
     next();
 });
 
 var start = new Date();
-app.listen(port, function () {
+app.listen(port, function init() {
     console.log('Gulp is running on port ' + port + '.');
     var end = new Date();
     var duration = end - start;

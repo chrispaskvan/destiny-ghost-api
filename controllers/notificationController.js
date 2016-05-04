@@ -73,7 +73,6 @@ function NotificationController(loggingProvider) {
     if (!(this.shadowUsers && this.shadowUsers.constructor === Array)) {
         throw new Error('Unexpected shadow following me.');
     }
-    return this;
 }
 /**
  * @namespace
@@ -124,7 +123,7 @@ NotificationController.prototype = (function () {
                 var worldPath = path.join('./databases/', path.basename(lastManifest.mobileWorldContentPaths.en));
                 return self.destiny.getCurrentUser(shadowUser.cookies)
                     .then(function (currentUser) {
-                        return self.destiny.getCharacters(currentUser.membershipId)
+                        return self.destiny.getCharacters(currentUser.membershipId, currentUser.membershipType)
                             .then(function (characters) {
                                 return self.destiny.getFieldTestWeapons(characters[0].characterBase.characterId,
                                         shadowUser.cookies)
@@ -195,7 +194,7 @@ NotificationController.prototype = (function () {
                 var worldPath = path.join('./databases/', path.basename(lastManifest.mobileWorldContentPaths.en));
                 return self.destiny.getCurrentUser(shadowUser.cookies)
                     .then(function (currentUser) {
-                        return self.destiny.getCharacters(currentUser.membershipId)
+                        return self.destiny.getCharacters(currentUser.membershipId, currentUser.membershipType)
                             .then(function (characters) {
                                 return self.destiny.getFoundryOrders(characters[0].characterBase.characterId, shadowUser.cookies)
                                     .then(function (foundryOrders) {
@@ -284,7 +283,7 @@ NotificationController.prototype = (function () {
                 var worldPath = path.join('./databases/', path.basename(lastManifest.mobileWorldContentPaths.en));
                 return self.destiny.getCurrentUser(shadowUser.cookies)
                     .then(function (currentUser) {
-                        return self.destiny.getCharacters(currentUser.membershipId)
+                        return self.destiny.getCharacters(currentUser.membershipId, currentUser.membershipType)
                             .then(function (characters) {
                                 var characterPromises = [];
                                 _.each(characters, function (character) {

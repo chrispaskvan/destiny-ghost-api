@@ -32,7 +32,6 @@ function Destiny() {
     if (!this.apiKey || !_.isString(this.apiKey)) {
         throw new Error('The API key is missing.');
     }
-    return this;
 }
 /**
  * @throws API key not found.
@@ -190,18 +189,19 @@ Destiny.prototype = (function () {
     /**
      * @function
      * @param membershipId {string}
+     * @param membershipType {integer}
      * @param callback
      * @returns {*|promise}
      * @description Get character details.
      */
-    var getCharacters = function (membershipId, callback) {
+    var getCharacters = function (membershipId, membershipType, callback) {
         var deferred = Q.defer();
         var opts = {
             headers: {
                 'x-api-key': this.apiKey
             },
-            url: util.format('%s/Destiny/2/Account/%s/Summary/', servicePlatform,
-                membershipId)
+            url: util.format('%s/Destiny/%s/Account/%s/Summary/', servicePlatform,
+                membershipType, membershipId)
         };
         request(opts, function (err, res, body) {
             if (!err && res.statusCode === 200) {
@@ -274,16 +274,20 @@ Destiny.prototype = (function () {
                         responseBody.Message, responseBody.Status));
                 } else {
                     var user = responseBody.Response;
-                    /**
-                     * @todo xBox
-                     */
-                    self.getMembershipIdFromDisplayName(user.psnId, membershipTypes.TigerPsn)
+                    var gamerTag = user.psnId || user.gamerTag;
+                    if (!gamerTag) {
+                        deferred.reject(new Error('Gamer tag not found.'));
+                    }
+                    var membershipType = user.psnId ? membershipTypes.TigerPsn : membershipTypes.TigerXbox;
+                    self.getMembershipIdFromDisplayName(gamerTag, membershipType)
                         .then(function (membershipId) {
                             if (user) {
                                 deferred.resolve({
                                     displayName: user.psnId,
                                     email: user.email,
-                                    membershipId: membershipId
+                                    membershipId: membershipId,
+                                    membershipType: membershipType,
+                                    profilePicturePath: user.user.profilePicturePath
                                 });
                             } else {
                                 deferred.resolve([]);

@@ -60,7 +60,6 @@ function UserController() {
      * @type {World|exports|module.exports}
      */
     this.world = new World();
-    return this;
 }
 /**
  * @namespace
@@ -116,7 +115,7 @@ UserController.prototype = (function () {
         return this.users.getUserByPhoneNumberToken(phoneNumberToken)
             .then(function (user) {
                 if (!user) {
-                    return res.status(404);
+                    return res.status(404).end();
                 }
 
             })
@@ -137,9 +136,9 @@ UserController.prototype = (function () {
         this.users.getUserByEmailAddress(emailAddress)
             .then(function (user) {
                 if (user) {
-                    return res.status(204);
+                    return res.status(204).end();
                 }
-                return res.status(404);
+                return res.status(404).end();
             })
             .fail(function (err) {
                 res.json(new jSend.error(err.message));
@@ -152,7 +151,7 @@ UserController.prototype = (function () {
      */
     var getGamerTag = function (req, res) {
         var gamerTag = req.params.gamerTag;
-        var membershipType = req.body.membershipType;
+        var membershipType = req.params.membershipType;
         if (!gamerTag || !membershipType) {
             return res.status(409).json(new jSend.error('A gamer tag is required.'));
         }
@@ -180,9 +179,9 @@ UserController.prototype = (function () {
         this.users.getUserByPhoneNumber(phoneNumber)
             .then(function (user) {
                 if (user) {
-                    return res.status(204);
+                    return res.status(204).end();
                 }
-                return res.status(404);
+                return res.status(404).end();
             })
             .fail(function (err) {
                 res.json(new jSend.error(err.message));
@@ -197,7 +196,7 @@ UserController.prototype = (function () {
     var getUserByEmailAddressToken = function (req, res) {
         var emailAddressToken = req.params.emailAddressToken;
         if (!emailAddressToken) {
-            return res.status(404);
+            return res.status(404).end();
         }
         this.users.getUserTokenByEmailAddressToken(emailAddressToken)
             .then(function (user) {

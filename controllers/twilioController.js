@@ -68,7 +68,6 @@ function TwilioController(loggingProvider) {
      * @type {User|exports|module.exports}
      */
     this.users = new Users(process.env.DATABASE, process.env.TWILIO);
-    return this;
 }
 /**
  * @namespace
@@ -129,7 +128,7 @@ TwilioController.prototype = (function () {
                 var worldPath = path.join('./databases/', path.basename(lastManifest.mobileWorldContentPaths.en));
                 return self.destiny.getCurrentUser(shadowUser.cookies)
                     .then(function (currentUser) {
-                        return self.destiny.getCharacters(currentUser.membershipId)
+                        return self.destiny.getCharacters(currentUser.membershipId, currentUser.membershipType)
                             .then(function (characters) {
                                 return self.destiny.getFieldTestWeapons(characters[0].characterBase.characterId,
                                         shadowUser.cookies)
@@ -176,7 +175,7 @@ TwilioController.prototype = (function () {
                 var worldPath = path.join('./databases/', path.basename(lastManifest.mobileWorldContentPaths.en));
                 return self.destiny.getCurrentUser(shadowUser.cookies)
                     .then(function (currentUser) {
-                        return self.destiny.getCharacters(currentUser.membershipId)
+                        return self.destiny.getCharacters(currentUser.membershipId, currentUser.membershipType)
                             .then(function (characters) {
                                 return self.destiny.getFoundryOrders(characters[0].characterBase.characterId,
                                         shadowUser.cookies)
@@ -215,7 +214,7 @@ TwilioController.prototype = (function () {
         var self = this;
         return this.destiny.getCurrentUser(shadowUser.cookies)
             .then(function (currentUser) {
-                return self.destiny.getCharacters(currentUser.membershipId)
+                return self.destiny.getCharacters(currentUser.membershipId, currentUser.membershipType)
                     .then(function (characters) {
                         var characterPromises = [];
                         _.each(characters, function (character) {
@@ -457,6 +456,9 @@ TwilioController.prototype = (function () {
                     }
                     var itemHash = req.cookies.itemHash;
                     var message = req.body.Body.trim().toLowerCase();
+                    /**
+                     * @todo Handle STOP and HELP
+                     */
                     if (new S(message).startsWith('more')) {
                         if (itemHash) {
                             return bitly.getShortUrl('http://db.destinytracker.com/items/' + itemHash)

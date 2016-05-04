@@ -21,7 +21,6 @@ function AuthenticationController() {
      * @type {Authentication|exports|module.exports}
      */
     this.authentication = new Authentication();
-    return this;
 }
 AuthenticationController.prototype = (function () {
     'use strict';
