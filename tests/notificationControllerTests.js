@@ -119,7 +119,7 @@ describe('Notification Controller Tests', function () {
                     deferred.resolve(responseText);
                 }
             };
-            notificationController.create(req, res);
+            notificationController.createNotifications(req, res);
             deferred.promise.should.become('Success\n').notify(done);
         });
     });

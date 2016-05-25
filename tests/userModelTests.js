@@ -47,17 +47,23 @@ describe('Create a new user', function () {
             isSubscribedToXur: true,
             membershipId: '11',
             membershipType: 2,
-            isSubscribedToBanshee44: true
+            notifications: []
         };
         userModel.getSubscribedUsers()
-            .then(function (usersBefore) {
+            .then(function (subscribedUsersBefore) {
                 return userModel.createUser(user)
                     .then(function () {
-                        return userModel.getSubscribedUsers()
-                            .then(function (usersAfter) {
-                                expect(usersAfter.length === (usersBefore.length + 1)).to.equal(true);
-                                userModel.deleteUser(user.phoneNumber);
-                                done();
+                        return userModel.getRegisteredUsers()
+                            .then(function (registeredUsersAfter) {
+                                expect(registeredUsersAfter.length ===
+                                    (subscribedUsersBefore.length + 1)).to.equal(true);
+                                return userModel.getSubscribedUsers()
+                                    .then(function (subscribedUsersAfter) {
+                                        expect(subscribedUsersAfter.length ===
+                                            subscribedUsersBefore.length).to.equal(true);
+                                        userModel.deleteUser(user.phoneNumber);
+                                        done();
+                                    });
                             });
                     });
             })

@@ -44,8 +44,12 @@ var routes = function () {
                     loggingProvider.info(err);
                 })
                 .fin(function () {
-                    notificationController.create(req, res);
+                    notificationController.createNotifications(req, res);
                 });
+        });
+    notificationRouter.route('/:subscription/:phoneNumber')
+        .post(function (req, res) {
+            notificationController.createNotificationsForUser(req, res);
         });
     return notificationRouter;
 };

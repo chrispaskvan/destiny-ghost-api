@@ -75,6 +75,14 @@ Users.prototype = (function () {
         name: 'User',
         type: 'object',
         properties: {
+            carrier: {
+                readOnly: true,
+                type: 'string'
+            },
+            dateRegistered: {
+                readOnly: true,
+                type: 'object'
+            },
             emailAddress: {
                 format: 'email',
                 readOnly: true,
@@ -123,10 +131,6 @@ Users.prototype = (function () {
                 type: 'string',
                 format: 'phone'
             },
-            carrier: {
-                readOnly: true,
-                type: 'string'
-            },
             type: {
                 readOnly: true,
                 type: 'string'
@@ -138,7 +142,7 @@ Users.prototype = (function () {
         name: 'User',
         type: 'object',
         properties: {
-            name: {
+            type: {
                 required: true,
                 type: 'string'
             },
@@ -153,7 +157,7 @@ Users.prototype = (function () {
      * Allowed Actions
      * @type {{Gunsmith: string, Xur: string}}
      */
-    var actions = {
+    var notificationTypes = {
         Foundry: 'Orders',
         Gunsmith: 'Banshee-44',
         IronBanner: 'Lord Saladin',
@@ -183,8 +187,14 @@ Users.prototype = (function () {
             return deferred.promise.nodeify(callback);
         }
         var validateNotifications = validator(notificationSchema);
-        if (!validateNotifications(user.notifications)) {
-            deferred.reject(new Error(JSON.stringify(validateNotifications.errors)));
+        var errors = [];
+        _.each(user.notifications, function (notification) {
+            if (!validateNotifications(notification)) {
+                _.union(errors, validateNotifications.errors);
+            }
+        });
+        if (errors.length) {
+            deferred.reject(new Error(JSON.stringify(errors)));
             return deferred.promise.nodeify(callback);
         }
         this.getUserByPhoneNumber(user.phoneNumber)
@@ -241,7 +251,7 @@ Users.prototype = (function () {
         sql.finalize();
     };
     /**
-     *
+     * Save the user, tokens included.
      * @param user
      * @param callback
      * @returns {*}
@@ -261,21 +271,28 @@ Users.prototype = (function () {
     };
     /**
      * Delete expired tokens.
+     * @param callback
      */
-    var deleteExpiredUserTokens = function () {
+    var deleteExpiredUserTokens = function (callback) {
+        var deferred = Q.defer();
         var now = new Date((new Date()) - 1000 * 3600 * 2);
         var sql = this.db.prepare('DELETE FROM DestinyGhostUserToken WHERE id < \'' + now.toISOString() + '\'');
         sql.run();
         sql.finalize();
+        deferred.resolve();
+        return deferred.promise.nodeify(callback);
     };
     /**
      * Delete a user.
      * @param phoneNumber {string}
      */
-    var deleteUser = function (phoneNumber) {
+    var deleteUser = function (phoneNumber, callback) {
+        var deferred = Q.defer();
         var sql = this.db.prepare('DELETE FROM DestinyGhostUser WHERE id = \'' + phoneNumber + '\'');
         sql.run();
         sql.finalize();
+        deferred.resolve();
+        return deferred.promise.nodeify(callback);
     };
     /**
      *
@@ -303,19 +320,19 @@ Users.prototype = (function () {
     /**
      *
      * @param phoneNumber
-     * @param action
+     * @param notificationType
      * @param callback
      * @returns {*}
      */
-    var getLastNotificationDate = function (phoneNumber, action, callback) {
+    var getLastNotificationDate = function (phoneNumber, notificationType, callback) {
         var deferred = Q.defer();
-        if (!_.contains(_.values(actions), action)) {
-            deferred.reject(new Error(action.toString() + ' is an unknown action.'));
+        if (!_.contains(_.values(notificationTypes), notificationType)) {
+            deferred.reject(new Error(notificationType.toString() + ' is an unknown action.'));
             return deferred.promise.nodeify(callback);
         }
         this.db.each('SELECT id FROM DestinyGhostUserMessage WHERE json LIKE \'%"phoneNumber":"' +
             phoneNumber + '"%\' AND json LIKE \'%"action":"' +
-            action.toString() + '"%\' ORDER BY id DESC LIMIT 1', function (err, row) {
+            notificationType.toString() + '"%\' ORDER BY id DESC LIMIT 1', function (err, row) {
                 if (err) {
                     deferred.reject(err);
                 } else {
@@ -351,10 +368,10 @@ Users.prototype = (function () {
         return deferred.promise;
     };
     /**
-     * Get subscribed users from the database.
+     * Get registered users from the database.
      * @returns {*|Array.User}
      */
-    var getSubscribedUsers = function () {
+    var getRegisteredUsers = function () {
         var deferred = Q.defer();
         var users = [];
         this.db.each('SELECT json FROM DestinyGhostUser', function (err, row) {
@@ -362,9 +379,7 @@ Users.prototype = (function () {
                 deferred.reject(err);
             } else {
                 var user = JSON.parse(row.json);
-                if (user.isSubscribedToBanshee44 || user.isSubscribedToXur) {
-                    users.push(user);
-                }
+                users.push(user);
             }
         }, function (err) {
             if (err) {
@@ -374,6 +389,22 @@ Users.prototype = (function () {
             }
         });
         return deferred.promise;
+    };
+    /**
+     * Get subscribed users from the database.
+     * @returns {*|Array.User}
+     */
+    var getSubscribedUsers = function () {
+        var subscribedUsers = [];
+        return this.getRegisteredUsers()
+            .then(function (registeredUsers) {
+                _.each(registeredUsers, function (registeredUser) {
+                    if (registeredUser.notifications.length > 0) {
+                        subscribedUsers.push(registeredUser);
+                    }
+                });
+                return subscribedUsers;
+            });
     };
     /**
      * Get the user with the provided email address.
@@ -461,8 +492,8 @@ Users.prototype = (function () {
      */
     var getUserByPhoneNumber = function (phoneNumber) {
         var deferred = Q.defer();
-        this.db.all('SELECT json FROM DestinyGhostUser WHERE json LIKE \'%"phoneNumber":"' +
-            phoneNumber + '"%\'', function (err, rows) {
+        this.db.all('SELECT json FROM DestinyGhostUser WHERE id = \'' +
+            phoneNumber + '\'', function (err, rows) {
                 if (err) {
                     deferred.reject(err);
                 } else {
@@ -515,10 +546,11 @@ Users.prototype = (function () {
      * @returns {*|Object}
      */
     var getUserTokenByPhoneNumber = function (phoneNumber) {
-        return deleteExpiredUserTokens()
+        var self = this;
+        return deleteExpiredUserTokens.call(this)
             .then(function () {
                 var deferred = Q.defer();
-                this.db.each('SELECT id, json FROM DestinyGhostUserToken WHERE json LIKE \'%"phoneNumber":"' +
+                self.db.each('SELECT id, json FROM DestinyGhostUserToken WHERE json LIKE \'%"phoneNumber":"' +
                     phoneNumber + '"%\' ORDER BY id DESC LIMIT 1', function (err, row) {
                         if (err) {
                             deferred.reject(err);
@@ -589,7 +621,7 @@ Users.prototype = (function () {
         return deferred.promise.nodeify(callback);
     };
     return {
-        actions: actions,
+        actions: notificationTypes,
         cleanPhoneNumber: cleanPhoneNumber,
         createUser: createUser,
         createUserMessage: createUserMessage,
@@ -599,6 +631,7 @@ Users.prototype = (function () {
         getBlob: getBlob,
         getLastNotificationDate: getLastNotificationDate,
         getPhoneNumberType: getPhoneNumberType,
+        getRegisteredUsers: getRegisteredUsers,
         getSubscribedUsers: getSubscribedUsers,
         getUserByEmailAddress: getUserByEmailAddress,
         getUserByGamerTag: getUserByGamerTag,

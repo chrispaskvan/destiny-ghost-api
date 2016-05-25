@@ -528,6 +528,70 @@ NotificationController.prototype = (function () {
                 fs.writeFileSync(self.shadowUserConfiguration, JSON.stringify(shadowUsers, null, 2));
             });
     };
+
+    /**
+     *
+     * @param res
+     * @param subscribedUsers
+     * @param subscription
+     * @returns {Request|*}
+     * @private
+     */
+    function _create(res, subscribedUsers, subscription) {
+        var self = this;// jshint ignore:line
+        if (subscribedUsers && subscribedUsers.length > 0) {
+            if (parseInt(subscription, 10) === subscriptions.FieldTestWeapons) {
+                var bansheeSubscribers = _.filter(subscribedUsers, function (user) {
+                    var notification = _.find(user.notifications, function (notification) {
+                        return notification.type === self.users.actions.Gunsmith;
+                    });
+                    return notification && notification.enabled === true;
+                });
+                return _getFieldTestWeapons.call(self, bansheeSubscribers)
+                    .then(function () {
+                        res.json(new JSend.success());
+                    });
+            }
+            if (parseInt(subscription, 10) === subscriptions.FoundryOrders) {
+                var foundrySubscribers = _.filter(subscribedUsers, function (user) {
+                    var notification = _.find(user.notifications, function (notification) {
+                        return notification.type === self.users.actions.Foundry;
+                    });
+                    return notification && notification.enabled === true;
+                });
+                return _getFoundryOrders.call(self, foundrySubscribers)
+                    .then(function () {
+                        res.json(new JSend.success());
+                    });
+            }
+            if (parseInt(subscription, 10) === subscriptions.IronBannerEventRewards) {
+                var lordSaladinSubscribers = _.filter(subscribedUsers, function (user) {
+                    var notification = _.find(user.notifications, function (notification) {
+                        return notification.type === self.users.actions.IronBanner;
+                    });
+                    return notification && notification.enabled === true;
+                });
+                return _getIronBannerEventRewards.call(self, lordSaladinSubscribers)
+                    .then(function () {
+                        res.json(new JSend.success());
+                    });
+            }
+            if (parseInt(subscription, 10) === subscriptions.Xur) {
+                var xurSubscribers = _.filter(subscribedUsers, function (user) {
+                    var notification = _.find(user.notifications, function (notification) {
+                        return notification.type === self.users.actions.Xur;
+                    });
+                    return notification && notification.enabled === true;
+                });
+                return _getXur.call(self, xurSubscribers)
+                    .then(function () {
+                        res.json(new JSend.success());
+                    });
+            }
+        } else {
+            res.json(new JSend.success());
+        }
+    }
     /**
      *
      * @param req
@@ -537,8 +601,7 @@ NotificationController.prototype = (function () {
         var self = this;
         _.each(_.keys(notificationHeaders), function (headerName) {
             if (req.headers[headerName] !== notificationHeaders[headerName]) {
-                res.writeHead(403);
-                return res.end();
+                res.writeHead(403).end();
             }
         });
         var subscription = parseInt(req.params.subscription, 10);
@@ -550,46 +613,35 @@ NotificationController.prototype = (function () {
                 return self.users.getSubscribedUsers();
             })
             .then(function (subscribedUsers) {
-                if (subscribedUsers && subscribedUsers.length > 0) {
-                    if (parseInt(subscription, 10) === subscriptions.FieldTestWeapons) {
-                        var bansheeSubscribers = _.filter(subscribedUsers, function (user) {
-                            return user.isSubscribedToBanshee44 === true;
-                        });
-                        return _getFieldTestWeapons.call(self, bansheeSubscribers)
-                            .then(function () {
-                                res.json(new JSend.success());
-                            });
-                    }
-                    if (parseInt(subscription, 10) === subscriptions.FoundryOrders) {
-                        var foundrySubscribers = _.filter(subscribedUsers, function (user) {
-                            return user.isSubscribedToBanshee44 === true;
-                        });
-                        return _getFoundryOrders.call(self, foundrySubscribers)
-                            .then(function () {
-                                res.json(new JSend.success());
-                            });
-                    }
-                    if (parseInt(subscription, 10) === subscriptions.IronBannerEventRewards) {
-                        var lordSaladinSubscribers = _.filter(subscribedUsers, function (user) {
-                            return user.isSubscribedToLordSaladin === true;
-                        });
-                        return _getIronBannerEventRewards.call(self, lordSaladinSubscribers)
-                            .then(function () {
-                                res.json(new JSend.success());
-                            });
-                    }
-                    if (parseInt(subscription, 10) === subscriptions.Xur) {
-                        var xurSubscribers = _.filter(subscribedUsers, function (user) {
-                            return user.isSubscribedToXur === true;
-                        });
-                        return _getXur.call(self, xurSubscribers)
-                            .then(function () {
-                                res.json(new JSend.success());
-                            });
-                    }
-                } else {
-                    res.json(new JSend.success());
+                _create.call(self, res, subscribedUsers, subscription);
+            })
+            .fail(function (err) {
+                res.json(new JSend.error(err.message));
+                if (self.loggingProvider) {
+                    self.loggingProvider.info(err);
                 }
+            });
+    };
+    var createForUser = function (req, res) {
+        var self = this;
+        _.each(_.keys(notificationHeaders), function (headerName) {
+            if (req.headers[headerName] !== notificationHeaders[headerName]) {
+                res.writeHead(403).end();
+            }
+        });
+        var subscription = parseInt(req.params.subscription, 10);
+        if (isNaN(subscription)) {
+            res.json(new JSend.fail('That subscription is not recognized.'));
+        }
+        this.signIn()
+            .then(function () {
+                return self.users.getUserByPhoneNumber(req.params.phoneNumber);
+            })
+            .then(function (subscribedUser) {
+                if (!subscribedUser) {
+                    res.writeHead(404).end();
+                }
+                _create.call(self, res, [subscribedUser], subscription);
             })
             .fail(function (err) {
                 res.json(new JSend.error(err.message));
@@ -599,7 +651,8 @@ NotificationController.prototype = (function () {
             });
     };
     return {
-        create: create,
+        createNotifications: create,
+        createNotificationsForUser: createForUser,
         signIn: signIn
     };
 }());

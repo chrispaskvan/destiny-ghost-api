@@ -85,11 +85,14 @@ UserController.prototype = (function () {
                     return res.json(new jSend.error('Bad tokens.'));
                 }
                 return self.users.getUserByPhoneNumber(user.phoneNumber)
-                    .then(function (user) {
-                        if (user) {
+                    .then(function (registeredUser) {
+                        if (registeredUser) {
                             return res.json(new jSend.error('You are already registered. Please sign in.'));
                         }
-                        return self.users.createUser(userToken)
+                        return self.users.createUser(
+                            _.extend(_.omit(userToken, ['notifications', 'timeStamp', 'tokens']),
+                                { notifications: user.notifications })
+                        )
                             .then(function () {
                                 return res.json(new jSend.success());
                             });

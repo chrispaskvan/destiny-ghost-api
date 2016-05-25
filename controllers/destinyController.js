@@ -181,7 +181,7 @@ DestinyController.prototype = (function () {
         var cookies = _getCookies(req);
         this.destiny.getCurrentUser(cookies)
             .then(function (currentUser) {
-                return self.destiny.getCharacters(currentUser.membershipId)
+                return self.destiny.getCharacters(currentUser.membershipId, currentUser.membershipType)
                     .then(function (characters) {
                         return self.destiny.getFieldTestWeapons(characters[0].characterBase.characterId, cookies)
                             .then(function (items) {
