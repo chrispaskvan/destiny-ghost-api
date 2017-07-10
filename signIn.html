@@ -1,27 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
     <meta charset="UTF-8">
     <title>Sign In</title>
     <script src="//ajax.aspnetcdn.com/ajax/jquery/jquery-2.1.4.min.js"></script>
     <script src="//cdnjs.cloudflare.com/ajax/libs/knockout/3.3.0/knockout-min.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/URI.js/1.18.9/URI.min.js"></script>
 </head>
 <body>
     <div id="anonymous1" style="display: none;">
         <div>
-            <label for="userName1">User Name:</label>
-            <input id="userName1" type="text" data-bind="value: userName, valueUpdate: 'afterkeydown'" />
-        </div>
-        <div>
-            <label for="password1">Password:</label>
-            <input id="password1" type="password" data-bind="value: password, valueUpdate: 'afterkeydown'" />
-        </div>
-        <div>
-            <input type="radio" name="console" data-bind="checked: membershipType" value="2"> Playstation Network<br>
-            <input type="radio" name="console" data-bind="checked: membershipType" value="1"> Xbox Live
-        </div>
-        <div>
-            <button id="signIn1" data-bind="click: signIn">Sign In</button>
+            <a data-bind="attr: { href: url }" id="signIn1">Sign In</a>
         </div>
     </div>
     <div id="authenticated1" style="display: none;">
@@ -34,59 +22,62 @@
     </div>
     <script>
         jQuery(document).ready(function () {
-            var anonymousUserViewModel = function () {
+            var anonymousUserViewModel = function (url) {
                 var self = this;
-                self.userName = ko.observable().extend({ required: true });
-                self.password = ko.observable().extend({ required: true });
-                self.membershipType = ko.observable('2');
-                self.signIn = function () {
-                    var data = JSON.stringify({
-                        userName: self.userName(),
-                        password: self.password(),
-                        membershipType: parseInt(self.membershipType(), 10)
-                    });
-                    jQuery.ajax({
-                        contentType: 'application/json; charset=utf-8',
-                        data: data,
-                        type: 'POST',
-                        url: '/api/users/signIn/bungie'
-                    }).done(function () {
-                        window.location.reload();
-                    });
-                };
+
+                self.url = url;
             };
-            var authenticatedUserViewModel = function (displayName) {
+            var authenticatedUserViewModel = function (user) {
                 var self = this;
                 self.welcomeMessage = ko.pureComputed(function () {
-                    return 'Welcome ' + displayName;
+                    return 'Welcome ' + user.displayName;
                 });
                 self.signOut = function () {
-                    document.cookie = "bungled=; expires=Thu, 10 Jul 1970 00:00:00 UTC";
-                    document.cookie = "bungledid=; expires=Thu, 02 Apr 2002 00:00:00 UTC";
-                    document.cookie = "bungleatk=; expires=Thu, 08 Aug 1999 00:00:00 UTC";
-                    window.location.reload();
+                    jQuery.ajax({
+                        contentType: 'application/json; charset=utf-8',
+                        type: 'GET',
+                        url: '/api/users/signout'
+                    })
+                        .always(function () {
+                            window.location.reload();
+                        });
                 };
             };
-            if (document.cookie.indexOf('bungleatk') >= 0 &&
-                    document.cookie.indexOf('bungleatk') >= 0 &&
-                    document.cookie.indexOf('bungleatk') >= 0) {
+
+            function authenticated(user) {
+                ko.applyBindings(new authenticatedUserViewModel(user), document.getElementById('authenticated1'));
+                jQuery("#authenticated1").fadeIn();
+            }
+
+            function anonymous() {
                 jQuery.ajax({
                     contentType: 'application/json; charset=utf-8',
                     type: 'GET',
-                    url: '/api/destiny/currentUser'
-                }).done(function (result) {
-                    if (result.status === 'error') {
-                        alert('Please sign in again.');
-                        var vm = new authenticatedUserViewModel();
-                        vm.signOut();
-                    } else {
-                        ko.applyBindings(new authenticatedUserViewModel(result.data.displayName), document.getElementById('authenticated1'));
-                        jQuery("#authenticated1").fadeIn();
-                    }
-                });
+                    url: '/api/destiny/signIn'
+                })
+                    .done(function (url) {
+                        ko.applyBindings(new anonymousUserViewModel(url), document.getElementById('anonymous1'));
+                        jQuery("#anonymous1").fadeIn();
+                    });
+            }
+
+            var uri = new URI(jQuery(location).attr('href'));
+            if (uri.query(true).code) {
+                jQuery.ajax({
+                    contentType: 'application/json; charset=utf-8',
+                    type: 'GET',
+                    url: '/api/users/signin/bungie' + uri.search()
+                })
+                    .done(authenticated)
+                    .fail(anonymous);
             } else {
-                ko.applyBindings(new anonymousUserViewModel(), document.getElementById('anonymous1'));
-                jQuery("#anonymous1").fadeIn();
+                jQuery.ajax({
+                    contentType: 'application/json; charset=utf-8',
+                    type: 'GET',
+                    url: '/api/users/current'
+                })
+                    .done(authenticated)
+                    .fail(anonymous);
             }
         });
     </script>

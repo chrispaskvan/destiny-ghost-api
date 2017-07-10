@@ -51,6 +51,7 @@ describe('It\'s Bungie\'s world, you\'re just querying it.', function () {
                 world.getItemByName('Hawkmoon')
                     .then(function (items) {
                         world.close();
+                        console.log(items);
                         expect(items[0].itemName).to.equal('Hawkmoon');
                         expect(items[0].qualityLevel).to.equal(0);
                         expect(items.length).to.equal(1);

@@ -32,6 +32,13 @@ function Destiny() {
     if (!this.apiKey || !_.isString(this.apiKey)) {
         throw new Error('The API key is missing.');
     }
+    /**
+     * @member {string} apiKey - The Destiny API key.
+     */
+    this.authorizationUrl = bungie.authorizationUrl;
+    if (!this.authorizationUrl || !_.isString(this.authorizationUrl)) {
+        throw new Error('The authorization URL is missing.');
+    }
 }
 /**
  * @throws API key not found.
@@ -80,6 +87,51 @@ Destiny.prototype = (function () {
      */
     var destinyCache = new NodeCache({ stdTTL: 0, checkperiod: 0, useClones: true });
     /**
+     *
+     * @param code
+     * @private
+     */
+    var getAccessTokenFromCode = function (code, callback) {
+        var deferred = Q.defer();
+        var opts = {
+            body: JSON.stringify({
+                code: code
+            }),
+            headers: {
+                'x-api-key': this.apiKey
+            },
+            url: util.format('%s/App/GetAccessTokensFromCode/', servicePlatform)
+        };
+        request.post(opts, function (err, res, body) {
+            if (!err && res.statusCode === 200) {
+                var responseBody = JSON.parse(body);
+                if (responseBody.ErrorCode !== 1) {
+                    deferred.reject(new DestinyError(responseBody.ErrorCode || -1,
+                        responseBody.Message || '', responseBody.ErrorStatus || ''));
+                } else {
+                    deferred.resolve(responseBody.Response);
+                }
+            } else {
+                deferred.reject(err);
+            }
+        });
+        return deferred.promise.nodeify(callback);
+    };
+    var getAccessTokensFromRefreshToken = function (refreshToken) {
+        var opts = {
+            body: JSON.stringify({
+                refreshToken: refreshToken
+            }),
+            headers: {
+                'x-api-key': this.apiKey
+            },
+            url: util.format('%s/App/GetAccessTokensFromRefreshToken/')
+        };
+        request.post(opts, function (err, res, body) {
+            console.log(body);
+        });
+    };
+    /**
      * @description Returns the cookie header string comprised of all Bungie cookies
      * required in certain web API requests.
      * @param cookies
@@ -104,6 +156,16 @@ Destiny.prototype = (function () {
         return _.find(cookies, function (cookie) {
             return cookie.name === cookieName;
         }).value;
+    };
+    /**
+     *
+     * @param state
+     * @returns {string}
+     */
+    var getAccessTokenUrl = function (state) {
+        var deferred = Q.defer();
+        deferred.resolve(util.format('%s?state=%s', this.authorizationUrl, state));
+        return deferred.promise;
     };
     /**
      * @function
@@ -783,6 +845,9 @@ Destiny.prototype = (function () {
         return deferred.promise.nodeify(callback);
     };
     return {
+        getAccessTokenFromCode: getAccessTokenFromCode,
+        getAccessTokensFromRefreshToken: getAccessTokensFromRefreshToken,
+        getAccessTokenUrl: getAccessTokenUrl,
         getActivity: getActivity,
         getCharacter: getCharacter,
         getCharacters: getCharacters,

@@ -2,6 +2,7 @@
 var env = require('gulp-env'),
     gulp = require('gulp'),
     gulpMocha = require('gulp-mocha'),
+    istanbul = require('gulp-istanbul'),
     nodemon = require('gulp-nodemon');
 
 gulp.task('default', function runDefault() {
@@ -12,7 +13,7 @@ gulp.task('default', function runDefault() {
             APPINSIGHTS: './settings/applicationInsights.json',
             BITLY: './settings/bitly.json',
             DATABASE: './databases/ghost.db',
-            DOMAIN: 'http://18d212d1.ngrok.io',
+            DOMAIN: 'http://a02a08d8.ngrok.io',
             PORT: 1100,
             TWILIO: './settings/twilio.production.json'
         },
@@ -27,7 +28,7 @@ gulp.task('integrationTests', function runIntegrationTests() {
         APPINSIGHTS: './settings/applicationInsights.json',
         BITLY: './settings/bitly.json',
         DATABASE: './databases/ghost.db',
-        DOMAIN: 'http://18d212d1.ngrok.io',
+        DOMAIN: 'http://a02a08d8.ngrok.io',
         PORT: 1100,
         TWILIO: './settings/twilio.production.json'
     }});
@@ -44,7 +45,7 @@ gulp.task('controllerTests', function runControllerTests() {
         PORT: 1100,
         TWILIO: './settings/twilio.production.json'
     }});
-    gulp.src('tests/*ControllerTests.js', { read: false })
+    gulp.src('tests/authenticationControllerTests.js', { read: false })
         .pipe(gulpMocha({ reporter: 'nyan' }));
 });
 
@@ -53,10 +54,28 @@ gulp.task('modelTests', function runModelTests() {
         APPINSIGHTS: './settings/applicationInsights.json',
         BITLY: './settings/bitly.json',
         DATABASE: './databases/ghost.db',
-        DOMAIN: 'http://18d212d1.ngrok.io',
+        DOMAIN: 'http://a02a08d8.ngrok.io',
         PORT: 1100,
         TWILIO: './settings/twilio.production.json'
     }});
     gulp.src('tests/*ModelTests.js', { read: false })
         .pipe(gulpMocha({ reporter: 'nyan' }));
+});
+
+gulp.task('test', function () {
+    return gulp.src('tests/tokenModelTests.js')
+        .pipe(istanbul({
+            includeUntested: true
+        }))
+        .on('finish', function () {
+            gulp.src('tests/tokenModelTests.js')
+                .pipe(gulpMocha({
+                    reporter: 'spec'
+                }))
+                .pipe(istanbul.writeReports({
+                    dir: './.coverage',
+                    reporters: [ 'lcov' ],
+                    reportOpts: { dir: './.coverage'}
+                }));
+        });
 });

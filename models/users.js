@@ -57,7 +57,7 @@ function Users(databaseFullPath, twilioSettingsFullPath) {
      * @member {Object}
      * @type {{accountSid: string, authToken string, phoneNumber string}} settings
      */
-    this.settings = JSON.parse(fs.readFileSync(twilioSettingsFullPath || './settings/twilio.production.json'));
+    this.settings = JSON.parse(fs.readFileSync('./settings/twilio.production.json')); // todo
 }
 /**
  * @namespace
@@ -172,6 +172,17 @@ Users.prototype = (function () {
     var cleanPhoneNumber = function (phoneNumber) {
         var cleaned = phoneNumber.replace(/\D/g, '');
         return '+1' + cleaned;
+    };
+
+    var dateReviver = function (key, value) {
+        var aDate;
+        if (typeof value === 'string') {
+            aDate = Date.parse(value);
+            if (aDate) {
+                return new Date(aDate);
+            }
+        }
+        return value;
     };
     /**
      * Create the user in the database.
@@ -422,7 +433,7 @@ Users.prototype = (function () {
                         deferred.resolve();
                     } else {
                         if (rows.length === 1) {
-                            deferred.resolve(JSON.parse(_.first(rows).json));
+                            deferred.resolve(JSON.parse(_.first(rows).json), dateReviver);
                         } else {
                             deferred.reject(new Error('The email address, ' + emailAddress + ', is not unique.'));
                         }

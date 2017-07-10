@@ -4,7 +4,6 @@
 'use strict';
 var Chance = require('chance'),
     expect = require('chai').expect,
-    fs = require('fs'),
     Users = require('../models/users'),
     validator = require('validator');
 

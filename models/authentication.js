@@ -44,13 +44,35 @@ Authentication.prototype = (function () {
      */
     var psnSignIn = function (userName, password, callback) {
         var deferred = Q.defer();
-        var horseman = new Horseman();
-        horseman.open('https://www.bungie.net/en/User/SignIn/Psnid')
-            .waitForSelector('#signInInput_SignInID')
+        var horseman = new Horseman({
+            timeout: 10000
+        });
+        horseman
+            .open('https://www.bungie.net')
+            .tabCount()
+            .log()
+            .click('.psn.exempt')
+            .tabCount()
+            .log()
+            .switchToTab(1)
+            .url()
+            .log()
             .type('input[id="signInInput_SignInID"]', userName)
             .type('input[id="signInInput_Password"]', password)
-            .click('#signInButton')
-            .waitForNextPage()
+            .click('input[id="signInButton"]')
+            .screenshot('image.png')
+            .evaluate(function () {
+                document.getElementById('signInButton').click();
+            })
+            .wait(1000)
+            .screenshot('image2.png')
+            .html()
+            .log()
+            .switchToTab(0)
+            .reload()
+            .url()
+            .log()
+            .screenshot('image3.png')
             .cookies()
             .then(function (cookies) {
                 var bungieCookies = {

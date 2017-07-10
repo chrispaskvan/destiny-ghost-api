@@ -92,6 +92,35 @@ World.prototype = (function () {
         return deferred.promise;
     };
     /**
+     * Get a Random Number of Cards
+     * @param numberOfCards {integer}
+     * @returns {*|promise}
+     */
+    var getGrimoireCards = function (numberOfCards) {
+        var self = this;
+        var deferred = Q.defer();
+
+        this.db.serialize(function () {
+            var cards = [];
+            self.db.each('SELECT * FROM DestinyGrimoireCardDefinition WHERE id IN (SELECT id FROM DestinyGrimoireCardDefinition ORDER BY RANDOM() LIMIT ' +
+                    numberOfCards + ')', function (err, row) {
+                if (err) {
+                    deferred.reject(err);
+                } else {
+                    cards.push(JSON.parse(row.json));
+                }
+            }, function (err) {
+                if (err) {
+                    deferred.reject(err);
+                } else {
+                    deferred.resolve(cards);
+                }
+            });
+        });
+
+        return deferred.promise;
+    };
+    /**
      * Look up the item(s) with matching strings in their name(s).
      * @param itemName {string}
      * @returns {*|Object}
@@ -102,7 +131,7 @@ World.prototype = (function () {
         this.db.serialize(function () {
             var items = [];
             var it = new S(itemName).replaceAll('\'', '\'\'').s;
-            self.db.each('SELECT json FROM DestinyInventoryItemDefinition WHERE json LIKE \'%"itemName":"%' +
+            self.db.each('SELECT json FROM DestinyInventoryItemDefinition WHERE json LIKE \'%"itemName":"' +
                 it + '%"%\'', function (err, row) {
                     if (err) {
                         deferred.reject(err);
@@ -228,6 +257,7 @@ World.prototype = (function () {
         close: closeDatabase,
         getClassByHash: getClassByHash,
         getClassByType: getClassByType,
+        getGrimoireCards: getGrimoireCards,
         getItemByName: getItemByName,
         getItemByHash: getItemByHash,
         getItemCategory: getItemCategory,

@@ -10,7 +10,9 @@
  */
 var _ = require('underscore'),
     Authentication = require('../models/authentication'),
-    cookie = require('cookie');
+    Destiny = require('../destiny/destiny.model'),
+    cookie = require('cookie'),
+    Users = require('../users/user.service');
 /**
  * @constructor
  */
@@ -21,6 +23,16 @@ function AuthenticationController() {
      * @type {Authentication|exports|module.exports}
      */
     this.authentication = new Authentication();
+    /**
+     * Destiny Model
+     * @type {Destiny|exports|module.exports}
+     */
+    this.destiny = new Destiny();
+    /**
+     *
+     * @type {User|exports|module.exports}
+     */
+    this.users = new Users(undefined, process.env.TWILIO);
 }
 AuthenticationController.prototype = (function () {
     'use strict';
@@ -47,16 +59,31 @@ AuthenticationController.prototype = (function () {
      * @param res
      */
     var signIn = function (req, res) {
-        var userName = req.body.userName;
-        var password = req.body.password;
-        var membershipType = req.body.membershipType;
-        this.authentication.signIn(userName, password, membershipType)
-            .then(function (cookies) {
-                res.header('Set-Cookie', _getCookieHeader(cookies));
-                res.end('Success\n');
-            })
-            .fail(function (err) {
-                res.status(401).send(err.message);
+        var self = this;
+        var code = req.query.code;
+        var sessionId = req.query.state;
+        var io = req.app.get('io');
+        var socketId = _.find(_.keys(io.sockets.sockets), function (key) {
+            return io.sockets.sockets[key].client.request.sessionID === sessionId;
+        });
+        if (socketId) {
+            io.sockets.sockets[socketId].emit('logged_in', 'test111111');
+        }
+
+        return this.destiny.getAccessTokenFromCode(code)
+            .then(function (bungie) {
+                return self.destiny.getCurrentUser(bungie.accessToken.value)
+                    .then(function (user) {
+                        if (user) {
+                            _.extend(user, {
+                                bungie: bungie
+                            });
+                            self.users.createAnonymousUser(user)
+                                .then(function () {
+                                    res.redirect('http://localhost:1100');
+                                });
+                        }
+                    });
             });
     };
     return {

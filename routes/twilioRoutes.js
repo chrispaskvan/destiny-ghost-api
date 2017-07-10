@@ -7,12 +7,13 @@
 var express = require('express'),
     TwilioController = require('../controllers/twilioController');
 
-var routes = function () {
+var routes = function (authenticateUser, destinyService, userService) {
     'use strict';
     var twilioRouter = express.Router();
-    var twilioController = new TwilioController();
+    var twilioController = new TwilioController(destinyService, userService);
+
     twilioRouter.route('/destiny/r')
-        .post(function (req, res) {
+        .post(authenticateUser, function (req, res) {
             twilioController.request(req, res);
         });
     twilioRouter.route('/destiny/s')
@@ -23,6 +24,7 @@ var routes = function () {
         .post(function (req, res) {
             twilioController.fallback(req, res);
         });
+
     return twilioRouter;
 };
 

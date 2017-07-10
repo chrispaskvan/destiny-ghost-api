@@ -601,7 +601,9 @@ NotificationController.prototype = (function () {
         var self = this;
         _.each(_.keys(notificationHeaders), function (headerName) {
             if (req.headers[headerName] !== notificationHeaders[headerName]) {
-                res.writeHead(403).end();
+                res.writeHead(403);
+                res.end();
+                return;
             }
         });
         var subscription = parseInt(req.params.subscription, 10);
@@ -626,7 +628,9 @@ NotificationController.prototype = (function () {
         var self = this;
         _.each(_.keys(notificationHeaders), function (headerName) {
             if (req.headers[headerName] !== notificationHeaders[headerName]) {
-                res.writeHead(403).end();
+                res.writeHead(403);
+                res.end();
+                return;
             }
         });
         var subscription = parseInt(req.params.subscription, 10);

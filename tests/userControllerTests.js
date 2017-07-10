@@ -127,21 +127,3 @@ describe('New user registration and confirmation requests', function () {
         deferred.promise.should.become(new jSend.success()).notify(done);
     });
 });
-
-describe('New user registration and confirmation requests', function () {
-    it('Should return successfully', function (done) {
-        var req = {
-            body: newUser
-        };
-        var deferred = Q.defer();
-        var res = {
-            json: function (response) {
-                deferred.resolve(response);
-            }
-        };
-        userController.register(req, res);
-        deferred.promise.should.become(new jSend.success());
-        userController.confirm(req, res);
-        deferred.promise.should.become(new jSend.success()).notify(done);
-    });
-});

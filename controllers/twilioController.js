@@ -21,7 +21,6 @@ var _ = require('underscore'),
      * @type {Bitly|exports|module.exports}
      */
     bitly = require('../models/bitly')(process.env.BITLY),
-    Destiny = require('../models/destiny'),
     fs = require('fs'),
     Ghost = require('../models/ghost'),
     Notifications = require('../models/notifications'),
@@ -29,20 +28,19 @@ var _ = require('underscore'),
     Q = require('q'),
     S = require('string'),
     shadowUsers = require('../settings/shadowUsers.json'),
+    settings = require('../settings/twilio.' + (process.env.NODE_ENV || 'development') + '.json'),
     twilio = require('twilio'),
-    Users = require('../models/users'),
     World = require('../models/world');
 /**
  * @constructor
  */
-function TwilioController(loggingProvider) {
+function TwilioController(destinyService, userService) {
     'use strict';
-    this.loggingProvider = loggingProvider;
     /**
      * Destiny Model
      * @type {Destiny|exports|module.exports}
      */
-    this.destiny = new Destiny();
+    this.destiny = destinyService;
     /**
      * Ghost Model
      * @type {Ghost|exports|module.exports}
@@ -62,12 +60,12 @@ function TwilioController(loggingProvider) {
      * @member {Object}
      * @type {{accountSid: string, authToken string, phoneNumber string}} settings
      */
-    this.authToken = JSON.parse(fs.readFileSync(process.env.TWILIO || './settings/twilio.production.json')).authToken;
+    this.authToken = settings.authToken;
     /**
      * User Model
      * @type {User|exports|module.exports}
      */
-    this.users = new Users(process.env.DATABASE, process.env.TWILIO);
+    this.users = userService;
 }
 /**
  * @namespace
@@ -121,44 +119,41 @@ TwilioController.prototype = (function () {
      * @returns {Request|*}
      * @private
      */
-    var _getFieldTestWeapons = function (shadowUser) {
+    var _getFieldTestWeapons = function (user) {
         var self = this;
         return this.ghost.getLastManifest()
             .then(function (lastManifest) {
                 var worldPath = path.join('./databases/', path.basename(lastManifest.mobileWorldContentPaths.en));
-                return self.destiny.getCurrentUser(shadowUser.cookies)
-                    .then(function (currentUser) {
-                        return self.destiny.getCharacters(currentUser.membershipId, currentUser.membershipType)
-                            .then(function (characters) {
-                                return self.destiny.getFieldTestWeapons(characters[0].characterBase.characterId,
-                                        shadowUser.cookies)
-                                    .then(function (items) {
-                                        if (items && items.length > 0) {
-                                            var itemHashes = _.map(items, function (item) {
-                                                return item.item.itemHash;
-                                            });
-                                            self.world.open(worldPath);
-                                            var itemPromises = [];
-                                            _.each(itemHashes, function (itemHash) {
-                                                itemPromises.push(self.world.getItemByHash(itemHash));
-                                            });
-                                            return Q.all(itemPromises)
-                                                .then(function (items) {
-                                                    return self.world.getVendorIcon(gunSmithHash)
-                                                        .then(function (iconUrl) {
-                                                            return {
-                                                                items: _.map(items, function (item) {
-                                                                    return item.itemName;
-                                                                }),
-                                                                iconUrl: iconUrl
-                                                            };
-                                                        });
-                                                })
-                                                .fin(function () {
-                                                    self.world.close();
-                                                });
-                                        }
+                return self.destiny.getCharacters(user.membershipId, user.membershipType)
+                    .then(function (characters) {
+                        return self.destiny.getFieldTestWeapons(characters[0].characterBase.characterId,
+                            user.bungie.accessToken.value)
+                            .then(function (items) {
+                                if (items && items.length > 0) {
+                                    var itemHashes = _.map(items, function (item) {
+                                        return item.item.itemHash;
                                     });
+                                    self.world.open(worldPath);
+                                    var itemPromises = [];
+                                    _.each(itemHashes, function (itemHash) {
+                                        itemPromises.push(self.world.getItemByHash(itemHash));
+                                    });
+                                    return Q.all(itemPromises)
+                                        .then(function (items) {
+                                            return self.world.getVendorIcon(gunSmithHash)
+                                                .then(function (iconUrl) {
+                                                    return {
+                                                        items: _.map(items, function (item) {
+                                                            return item.itemName;
+                                                        }),
+                                                        iconUrl: iconUrl
+                                                    };
+                                                });
+                                        })
+                                        .fin(function () {
+                                            self.world.close();
+                                        });
+                                }
                             });
                     });
             });
@@ -416,6 +411,7 @@ TwilioController.prototype = (function () {
     var fallback = function (req, res) {
         var header = req.headers['x-twilio-signature'];
         var twiml = new twilio.TwimlResponse();
+
         if (twilio.validateRequest(this.authToken, header, process.env.DOMAIN + req.originalUrl, req.body)) {
             twiml.message(_getRandomResponseForAnError());
             res.writeHead(200, {
@@ -441,9 +437,9 @@ TwilioController.prototype = (function () {
             var counter = parseInt(req.cookies.counter, 10) || 0;
             this.users.getUserByPhoneNumber(req.body.From)
                 .then(function (user) {
-                    if (!user) {
-                        if (!req.cookies.unregisteredUser) {
-                            twiml.message('Register your phone at app.destiny-ghost.com/register');
+                    if (!user || !user.dateRegistered) {
+                        if (!req.cookies.isRegistered) {
+                            twiml.message('Register your phone at app.destiny-ghost.com/register'); // ToDo: Domain name is hard coded here.
                             res.writeHead(200, {
                                 'Content-Type': 'text/xml'
                             });
@@ -454,6 +450,8 @@ TwilioController.prototype = (function () {
                         }
                         return;
                     }
+                    res.cookie('isRegistered', true);
+
                     var itemHash = req.cookies.itemHash;
                     var message = req.body.Body.trim().toLowerCase();
                     /**
@@ -487,151 +485,167 @@ TwilioController.prototype = (function () {
                             });
                             res.end(twiml.toString());
                         } else {
-                            var shadowUser = _.find(shadowUsers, function (shadowUser) {
-                                return shadowUser.membershipType === user.membershipType;
-                            });
+                            //var shadowUser = _.find(shadowUsers, function (shadowUser) {
+                            //    return shadowUser.membershipType === user.membershipType;
+                            //});
                             var searchTerm = req.body.Body.trim().toLowerCase();
-                            if (searchTerm === 'xur') {
-                                return _getXur.call(self)
-                                    .then(function (vendor) {
-                                        var result = vendor.items && vendor.items.length > 0 ?
-                                                    _.reduce(vendor.items, function (memo, exotic) {
-                                                        return memo + '\n' + exotic;
-                                                    }, ' ').trim() :
-                                                    'Xur is off conspiring with the 9. Check back Friday.';
-                                        twiml.message(function () {
-                                            this.body(result.substr(0, 130));
-                                            this.media(vendor.iconUrl);
+                            switch (searchTerm) {
+                                case 'xur': {
+                                    return _getXur.call(self)
+                                        .then(function (vendor) {
+                                            var result = vendor.items && vendor.items.length > 0 ?
+                                                _.reduce(vendor.items, function (memo, exotic) {
+                                                    return memo + '\n' + exotic;
+                                                }, ' ').trim() :
+                                                'Xur is off conspiring with the 9. Check back Friday.';
+                                            twiml.message(function () {
+                                                this.body(result.substr(0, 130));
+                                                this.media(vendor.iconUrl);
+                                            });
+                                            res.writeHead(200, {
+                                                'Content-Type': 'text/xml'
+                                            });
+                                            res.end(twiml.toString());
                                         });
-                                        res.writeHead(200, {
-                                            'Content-Type': 'text/xml'
+
+                                    break;
+                                }
+                                case 'field test weapons': {
+                                    return _getFieldTestWeapons.call(self, user)
+                                        .then(function (vendor) {
+                                            var result = _.reduce(vendor.items, function (memo, weapon) {
+                                                return memo + '\n' + weapon;
+                                            }, ' ').trim();
+                                            twiml.message(function () {
+                                                this.body(result.substr(0, 130));
+                                                this.media(vendor.iconUrl);
+                                            });
+                                            res.writeHead(200, {
+                                                'Content-Type': 'text/xml'
+                                            });
+                                            res.end(twiml.toString());
                                         });
-                                        res.end(twiml.toString());
-                                    });
-                            }
-                            if (searchTerm === 'field test weapons') {
-                                return _getFieldTestWeapons.call(self, shadowUser)
-                                    .then(function (vendor) {
-                                        var result = _.reduce(vendor.items, function (memo, weapon) {
-                                            return memo + '\n' + weapon;
-                                        }, ' ').trim();
-                                        twiml.message(function () {
-                                            this.body(result.substr(0, 130));
-                                            this.media(vendor.iconUrl);
+
+                                    break;
+                                }
+                                case 'foundry orders': {
+                                    return _getFoundryOrders.call(self, user)
+                                        .then(function (vendor) {
+                                            var result = _.reduce(vendor.items, function (memo, foundryItem) {
+                                                return memo + '\n' + foundryItem;
+                                            }, ' ').trim();
+                                            twiml.message(function () {
+                                                this.body(result.substr(0, 130));
+                                                this.media(vendor.iconUrl);
+                                            });
+                                            res.writeHead(200, {
+                                                'Content-Type': 'text/xml'
+                                            });
+                                            res.end(twiml.toString());
                                         });
-                                        res.writeHead(200, {
-                                            'Content-Type': 'text/xml'
-                                        });
-                                        res.end(twiml.toString());
-                                    })
-                                    .fail(function (err) {
-                                        res.status(500).end(err.toString());
-                                    });
-                            }
-                            if (searchTerm === 'foundry orders') {
-                                return _getFoundryOrders.call(self, shadowUser)
-                                    .then(function (vendor) {
-                                        var result = _.reduce(vendor.items, function (memo, foundryItem) {
-                                            return memo + '\n' + foundryItem;
-                                        }, ' ').trim();
-                                        twiml.message(function () {
-                                            this.body(result.substr(0, 130));
-                                            this.media(vendor.iconUrl);
-                                        });
-                                        res.writeHead(200, {
-                                            'Content-Type': 'text/xml'
-                                        });
-                                        res.end(twiml.toString());
-                                    });
-                            }
-                            if (searchTerm === 'iron banner') {
-                                return _getIronBannerEventRewards.call(self, shadowUser)
-                                    .then(function (vendor) {
-                                        if (vendor && vendor.rewards && vendor.rewards.weapons &&
+
+                                    break;
+                                }
+                                case 'iron banner': {
+                                    return _getIronBannerEventRewards.call(self, user)
+                                        .then(function (vendor) {
+                                            if (vendor && vendor.rewards && vendor.rewards.weapons &&
                                                 vendor.rewards.weapons.length > 0) {
-                                            twiml.message(function () {
-                                                this.body(_.reduce(vendor.rewards.weapons, function (memo, weapon) {
-                                                    return memo + '\n' + weapon;
-                                                }, ' ').trim().substr(0, 130));
-                                                this.media(vendor.iconUrl);
-                                            });
-                                            twiml.message('Hunter\n------\n' + _.reduce(vendor.rewards.armor.hunter,
-                                                function (memo, classArmor) {
-                                                    return memo + '\n' + classArmor;
-                                                },
-                                                ' ').trim().substr(0, 130));
-                                            twiml.message('Titan\n-----\n' + _.reduce(vendor.rewards.armor.titan,
-                                                function (memo, classArmor) {
-                                                    return memo + '\n' + classArmor;
-                                                }, ' ').trim().substr(0, 130));
-                                            twiml.message('Warlock\n-------\n' + _.reduce(vendor.rewards.armor.warlock,
-                                                function (memo, classArmor) {
-                                                    return memo + '\n' + classArmor;
-                                                }, ' ').trim().substr(0, 130));
-                                            res.writeHead(200, {
-                                                'Content-Type': 'text/xml'
-                                            });
-                                            res.end(twiml.toString());
-                                        } else {
-                                            twiml.message(function () {
-                                                this.body('Lord Saladin will be back soon enough.');
-                                                this.media(vendor.iconUrl);
-                                            });
-                                            res.writeHead(200, {
-                                                'Content-Type': 'text/xml'
-                                            });
-                                            res.end(twiml.toString());
-                                        }
-                                    });
+                                                twiml.message(function () {
+                                                    this.body(_.reduce(vendor.rewards.weapons, function (memo, weapon) {
+                                                        return memo + '\n' + weapon;
+                                                    }, ' ').trim().substr(0, 130));
+                                                    this.media(vendor.iconUrl);
+                                                });
+                                                twiml.message('Hunter\n------\n' + _.reduce(vendor.rewards.armor.hunter,
+                                                        function (memo, classArmor) {
+                                                            return memo + '\n' + classArmor;
+                                                        },
+                                                        ' ').trim().substr(0, 130));
+                                                twiml.message('Titan\n-----\n' + _.reduce(vendor.rewards.armor.titan,
+                                                        function (memo, classArmor) {
+                                                            return memo + '\n' + classArmor;
+                                                        }, ' ').trim().substr(0, 130));
+                                                twiml.message('Warlock\n-------\n' + _.reduce(vendor.rewards.armor.warlock,
+                                                        function (memo, classArmor) {
+                                                            return memo + '\n' + classArmor;
+                                                        }, ' ').trim().substr(0, 130));
+                                                res.writeHead(200, {
+                                                    'Content-Type': 'text/xml'
+                                                });
+                                                res.end(twiml.toString());
+                                            } else {
+                                                twiml.message(function () {
+                                                    this.body('Lord Saladin will be back soon enough.');
+                                                    this.media(vendor.iconUrl);
+                                                });
+                                                res.writeHead(200, {
+                                                    'Content-Type': 'text/xml'
+                                                });
+                                                res.end(twiml.toString());
+                                            }
+                                        });
+
+                                    break;
+                                }
+                                default: {
+                                    return _queryItem.call(self, searchTerm)
+                                        .then(function (items) {
+                                            counter = counter + 1;
+                                            res.cookie('counter', counter);
+                                            switch (items.length) {
+                                                case 0: {
+                                                    twiml.message(_getRandomResponseForNoResults());
+                                                    res.writeHead(200, {
+                                                        'Content-Type': 'text/xml'
+                                                    });
+
+                                                    return res.end(twiml.toString());
+                                                }
+                                                case 1: {
+                                                    res.cookie('itemHash', items[0].itemHash);
+                                                    items[0].itemCategory = new S(items[0].itemCategory).strip('Weapon')
+                                                        .collapseWhitespace().s.trim();
+                                                    var template = '{{itemName}} {{tierTypeName}} {{itemCategory}}';
+                                                    if (user.type === 'landline') {
+                                                        twiml.message((new S(template).template(items[0]).s).substr(0, 130));
+                                                    } else {
+                                                        twiml.message(function () {
+                                                            this.body(new S(template).template(items[0]).s)
+                                                                .media(items[0].icon);
+                                                        });
+                                                    }
+                                                    res.writeHead(200, {
+                                                        'Content-Type': 'text/xml'
+                                                    });
+
+                                                    return res.end(twiml.toString());
+                                                }
+                                                default: {
+                                                    var groups = _.groupBy(items, function (item) {
+                                                        return item.itemName;
+                                                    });
+                                                    var keys = Object.keys(groups);
+                                                    var result = _.reduce(keys, function (memo, key) {
+                                                        return memo + '\n' + key;
+                                                    }, ' ').trim();
+
+                                                    twiml.message(result.substr(0, 130));
+                                                    res.writeHead(200, {
+                                                        'Content-Type': 'text/xml'
+                                                    });
+
+                                                    return res.end(twiml.toString());
+                                                }
+                                            }
+                                        });
+                                }
                             }
-                            return _queryItem.call(self, searchTerm)
-                                .then(function (items) {
-                                    counter = counter + 1;
-                                    res.cookie('counter', counter);
-                                    if (items.length === 1) {
-                                        res.cookie('itemHash', items[0].itemHash);
-                                        items[0].itemCategory = new S(items[0].itemCategory).strip('Weapon')
-                                            .collapseWhitespace().s.trim();
-                                        var template = '{{itemName}} {{tierTypeName}} {{itemCategory}}';
-                                        if (user.type === 'landline') {
-                                            twiml.message((new S(template).template(items[0]).s).substr(0, 130));
-                                        } else {
-                                            twiml.message(function () {
-                                                this.body(new S(template).template(items[0]).s)
-                                                    .media(items[0].icon);
-                                            });
-                                        }
-                                        res.writeHead(200, {
-                                            'Content-Type': 'text/xml'
-                                        });
-                                        res.end(twiml.toString());
-                                    }
-                                    if (items.length > 1) {
-                                        var groups = _.groupBy(items, function (item) {
-                                            return item.itemName;
-                                        });
-                                        var keys = Object.keys(groups);
-                                        var result = _.reduce(keys, function (memo, key) {
-                                            return memo + '\n' + key;
-                                        }, ' ').trim();
-                                        twiml.message(result.substr(0, 130));
-                                        res.writeHead(200, {
-                                            'Content-Type': 'text/xml'
-                                        });
-                                        res.end(twiml.toString());
-                                    } else {
-                                        twiml.message(_getRandomResponseForNoResults());
-                                        res.writeHead(200, {
-                                            'Content-Type': 'text/xml'
-                                        });
-                                        res.end(twiml.toString());
-                                    }
-                                });
                         }
                     }
                 })
                 .fail(function (err) {
-                    res.status(500).end(err.toString());
+                    res.status(500).end(err.message);
                 });
         } else {
             res.writeHead(403);

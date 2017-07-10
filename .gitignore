@@ -1,5 +1,9 @@
 # Created by .ignore support plugin (hsz.mobi)
-.idea
+.coverage/
+.idea/
+.jscsrc
+.vscode/
+appInsights-node/
 databases/
 logs/
 settings/
