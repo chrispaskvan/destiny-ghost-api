@@ -183,6 +183,37 @@ var notificationTypes = {
     Xur: 'Xur'
 };
 /**
+ * Add message to the user audit trail.
+ * @param user {Object}
+ * @param callback
+ * @returns {*|Array}
+ */
+Users.prototype.addUserMessage = function (displayName, membershipType, message, notificationType) {
+    var self = this;
+
+    return this.getUserByDisplayName(displayName, membershipType)
+        .then(function (user) {
+            var notification;
+            var messages;
+
+            if (notificationTypes[notificationType]) {
+                notification = _.find(user.notifications, function (notification) {
+                    return notification.type === notificationTypes[notificationType];
+                });
+                if (notification) {
+                    messages = notification.messages;
+                }
+            } else {
+                messages = user.messages;
+            }
+            if (messages) {
+                messages.push(message);
+            }
+
+            return self.documents.upsertDocument(collectionId, user);
+        });
+};
+/**
  * Create an Anonymous User
  * @param user
  * @param callback
@@ -313,17 +344,26 @@ Users.prototype.getPhoneNumberType = function (phoneNumber) {
  * Get subscribed users from the database.
  * @returns {*|Array.User}
  */
-Users.prototype.getSubscribedUsers = function () {
-    var subscribedUsers = [];
-    return this.getRegisteredUsers()
-        .then(function (registeredUsers) {
-            _.each(registeredUsers, function (registeredUser) {
-                if (registeredUser.notifications.length > 0) {
-                    subscribedUsers.push(registeredUser);
-                }
-            });
-            return subscribedUsers;
-        });
+Users.prototype.getSubscribedUsers = function (notificationType) {
+    var deferred = Q.defer();
+    var qb = new QueryBuilder();
+
+    if (!notificationTypes[notificationType]) {
+        deferred.reject(Error('notificationType is not valid'));
+
+        return deferred.promise;
+    }
+    qb
+        .select('displayName')
+        .select('membershipType')
+        .select('phoneNumber')
+        .from(collectionId)
+        .join('notifications')
+        .where('type', notificationTypes[notificationType])
+        .where('enabled', true);
+
+    return this.documents.getDocuments(collectionId, qb.getQuery(), {
+            enableCrossPartitionQuery: true });
 };
 /**
  * Get User with Matching Display Name
@@ -377,14 +417,21 @@ Users.prototype.getUserByDisplayName = function (displayName, membershipType, ca
  * @param emailAddress {string}
  * @returns {*|Object}
  */
-Users.prototype.getUserByEmailAddress = function (emailAddress, callback) {
+Users.prototype.getUserByEmailAddress = function (emailAddress, membershipType) {
     var deferred = Q.defer();
     var qb = new QueryBuilder();
 
     if (typeof emailAddress !== 'string' || _.isEmpty(emailAddress)) {
         deferred.reject(Error('emailAddress string is required'));
 
-        return deferred.promise.nodeify(callback);
+        return deferred.promise;
+    }
+    if (membershipType && _.isNumber(membershipType)) {
+        qb.where('membershipType', membershipType);
+    } else {
+        deferred.reject(Error('membershipType number is required'));
+
+        return deferred.promise;
     }
 
     qb.where('emailAddress', emailAddress);
@@ -404,7 +451,7 @@ Users.prototype.getUserByEmailAddress = function (emailAddress, callback) {
             return deferred.reject(Error('documents undefined'));
         });
 
-    return deferred.promise.nodeify(callback);
+    return deferred.promise;
 };
 /**
  * Get the user token by the email address token.

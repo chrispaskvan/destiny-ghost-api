@@ -20,14 +20,13 @@ var _ = require('underscore'),
      * Bitly Model
      * @type {Bitly|exports|module.exports}
      */
-    bitly = require('../models/bitly')(process.env.BITLY),
+    bitly = require('../helpers/bitly'),
     fs = require('fs'),
     Ghost = require('../models/ghost'),
     Notifications = require('../models/notifications'),
     path = require('path'),
     Q = require('q'),
     S = require('string'),
-    shadowUsers = require('../settings/shadowUsers.json'),
     settings = require('../settings/twilio.' + (process.env.NODE_ENV || 'development') + '.json'),
     twilio = require('twilio'),
     World = require('../models/world');

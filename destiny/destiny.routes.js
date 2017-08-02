@@ -5,13 +5,13 @@ var bunyan = require('bunyan'),
     DestinyController = require('../destiny/destiny.controller'),
     express = require('express');
 
-var routes = function () {
+var routes = function (authenticateUser, destinyService, userService, worldRepository) {
     'use strict';
     var destinyRouter = express.Router();
     /**
      * Notification Log
      */
-    var loggingProvider = bunyan.createLogger({
+    var loggingProvider = bunyan.createLogger({ // ToDo
         name: 'destiny-ghost-api',
         streams: [
             {
@@ -24,7 +24,7 @@ var routes = function () {
      * Set up routes and initialize the controller.
      * @type {destinyController|exports|module.exports}
      */
-    var destinyController = new DestinyController(loggingProvider);
+    var destinyController = new DestinyController(destinyService, loggingProvider, userService, worldRepository);
     /**
      * Routes
      */
@@ -32,8 +32,8 @@ var routes = function () {
         .get(function (req, res) {
             destinyController.getAuthorizationUrl(req, res);
         });
-    destinyRouter.route('/:membershipType/characters/:displayName')
-        .get(function (req, res) {
+    destinyRouter.route('/characters')
+        .get(authenticateUser, function (req, res) {
             destinyController.getCharacters(req, res);
         });
     destinyRouter.route('/currentUser/')
@@ -41,11 +41,11 @@ var routes = function () {
             destinyController.getCurrentUser(req, res);
         });
     destinyRouter.route('/fieldTestWeapons/')
-        .get(function (req, res) {
+        .get(authenticateUser, function (req, res) {
             destinyController.getFieldTestWeapons(req, res);
         });
     destinyRouter.route('/foundryOrders/')
-        .get(function (req, res) {
+        .get(authenticateUser, function (req, res) {
             destinyController.getFoundryOrders(req, res);
         });
     destinyRouter.route('/grimoireCards/:numberOfCards')

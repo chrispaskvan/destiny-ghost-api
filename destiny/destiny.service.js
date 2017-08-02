@@ -14,9 +14,9 @@
  * @requires request
  * @requires util
  */
+'use strict';
 var _ = require('underscore'),
     bungie = require('../settings/bungie.json'),
-    NodeCache = require('node-cache'),
     Q = require('q'),
     request = require('request'),
     util = require('util');
@@ -24,8 +24,8 @@ var _ = require('underscore'),
  * @throws API key not found.
  * @constructor
  */
-function Destiny() {
-    'use strict';
+function Destiny(cacheService) {
+    this.cacheService = cacheService;
     /**
      * @member {string} apiKey - The Destiny API key.
      */
@@ -41,7 +41,6 @@ function Destiny() {
         throw new Error('The authorization URL is missing.');
     }
 }
-
 /**
  * Available Membership Types
  * @type {{TigerXbox: number, TigerPsn: number}}
@@ -78,18 +77,13 @@ var DestinyError = function (code, message, status) {
 DestinyError.prototype = Object.create(Error.prototype);
 DestinyError.prototype.constructor = DestinyError;
 /**
- * Local cache.
- * @type {*|exports|module.exports}
- */
-var destinyCache = new NodeCache({ stdTTL: 0, checkperiod: 0, useClones: true });
-/**
  *
  * @param code
  * @private
  */
-Destiny.prototype.getAccessTokenFromCode = function (code, callback) {
-    var deferred = Q.defer();
-    var opts = {
+Destiny.prototype.getAccessTokenFromCode = function (code) {
+    const deferred = Q.defer();
+    const opts = {
         body: JSON.stringify({
             code: code
         }),
@@ -98,6 +92,7 @@ Destiny.prototype.getAccessTokenFromCode = function (code, callback) {
         },
         url: util.format('%s/App/GetAccessTokensFromCode/', servicePlatform)
     };
+
     request.post(opts, function (err, res, body) {
         if (!err && res.statusCode === 200) {
             var responseBody = JSON.parse(body);
@@ -111,15 +106,16 @@ Destiny.prototype.getAccessTokenFromCode = function (code, callback) {
             deferred.reject(err);
         }
     });
-    return deferred.promise.nodeify(callback);
+
+    return deferred.promise;
 };
 /**
  * Refresh Access Token with Bungie
  * @param refreshToken
  */
-Destiny.prototype.getAccessTokenFromRefreshToken = function (refreshToken, callback) {
-    var deferred = Q.defer();
-    var opts = {
+Destiny.prototype.getAccessTokenFromRefreshToken = function (refreshToken) {
+    const deferred = Q.defer();
+    const opts = {
         body: JSON.stringify({
             refreshToken: refreshToken
         }),
@@ -128,6 +124,7 @@ Destiny.prototype.getAccessTokenFromRefreshToken = function (refreshToken, callb
         },
         url: util.format('%s/App/GetAccessTokensFromRefreshToken/', servicePlatform)
     };
+
     request.post(opts, function (err, res, body) {
         if (!err && res.statusCode === 200) {
             var responseBody = JSON.parse(body);
@@ -141,7 +138,8 @@ Destiny.prototype.getAccessTokenFromRefreshToken = function (refreshToken, callb
             deferred.reject(err);
         }
     });
-    return deferred.promise.nodeify(callback);
+
+    return deferred.promise;
 };
 /**
  * Get Bungie App Authorization
@@ -149,8 +147,10 @@ Destiny.prototype.getAccessTokenFromRefreshToken = function (refreshToken, callb
  * @returns {string}
  */
 Destiny.prototype.getAuthorizationUrl = function (state) {
-    var deferred = Q.defer();
+    const deferred = Q.defer();
+
     deferred.resolve(util.format('%s?state=%s', this.authorizationUrl, state));
+
     return deferred.promise;
 };
 /**
@@ -161,9 +161,9 @@ Destiny.prototype.getAuthorizationUrl = function (state) {
  * @param callback
  * @returns {*|promise}
  */
-Destiny.prototype.getActivity = function (characterId, membershipId, accessToken, callback) {
-    var deferred = Q.defer();
-    var opts = {
+Destiny.prototype.getActivity = function (characterId, membershipId, accessToken) {
+    const deferred = Q.defer();
+    const opts = {
         headers: {
             authorization: 'Bearer ' + accessToken,
             'x-api-key': this.apiKey
@@ -171,7 +171,8 @@ Destiny.prototype.getActivity = function (characterId, membershipId, accessToken
         url: util.format('%s/Destiny/2/Account/%s/Character/%s/Activities/',
             servicePlatform, membershipId, characterId)
     };
-    request(opts, function (err, res, body) {
+
+    request.get(opts, function (err, res, body) {
         if (!err && res.statusCode === 200) {
             var responseBody = JSON.parse(body);
             if (responseBody.ErrorCode !== 1) {
@@ -185,7 +186,8 @@ Destiny.prototype.getActivity = function (characterId, membershipId, accessToken
             deferred.reject(err);
         }
     });
-    return deferred.promise.nodeify(callback);
+
+    return deferred.promise;
 };
 /**
  * @function
@@ -197,8 +199,8 @@ Destiny.prototype.getActivity = function (characterId, membershipId, accessToken
  * @description Get the details for the member's character provided.
  */
 Destiny.prototype.getCharacter = function (membershipId, characterId, accessToken, callback) {
-    var deferred = Q.defer();
-    var opts = {
+    const deferred = Q.defer();
+    const opts = {
         headers: {
             authorization: 'Bearer ' + accessToken,
             'x-api-key': this.apiKey
@@ -206,7 +208,8 @@ Destiny.prototype.getCharacter = function (membershipId, characterId, accessToke
         url: util.format('%s/Destiny/2/Account/%s/Character/%s/Complete/',
             servicePlatform, membershipId, characterId)
     };
-    request(opts, function (err, res, body) {
+
+    request.get(opts, function (err, res, body) {
         if (!err && res.statusCode === 200) {
             var responseBody = JSON.parse(body);
             if (responseBody.ErrorCode !== 1) {
@@ -222,7 +225,8 @@ Destiny.prototype.getCharacter = function (membershipId, characterId, accessToke
             deferred.reject(err);
         }
     });
-    return deferred.promise.nodeify(callback);
+
+    return deferred.promise;
 };
 /**
  * @function
@@ -232,16 +236,17 @@ Destiny.prototype.getCharacter = function (membershipId, characterId, accessToke
  * @returns {*|promise}
  * @description Get character details.
  */
-Destiny.prototype.getCharacters = function (membershipId, membershipType, callback) {
-    var deferred = Q.defer();
-    var opts = {
+Destiny.prototype.getCharacters = function (membershipId, membershipType) {
+    const deferred = Q.defer();
+    const opts = {
         headers: {
             'x-api-key': this.apiKey
         },
         url: util.format('%s/Destiny/%s/Account/%s/Summary/', servicePlatform,
             membershipType, membershipId)
     };
-    request(opts, function (err, res, body) {
+
+    request.get(opts, function (err, res, body) {
         if (!err && res.statusCode === 200) {
             var responseBody = JSON.parse(body);
             if (responseBody.ErrorCode !== 1) {
@@ -254,7 +259,8 @@ Destiny.prototype.getCharacters = function (membershipId, membershipType, callba
             deferred.reject(err);
         }
     });
-    return deferred.promise.nodeify(callback);
+
+    return deferred.promise;
 };
 /**
  * @function
@@ -264,23 +270,25 @@ Destiny.prototype.getCharacters = function (membershipId, membershipType, callba
  * @returns {*|promise}
  * @description Get the Bungie member number from the user's display name.
  */
-Destiny.prototype.getMembershipIdFromDisplayName = function (displayName, membershipType, callback) {
-    var deferred = Q.defer();
-    var opts = {
+Destiny.prototype.getMembershipIdFromDisplayName = function (displayName, membershipType) {
+    const deferred = Q.defer();
+    const opts = {
         headers: {
             'x-api-key': this.apiKey
         },
         url: util.format('%s/Destiny/%s/Stats/GetMembershipIdByDisplayName/%s/',
             servicePlatform, membershipType, encodeURIComponent(displayName))
     };
-    request(opts, function (err, res, body) {
+
+    request.get(opts, function (err, res, body) {
         if (!err && res.statusCode === 200) {
             deferred.resolve(JSON.parse(body).Response);
         } else {
             deferred.reject(err);
         }
     });
-    return deferred.promise.nodeify(callback);
+
+    return deferred.promise;
 };
 /**
  * @function
@@ -289,17 +297,18 @@ Destiny.prototype.getMembershipIdFromDisplayName = function (displayName, member
  * @returns {*|promise}
  * @description Get the current user based on the Bungie cookies.
  */
-Destiny.prototype.getCurrentUser = function (accessToken, callback) {
-    var self = this;
-    var deferred = Q.defer();
-    var opts = {
+Destiny.prototype.getCurrentUser = function (accessToken) {
+    const self = this;
+    const deferred = Q.defer();
+    const opts = {
         headers: {
             authorization: 'Bearer ' + accessToken,
             'x-api-key': this.apiKey
         },
         url: util.format('%s/User/GetBungieNetUser/', servicePlatform)
     };
-    request(opts, function (err, res, body) {
+
+    request.get(opts, function (err, res, body) {
         if (!err && res.statusCode === 200) {
             var responseBody = JSON.parse(body);
             if (responseBody.Reponse !== undefined || responseBody.ErrorCode !== 1) {
@@ -331,7 +340,8 @@ Destiny.prototype.getCurrentUser = function (accessToken, callback) {
             deferred.reject(err);
         }
     });
-    return deferred.promise.nodeify(callback);
+
+    return deferred.promise;
 };
 /**
  * @constant
@@ -347,53 +357,52 @@ var gunSmithHash = '570929315';
  * @returns {*|promise}
  * @description Return the current field test weapons available from the gunsmith.
  */
-Destiny.prototype.getFieldTestWeapons = function (characterId, accessToken, callback) {
-    var self = this;
-    var deferred = Q.defer();
-    destinyCache.get('getFieldTestWeapons', function (err, saleItems) {
-        if (err) {
-            deferred.reject(err);
+Destiny.prototype.getFieldTestWeapons = function (characterId, accessToken) {
+    const self = this;
+    const deferred = Q.defer();
+    const opts = {
+        headers: {
+            authorization: 'Bearer ' + accessToken,
+            'x-api-key': self.apiKey
+        },
+        url: util.format('%s/Destiny/2/MyAccount/Character/%s/Vendor/%s/',
+            servicePlatform, characterId, gunSmithHash)
+    };
+
+    request.get(opts, function (error, res, body) {
+        if (!(!error && res.statusCode === 200)) {
+            deferred.reject(error);
         } else {
-            if (saleItems) {
-                setTimeout(function () {
-                    deferred.resolve(saleItems);
-                }, 10);
+            var responseBody = JSON.parse(body);
+            if (responseBody.ErrorCode !== 1) {
+                deferred.reject(new DestinyError(responseBody.ErrorCode,
+                    responseBody.Message, responseBody.Status));
             } else {
-                var opts = {
-                    headers: {
-                        authorization: 'Bearer ' + accessToken,
-                        'x-api-key': self.apiKey
-                    },
-                    url: util.format('%s/Destiny/2/MyAccount/Character/%s/Vendor/%s/',
-                        servicePlatform, characterId, gunSmithHash)
-                };
-                request(opts, function (error, res, body) {
-                    if (!(!error && res.statusCode === 200)) {
-                        deferred.reject(error);
-                    } else {
-                        var responseBody = JSON.parse(body);
-                        if (responseBody.ErrorCode !== 1) {
-                            deferred.reject(new DestinyError(responseBody.ErrorCode,
-                                responseBody.Message, responseBody.Status));
-                        } else {
-                            var data = responseBody.Response.data;
-                            if (data) {
-                                var saleItemCategories = data.saleItemCategories;
-                                var fieldTestWeapons = _.find(saleItemCategories, function (saleItemCategory) {
-                                    return saleItemCategory.categoryTitle === 'Field Test Weapons';
-                                });
-                                destinyCache.set('getFieldTestWeapons', fieldTestWeapons.saleItems);
-                                deferred.resolve(fieldTestWeapons.saleItems);
-                            } else {
-                                deferred.resolve([]);
-                            }
-                        }
-                    }
-                });
+                const { Response: { data }} = responseBody;
+                if (data) {
+                    const { vendorHash, nextRefreshDate, saleItemCategories } = data;
+                    const fieldTestWeapons = _.find(saleItemCategories, function (saleItemCategory) {
+                        return saleItemCategory.categoryTitle === 'Field Test Weapons';
+                    });
+                    const itemHashes = fieldTestWeapons.saleItems.map((saleItem) => {
+                        const { item: { itemHash }} = saleItem;
+
+                        return itemHash;
+                    });
+
+                    deferred.resolve({
+                        vendorHash,
+                        nextRefreshDate,
+                        itemHashes
+                    });
+                } else {
+                    deferred.resolve([]);
+                }
             }
         }
     });
-    return deferred.promise.nodeify(callback);
+
+    return deferred.promise;
 };
 /**
  * @function
@@ -403,58 +412,48 @@ Destiny.prototype.getFieldTestWeapons = function (characterId, accessToken, call
  * @returns {*|promise}
  * @description Return the current field test weapons available from the gunsmith.
  */
-Destiny.prototype.getFoundryOrders = function (characterId, accessToken, callback) {
-    var self = this;
-    var deferred = Q.defer();
-    destinyCache.get('getFoundryOrders', function (err, saleItems) {
-        if (err) {
-            deferred.reject(err);
+Destiny.prototype.getFoundryOrders = function (characterId, accessToken) {
+    const self = this;
+    const deferred = Q.defer();
+    const opts = {
+        headers: {
+            authorization: 'Bearer ' + accessToken,
+            'x-api-key': self.apiKey
+        },
+        url: util.format('%s/Destiny/2/MyAccount/Character/%s/Vendor/%s/',
+            servicePlatform, characterId, gunSmithHash)
+    };
+
+    request.get(opts, function (error, res, body) {
+        if (!(!error && res.statusCode === 200)) {
+            deferred.reject(error);
         } else {
-            if (saleItems) {
-                setTimeout(function () {
-                    deferred.resolve(saleItems);
-                }, 10);
+            var responseBody = JSON.parse(body);
+            if (responseBody.ErrorCode !== 1) {
+                deferred.reject(new DestinyError(responseBody.ErrorCode,
+                    responseBody.Message, responseBody.Status));
             } else {
-                var opts = {
-                    headers: {
-                        authorization: 'Bearer ' + accessToken,
-                        'x-api-key': self.apiKey
-                    },
-                    url: util.format('%s/Destiny/2/MyAccount/Character/%s/Vendor/%s/',
-                        servicePlatform, characterId, gunSmithHash)
-                };
-                request(opts, function (error, res, body) {
-                    if (!(!error && res.statusCode === 200)) {
-                        deferred.reject(error);
-                    } else {
-                        var responseBody = JSON.parse(body);
-                        if (responseBody.ErrorCode !== 1) {
-                            deferred.reject(new DestinyError(responseBody.ErrorCode,
-                                responseBody.Message, responseBody.Status));
-                        } else {
-                            var data = responseBody.Response.data;
-                            if (data) {
-                                var foundryOrdersCategory = _.find(data.saleItemCategories,
-                                    function (saleItemCategory) {
-                                        return saleItemCategory.categoryTitle === 'Foundry Orders';
-                                    });
-                                var foundryOrders = {
-                                    items: (typeof foundryOrdersCategory === 'object') ?
-                                        foundryOrdersCategory.saleItems : [],
-                                    nextRefreshDate: data.nextRefreshDate
-                                };
-                                destinyCache.set('getFoundryOrders', foundryOrders);
-                                deferred.resolve(foundryOrders);
-                            } else {
-                                deferred.resolve([]);
-                            }
-                        }
-                    }
-                });
+                var data = responseBody.Response.data;
+                if (data) {
+                    var foundryOrdersCategory = _.find(data.saleItemCategories,
+                        function (saleItemCategory) {
+                            return saleItemCategory.categoryTitle === 'Foundry Orders';
+                        });
+                    var foundryOrders = {
+                        items: (typeof foundryOrdersCategory === 'object') ?
+                            foundryOrdersCategory.saleItems : [],
+                        nextRefreshDate: data.nextRefreshDate
+                    };
+                    destinyCache.set('getFoundryOrders', foundryOrders);
+                    deferred.resolve(foundryOrders);
+                } else {
+                    deferred.resolve([]);
+                }
             }
         }
     });
-    return deferred.promise.nodeify(callback);
+
+    return deferred.promise;
 };
 /**
  * @function
@@ -464,9 +463,9 @@ Destiny.prototype.getFoundryOrders = function (characterId, accessToken, callbac
  * @param callback
  * @returns {*|promise}
  */
-Destiny.prototype.getInventory = function (characterId, membershipId, accessToken, callback) {
-    var deferred = Q.defer();
-    var opts = {
+Destiny.prototype.getInventory = function (characterId, membershipId, accessToken) {
+    const deferred = Q.defer();
+    const opts = {
         headers: {
             authorization: 'Bearer ' + accessToken,
             'x-api-key': this.apiKey
@@ -474,7 +473,8 @@ Destiny.prototype.getInventory = function (characterId, membershipId, accessToke
         url: util.format('%s/Destiny/2/Account/%s/Character/%s/Inventory/',
             servicePlatform, membershipId, characterId)
     };
-    request(opts, function (err, res, body) {
+
+    request.get(opts, function (err, res, body) {
         if (!err && res.statusCode === 200) {
             var responseBody = JSON.parse(body);
             if (responseBody.ErrorCode !== 1) {
@@ -488,7 +488,8 @@ Destiny.prototype.getInventory = function (characterId, membershipId, accessToke
             deferred.reject(err);
         }
     });
-    return deferred.promise.nodeify(callback);
+
+    return deferred.promise;
 };
 /**
  * @constant
@@ -504,54 +505,44 @@ var lordSaladinHash = '242140165';
  * @returns {*|promise}
  * @description Return the current field test weapons available from the gunsmith.
  */
-Destiny.prototype.getIronBannerEventRewards = function (characterId, accessToken, callback) {
-    var self = this;
-    var deferred = Q.defer();
-    destinyCache.get('getIronBannerEventRewards', function (err, saleItems) {
-        if (err) {
-            deferred.reject(err);
-        } else {
-            if (saleItems) {
-                setTimeout(function () {
-                    deferred.resolve(saleItems);
-                }, 10);
+Destiny.prototype.getIronBannerEventRewards = function (characterId, accessToken) {
+    const self = this;
+    const deferred = Q.defer();
+    const opts = {
+        headers: {
+            authorization: 'Bearer ' + accessToken,
+            'x-api-key': self.apiKey
+        },
+        url: util.format('%s/Destiny/2/MyAccount/Character/%s/Vendor/%s/',
+            servicePlatform, characterId, lordSaladinHash)
+    };
+
+    request.get(opts, function (err, res, body) {
+        if (!err && res.statusCode === 200) {
+            var responseBody = JSON.parse(body);
+            if (responseBody.ErrorCode === 1627) {
+                deferred.resolve([]);
+            } else if (responseBody.ErrorCode !== 1) {
+                deferred.reject(new DestinyError(responseBody.ErrorCode ||
+                    -1, responseBody.Message || '',
+                    responseBody.ErrorStatus || ''));
             } else {
-                var opts = {
-                    headers: {
-                        authorization: 'Bearer ' + accessToken,
-                        'x-api-key': self.apiKey
-                    },
-                    url: util.format('%s/Destiny/2/MyAccount/Character/%s/Vendor/%s/',
-                        servicePlatform, characterId, lordSaladinHash)
-                };
-                request(opts, function (err, res, body) {
-                    if (!err && res.statusCode === 200) {
-                        var responseBody = JSON.parse(body);
-                        if (responseBody.ErrorCode === 1627) {
-                            deferred.resolve([]);
-                        } else if (responseBody.ErrorCode !== 1) {
-                            deferred.reject(new DestinyError(responseBody.ErrorCode ||
-                                -1, responseBody.Message || '',
-                                responseBody.ErrorStatus || ''));
-                        } else {
-                            var data = responseBody.Response.data;
-                            if (data) {
-                                var saleItemCategories = data.saleItemCategories;
-                                var eventRewards = _.find(saleItemCategories, function (saleItemCategory) {
-                                    return saleItemCategory.categoryTitle === 'Event Rewards';
-                                });
-                                destinyCache.set('getIronBannerEventRewards', eventRewards.saleItems);
-                                deferred.resolve(eventRewards.saleItems);
-                            } else {
-                                deferred.resolve([]);
-                            }
-                        }
-                    }
-                });
+                var data = responseBody.Response.data;
+                if (data) {
+                    var saleItemCategories = data.saleItemCategories;
+                    var eventRewards = _.find(saleItemCategories, function (saleItemCategory) {
+                        return saleItemCategory.categoryTitle === 'Event Rewards';
+                    });
+                    destinyCache.set('getIronBannerEventRewards', eventRewards.saleItems);
+                    deferred.resolve(eventRewards.saleItems);
+                } else {
+                    deferred.resolve([]);
+                }
             }
         }
     });
-    return deferred.promise.nodeify(callback);
+
+    return deferred.promise;
 };
 /**
  * @function
@@ -560,16 +551,17 @@ Destiny.prototype.getIronBannerEventRewards = function (characterId, accessToken
  * @param callback
  * @returns {*|promise}
  */
-Destiny.prototype.getItem = function (itemHash, accessToken, callback) {
-    var deferred = Q.defer();
-    var opts = {
+Destiny.prototype.getItem = function (itemHash, accessToken) {
+    const deferred = Q.defer();
+    const opts = {
         headers: {
             authorization: 'Bearer ' + accessToken,
             'x-api-key': this.apiKey
         },
         url: util.format('%s/Destiny/Manifest/2/%s/', servicePlatform, itemHash)
     };
-    request(opts, function (err, res, body) {
+
+    request.get(opts, function (err, res, body) {
         if (!err && res.statusCode === 200) {
             var responseBody = JSON.parse(body);
             if (responseBody.ErrorCode !== 1) {
@@ -582,44 +574,34 @@ Destiny.prototype.getItem = function (itemHash, accessToken, callback) {
             deferred.reject(err);
         }
     });
-    return deferred.promise.nodeify(callback);
+
+    return deferred.promise;
 };
 /**
  * @function
  * @returns {*|promise}
  * @description Get the latest Destiny manifest definition.
  */
-Destiny.prototype.getManifest = function (callback) {
-    var self = this;
-    var deferred = Q.defer();
-    destinyCache.get('getManifest', function (err, manifest) {
-        if (err) {
-            deferred.reject(err);
+Destiny.prototype.getManifest = function () {
+    const self = this;
+    const deferred = Q.defer();
+    const opts = {
+        headers: {
+            'x-api-key': self.apiKey
+        },
+        url: util.format('%s/Destiny/Manifest', servicePlatform)
+    };
+
+    request.get(opts, function (err, res, body) {
+        if (!err && res.statusCode === 200) {
+            const manifest = JSON.parse(body).Response;
+            deferred.resolve(manifest);
         } else {
-            if (manifest) {
-                setTimeout(function () {
-                    deferred.resolve(manifest);
-                }, 50);
-            } else {
-                var opts = {
-                    headers: {
-                        'x-api-key': self.apiKey
-                    },
-                    url: util.format('%s/Destiny/Manifest', servicePlatform)
-                };
-                request(opts, function (err, res, body) {
-                    if (!err && res.statusCode === 200) {
-                        manifest = JSON.parse(body).Response;
-                        destinyCache.set('getManifest', manifest);
-                        deferred.resolve(manifest);
-                    } else {
-                        deferred.reject(err);
-                    }
-                });
-            }
+            deferred.reject(err);
         }
     });
-    return deferred.promise.nodeify(callback);
+
+    return deferred.promise;
 };
 /**
  * @function
@@ -629,9 +611,9 @@ Destiny.prototype.getManifest = function (callback) {
  * @param callback
  * @returns {*|promise}
  */
-Destiny.prototype.getProgression = function (characterId, membershipId, accessToken, callback) {
-    var deferred = Q.defer();
-    var opts = {
+Destiny.prototype.getProgression = function (characterId, membershipId, accessToken) {
+    const deferred = Q.defer();
+    const opts = {
         headers: {
             authorization: 'Bearer ' + accessToken,
             'x-api-key': this.apiKey
@@ -639,7 +621,8 @@ Destiny.prototype.getProgression = function (characterId, membershipId, accessTo
         url: util.format('%s/Destiny/2/Account/%s/Character/%s/Progression/',
             servicePlatform, membershipId, characterId)
     };
-    request(opts, function (err, res, body) {
+
+    request.get(opts, function (err, res, body) {
         if (!err && res.statusCode === 200) {
             var character = JSON.parse(body).Response;
             deferred.resolve(character);
@@ -647,7 +630,8 @@ Destiny.prototype.getProgression = function (characterId, membershipId, accessTo
             deferred.reject(err);
         }
     });
-    return deferred.promise.nodeify(callback);
+
+    return deferred.promise;
 };
 /**
  * @function
@@ -656,9 +640,9 @@ Destiny.prototype.getProgression = function (characterId, membershipId, accessTo
  * @param callback
  * @returns {*|promise}
  */
-Destiny.prototype.getVendorSummaries = function (characterId, accessToken, callback) {
-    var deferred = Q.defer();
-    var opts = {
+Destiny.prototype.getVendorSummaries = function (characterId, accessToken) {
+    const deferred = Q.defer();
+    const opts = {
         headers: {
             authorization: 'Bearer ' + accessToken,
             'x-api-key': this.apiKey
@@ -666,7 +650,8 @@ Destiny.prototype.getVendorSummaries = function (characterId, accessToken, callb
         url: util.format('%s/Destiny/2/MyAccount/Character/%s/Vendors/Summaries/',
             servicePlatform, characterId)
     };
-    request(opts, function (err, res, body) {
+
+    request.get(opts, function (err, res, body) {
         if (!err && res.statusCode === 200) {
             var responseBody = JSON.parse(body);
             if (responseBody.ErrorCode !== 1) {
@@ -685,7 +670,8 @@ Destiny.prototype.getVendorSummaries = function (characterId, accessToken, callb
             deferred.reject(err);
         }
     });
-    return deferred.promise.nodeify(callback);
+
+    return deferred.promise;
 };
 /**
  * @function
@@ -695,9 +681,9 @@ Destiny.prototype.getVendorSummaries = function (characterId, accessToken, callb
  * @param callback
  * @returns {*|promise}
  */
-var getWeapons = function (characterId, membershipId, accessToken, callback) {
-    var deferred = Q.defer();
-    var opts = {
+var getWeapons = function (characterId, membershipId, accessToken) {
+    const  deferred = Q.defer();
+    const opts = {
         headers: {
             authorization: 'Bearer ' + accessToken,
             'x-api-key': this.apiKey
@@ -705,50 +691,63 @@ var getWeapons = function (characterId, membershipId, accessToken, callback) {
         url: util.format('%s/Destiny/stats/uniqueweapons/2/%s/%s/',
             servicePlatform, membershipId, characterId)
     };
-    request(opts, function (err, res, body) {
+
+    request.get(opts, function (err, res, body) {
         if (!(!err && res.statusCode === 200)) {
             deferred.reject(err);
         } else {
-            var weapons = body.Response.data.weapons;
+            const { Response: { data: { weapons }}} = body;
+
             deferred.resolve(weapons.sort(function (a, b) {
                 if (a.values.uniqueWeaponKillsPrecisionKills.basic.value <
                     b.values.uniqueWeaponKillsPrecisionKills.basic.value) {
+
                     return -1;
                 }
                 if (a.values.uniqueWeaponKillsPrecisionKills.basic.value >
                     b.values.uniqueWeaponKillsPrecisionKills.basic.value) {
+
                     return 1;
                 }
+
                 return 0;
             }));
         }
     });
-    return deferred.promise.nodeify(callback);
+
+    return deferred.promise;
 };
+/**
+ * @constant
+ * @type {string}
+ * @description Xur's Vendor Number
+ */
+var xurHash = 2796397637;
 /**
  * @function
  * @returns {*|promise}
  * @description Get the exotic gear and waepons available for sale from XUr.
  */
-Destiny.prototype.getXur = function (callback) {
-    var self = this;
-    var deferred = Q.defer();
-    destinyCache.get('getXur', function (err, items) {
-        if (err) {
-            deferred.reject(err);
-        } else {
-            if (items) {
-                deferred.resolve(items);
+Destiny.prototype.getXur = function () {
+    const self = this;
+    const deferred = Q.defer();
+
+    this.cacheService.getVendor(xurHash)
+        .then(function (vendor) {
+            if (vendor) {
+                deferred.resolve(vendor);
             } else {
-                var opts = {
+                const opts = {
                     headers: {
                         'x-api-key': self.apiKey
                     },
                     url: util.format('%s/Destiny/Advisors/Xur/', servicePlatform)
                 };
-                request(opts, function (err, res, body) {
+
+                request.get(opts, function (err, res, body) {
                     if (!err && res.statusCode === 200) {
-                        var responseBody = JSON.parse(body);
+                        const responseBody = JSON.parse(body);
+
                         if (responseBody.ErrorCode === 1627) {
                             deferred.resolve([]);
                         } else if (responseBody.ErrorCode !== 1) {
@@ -756,16 +755,26 @@ Destiny.prototype.getXur = function (callback) {
                                 -1, responseBody.Message || '',
                                 responseBody.ErrorStatus || ''));
                         } else {
-                            var data = responseBody.Response.data;
+                            const { Response: { data }} = responseBody;
+
                             if (data) {
-                                var saleItemCategories = data.saleItemCategories;
-                                var exotics = _.find(saleItemCategories,
-                                    function (saleItemCategory) {
-                                        return saleItemCategory.categoryTitle ===
-                                            'Exotic Gear';
-                                    });
-                                destinyCache.set('getXur', exotics.saleItems);
-                                deferred.resolve(exotics.saleItems);
+                                const { vendorHash, nextRefreshDate, saleItemCategories } = data;
+                                const exotics = saleItemCategories.find((saleItemCategory) => {
+                                    return saleItemCategory.categoryTitle === 'Exotic Gear';
+                                });
+                                const itemHashes = exotics.saleItems.map((saleItem) => {
+                                    const { item: { itemHash }} = saleItem;
+
+                                    return itemHash;
+                                });
+                                const vendor = {
+                                    vendorHash,
+                                    nextRefreshDate,
+                                    itemHashes
+                                };
+
+                                self.cacheService.setVendor(vendor);
+                                deferred.resolve(vendor);
                             } else {
                                 deferred.resolve([]);
                             }
@@ -775,9 +784,9 @@ Destiny.prototype.getXur = function (callback) {
                     }
                 });
             }
-        }
-    });
-    return deferred.promise.nodeify(callback);
+        });
+
+    return deferred.promise;
 };
 
 exports = module.exports = Destiny;

@@ -3,19 +3,18 @@ var Q = require('q'),
     redis = require('redis'),
     redisConfig = require('../settings/redis.json');
 
-
 function getCacheKey(displayName, membershipType) {
     return displayName + '|' + membershipType;
 }
 
-function CacheService() {
+function UserCache() {
     this.client = redis.createClient(redisConfig.port, redisConfig.host, {
         auth_pass: redisConfig.key, // jscs:ignore requireCamelCaseOrUpperCaseIdentifiers
         ttl: 3300
     });
 }
 
-CacheService.prototype.getUser = function(displayName, membershipType, callback) {
+UserCache.prototype.getUser = function(displayName, membershipType, callback) {
     var deferred = Q.defer();
     var key = getCacheKey(displayName, membershipType);
 
@@ -30,7 +29,7 @@ CacheService.prototype.getUser = function(displayName, membershipType, callback)
     return deferred.promise.nodeify(callback);
 };
 
-CacheService.prototype.setUser = function(user, callback) {
+UserCache.prototype.setUser = function(user, callback) {
     var deferred = Q.defer();
     var key = getCacheKey(user.displayName, user.membershipType);
 
@@ -45,4 +44,4 @@ CacheService.prototype.setUser = function(user, callback) {
     return deferred.promise.nodeify(callback);
 };
 
-exports = module.exports = CacheService;
+exports = module.exports = UserCache;
