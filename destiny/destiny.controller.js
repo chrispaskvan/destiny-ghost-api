@@ -19,38 +19,37 @@ var _ = require('underscore'),
     base64url = require('base64url'),
     cookie = require('cookie'),
     crypto = require('crypto'),
-    Destiny = require('../destiny/destiny.model'),
     fs = require('fs'),
     Ghost = require('../models/ghost'),
     jSend = require('../models/jsend'),
     Q = require('q'),
     request = require('request'),
     S = require('string'),
-    World = require('../models/world'),
     yauzl = require('yauzl');
 
 /**
  * @param loggingProvider
  * @constructor
  */
-function DestinyController(loggingProvider) {
+function DestinyController(destinyService, loggingProvider, userService, worldRepository) {
     'use strict';
     this.loggingProvider = loggingProvider;
     /**
      * Destiny Model
      * @type {Destiny|exports|module.exports}
      */
-    this.destiny = new Destiny();
+    this.destiny = destinyService;
     /**
      * Ghost Model
      * @type {Ghost|exports|module.exports}
      */
     this.ghost = new Ghost(process.env.DATABASE);
+    this.users = userService;
     /**
      * World Model
      * @type {World|exports|module.exports}
      */
-    this.world = new World();
+    this.world = worldRepository;
 }
 /**
  * @namespace
@@ -59,53 +58,6 @@ function DestinyController(loggingProvider) {
  */
 DestinyController.prototype = (function () {
     'use strict';
-    /**
-     *
-     * @param req
-     * @private
-     */
-    var _getAccessToken = function (req) {
-        var cookies = _.pick(cookie.parse(req.headers.cookie), authorizationCookie);
-        return cookies[authorizationCookie];
-    };
-    /**
-     *
-     * @param membershipId {string}
-     * @param membershipType {integer}
-     * @returns {Request|*}
-     * @private
-     */
-    var _getCharacters = function (membershipId, membershipType) {
-        var self = this;
-        return this.destiny.getCharacters(membershipId, membershipType)
-            .then(function (characters) {
-                return self.ghost.getWorldDatabasePath()
-                    .then(function (worldDatabasePath) {
-                        self.world.open(worldDatabasePath);
-                        var characterBases = _.map(characters, function (character) {
-                            return {
-                                characterId: character.characterBase.characterId,
-                                classHash: character.characterBase.classHash,
-                                emblem: character.emblemPath,
-                                backgroundPath: character.backgroundPath,
-                                powerLevel: character.characterBase.powerLevel
-                            };
-                        });
-                        var promises = [];
-                        _.each(characterBases, function (characterBase) {
-                            promises.push(self.world.getClassByHash(characterBase.classHash));
-                        });
-                        return Q.all(promises)
-                            .then(function (characterClasses) {
-                                self.world.close();
-                                _.each(characterBases, function (characterBase, index) {
-                                    characterBase.className = characterClasses[index].className;
-                                });
-                                return characterBases;
-                            });
-                    });
-            });
-    };
     /**
      *
      * @returns {*}
@@ -142,41 +94,50 @@ DestinyController.prototype = (function () {
      */
     var getCharacters = function (req, res) {
         var self = this;
-        var displayName = req.params.displayName;
-        var membershipType = req.params.membershipType;
-        if (displayName && membershipType) {
-            this.destiny.getMembershipIdFromDisplayName(displayName, membershipType)
-                .then(function (membershipId) {
-                    if (parseInt(membershipId, 10)) {
-                        return _getCharacters.call(self, membershipId, membershipType)
-                            .then(function (characters) {
-                                res.json(characters);
+
+        this.users.getUserByDisplayName(req.session.displayName, req.session.membershipType)
+            .then(function (currentUser) {
+                return self.destiny.getCharacters(currentUser.membershipId, req.session.membershipType)
+                    .then(function (characters) {
+                        return self.ghost.getWorldDatabasePath()
+                            .then(function (worldDatabasePath) {
+                                self.world.open(worldDatabasePath);
+                                var characterBases = _.map(characters, function (character) {
+                                    return {
+                                        characterId: character.characterBase.characterId,
+                                        classHash: character.characterBase.classHash,
+                                        emblem: character.emblemPath,
+                                        backgroundPath: character.backgroundPath,
+                                        powerLevel: character.characterBase.powerLevel,
+                                        links: [
+                                            {
+                                                rel: 'Character',
+                                                href: '/characters/' + character.characterBase.characterId
+                                            }
+                                        ]
+                                    };
+                                });
+                                var promises = [];
+                                _.each(characterBases, function (characterBase) {
+                                    promises.push(self.world.getClassByHash(characterBase.classHash));
+                                });
+                                return Q.all(promises)
+                                    .then(function (characterClasses) {
+                                        self.world.close();
+                                        _.each(characterBases, function (characterBase, index) {
+                                            characterBase.className = characterClasses[index].className;
+                                        });
+                                        res.json(characterBases);
+                                    });
                             });
-                    }
-                    res.status(404).json(new jSend.fail('Membership not found.'));
-                })
-                .fail(function (err) {
-                    res.json(jSend.error(err));
-                    if (self.loggingProvider) {
-                        self.loggingProvider.info(err);
-                    }
-                });
-        } else {
-            var accessToken = _getAccessToken(req);
-            this.destiny.getCurrentUser(accessToken)
-                .then(function (currentUser) {
-                    return _getCharacters(currentUser.membershipId)
-                        .then(function (characters) {
-                            res.json(characters);
-                        });
-                })
-                .fail(function (err) {
-                    res.json(jSend.error(err));
-                    if (self.loggingProvider) {
-                        self.loggingProvider.info(err);
-                    }
-                });
-        }
+                    });
+            })
+            .fail(function (err) {
+                res.json(jSend.error(err));
+                if (self.loggingProvider) {
+                    self.loggingProvider.info(err);
+                }
+            });
     };
     /**
      * Get the currently available field test weapons from the gun smith.
@@ -185,12 +146,14 @@ DestinyController.prototype = (function () {
      */
     var getFieldTestWeapons = function (req, res) {
         var self = this;
-        var accessToken = _getAccessToken(req);
-        this.destiny.getCurrentUser(accessToken)
+
+        this.users.getUserByDisplayName(req.session.displayName, req.session.membershipType)
             .then(function (currentUser) {
+                var user = currentUser;
+
                 return self.destiny.getCharacters(currentUser.membershipId, currentUser.membershipType)
                     .then(function (characters) {
-                        return self.destiny.getFieldTestWeapons(characters[0].characterBase.characterId, accessToken)
+                        return self.destiny.getFieldTestWeapons(characters[0].characterBase.characterId, user.bungie.accessToken.value)
                             .then(function (items) {
                                 if (items === undefined || items.length === 0) {
                                     res.json(jSend.fail('Banshee-44 is the Gunsmith.'));
@@ -231,12 +194,12 @@ DestinyController.prototype = (function () {
      */
     var getFoundryOrders = function (req, res) {
         var self = this;
-        var accessToken = _getAccessToken(req);
-        this.destiny.getCurrentUser(accessToken)
+
+        this.users.getUserByDisplayName(req.session.displayName, req.session.membershipType)
             .then(function (currentUser) {
                 return self.destiny.getCharacters(currentUser.membershipId, currentUser.membershipType)
                     .then(function (characters) {
-                        return self.destiny.getFoundryOrders(characters[0].characterBase.characterId, accessToken)
+                        return self.destiny.getFoundryOrders(characters[0].characterBase.characterId, currentUser.bungie.accessToken.value)
                             .then(function (foundryOrders) {
                                 if (foundryOrders.items.length === 0) {
                                     res.json(foundryOrders);
@@ -277,15 +240,14 @@ DestinyController.prototype = (function () {
      */
     var getIronBannerEventRewards = function (req, res) {
         var self = this;
-        var accessToken = _getAccessToken(req);
-        this.destiny.getCurrentUser(accessToken)
+        this.users.getUserByDisplayName(req.session.displayName, req.session.membershipType)
             .then(function (currentUser) {
-                return self.destiny.getCharacters(currentUser.membershipId)
+                return self.destiny.getCharacters(currentUser.membershipId, req.session.membershipType)
                     .then(function (characters) {
                         var characterPromises = [];
                         _.each(characters, function (character) {
                             characterPromises.push(
-                                self.destiny.getIronBannerEventRewards(character.characterBase.characterId, accessToken)
+                                self.destiny.getIronBannerEventRewards(character.characterBase.characterId, currentUser.bungie.accessToken.value)
                             );
                         });
                         return Q.all(characterPromises)
@@ -367,12 +329,6 @@ DestinyController.prototype = (function () {
             });
     };
     /**
-     * @constant
-     * @type {string}
-     * @description Xur's Vendor Number
-     */
-    var xurHash = '2796397637';
-    /**
      * Get the exotic weapons and gear available from Xur.
      * @param req
      * @param res
@@ -380,52 +336,57 @@ DestinyController.prototype = (function () {
     /*jslint unparam: true*/
     var getXur = function (req, res) {
         var self = this;
-        this.ghost.getNextRefreshDate(xurHash)
-            .then(function (nextRefreshDate) {
-                return self.destiny.getXur()
-                    .then(function (items) {
-                        if (items === undefined || items.length === 0) {
-                            res.status(200).json({ items: [], nextRefreshDate: nextRefreshDate });
-                            return;
-                        }
-                        var itemHashes = _.map(items, function (item) {
-                            return item.item.itemHash;
+
+        return self.destiny.getXur()
+            .then(function (vendor) {
+                const { itemHashes, nextRefreshDate } = vendor;
+
+                if (itemHashes === undefined || itemHashes.length === 0) {
+                    res.status(200).json({ itemHashes: [], nextRefreshDate: nextRefreshDate });
+
+                    return;
+                }
+
+                return self.ghost.getWorldDatabasePath()
+                    .then(function (worldDatabasePath) {
+                        var promises = [];
+
+                        self.world.open(worldDatabasePath);
+
+                        _.each(itemHashes, function (itemHash) {
+                            promises.push(self.world.getItemByHash(itemHash));
                         });
-                        return self.ghost.getWorldDatabasePath()
-                            .then(function (worldDatabasePath) {
-                                self.world.open(worldDatabasePath);
-                                var promises = [];
-                                _.each(itemHashes, function (itemHash) {
-                                    promises.push(self.world.getItemByHash(itemHash));
-                                });
-                                return Q.all(promises)
-                                    .then(function (items) {
-                                        var itemPromises = _.map(items, function (item) {
-                                            if (item.itemName === 'Exotic Engram' ||
-                                                    item.itemName === 'Legacy Engram') {
-                                                return self.world.getItemByHash(item.itemHash)
-                                                    .then(function (itemDetail) {
-                                                        return (new S(item.itemName).chompRight('Engram') +
-                                                        itemDetail.itemTypeName);
-                                                    });
-                                            }
-                                            var deferred = Q.defer();
-                                            deferred.resolve(item.itemName);
-                                            return deferred.promise;
-                                        });
-                                        return Q.all(itemPromises)
-                                            .then(function (items) {
-                                                res.json(items);
+
+                        return Q.all(promises)
+                            .then(function (items) {
+                                var itemPromises = _.map(items, function (item) {
+                                    if (item.itemName === 'Exotic Engram' ||
+                                            item.itemName === 'Legacy Engram') {
+                                        return self.world.getItemByHash(item.itemHash)
+                                            .then(function (itemDetail) {
+                                                return (new S(item.itemName).chompRight('Engram') +
+                                                itemDetail.itemTypeName);
                                             });
-                                    })
-                                    .fin(function () {
-                                        self.world.close();
+                                    }
+                                    var deferred = Q.defer();
+
+                                    deferred.resolve(item.itemName);
+
+                                    return deferred.promise;
+                                });
+
+                                return Q.all(itemPromises)
+                                    .then(function (items) {
+                                        res.json(items);
                                     });
+                            })
+                            .fin(function () {
+                                self.world.close();
                             });
                     });
             })
             .fail(function (err) {
-                res.json(jSend.error(err));
+                res.status(500).send(err.message);
                 if (self.loggingProvider) {
                     self.loggingProvider.info(err);
                 }
@@ -437,6 +398,7 @@ DestinyController.prototype = (function () {
      */
     var upsertManifest = function () {
         var self = this;
+
         return this.destiny.getManifest()
             .then(function (manifest) {
                 return self.ghost.getLastManifest()
@@ -444,6 +406,7 @@ DestinyController.prototype = (function () {
                         var databasePath = './databases/';
                         var relativeUrl = manifest.mobileWorldContentPaths.en;
                         var fileName = databasePath + relativeUrl.substring(relativeUrl.lastIndexOf('/') + 1);
+
                         if (!lastManifest || lastManifest.version !== manifest.version ||
                                 lastManifest.mobileWorldContentPaths.en !== manifest.mobileWorldContentPaths.en ||
                                 !fs.existsSync(fileName)) {

@@ -52,11 +52,9 @@ UserAuthentication.prototype.authenticate = function () {
     }
 
     return function (req, res, next) {
-        var displayName = req.session.displayName;
-        var membershipType = req.session.membershipType;
-        var phoneNumber = req.body.From;
+        const { method, session: { displayName, membershipType }, body: { From: phoneNumber }} = req;
 
-        if (req.method === 'OPTIONS') {
+        if (method === 'OPTIONS') {
             return next();
         }
         if (!displayName && !phoneNumber) {

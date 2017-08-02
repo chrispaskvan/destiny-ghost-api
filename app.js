@@ -6,22 +6,24 @@
  * @todo clean up
  */
 var ApplicationInsights = require('applicationinsights'),
+    DestinyCache = require('./destiny/destiny.cache'),
+    DestinyService = require('./destiny/destiny.service'),
+    Log = require('./models/log'),
+    UserAuthentication = require('./users/user.authentication'),
+    UserCache = require('./users/user.cache'),
+    UserService = require('./users/user.service'),
     bodyParser = require('body-parser'),
     cookieParser = require('cookie-parser'),
+    documents = require('./helpers/documents'),
     express = require('express'),
     fs = require('fs'),
     http = require('http'),
-    Log = require('./models/log'),
     path = require('path'),
     session = require('express-session'),
-    RedisStore = require('connect-redis')(session),
     redis = require('redis'),
-    CacheService = require('./users/user.cache.js'),
-    Destiny = require('./destiny/destiny.model'),
-    UserAuthentication = require('./users/user.authentication'),
-    UserService = require('./users/user.service'),
-    documents = require('./helpers/documents');
+    world = require('./helpers/world');
 
+var RedisStore = require('connect-redis')(session);
 
 var app = express();
 var port = process.env.PORT || 1100;
@@ -108,25 +110,26 @@ app.use(logger.errorLogger());
 /**
  * Dependencies
  */
-var cacheService = new CacheService();
-var destinyService = new Destiny();
-var userService = new UserService(cacheService, documents);
-var authenticate = new UserAuthentication(cacheService, destinyService, userService).authenticate();
+var destinyCache = new DestinyCache();
+var destinyService = new DestinyService(destinyCache);
+var userCache = new UserCache();
+var userService = new UserService(userCache, documents);
+var authenticate = new UserAuthentication(userCache, destinyService, userService).authenticate();
 /**
  * Routes
  */
-var destinyRouter = require('./destiny/destiny.routes')();
+var destinyRouter = require('./destiny/destiny.routes')(authenticate, destinyService, userService, world);
 app.use('/api/destiny', destinyRouter);
 /**
  * ToDo: Health Check
  * redis
  * documentdb
  * destiny api
- * twilio xlient?
+ * twilio client?
  * azure?
  */
-var notificationRouter = require('./routes/notificationRoutes')();
-app.use('/api/notifications', notificationRouter);
+//var notificationRouter = require('./routes/notificationRoutes')();
+//app.use('/api/notifications', notificationRouter);
 
 var twilioRouter = require('./routes/twilioRoutes')(authenticate, destinyService, userService);
 app.use('/api/twilio', twilioRouter);

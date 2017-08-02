@@ -34,7 +34,13 @@ var user = {
     lastName: chance.last(),
     membershipId: '11',
     membershipType: 2,
-    notifications: [],
+    notifications: [
+        {
+            enabled: true,
+            messages: [],
+            type: 'Xur'
+        }
+    ],
     phoneNumber: cleanPhoneNumber(chance.phone({
         country: 'us',
         mobile: true
@@ -43,17 +49,51 @@ var user = {
 var userService;
 
 beforeEach(function () {
-    userService = new UserService(documentService);
+    var cacheService = {
+        getUser: function() {}
+    };
+
+    sinon.stub(cacheService, 'getUser').resolves();
+    userService = new UserService(cacheService, documentService);
 });
 
-describe.only('UserService', function () {
+describe('UserService', function () {
     var mock;
     beforeEach(function () {
         mock = sinon.mock(documentService);
     });
 
+    describe('addUserMessage', function () {
+        var stub;
+        beforeEach(function () {
+            stub = sinon.stub(userService, 'getUserByDisplayName');
+        });
+
+        describe('when notification type is Xur', function () {
+            it('should add message to list of Xur notifications', function () {
+                var displayName = 'user1';
+                var membershipType = 2;
+                var message = {
+                    sid: '1'
+                };
+                var notificationType = 'Xur';
+                var user1 = JSON.parse(JSON.stringify(user));
+
+                user1.notifications[0].messages.push(message);
+
+                stub.resolves(user);
+                mock.expects('upsertDocument').once().withArgs(sinon.match.any, user1).resolves();
+
+                return userService.addUserMessage(displayName, membershipType, message, notificationType)
+                    .then(function () {
+                        mock.verify();
+                    });
+            });
+        });
+    });
     describe('createAnonymousUser', function () {
         var stub;
+
         beforeEach(function () {
             stub = sinon.stub(userService, 'getUserByDisplayName');
         });
@@ -99,19 +139,21 @@ describe.only('UserService', function () {
     });
     describe('createUser', function () {
         var stub;
+
         beforeEach(function () {
             stub = sinon.stub(userService, 'getUserByDisplayName');
         });
 
         describe('when user is invalid', function () {
             it('should reject the user', function () {
-                return userService.createUser(_.omit(user, 'notifications'))
+                return userService.createUser(_.omit(user, 'phoneNumber'))
                     .fail(function (err) {
                         expect(err).to.be.defined;
                     });
             });
         });
         describe('when user is valid', function () {
+            // ToDo
         });
 
         afterEach(function () {
@@ -249,7 +291,7 @@ describe.only('UserService', function () {
 describe('Format a phone number', function () { // jshint ignore:line
     it('Should return a properly formatted phone number', function (done) {
         var phoneNumber = chance.phone({ country: 'us', mobile: true });
-        var cleanPhoneNumber = users.cleanPhoneNumber(phoneNumber);
+        var cleanPhoneNumber = userService.cleanPhoneNumber(phoneNumber);
 
         expect(validator.isMobilePhone(cleanPhoneNumber, 'en-US')).to.equal(true);
         done();
@@ -258,8 +300,9 @@ describe('Format a phone number', function () { // jshint ignore:line
 describe('Get the carrier type of a phone number', function () {
     it('Should return a type of mobile', function (done) {
         var phoneNumber = chance.phone({ country: 'us', mobile: true });
-        var cleanPhoneNumber = users.cleanPhoneNumber(phoneNumber);
-        users.getPhoneNumberType(cleanPhoneNumber)
+        var cleanPhoneNumber = userService.cleanPhoneNumber(phoneNumber);
+
+        userService.getPhoneNumberType(cleanPhoneNumber)
             .then(function (phoneNumberType) {
                 expect(phoneNumberType.type).to.equal('mobile');
                 done();
@@ -285,47 +328,24 @@ describe('Create a new user', function () {
             membershipType: 2,
             notifications: []
         };
-        users.getSubscribedUsers()
+
+        userService.getSubscribedUsers()
             .then(function (subscribedUsersBefore) {
-                return users.createUser(user)
+                return userService.createUser(user)
                     .then(function () {
-                        return users.getRegisteredUsers()
+                        return userService.getRegisteredUsers()
                             .then(function (registeredUsersAfter) {
                                 expect(registeredUsersAfter.length ===
                                     (subscribedUsersBefore.length + 1)).to.equal(true);
-                                return users.getSubscribedUsers()
+                                return userService.getSubscribedUsers()
                                     .then(function (subscribedUsersAfter) {
                                         expect(subscribedUsersAfter.length ===
                                             subscribedUsersBefore.length).to.equal(true);
-                                        users.deleteUser(user.phoneNumber);
+                                        userService.deleteUser(user.phoneNumber);
                                         done();
                                     });
                             });
                     });
-            })
-            .fail(function (err) {
-                done(err);
-            });
-    });
-});
-describe('Get a new 32-bit globally unique identifier', function () {
-    it('Should return a random identification number', function (done) {
-        users.getBlob(32)
-            .then(function (id) {
-                expect(id.length).to.equal(64);
-                done();
-            })
-            .fail(function (err) {
-                done(err);
-            });
-    });
-});
-describe('Get a new 16-bit globally unique identifier', function () {
-    it('Should return a random identification number', function (done) {
-        users.getBlob()
-            .then(function (id) {
-                expect(id.length).to.equal(32);
-                done();
             })
             .fail(function (err) {
                 done(err);

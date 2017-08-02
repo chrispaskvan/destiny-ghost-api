@@ -30,3 +30,6 @@ https://www.bungie.net/en/Help/Article/45481
 
 DocumentDB Queries
 https://docs.microsoft.com/en-us/azure/cosmos-db/documentdb-sql-query
+
+
+https://github.com/mrcrgl/node-querybuilder

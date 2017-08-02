@@ -8,19 +8,77 @@
 'use strict';
 var DocumentClient = require('documentdb').DocumentClient,
     Q = require('q'),
+    configuration = require('../settings/documents.json'),
     util = require('util');
+/**
+ * Get Collection by Id
+ * @param collectionId
+ * @returns {promise}
+ */
+function getCollection(collectionId) {
+    var deferred = Q.defer();
 
-var databaseConfiguration = require('../settings/documents.json');
+    function getCurrentCollection(err, collection) {
+        if (err) {
+            return deferred.reject(err);
+        }
 
+        map[collectionId] = collection;
+
+        return deferred.resolve(collection);
+    }
+
+    function getCurrentDatabase(err, database) {
+        if (err) {
+            return deferred.reject(err);
+        }
+        if (database) {
+            client.queryCollections(database._self,
+                util.format('SELECT * FROM collections c WHERE c.id = "%s"', collectionId))
+                .current(getCurrentCollection);
+        } else {
+            return deferred.resolve();
+        }
+    }
+
+    if (map[collectionId]) {
+        deferred.resolve(map[collectionId]);
+    } else {
+        client.queryDatabases(util.format('SELECT * FROM root r WHERE r.id = "%s"', databaseId))
+            .current(getCurrentDatabase);
+    }
+
+    return deferred.promise;
+}
+/**
+ *
+ * @constructor
+ */
 function Documents() {}
-
+/**
+ * Database Id
+ * @type {string}
+ */
 var databaseId = 'Gjallarhorn';
-var client = new DocumentClient(databaseConfiguration.host, {
-    masterKey: databaseConfiguration.authenticationKey
+/**
+ * Initialize Client
+ * @type {*|DocumentClient}
+ */
+var client = new DocumentClient(configuration.host, {
+    masterKey: configuration.authenticationKey
 });
+/**
+ * Local Cache
+ * @type {object}
+ */
 var map = Object.create(null);
-
-Documents.prototype.createDocument = function (collectionId, document, callback) {
+/**
+ * Create Document
+ * @param collectionId
+ * @param document
+ * @returns {promise}
+ */
+Documents.prototype.createDocument = function (collectionId, document) {
     var deferred = Q.defer();
 
     getCollection(collectionId)
@@ -39,53 +97,16 @@ Documents.prototype.createDocument = function (collectionId, document, callback)
             deferred.reject(err);
         });
 
-    return deferred.promise.nodeify(callback);
+    return deferred.promise;
 };
 /**
- *
+ * Get Documents by Query
  * @param collectionId
- * @param callback
- * @returns {*}
+ * @param query
+ * @param options
+ * @returns {promise}
  */
-function getCollection(collectionId, callback) {
-    var deferred = Q.defer();
-
-    function getCurrentCollection(err, collection) {
-        if (err) {
-            return deferred.reject(err);
-        }
-
-        map[collectionId] = collection;
-        return deferred.resolve(collection);
-    }
-
-    function getCurrentDatabase(err, database) {
-        if (err) {
-            return deferred.reject(err);
-        }
-        if (database) {
-            // jscs:ignore requireCapitalizedComments
-            // noinspection JSUnresolvedVariable
-            client.queryCollections(database._self,
-                    util.format('SELECT * FROM collections c WHERE c.id = "%s"', collectionId))
-                .current(getCurrentCollection);
-        } else {
-            return deferred.resolve();
-        }
-    }
-
-    var collection = map[collectionId];
-    if (collection) {
-        deferred.resolve(collection);
-    } else {
-        client.queryDatabases(util.format('SELECT * FROM root r WHERE r.id = "%s"', databaseId))
-            .current(getCurrentDatabase);
-    }
-
-    return deferred.promise.nodeify(callback);
-}
-
-Documents.prototype.getDocuments = function (collectionId, query, options, callback) {
+Documents.prototype.getDocuments = function (collectionId, query, options) {
     var deferred = Q.defer();
 
     function getDocuments(err, results) {
@@ -106,10 +127,15 @@ Documents.prototype.getDocuments = function (collectionId, query, options, callb
             deferred.reject(err);
         });
 
-    return deferred.promise.nodeify(callback);
+    return deferred.promise;
 };
-
-Documents.prototype.upsertDocument = function (collectionId, document, callback) {
+/**
+ * Insert If New or Update Existing Document
+ * @param collectionId
+ * @param document
+ * @returns {promise}
+ */
+Documents.prototype.upsertDocument = function (collectionId, document) {
     var deferred = Q.defer();
 
     getCollection(collectionId)
@@ -128,7 +154,7 @@ Documents.prototype.upsertDocument = function (collectionId, document, callback)
             deferred.reject(err);
         });
 
-    return deferred.promise.nodeify(callback);
+    return deferred.promise;
 };
 
 exports = module.exports = new Documents();

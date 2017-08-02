@@ -118,19 +118,29 @@ UserController.prototype = (function () {
      * @param res
      */
     var getCurrentUser = function (req, res) {
-        var self = this;
+        const self = this;
+        const { session: { displayName, membershipType }} = req;
 
-        if (!req.session.displayName) {
+        if (!displayName) {
             return res.status(401).end();
         }
-        this.users.getUserByDisplayName(req.session.displayName, req.session.membershipType)
+        this.users.getUserByDisplayName(displayName, membershipType)
             .then(function (user) {
                 if (user) {
                     return self.destiny.getCurrentUser(user.bungie.accessToken.value)
                         .then(function (user) {
                             if (user) {
                                 return res.status(200)
-                                    .json({ displayName: user.displayName })
+                                    .json({
+                                        displayName: user.displayName,
+                                        membershipType: user.membershipType,
+                                        links: [
+                                            {
+                                                rel: 'characters',
+                                                href: '/api/destiny/characters'
+                                            }
+                                        ]
+                                    })
                                     .end();
                             }
 

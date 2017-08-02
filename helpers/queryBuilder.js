@@ -2,6 +2,7 @@
 function QueryBuilder() {
     this.filters = [];
     this.fields = [];
+    this.joins = [];
     this.table = '';
 }
 
@@ -53,6 +54,20 @@ QueryBuilder.prototype.from = function (table) {
     return this;
 };
 
+QueryBuilder.prototype.join = function (key) {
+    if (typeof key === 'string') {
+        if (key) {
+            this.joins.push(key.trim());
+        } else {
+            throw Error('key string is empty');
+        }
+    } else {
+        throw Error('key is not a string');
+    }
+
+    return this;
+};
+
 QueryBuilder.prototype.where = function (key, value) {
     var filter = {};
 
@@ -63,12 +78,18 @@ QueryBuilder.prototype.where = function (key, value) {
 };
 
 QueryBuilder.prototype.getQuery = function () {
+    var childAlias;
     var parameters = [];
     var sql;
-    var tableAlias = this.table ? this.table[0] : 'r';
+    var tableAlias = this.table ? this.table[0].toLowerCase() : 'r';
 
-    sql = 'SELECT ' + (this.fields.length ? this.fields.join(', ') : '*') + ' FROM ' +
+    sql = 'SELECT ' + (this.fields.length ? tableAlias + '.' + this.fields.join(', ' + tableAlias + '.') : '*') + ' FROM ' +
         (this.table || 'root') + ' ' + tableAlias;
+
+    this.joins.forEach(function (table) {
+        childAlias = table[0].toLowerCase();
+        sql += ' JOIN ' + childAlias + ' IN ' + tableAlias + '.' + table;
+    });
     this.filters.forEach(function (filter, index) {
         var keys = Object.keys(filter);
 
@@ -84,7 +105,7 @@ QueryBuilder.prototype.getQuery = function () {
             if (index) {
                 sql += ' AND ';
             }
-            sql += tableAlias + '.' + key + ' = ' + parameterName;
+            sql += (childAlias || tableAlias) + '.' + key + ' = ' + parameterName;
             parameters.push({
                 name: parameterName,
                 value: filter[key]
