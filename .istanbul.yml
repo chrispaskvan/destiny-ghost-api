@@ -1,0 +1,5 @@
+instrumentation:
+    excludes: 
+        - './**/*.spec.js'
+reporting:
+    dir: ./.coverage

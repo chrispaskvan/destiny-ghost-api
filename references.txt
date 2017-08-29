@@ -33,3 +33,4 @@ https://docs.microsoft.com/en-us/azure/cosmos-db/documentdb-sql-query
 
 
 https://github.com/mrcrgl/node-querybuilder
+https://docs.microsoft.com/en-us/azure/application-insights/app-insights-monitor-web-app-availability

@@ -1,0 +1,41 @@
+{
+  "Response": {
+    "version": "56578.17.04.12.1251-6",
+    "mobileAssetContentPath": "/common/destiny_content/sqlite/asset/asset_sql_content_fd24e5f944d34a326e0e21817ea353ea.content",
+    "mobileGearAssetDataBases": [
+      {
+        "version": 0,
+        "path": "/common/destiny_content/sqlite/asset/asset_sql_content_fd24e5f944d34a326e0e21817ea353ea.content"
+      },
+      {
+        "version": 1,
+        "path": "/common/destiny_content/sqlite/asset/asset_sql_content_e563ae481f48cf708da20f4ab86ba8ed.content"
+      },
+      {
+        "version": 2,
+        "path": "/common/destiny_content/sqlite/asset/asset_sql_content_e563ae481f48cf708da20f4ab86ba8ed.content"
+      }
+    ],
+    "mobileWorldContentPaths": {
+      "en": "/common/destiny_content/sqlite/en/world_sql_content_9f4a7c58db0ff978482ec9a34df30840.content",
+      "fr": "/common/destiny_content/sqlite/fr/world_sql_content_55d22744450eef370d0a631bc3ff4aba.content",
+      "es": "/common/destiny_content/sqlite/es/world_sql_content_084e1e03e9b50a3cfec139acef924f30.content",
+      "de": "/common/destiny_content/sqlite/de/world_sql_content_3dc8b73bc7581acad8dacae66aa08dba.content",
+      "it": "/common/destiny_content/sqlite/it/world_sql_content_88bf4a387575d12bb75a25a4b40bf1c3.content",
+      "ja": "/common/destiny_content/sqlite/ja/world_sql_content_bd39d8b71f34f3d56ccd71d52f71e870.content",
+      "pt-br": "/common/destiny_content/sqlite/pt-br/world_sql_content_8f7ecef897f020d36e04a62162fb7999.content"
+    },
+    "mobileGearCDN": {
+      "Geometry": "/common/destiny_content/geometry/platform/mobile/geometry",
+      "Texture": "/common/destiny_content/geometry/platform/mobile/textures",
+      "PlateRegion": "/common/destiny_content/geometry/platform/mobile/plated_textures",
+      "Gear": "/common/destiny_content/geometry/gear",
+      "Shader": "/common/destiny_content/geometry/platform/mobile/shaders"
+    }
+  },
+  "ErrorCode": 1,
+  "ThrottleSeconds": 0,
+  "ErrorStatus": "Success",
+  "Message": "Ok",
+  "MessageData": {}
+}

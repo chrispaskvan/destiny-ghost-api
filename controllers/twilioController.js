@@ -21,15 +21,13 @@ var _ = require('underscore'),
      * @type {Bitly|exports|module.exports}
      */
     bitly = require('../helpers/bitly'),
-    fs = require('fs'),
-    Ghost = require('../models/ghost'),
-    Notifications = require('../models/notifications'),
+    Ghost = require('../helpers/ghost'),
     path = require('path'),
     Q = require('q'),
     S = require('string'),
     settings = require('../settings/twilio.' + (process.env.NODE_ENV || 'development') + '.json'),
     twilio = require('twilio'),
-    World = require('../models/world');
+    World = require('../helpers/world');
 /**
  * @constructor
  */
@@ -49,12 +47,12 @@ function TwilioController(destinyService, userService) {
      * World Model
      * @type {World|exports|module.exports}
      */
-    this.world = new World();
+    this.world = World;
     /**
      * Notifications Model
      * @type {Notifications|exports|module.exports}
      */
-    this.notifications = new Notifications(process.env.DATABASE, process.env.TWILIO);
+    //this.notifications = new Notifications(process.env.DATABASE, process.env.TWILIO);
     /**
      * @member {Object}
      * @type {{accountSid: string, authToken string, phoneNumber string}} settings
@@ -660,7 +658,7 @@ TwilioController.prototype = (function () {
         var header = req.headers['x-twilio-signature'];
         var twiml = new twilio.TwimlResponse();
         if (twilio.validateRequest(this.authToken, header, process.env.DOMAIN + req.originalUrl, req.body)) {
-            this.notifications.updateMessage(JSON.stringify(req.body));
+            //this.notifications.updateMessage(JSON.stringify(req.body));
             res.writeHead(200, {
                 'Content-Type': 'text/xml'
             });

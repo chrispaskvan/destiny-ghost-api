@@ -1,0 +1,38 @@
+{
+  "sid": "SM006fcd9569d94319a5b919faedd68a34",
+  "date_created": "Thu, 17 Aug 2017 00:57:49 +0000",
+  "date_updated": "Thu, 17 Aug 2017 00:57:49 +0000",
+  "date_sent": null,
+  "account_sid": "...",
+  "to": "+11111111111",
+  "from": "+10000000000",
+  "messaging_service_sid": null,
+  "body": "hi",
+  "status": "queued",
+  "num_segments": "1",
+  "num_media": "0",
+  "direction": "outbound-api",
+  "api_version": "2010-04-01",
+  "price": null,
+  "price_unit": "USD",
+  "error_code": null,
+  "error_message": null,
+  "uri": "/2010-04-01/Accounts/.../Messages/SM006fcd9569d94319a5b919faedd68a34.json",
+  "subresource_uris": {
+    "media": "/2010-04-01/Accounts/.../Messages/SM006fcd9569d94319a5b919faedd68a34/Media.json"
+  },
+  "dateCreated": "2017-08-17T00:57:49.000Z",
+  "dateUpdated": "2017-08-17T00:57:49.000Z",
+  "dateSent": null,
+  "accountSid": "...",
+  "messagingServiceSid": null,
+  "numSegments": "1",
+  "numMedia": "0",
+  "apiVersion": "2010-04-01",
+  "priceUnit": "USD",
+  "errorCode": null,
+  "errorMessage": null,
+  "subresourceUris": {
+    "media": "/2010-04-01/Accounts/.../Messages/SM006fcd9569d94319a5b919faedd68a34/Media.json"
+  }
+}

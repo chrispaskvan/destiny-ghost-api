@@ -1,7 +1,7 @@
 /**
- * User Authentication Class
+ * User Authentication Service Class
  */
-class UserAuthentication {
+class AuthenticationService {
     /**
      * @constructor
      */
@@ -11,6 +11,11 @@ class UserAuthentication {
         this.userService = userService;
     }
 
+    /**
+     * Authenticate User by Gamer Tag and Console or Phone Number
+     * @param {Object} options
+     * @returns {Promise}
+     */
     authenticate(options = {}) {
         const { displayName, membershipType, phoneNumber } = options;
 
@@ -23,27 +28,10 @@ class UserAuthentication {
             this.userService.getUserByDisplayName(displayName, membershipType);
 
         return promise
-            .then(this.validateUser);
+            .then(user => this.validate(user));
     }
 
-    authenticateRequest(req) {
-        const { session: { displayName, membershipType }, body: { From: phoneNumber }} = req;
-
-        return this.authenticate({ displayName, membershipType, phoneNumber })
-            .then(user => {
-                if (!displayName) {
-                    req.session.displayName = user.displayName;
-                }
-                if (!membershipType) {
-                    req.session.membershipType = user.membershipType;
-                }
-            })
-            .catch(err => {
-                console.log(err); // TodO
-            });
-    }
-
-    validateUser(user) {
+    validate(user) {
         if (!user) {
             return Promise.reject(new Error('User not found'));
         }
@@ -54,7 +42,8 @@ class UserAuthentication {
             .then(() => {
                 if (user) {
                     if (user.dateRegistered) {
-                        return this.cacheService.setUser(user);
+                        return this.cacheService.setUser(user)
+                            .then(() => user);
                     } else {
                         return user;
                     }
@@ -71,9 +60,11 @@ class UserAuthentication {
                                 return Promise.all([
                                     this.cacheService.setUser(user),
                                     this.userService.updateUser(user)
-                                ]);
+                                ])
+                                    .then(() => user);
                             } else {
-                                return this.userService.updateAnonymousUser(user);
+                                return this.userService.updateAnonymousUser(user)
+                                    .then(() => user);
                             }
                         }
 
@@ -83,4 +74,4 @@ class UserAuthentication {
     }
 }
 
-exports = module.exports = UserAuthentication;
+exports = module.exports = AuthenticationService;

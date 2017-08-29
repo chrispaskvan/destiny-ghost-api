@@ -11,15 +11,13 @@
 'use strict';
 var _ = require('underscore'),
     crypto = require('crypto'),
-    Ghost = require('../models/ghost'),
-    jSend = require('../models/jsend'),
+    Ghost = require('../helpers/ghost'),
     jsonpatch = require('fast-json-patch'),
-    Notifications = require('../models/notifications'),
+//    Notifications = require('../models/notifications'),
     Q = require('q'),
     path = require('path'),
     Postmaster = require('../helpers/postmaster'),
-    tokens = require('../helpers/tokens'),
-    World = require('../models/world');
+    tokens = require('../helpers/tokens');
 /**
  * Time to Live for Tokens
  * @type {number}
@@ -42,6 +40,26 @@ function getEpoch() {
     return Math.floor((new Date()).getTime() / 1000);
 }
 /**
+ *
+ * @param displayName
+ * @param membershipType
+ * @param profilePicturePath
+ * @returns {{displayName: *, membershipType: *, links: [null], profilePicturePath: *}}
+ */
+function getUserResponse({ displayName, membershipType, profilePicturePath }) {
+    return {
+        displayName,
+        membershipType,
+        links: [
+            {
+                rel: 'characters',
+                href: '/api/destiny/characters'
+            }
+        ],
+        profilePicturePath
+    };
+}
+/**
  * @constructor
  */
 function UserController(destinyService, userService) {
@@ -54,12 +72,12 @@ function UserController(destinyService, userService) {
      * Ghost Model
      * @type {Ghost|exports|module.exports}
      */
-    this.ghost = new Ghost(process.env.DATABASE);
+    this.ghost = Ghost;
     /**
      * Notifications Model
      * @type {Notifications|exports|module.exports}
      */
-    this.notifications = new Notifications(process.env.DATABASE, process.env.TWILIO);
+    //this.notifications = new Notifications(process.env.DATABASE, process.env.TWILIO);
     /**
      * Post Office Model
      * @type {Postmaster|exports|module.exports}
@@ -70,11 +88,6 @@ function UserController(destinyService, userService) {
      * @type {User|exports|module.exports}
      */
     this.users = userService;
-    /**
-     * World Model
-     * @type {World|exports|module.exports}
-     */
-    this.world = new World();
 }
 /**
  * @namespace
@@ -118,51 +131,30 @@ UserController.prototype = (function () {
      * @param res
      */
     var getCurrentUser = function (req, res) {
-        const self = this;
         const { session: { displayName, membershipType }} = req;
 
         if (!displayName) {
             return res.status(401).end();
         }
-        this.users.getUserByDisplayName(displayName, membershipType)
-            .then(function (user) {
+        return this.users.getUserByDisplayName(displayName, membershipType)
+            .then(user => {
                 if (user) {
-                    return self.destiny.getCurrentUser(user.bungie.accessToken.value)
-                        .then(function (user) {
+                    return this.destiny.getCurrentUser(user.bungie.accessToken.value)
+                        .then(user => {
                             if (user) {
                                 return res.status(200)
-                                    .json({
-                                        displayName: user.displayName,
-                                        membershipType: user.membershipType,
-                                        links: [
-                                            {
-                                                rel: 'characters',
-                                                href: '/api/destiny/characters'
-                                            }
-                                        ]
-                                    })
+                                    .json(getUserResponse(user))
                                     .end();
                             }
 
                             return res.status(401).end();
-                        })
-                        .fail(function (err) {
-                            return self.destiny.getAccessTokenFromRefreshToken(user.bungie.refreshToken.value)
-                                .then(function (bungie) {
-                                    _.extend(user, {
-                                        bungie: bungie
-                                    });
-                                    self.users.updateAnonymousUser(user);
-                                    return res.status(200)
-                                        .json({ displayName: user.displayName })
-                                        .end();
-                                });
                         });
                 } else {
                     return res.status(401).end();
                 }
             })
-            .fail(function (err) {
+            .catch(function (err) {
+                console.log(err); // todo
                 return res.status(500).end();
             });
     };

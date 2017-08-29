@@ -6,7 +6,7 @@ var bunyan = require('bunyan'),
     express = require('express'),
     NotificationController = require('../notifications/notification.controller');
 
-var routes = function () {
+var routes = function (authenticationController, destinyService, notificationService, userService, worldRepository) {
     'use strict';
     var notificationRouter = express.Router();
     /**
@@ -30,26 +30,14 @@ var routes = function () {
      * Initialize the controller.
      * @type {notificationController|exports|module.exports}
      */
-    var notificationController = new NotificationController(loggingProvider);
+    var notificationController = new NotificationController(destinyService, notificationService, userService, worldRepository);
     /**
      * Routes
      */
     notificationRouter.route('/:subscription')
         .post(function (req, res) {
-            /**
-             * Check for any changes to the Bungie Destiny manifest definition.
-             */
-            destinyController.upsertManifest()
-                .fail(function (err) {
-                    loggingProvider.info(err);
-                })
-                .fin(function () {
-                    notificationController.createNotifications(req, res);
-                });
-        });
-    notificationRouter.route('/:subscription/:phoneNumber')
-        .post(function (req, res) {
-            notificationController.createNotificationsForUser(req, res);
+            authenticationController.authenticate(req)
+                .then(() => notificationController.create(req, res));
         });
     return notificationRouter;
 };
