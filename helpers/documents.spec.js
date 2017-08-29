@@ -1,27 +1,24 @@
 /**
- * User Service Tests
+ * Document Tests
  */
 'use strict';
-var _ = require('underscore'),
-    chance = require('chance')(),
-    documentService = require('./documents'),
-    expect = require('chai').expect,
-    sinon = require('sinon'),
-    validator = require('validator');
+const documentService = require('./documents'),
+    expect = require('chai').expect;
 
-describe('Documents', function () {
-    describe('getDocuments', function () {
-        it('should return 1 document', function () {
-            var collectionId = 'Users';
-            var options = {
+describe('Documents', () => {
+    describe('getDocuments', () => {
+        it('should return 1 document', () => {
+            const collectionId = 'Users';
+            const options = {
                 enableCrossPartitionQuery: true,
                 pageSize: 1
             };
-            var query = {
+            const query = {
                 query: 'SELECT * FROM u'
             };
+
             return documentService.getDocuments(collectionId, query, options)
-                .then(function (documents) {
+                .then(documents => {
                     expect(documents).to.be.defined;
                     expect(documents.length).to.equal(1);
                 });

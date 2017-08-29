@@ -1,0 +1,19 @@
+[
+  {
+    "phoneNumber": "+19704965500",
+    "firstName": "John",
+    "emailAddress": "john.smith@destiny-ghost.com",
+    "displayName": "PocketInfinity",
+    "membershipId": "11",
+    "membershipType": 2,
+    "timeStamp": "2016-02-09T09:13:33.901Z",
+    "lastName": "Snow",
+    "membership": {
+      "tokens": {
+        "blob": "385f49b456d4c76c0048e87c80e2f401",
+        "code": "324347",
+        "timeStamp": 1499474698
+      }
+    }
+  }
+]

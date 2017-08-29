@@ -5,6 +5,10 @@ var env = require('gulp-env'),
     istanbul = require('gulp-istanbul'),
     nodemon = require('gulp-nodemon');
 
+// We'll use mocha in this example, but any test framework will work
+var mocha = require('gulp-mocha');
+
+
 gulp.task('default', function runDefault() {
     nodemon({
         script: 'app.js',
@@ -62,13 +66,66 @@ gulp.task('modelTests', function runModelTests() {
         .pipe(gulpMocha({ reporter: 'nyan' }));
 });
 
-gulp.task('test', function () {
-    return gulp.src('tests/tokenModelTests.js')
+gulp.task('pre-test', function () {
+    env({
+        vars: {
+            APPINSIGHTS: './settings/applicationInsights.json',
+            BITLY: './settings/bitly.json',
+            DATABASE: './databases/ghost.db',
+            DOMAIN: 'http://a02a08d8.ngrok.io',
+            PORT: 1100,
+            TWILIO: './settings/twilio.production.json'
+        }
+    });
+    return gulp.src(['!node_modules', '!node_modules/**', './**/*.js'])
+        // Covering files
+        .pipe(istanbul())
+        // Force `require` to return covered files
+        .pipe(istanbul.hookRequire());
+});
+
+gulp.task('test', ['pre-test'], function () {
+    env({
+        vars: {
+            APPINSIGHTS: './settings/applicationInsights.json',
+            BITLY: './settings/bitly.json',
+            DATABASE: './databases/ghost.db',
+            DOMAIN: 'http://a02a08d8.ngrok.io',
+            PORT: 1100,
+            TWILIO: './settings/twilio.production.json'
+        }
+    });
+    gulp.src(['!node_modules', '!node_modules/**', './**/*.spec.js'])
+        .pipe(mocha({
+            reporter: 'spec'
+        }))
+        // Creating the reports after tests ran
+        .pipe(istanbul.writeReports({
+            dir: './.coverage',
+            reporters: [ 'lcov' ],
+            reportOpts: { dir: './.coverage'}
+        }))
+        // Enforce a coverage of at least 90%
+        .pipe(istanbul.enforceThresholds({ thresholds: { global: 90 } }));
+});
+
+gulp.task('test2', function () {
+    env({
+            vars: {
+                APPINSIGHTS: './settings/applicationInsights.json',
+                BITLY: './settings/bitly.json',
+                DATABASE: './databases/ghost.db',
+                DOMAIN: 'http://a02a08d8.ngrok.io',
+                PORT: 1100,
+                TWILIO: './settings/twilio.production.json'
+            }
+        });
+    return gulp.src(['!node_modules', '!node_modules/**', './**/*.js'])
         .pipe(istanbul({
             includeUntested: true
         }))
         .on('finish', function () {
-            gulp.src('tests/tokenModelTests.js')
+            gulp.src(['./helpers/*.js'])
                 .pipe(gulpMocha({
                     reporter: 'spec'
                 }))

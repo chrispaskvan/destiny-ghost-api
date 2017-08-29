@@ -14,27 +14,23 @@ QueryBuilder.prototype.select = function (selections) {
         }
     } else if (Object.prototype.toString.call(selections) === Object.prototype.toString.call([])) {
         if (selections.length === 0) {
-            throw Error('select array is empty');
+            throw new Error('select array is empty');
         }
     } else {
-        throw Error('select must be a string or an array');
+        throw new Error('select must be a string or an array');
     }
 
     if (typeof selections === 'string') {
-        if (selections.indexOf(',') === -1) {
-            selections = selections.split(',');
-        } else {
-            selections = [selections];
-        }
+        selections.indexOf(',') === -1 ? selections = selections.split(',') : selections = [selections];
     }
 
-    selections.forEach(function (selection) {
-        var field = selection.trim();
+    selections.forEach(selection => {
+        const field = selection.trim();
 
         if (field !== '') {
             this.fields.push(field);
         }
-    }, this);
+    });
 
     return this;
 };
@@ -43,10 +39,10 @@ QueryBuilder.prototype.from = function (table) {
     if (typeof table === 'string') {
         table = table.trim();
         if (table.length === 0) {
-            throw Error('table string is empty');
+            throw new Error('table string is empty');
         }
     } else {
-        throw Error('table is not a string');
+        throw new Error('table is not a string');
     }
 
     this.table = table;
@@ -59,10 +55,10 @@ QueryBuilder.prototype.join = function (key) {
         if (key) {
             this.joins.push(key.trim());
         } else {
-            throw Error('key string is empty');
+            throw new Error('key string is empty');
         }
     } else {
-        throw Error('key is not a string');
+        throw new Error('key is not a string');
     }
 
     return this;

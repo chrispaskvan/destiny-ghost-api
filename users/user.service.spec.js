@@ -6,8 +6,7 @@ var _ = require('underscore'),
     chance = require('chance')(),
     expect = require('chai').expect,
     sinon = require('sinon'),
-    UserService = require('./user.service'),
-    validator = require('validator');
+    UserService = require('./user.service');
 
 var documentService = require('../helpers/documents');
 
@@ -21,12 +20,19 @@ function cleanPhoneNumber(phoneNumber) {
     var cleaned = phoneNumber.replace(/\D/g, '');
     return '+1' + cleaned;
 }
-
+/**
+ * Anonymous User
+ * @type {{displayName: string, membershipId: string, membershipType: number}}
+ */
 var anonymousUser = {
     displayName: 'displayName1',
     membershipId: '11',
     membershipType: 2
 };
+/**
+ * User
+ * @type {{displayName: string, emailAddress: *, firstName: *, lastName: *, membershipId: string, membershipType: number, notifications: *[], phoneNumber: string}}
+ */
 var user = {
     displayName: 'displayName1',
     emailAddress: chance.email(),
@@ -46,14 +52,16 @@ var user = {
         mobile: true
     }))
 };
+
+var cacheService = {
+    getUser: function() {
+        return Promise.resolve();
+    }
+};
+
 var userService;
 
 beforeEach(function () {
-    var cacheService = {
-        getUser: function() {}
-    };
-
-    sinon.stub(cacheService, 'getUser').resolves();
     userService = new UserService(cacheService, documentService);
 });
 
@@ -101,7 +109,7 @@ describe('UserService', function () {
         describe('when anonymous user is invalid', function () {
             it('should reject the anonymous user', function () {
                 return userService.createAnonymousUser(_.omit(anonymousUser, 'membershipId'))
-                    .fail(function (err) {
+                    .catch(function (err) {
                         expect(err).to.be.defined;
                     });
             });
@@ -147,7 +155,7 @@ describe('UserService', function () {
         describe('when user is invalid', function () {
             it('should reject the user', function () {
                 return userService.createUser(_.omit(user, 'phoneNumber'))
-                    .fail(function (err) {
+                    .catch(function (err) {
                         expect(err).to.be.defined;
                     });
             });
@@ -161,6 +169,28 @@ describe('UserService', function () {
         });
     });
     describe('getUserByDisplayName', function () {
+        describe('when user is cached', function () {
+            let mockCache;
+
+            beforeEach(function () {
+                mockCache = sinon.mock(cacheService);
+            });
+
+            it('should return cached user', function () {
+                mockCache.expects('getUser').once().resolves(user);
+                mock.expects('getDocuments').never();
+
+                return userService.getUserByDisplayName(user.displayName, user.membershipType)
+                    .then(function (user1) {
+                        expect(user1.displayName).to.equal(user.displayName);
+                        mock.verify();
+                    });
+            });
+
+            afterEach(function () {
+                mockCache.restore();
+            });
+        });
         describe('when display name is defined', function () {
             describe('when membership type is defined', function () {
                 it('should return an existing user', function () {
@@ -186,16 +216,16 @@ describe('UserService', function () {
                         });
                 });
             });
-            it('should not return an existing user', function () {
+            it('should fail when more than one existing user is found', function () {
                 mock.expects('getDocuments').once().resolves([user, user]);
 
                 return userService.getUserByDisplayName(user.displayName)
-                    .fail(function (err) {
+                    .catch(function (err) {
                         expect(err).to.be.defined;
                         mock.verify();
                     });
             });
-            it('should fail when more than one existing user is returned', function () {
+            it('should return undefined is user is not found', function () {
                 mock.expects('getDocuments').once().resolves([]);
 
                 return userService.getUserByDisplayName(user.displayName)
@@ -208,7 +238,7 @@ describe('UserService', function () {
                 mock.expects('getDocuments').never();
 
                 return userService.getUserByDisplayName()
-                    .fail(function (err) {
+                    .catch(function (err) {
                         expect(err).to.be.defined;
                         mock.verify();
                     });
@@ -217,7 +247,7 @@ describe('UserService', function () {
                 mock.expects('getDocuments').once().resolves(undefined);
 
                 return userService.getUserByDisplayName(user.displayName)
-                    .fail(function (err) {
+                    .catch(function (err) {
                         expect(err).to.be.defined;
                         mock.verify();
                     });
@@ -235,16 +265,16 @@ describe('UserService', function () {
                         mock.verify();
                     });
             });
-            it('should fail when more than one existing user is returned', function () {
+            it('should fail when more than one existing user is found', function () {
                 mock.expects('getDocuments').once().resolves([user, user]);
 
                 return userService.getUserByEmailAddress(user.emailAddress, user.membershipType)
-                    .fail(function (err) {
+                    .catch(function (err) {
                         expect(err).to.be.defined;
                         mock.verify();
                     });
             });
-            it('should fail when no users are returned', function () {
+            it('should fail when no users are found', function () {
                 mock.expects('getDocuments').once().resolves([]);
 
                 return userService.getUserByEmailAddress(user.emailAddress, user.membershipType)
@@ -257,7 +287,7 @@ describe('UserService', function () {
                 mock.expects('getDocuments').never();
 
                 return userService.getUserByEmailAddress()
-                    .fail(function (err) {
+                    .catch(function (err) {
                         expect(err).to.be.defined;
                         mock.verify();
                     });
@@ -266,7 +296,7 @@ describe('UserService', function () {
                 mock.expects('getDocuments').never();
 
                 return userService.getUserByEmailAddress(user.emailAddress)
-                    .fail(function (err) {
+                    .catch(function (err) {
                         expect(err).to.be.defined;
                         mock.verify();
                     });
@@ -275,7 +305,7 @@ describe('UserService', function () {
                 mock.expects('getDocuments').once().resolves(undefined);
 
                 return userService.getUserByEmailAddress(user.emailAddress, user.membershipType)
-                    .fail(function (err) {
+                    .catch(function (err) {
                         expect(err).to.be.defined;
                         mock.verify();
                     });
@@ -285,70 +315,5 @@ describe('UserService', function () {
 
     afterEach(function () {
         mock.restore();
-    });
-});
-
-describe('Format a phone number', function () { // jshint ignore:line
-    it('Should return a properly formatted phone number', function (done) {
-        var phoneNumber = chance.phone({ country: 'us', mobile: true });
-        var cleanPhoneNumber = userService.cleanPhoneNumber(phoneNumber);
-
-        expect(validator.isMobilePhone(cleanPhoneNumber, 'en-US')).to.equal(true);
-        done();
-    });
-});
-describe('Get the carrier type of a phone number', function () {
-    it('Should return a type of mobile', function (done) {
-        var phoneNumber = chance.phone({ country: 'us', mobile: true });
-        var cleanPhoneNumber = userService.cleanPhoneNumber(phoneNumber);
-
-        userService.getPhoneNumberType(cleanPhoneNumber)
-            .then(function (phoneNumberType) {
-                expect(phoneNumberType.type).to.equal('mobile');
-                done();
-            })
-            .fail(function (err) {
-                done(err);
-            });
-    });
-});
-describe('Create a new user', function () {
-    it('Should add a new valid user', function (done) {
-        var user = {
-            firstName: chance.first(),
-            emailAddress: chance.email(),
-            gamerTag: 'PocketInfinity',
-            lastName: chance.last(),
-            phoneNumber: users.cleanPhoneNumber(chance.phone({
-                country: 'us',
-                mobile: true
-            })),
-            isSubscribedToXur: true,
-            membershipId: '11',
-            membershipType: 2,
-            notifications: []
-        };
-
-        userService.getSubscribedUsers()
-            .then(function (subscribedUsersBefore) {
-                return userService.createUser(user)
-                    .then(function () {
-                        return userService.getRegisteredUsers()
-                            .then(function (registeredUsersAfter) {
-                                expect(registeredUsersAfter.length ===
-                                    (subscribedUsersBefore.length + 1)).to.equal(true);
-                                return userService.getSubscribedUsers()
-                                    .then(function (subscribedUsersAfter) {
-                                        expect(subscribedUsersAfter.length ===
-                                            subscribedUsersBefore.length).to.equal(true);
-                                        userService.deleteUser(user.phoneNumber);
-                                        done();
-                                    });
-                            });
-                    });
-            })
-            .fail(function (err) {
-                done(err);
-            });
     });
 });

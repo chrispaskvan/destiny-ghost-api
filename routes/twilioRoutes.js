@@ -13,7 +13,8 @@ var routes = function (authenticateUser, destinyService, userService) {
     var twilioController = new TwilioController(destinyService, userService);
 
     twilioRouter.route('/destiny/r')
-        .post(authenticateUser, function (req, res) {
+        .post(function (req, res) {
+            //authenticateUser,
             twilioController.request(req, res);
         });
     twilioRouter.route('/destiny/s')

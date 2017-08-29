@@ -10,11 +10,10 @@
  * @requires validator
  */
 'use strict';
-var _ = require('underscore'),
-    defaults = require('json-schema-defaults'),
-    fs = require('fs'),
-    Q = require('q'),
+const _ = require('underscore'),
     QueryBuilder = require('../helpers/queryBuilder'),
+    defaults = require('json-schema-defaults'),
+    notificationTypes = require('../notifications/notification.types'),
     twilio = require('twilio'),
     validator = require('is-my-json-valid');
 
@@ -22,18 +21,11 @@ var _ = require('underscore'),
  * Users Table Name
  * @type {string}
  */
-var collectionId = 'Users';
-/**
- * @constructor
- */
-function Users(cacheService, documentService) {
-    this.cacheService = cacheService;
-    this.documents = documentService;
-}
+const collectionId = 'Users';
 /**
  * @private
  */
-var anonymousUserSchema = {
+const anonymousUserSchema = {
     name: 'User',
     type: 'object',
     properties: {
@@ -61,7 +53,7 @@ var anonymousUserSchema = {
         }
     }
 };
-var userSchema = {
+const userSchema = {
     name: 'User',
     type: 'object',
     properties: {
@@ -148,7 +140,7 @@ var userSchema = {
     },
     additionalProperties: true
 };
-var notificationSchema = {
+const notificationSchema = {
     name: 'User',
     type: 'object',
     properties: {
@@ -172,485 +164,449 @@ var notificationSchema = {
     },
     additionalProperties: false
 };
-/**
- * Allowed Actions
- * @type {{Gunsmith: string, Xur: string}}
- */
-var notificationTypes = {
-    Foundry: 'Orders',
-    Gunsmith: 'Banshee-44',
-    IronBanner: 'Lord Saladin',
-    Xur: 'Xur'
-};
-/**
- * Add message to the user audit trail.
- * @param user {Object}
- * @param callback
- * @returns {*|Array}
- */
-Users.prototype.addUserMessage = function (displayName, membershipType, message, notificationType) {
-    var self = this;
 
-    return this.getUserByDisplayName(displayName, membershipType)
-        .then(function (user) {
-            var notification;
-            var messages;
-
-            if (notificationTypes[notificationType]) {
-                notification = _.find(user.notifications, function (notification) {
-                    return notification.type === notificationTypes[notificationType];
-                });
-                if (notification) {
-                    messages = notification.messages;
-                }
-            } else {
-                messages = user.messages;
-            }
-            if (messages) {
-                messages.push(message);
-            }
-
-            return self.documents.upsertDocument(collectionId, user);
-        });
-};
-/**
- * Create an Anonymous User
- * @param user
- * @param callback
- * @returns {*}
- */
-Users.prototype.createAnonymousUser = function (user, callback) {
-    var self = this;
-    var deferred = Q.defer();
-    var validateUser = validator(anonymousUserSchema, {
-        greedy: true
-    });
-
-    if (!validateUser(user)) {
-        deferred.reject(Error(JSON.stringify(validateUser.errors)));
-        return deferred.promise.nodeify(callback);
+class Users {
+    /**
+     * @constructor
+     */
+    constructor(cacheService, documentService) {
+        this.cacheService = cacheService;
+        this.documents = documentService;
     }
+    /**
+     * Add Message to the User History
+     * @param displayName
+     * @param membershipType
+     * @param message
+     * @param notificationType
+     * @returns {Request|Promise.<T>|*}
+     */
+    addUserMessage(displayName, membershipType, message, notificationType) {
+        const self = this;
 
-    return this.getUserByDisplayName(user.displayName, user.membershipType)
-        .then(function (document) {
-            if (document) {
-                _.extend(document, user);
-                return self.documents.upsertDocument(collectionId, document);
-            }
+        return this.getUserByDisplayName(displayName, membershipType)
+            .then(function (user) {
+                let notification;
+                let messages;
 
-            return self.documents.createDocument(collectionId, user);
-        });
-};
-/**
- * Create the user in the database.
- * @param user {Object}
- * @param callback
- */
-Users.prototype.createUser = function (user, callback) {
-    var self = this;
-
-    var deferred = Q.defer();
-    var errors = [];
-    var validateNotifications = validator(notificationSchema);
-    var validateUser = validator(userSchema);
-
-    if (!validateUser(user)) {
-        deferred.reject(Error(JSON.stringify(validateUser.errors)));
-        return deferred.promise.nodeify(callback);
-    }
-    _.each(user.notifications, function (notification) {
-        if (!validateNotifications(notification)) {
-            _.union(errors, validateNotifications.errors);
-        }
-    });
-    if (errors.length) {
-        deferred.reject(Error(JSON.stringify(errors)));
-        return deferred.promise.nodeify(callback);
-    }
-
-    this.getUserByPhoneNumber(user.phoneNumber)
-        .then(function (existingUser) {
-            if (existingUser) {
-                return deferred.reject(Error('The phone number, ' +
-                    user.phoneNumber + ', is already registered.'));
-            }
-            return self.getUserByEmailAddress(user.emailAddress);
-        })
-        .then(function (existingUser) {
-            if (existingUser) {
-                return deferred.reject(Error('The email address, ' +
-                    user.emailAddress + ', is already registered.'));
-            }
-            return self.getUserByDisplayName(user.displayName, user.membershipType);
-        })
-        .then(function (existingUser) {
-            self.getPhoneNumberType(user.phoneNumber)
-                .then(function (carrier) {
-                    var filter = validator.filter(userSchema);
-                    var filteredUser;
-
-                    user.carrier = carrier.name;
-                    user.type = carrier.type;
-                    userSchema.additionalProperties = false;
-                    filteredUser = filter(user);
-                    _.defaults(filteredUser, defaults(userSchema));
-                    _.extend(existingUser, filteredUser);
-
-                    return self.documents.upsertDocument(collectionId, document);
-                });
-        });
-
-    return deferred.promise.nodeify(callback);
-};
-/**
- * Create an entry in the database for the message sent to the user.
- * @param user {Object}
- * @param message {Object}
- * @param action {string}
- */
-Users.prototype.createUserMessage = function (user, message, action) {
-    var userMessage = {
-        action: action || '',
-        phoneNumber: user.phoneNumber,
-        sid: message.sid
-    };
-    var sql = this.db.prepare('INSERT INTO DestinyGhostUserMessage VALUES (?, ?)');
-    sql.run(new Date().toISOString(), JSON.stringify(userMessage));
-    sql.finalize();
-};
-/**
- * Get the carrier data for the provided phone number.
- * @param phoneNumber
- * @returns {*|Object}
- */
-Users.prototype.getPhoneNumberType = function (phoneNumber) {
-    var client = new twilio.LookupsClient(this.settings.accountSid, this.settings.authToken);
-    var deferred = Q.defer();
-
-    client.phoneNumbers(phoneNumber).get({
-        countryCode: 'US',
-        type: 'carrier'
-    }, function (error, number) {
-        if (error) {
-            deferred.resolve(error);
-        } else {
-            deferred.resolve(number.carrier);
-        }
-    });
-
-    return deferred.promise;
-};
-/**
- * Get subscribed users from the database.
- * @returns {*|Array.User}
- */
-Users.prototype.getSubscribedUsers = function (notificationType) {
-    var deferred = Q.defer();
-    var qb = new QueryBuilder();
-
-    if (!notificationTypes[notificationType]) {
-        deferred.reject(Error('notificationType is not valid'));
-
-        return deferred.promise;
-    }
-    qb
-        .select('displayName')
-        .select('membershipType')
-        .select('phoneNumber')
-        .from(collectionId)
-        .join('notifications')
-        .where('type', notificationTypes[notificationType])
-        .where('enabled', true);
-
-    return this.documents.getDocuments(collectionId, qb.getQuery(), {
-            enableCrossPartitionQuery: true });
-};
-/**
- * Get User with Matching Display Name
- * @param displayName
- * @param membershipType
- * @param callback
- * @returns {*}
- */
-Users.prototype.getUserByDisplayName = function (displayName, membershipType, callback) {
-    var self = this;
-    var deferred = Q.defer();
-    var qb = new QueryBuilder();
-
-    if (typeof displayName !== 'string' || _.isEmpty(displayName)) {
-        deferred.reject(Error('displayName string is required.'));
-
-        return deferred.promise.nodeify(callback);
-    }
-    qb.where('displayName', displayName);
-    if (membershipType && _.isNumber(membershipType)) { // ToDo Remove this and require membershipType?
-        qb.where('membershipType', membershipType);
-    }
-
-    this.cacheService.getUser(displayName, membershipType)
-        .then(function (user) {
-            if (user) {
-                return deferred.resolve(user);
-            } else {
-                self.documents.getDocuments(collectionId, qb.getQuery(), membershipType ? undefined : {
-                        enableCrossPartitionQuery: true })
-                    .then(function (documents) {
-                        if (documents) {
-                            if (documents.length > 1) {
-                                return deferred.reject(
-                                    Error('more than 1 document found for displayName ' +
-                                        displayName + ' and membershipType ' + membershipType));
-                            }
-
-                            return deferred.resolve(documents[0]);
-                        }
-
-                        return deferred.reject(Error('documents undefined'));
+                if (notificationTypes[notificationType]) {
+                    notification = _.find(user.notifications, function (notification) {
+                        return notification.type === notificationTypes[notificationType];
                     });
-            }
-        });
-
-    return deferred.promise.nodeify(callback);
-};
-/**
- * Get the user with the provided email address.
- * @param emailAddress {string}
- * @returns {*|Object}
- */
-Users.prototype.getUserByEmailAddress = function (emailAddress, membershipType) {
-    var deferred = Q.defer();
-    var qb = new QueryBuilder();
-
-    if (typeof emailAddress !== 'string' || _.isEmpty(emailAddress)) {
-        deferred.reject(Error('emailAddress string is required'));
-
-        return deferred.promise;
-    }
-    if (membershipType && _.isNumber(membershipType)) {
-        qb.where('membershipType', membershipType);
-    } else {
-        deferred.reject(Error('membershipType number is required'));
-
-        return deferred.promise;
-    }
-
-    qb.where('emailAddress', emailAddress);
-    this.documents.getDocuments(collectionId, qb.getQuery(), {
-        enableCrossPartitionQuery: true
-    })
-        .then(function (documents) {
-            if (documents) {
-                if (documents.length > 1) {
-                    return deferred.reject(
-                        Error('more than 1 document found for emailAddress ' + emailAddress));
-                }
-
-                return deferred.resolve(documents[0]);
-            }
-
-            return deferred.reject(Error('documents undefined'));
-        });
-
-    return deferred.promise;
-};
-/**
- * Get the user token by the email address token.
- * @param emailAddressToken
- * @param callback
- * @returns {*|promise}
- */
-Users.prototype.getUserByEmailAddressToken = function (emailAddressToken, callback) {
-    var deferred = Q.defer();
-    var qb = new QueryBuilder();
-
-    if (typeof emailAddressToken !== 'string' || _.isEmpty(emailAddressToken)) {
-        deferred.reject(Error('emailAddressToken string is required.'));
-
-        return deferred.promise.nodeify(callback);
-    }
-
-    qb.where('membership.tokens.blob', emailAddressToken);
-
-    this.documents.getDocuments(collectionId, qb.getQuery(), {
-            enableCrossPartitionQuery: true }, callback)
-        .then(function (documents) {
-            if (documents) {
-                if (documents.length > 1) {
-                    return deferred.reject(
-                        Error('more than 1 document found for emailAddressToken ' + emailAddressToken));
-                }
-
-                return deferred.resolve(documents[0]);
-            }
-
-            return deferred.reject(Error('documents undefined'));
-        });
-
-    return deferred.promise.nodeify(callback);
-};
-/**
- * Get the user by the membership Id.
- * @param membershipId
- * @param callback
- * @returns {*|Object}
- */
-Users.prototype.getUserByMembershipId = function (membershipId, callback) {
-    var deferred = Q.defer();
-    var qb = new QueryBuilder();
-
-    if (typeof membershipId !== 'string' || _.isEmpty(membershipId)) {
-        deferred.reject(Error('membershipId string is required'));
-
-        return deferred.promise.nodeify(callback);
-    }
-    qb.where('membershipId', membershipId);
-
-    this.documents.getDocuments(collectionId, qb.getQuery(), {
-            enableCrossPartitionQuery: true })
-        .then(function (documents) {
-            if (documents) {
-                if (documents.length > 1) {
-                    return deferred.reject(
-                        Error('more than 1 document found for membershipId ' + membershipId));
-                }
-
-                return deferred.resolve(documents[0]);
-            }
-
-            return deferred.reject(Error('documents undefined'));
-        });
-
-    return deferred.promise.nodeify(callback);
-};
-/**
- * Get the user by the phone number.
- * @param phoneNumber
- * @param membershipType
- * @param callback
- * @returns {*|Object}
- */
-Users.prototype.getUserByPhoneNumber = function (phoneNumber, callback) {
-    var deferred = Q.defer();
-    var qb = new QueryBuilder();
-
-    if (typeof phoneNumber !== 'string' || _.isEmpty(phoneNumber)) {
-        deferred.reject(Error('phoneNumber string is required.'));
-
-        return deferred.promise.nodeify(callback);
-    }
-
-    qb.where('phoneNumber', phoneNumber);
-    this.documents.getDocuments(collectionId, qb.getQuery(), {
-        enableCrossPartitionQuery: true
-    })
-        .then(function (documents) {
-            if (documents) {
-                if (documents.length > 1) {
-                    return deferred.reject(
-                        Error('more than 1 document found for phoneNumber ' + phoneNumber));
-                }
-
-                return deferred.resolve(documents[0]);
-            }
-
-            return deferred.reject(Error('documents undefined'));
-        });
-
-    return deferred.promise.nodeify(callback);
-};
-/**
- * Get the user by the phone number token
- * @param phoneNumberToken
- * @param callback
- * @returns {*|promise}
- */
-Users.prototype.getUserByPhoneNumberToken = function (phoneNumberToken, callback) {
-    var deferred = Q.defer();
-    var qb = new QueryBuilder();
-
-    if (typeof phoneNumberToken !== 'number' || _.isEmpty(phoneNumberToken)) {
-        deferred.reject(Error('phoneNumberToken number is required.'));
-
-        return deferred.promise.nodeify(callback);
-    }
-    qb.where('membership.tokens.code', phoneNumberToken);
-
-    this.documents.getDocuments(collectionId, qb.getQuery(), {
-            enableCrossPartitionQuery: true })
-        .then(function (documents) {
-            if (documents) {
-                if (documents.length > 1) {
-                    return deferred.reject(
-                        Error('more than 1 document found for phoneNumberToken ' + phoneNumberToken));
-                }
-
-                return deferred.resolve(documents[0]);
-            }
-
-            return deferred.reject(Error('documents undefined'));
-        });
-
-    return deferred.promise.nodeify(callback);
-};
-/**
- * Update the user.
- * @param user {Object}
- * @param callback
- * @returns {*|Array}
- */
-Users.prototype.updateAnonymousUser = function (user, callback) {
-    var self = this;
-    var deferred = Q.defer();
-    var validate = validator(anonymousUserSchema);
-    if (!validate(user)) {
-        deferred.reject(Error(JSON.stringify(validate.errors)));
-        return deferred.promise.nodeify(callback);
-    }
-    this.getUserByDisplayName(user.displayName, user.membershipType)
-        .then(function (user1) {
-            if (user1) {
-                self.documents.upsertDocument(collectionId, user, function (err) {
-                    if (err) {
-                        return deferred.reject(err);
+                    if (notification) {
+                        messages = notification.messages;
                     }
-
-                    return deferred.resolve();
-                });
-            } else {
-                deferred.reject(Error('User not found: ' + JSON.stringify(user)));
-            }
-        });
-    return deferred.promise.nodeify(callback);
-};
-/**
- * Update the user.
- * @param user {Object}
- * @param callback
- * @returns {*|Array}
- */
-Users.prototype.updateUser = function (user, callback) {
-    var self = this;
-    var deferred = Q.defer();
-    var validate = validator(userSchema);
-
-    if (!validate(user)) {
-        deferred.reject(Error(JSON.stringify(validate.errors)));
-        return deferred.promise.nodeify(callback);
-    }
-
-    this.getUserByDisplayName(user.displayName, user.membershipType)
-        .then(function (userDocument) {
-            _.extend(userDocument, user);
-            self.documents.upsertDocument(collectionId, userDocument, function (err) {
-                if (err) {
-                    return deferred.reject(err);
+                } else {
+                    messages = user.messages;
+                }
+                if (messages) {
+                    messages.push(message);
                 }
 
-                return deferred.resolve();
+                return self.documents.upsertDocument(collectionId, user);
+            });
+    }
+    /**
+     * Create an Anonymous User
+     * @param user
+     * @returns {*}
+     */
+    createAnonymousUser(user) {
+        const self = this;
+
+        const validateUser = validator(anonymousUserSchema, {
+            greedy: true
+        });
+
+        if (!validateUser(user)) {
+            return Promise.reject(Error(JSON.stringify(validateUser.errors)));
+        }
+
+        return this.getUserByDisplayName(user.displayName, user.membershipType)
+            .then(function (document) {
+                if (document) {
+                    _.extend(document, user);
+                    return self.documents.upsertDocument(collectionId, document);
+                }
+
+                return self.documents.createDocument(collectionId, user);
+            });
+    }
+    /**
+     * Create a User
+     * @param user {Object}
+     * @returns {*}
+     */
+    createUser(user) {
+        const self = this;
+
+        const errors = [];
+        const validateNotifications = validator(notificationSchema);
+        const validateUser = validator(userSchema);
+
+        if (!validateUser(user)) {
+            return Promise.reject(new Error(JSON.stringify(validateUser.errors)));
+        }
+        _.each(user.notifications, function (notification) {
+            if (!validateNotifications(notification)) {
+                _.union(errors, validateNotifications.errors);
+            }
+        });
+        if (errors.length) {
+            return Promise.reject(new Error(JSON.stringify(errors)));
+        }
+
+        return this.getUserByPhoneNumber(user.phoneNumber)
+            .then(function (existingUser) {
+                if (existingUser) {
+                    return Promise.reject(new Error('The phone number, ' +
+                        user.phoneNumber + ', is already registered.'));
+                }
+                return self.getUserByEmailAddress(user.emailAddress);
+            })
+            .then(function (existingUser) {
+                if (existingUser) {
+                    return Promise.reject(new Error('The email address, ' +
+                        user.emailAddress + ', is already registered.'));
+                }
+                return self.getUserByDisplayName(user.displayName, user.membershipType);
+            })
+            .then(function (existingUser) {
+                self.getPhoneNumberType(user.phoneNumber)
+                    .then(function (carrier) {
+                        const filter = validator.filter(userSchema);
+                        let filteredUser;
+
+                        user.carrier = carrier.name;
+                        user.type = carrier.type;
+                        userSchema.additionalProperties = false;
+                        filteredUser = filter(user);
+                        _.defaults(filteredUser, defaults(userSchema));
+                        _.extend(existingUser, filteredUser);
+
+                        return self.documents.upsertDocument(collectionId, document);
+                    });
+            });
+    }
+    /**
+     * Get the carrier data for the provided phone number.
+     * @param phoneNumber
+     * @returns {*|Object}
+     */
+    getPhoneNumberType(phoneNumber) {
+        const client = new twilio.LookupsClient(this.settings.accountSid, this.settings.authToken);
+
+        return new Promise(function (resolve) {
+            client.phoneNumbers(phoneNumber).get({
+                countryCode: 'US',
+                type: 'carrier'
+            }, function (error, number) {
+                if (error) {
+                    resolve(error);
+                } else {
+                    resolve(number.carrier);
+                }
             });
         });
+    }
+    /**
+     * Get subscribed users from the database.
+     * @returns {*|Array.User}
+     */
+    getSubscribedUsers(notificationType) {
+        const qb = new QueryBuilder();
 
-    return deferred.promise.nodeify(callback);
-};
+        if (!notificationTypes[notificationType]) {
+            return Promise.reject(Error('notificationType is not valid'));
+        }
+        qb
+            .select('displayName')
+            .select('membershipType')
+            .select('phoneNumber')
+            .from(collectionId)
+            .join('notifications')
+            .where('type', notificationTypes[notificationType])
+            .where('enabled', true);
 
+        return this.documents.getDocuments(collectionId, qb.getQuery(), {
+            enableCrossPartitionQuery: true
+        });
+    }
+    /**
+     * Get User with Matching Display Name
+     * @param displayName
+     * @param membershipType
+     * @returns {Promise}
+     */
+    getUserByDisplayName(displayName, membershipType) {
+        const self = this;
+
+        const qb = new QueryBuilder();
+
+        if (typeof displayName !== 'string' || _.isEmpty(displayName)) {
+            return Promise.reject(new Error('displayName string is required.'));
+        }
+
+        qb.where('displayName', displayName);
+        if (membershipType && _.isNumber(membershipType)) { // ToDo Remove this and require membershipType?
+            qb.where('membershipType', membershipType);
+        }
+
+        return self.cacheService.getUser(displayName, membershipType)
+            .then(function (user) {
+                if (user) {
+                    return user;
+                } else {
+                    return self.documents.getDocuments(collectionId, qb.getQuery(), membershipType ? undefined : {
+                        enableCrossPartitionQuery: true
+                    })
+                        .then(function (documents) {
+                            if (documents) {
+                                if (documents.length > 1) {
+                                    throw new Error('more than 1 document found for displayName ' +
+                                        displayName + ' and membershipType ' + membershipType);
+                                }
+
+                                return documents[0];
+                            }
+
+                            throw new Error('documents undefined');
+                        });
+                }
+            });
+    }
+    /**
+     * Get User By Email Address
+     * @param emailAddress
+     * @param membershipType
+     * @returns {Promise}
+     */
+    getUserByEmailAddress(emailAddress, membershipType) {
+        const self = this;
+
+        const qb = new QueryBuilder();
+
+        if (typeof emailAddress !== 'string' || _.isEmpty(emailAddress)) {
+            return Promise.reject(new Error('emailAddress string is required'));
+        }
+        if (!(membershipType && _.isNumber(membershipType))) {
+            return Promise.reject(new Error('membershipType number is required'));
+        }
+
+        return new Promise(function (resolve, reject) {
+            qb.where('membershipType', membershipType);
+            qb.where('emailAddress', emailAddress);
+
+            self.documents.getDocuments(collectionId, qb.getQuery(), {
+                enableCrossPartitionQuery: true
+            })
+                .then(function (documents) {
+                    if (documents) {
+                        if (documents.length > 1) {
+                            reject(new Error('more than 1 document found for emailAddress ' + emailAddress));
+                        }
+
+                        resolve(documents[0]);
+                    }
+
+                    reject(new Error('documents undefined'));
+                });
+        });
+    }
+    /**
+     * Get the user token by the email address token.
+     * @param emailAddressToken
+     * @returns {Promise}
+     */
+    getUserByEmailAddressToken(emailAddressToken) {
+        const self = this;
+
+        const qb = new QueryBuilder();
+
+        if (typeof emailAddressToken !== 'string' || _.isEmpty(emailAddressToken)) {
+            return Promise.reject(new Error('emailAddressToken string is required.'));
+        }
+
+        return new Promise(function (resolve, reject) {
+            qb.where('membership.tokens.blob', emailAddressToken);
+
+            self.documents.getDocuments(collectionId, qb.getQuery(), {
+                enableCrossPartitionQuery: true
+            })
+                .then(function (documents) {
+                    if (documents) {
+                        if (documents.length > 1) {
+                            reject(new Error('more than 1 document found for emailAddressToken ' + emailAddressToken));
+                        }
+
+                        resolve(documents[0]);
+                    }
+
+                    reject(new Error('documents undefined'));
+                });
+        });
+    }
+    /**
+     * Get User By Membership Id
+     * @param membershipId
+     * @returns {Promise}
+     */
+    getUserByMembershipId(membershipId) {
+        const self = this;
+
+        const qb = new QueryBuilder();
+
+        if (typeof membershipId !== 'string' || _.isEmpty(membershipId)) {
+            return Promise.reject(new Error('membershipId string is required'));
+        }
+
+        return new Promise(function (resolve, reject) {
+            qb.where('membershipId', membershipId);
+
+            self.documents.getDocuments(collectionId, qb.getQuery(), {
+                enableCrossPartitionQuery: true
+            })
+                .then(function (documents) {
+                    if (documents) {
+                        if (documents.length > 1) {
+                            reject(new Error('more than 1 document found for membershipId ' + membershipId));
+                        }
+
+                        resolve(documents[0]);
+                    }
+
+                    reject(new Error('documents undefined'));
+                });
+        });
+    }
+    /**
+     * Get User By Phone Number
+     * @param phoneNumber
+     * @returns {Promise}
+     */
+    getUserByPhoneNumber(phoneNumber) {
+        const self = this;
+
+        const qb = new QueryBuilder();
+
+        if (typeof phoneNumber !== 'string' || _.isEmpty(phoneNumber)) {
+            return Promise.reject(Error('phoneNumber string is required.'));
+        }
+
+        return self.cacheService.getUser(phoneNumber)
+            .then(function (user) {
+                if (user) {
+                    return user;
+                } else {
+                    qb.where('phoneNumber', phoneNumber);
+                    return self.documents.getDocuments(collectionId, qb.getQuery(), {
+                        enableCrossPartitionQuery: true
+                    })
+                        .then(function (documents) {
+                            if (documents) {
+                                if (documents.length > 1) {
+                                    throw new Error('more than 1 document found for phoneNumber ' + phoneNumber);
+                                }
+
+                                return documents[0];
+                            }
+
+                            throw new Error('documents undefined');
+                        });
+                }
+            });
+    }
+    /**
+     * Get User By Phone Number Token
+     * @param phoneNumberToken
+     * @returns {Promise}
+     */
+    getUserByPhoneNumberToken(phoneNumberToken) {
+        const self = this;
+
+        const qb = new QueryBuilder();
+
+        if (typeof phoneNumberToken !== 'number' || _.isEmpty(phoneNumberToken)) {
+            return Promise.reject(Error('phoneNumberToken number is required.'));
+        }
+
+        return new Promise(function (resolve, reject) {
+            qb.where('membership.tokens.code', phoneNumberToken);
+
+            self.documents.getDocuments(collectionId, qb.getQuery(), {
+                enableCrossPartitionQuery: true
+            })
+                .then(function (documents) {
+                    if (documents) {
+                        if (documents.length > 1) {
+                            reject(new Error('more than 1 document found for phoneNumberToken ' + phoneNumberToken));
+                        }
+
+                        resolve(documents[0]);
+                    }
+
+                    reject(new Error('documents undefined'));
+                });
+        });
+    }
+    /**
+     * Update Anonymous User
+     * @param user {Object}
+     * @returns {Promise}
+     */
+    updateAnonymousUser(user) {
+        const self = this;
+
+        const validate = validator(anonymousUserSchema);
+
+        if (!validate(user)) {
+            return Promise.reject(new Error(JSON.stringify(validate.errors)));
+        }
+
+        return new Promise(function (resolve, reject) {
+            self.getUserByDisplayName(user.displayName, user.membershipType)
+                .then(function (user1) {
+                    if (user1) {
+                        self.documents.upsertDocument(collectionId, user, function (err) {
+                            if (err) {
+                                reject(err);
+                            }
+
+                            resolve();
+                        });
+                    } else {
+                        reject(new Error('User not found: ' + JSON.stringify(user)));
+                    }
+                });
+        });
+    }
+    /**
+     * Update User
+     * @param user {Object}
+     * @returns {Promise}
+     */
+    updateUser(user) {
+        const self = this;
+
+        const validate = validator(userSchema);
+
+        if (!validate(user)) {
+            return Promise.reject(Error(JSON.stringify(validate.errors)));
+        }
+
+        return new Promise(function (resolve, reject) {
+            self.getUserByDisplayName(user.displayName, user.membershipType)
+                .then(function (userDocument) {
+                    _.extend(userDocument, user);
+                    self.documents.upsertDocument(collectionId, userDocument, function (err) {
+                        if (err) {
+                            reject(err);
+                        }
+
+                        resolve();
+                    });
+                });
+        });
+    }
+}
 exports = module.exports = Users;

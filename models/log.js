@@ -12,7 +12,7 @@
  * @requires cuid
  */
 'use strict';
-var _ = require('underscore'),
+const _ = require('underscore'),
     bunyan = require('bunyan'),
     cuid = require('cuid');
 /**

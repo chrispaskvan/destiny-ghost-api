@@ -17,23 +17,23 @@
  */
 var _ = require('underscore'),
     base64url = require('base64url'),
-    cookie = require('cookie'),
     crypto = require('crypto'),
     fs = require('fs'),
-    Ghost = require('../models/ghost'),
-    jSend = require('../models/jsend'),
+    Ghost = require('../helpers/ghost'),
+    log = require('../helpers/log'),
     Q = require('q'),
     request = require('request'),
     S = require('string'),
     yauzl = require('yauzl');
-
 /**
- * @param loggingProvider
+ * Destiny Controller
+ * @param destinyService
+ * @param userService
+ * @param worldRepository
  * @constructor
  */
-function DestinyController(destinyService, loggingProvider, userService, worldRepository) {
+function DestinyController(destinyService, userService, worldRepository) {
     'use strict';
-    this.loggingProvider = loggingProvider;
     /**
      * Destiny Model
      * @type {Destiny|exports|module.exports}
@@ -72,19 +72,14 @@ DestinyController.prototype = (function () {
      * @param res
      */
     var getAuthorizationUrl = function (req, res) {
-        var self = this;
-        var state = _getRandomState();
+        const state = _getRandomState();
 
         req.session.state = state;
         return this.destiny.getAuthorizationUrl(state)
-            .then(function (url) {
-                res.send(url);
-            })
-            .fail(function (err) {
-                res.json(jSend.error(err));
-                if (self.loggingProvider) {
-                    self.loggingProvider.info(err);
-                }
+            .then(url => res.send(url))
+            .fail(err => {
+                log.error(err);
+                res.status(500).json(err);
             });
     };
     /**
@@ -132,11 +127,9 @@ DestinyController.prototype = (function () {
                             });
                     });
             })
-            .fail(function (err) {
-                res.json(jSend.error(err));
-                if (self.loggingProvider) {
-                    self.loggingProvider.info(err);
-                }
+            .fail(err => {
+                log.error(err);
+                res.status(500).json(err);
             });
     };
     /**
@@ -153,7 +146,8 @@ DestinyController.prototype = (function () {
 
                 return self.destiny.getCharacters(currentUser.membershipId, currentUser.membershipType)
                     .then(function (characters) {
-                        return self.destiny.getFieldTestWeapons(characters[0].characterBase.characterId, user.bungie.accessToken.value)
+                        return self.destiny.getFieldTestWeapons(characters[0].characterBase.characterId,
+                                user.bungie.accessToken.value)
                             .then(function (items) {
                                 if (items === undefined || items.length === 0) {
                                     res.json(jSend.fail('Banshee-44 is the Gunsmith.'));
@@ -180,11 +174,9 @@ DestinyController.prototype = (function () {
                             });
                     });
             })
-            .fail(function (err) {
-                res.json(jSend.error(err));
-                if (self.loggingProvider) {
-                    self.loggingProvider.info(err);
-                }
+            .fail(err => {
+                log.error(err);
+                res.status(500).json(err);
             });
     };
     /**
@@ -199,7 +191,8 @@ DestinyController.prototype = (function () {
             .then(function (currentUser) {
                 return self.destiny.getCharacters(currentUser.membershipId, currentUser.membershipType)
                     .then(function (characters) {
-                        return self.destiny.getFoundryOrders(characters[0].characterBase.characterId, currentUser.bungie.accessToken.value)
+                        return self.destiny.getFoundryOrders(characters[0].characterBase.characterId,
+                                currentUser.bungie.accessToken.value)
                             .then(function (foundryOrders) {
                                 if (foundryOrders.items.length === 0) {
                                     res.json(foundryOrders);
@@ -226,11 +219,9 @@ DestinyController.prototype = (function () {
                             });
                     });
             })
-            .fail(function (err) {
-                res.json(jSend.error(err));
-                if (self.loggingProvider) {
-                    self.loggingProvider.info(err);
-                }
+            .fail(err => {
+                log.error(err);
+                res.status(500).json(err);
             });
     };
     /**
@@ -247,7 +238,8 @@ DestinyController.prototype = (function () {
                         var characterPromises = [];
                         _.each(characters, function (character) {
                             characterPromises.push(
-                                self.destiny.getIronBannerEventRewards(character.characterBase.characterId, currentUser.bungie.accessToken.value)
+                                self.destiny.getIronBannerEventRewards(character.characterBase.characterId,
+                                    currentUser.bungie.accessToken.value)
                             );
                         });
                         return Q.all(characterPromises)
@@ -295,11 +287,9 @@ DestinyController.prototype = (function () {
                             });
                     });
             })
-            .fail(function (err) {
-                res.json(jSend.error(err));
-                if (self.loggingProvider) {
-                    self.loggingProvider.info(err);
-                }
+            .fail(err => {
+                log.error(err);
+                res.status(500).json(err);
             });
     };
     /**
@@ -309,23 +299,23 @@ DestinyController.prototype = (function () {
      * @returns {*}
      */
     var getGrimoireCards = function (req, res) {
-        var self = this;
-        var numberOfCards = parseInt(req.params.numberOfCards, 10);
+        const numberOfCards = parseInt(req.params.numberOfCards, 10);
 
         if (isNaN(numberOfCards)) {
             return res.status(422).end();
         }
 
-        return self.ghost.getWorldDatabasePath()
-            .then(function (worldDatabasePath) {
-                self.world.open(worldDatabasePath);
-                return self.world.getGrimoireCards(numberOfCards)
-                    .then(function (grimoireCards) {
-                        res.status(200).json(grimoireCards).end();
-                    })
-                    .fin(function () {
-                        self.world.close();
-                    });
+        this.ghost.getWorldDatabasePath()
+            .then(worldDatabasePath => {
+                this.world.open(worldDatabasePath);
+
+                return this.world.getGrimoireCards(numberOfCards)
+                    .then(grimoireCards => res.status(200).json(grimoireCards).end())
+                    .finally(() => this.world.close());
+            })
+            .catch(err => {
+                log.error(err);
+                res.status(500).json(err);
             });
     };
     /**
@@ -386,46 +376,40 @@ DestinyController.prototype = (function () {
                     });
             })
             .fail(function (err) {
-                res.status(500).send(err.message);
-                if (self.loggingProvider) {
-                    self.loggingProvider.info(err);
-                }
+                log.error(err);
+                res.status(500).json(err);
             });
     };
-    /*jslint unparam: false*/
     /**
      * Insert or update the Destiny manifest.
      */
-    var upsertManifest = function () {
-        var self = this;
-
-        return this.destiny.getManifest()
-            .then(function (manifest) {
-                return self.ghost.getLastManifest()
-                    .then(function (lastManifest) {
-                        var databasePath = './databases/';
-                        var relativeUrl = manifest.mobileWorldContentPaths.en;
-                        var fileName = databasePath + relativeUrl.substring(relativeUrl.lastIndexOf('/') + 1);
+    var upsertManifest = function (req, res) {
+        this.destiny.getManifest()
+            .then(manifest => {
+                return this.destiny.getManifest(true)
+                    .then(lastManifest => {
+                        const databasePath = './databases/';
+                        const { mobileWorldContentPaths: { en: relativeUrl }}  = manifest;
+                        const fileName = databasePath + relativeUrl.substring(relativeUrl.lastIndexOf('/') + 1);
 
                         if (!lastManifest || lastManifest.version !== manifest.version ||
                                 lastManifest.mobileWorldContentPaths.en !== manifest.mobileWorldContentPaths.en ||
                                 !fs.existsSync(fileName)) {
-                            var file = fs.createWriteStream(fileName + '.zip');
-                            var stream = request('https://www.bungie.net' + relativeUrl, function () {
-                                /*
-                                 * @todo Log entry here.
-                                 */
-                                console.log('Content downloaded from ' + relativeUrl);
+                            const file = fs.createWriteStream(fileName + '.zip');
+                            const stream = request('https://www.bungie.net' + relativeUrl, () => {
+                                log.info('content downloaded from ' + relativeUrl);
                             }).pipe(file);
-                            stream.on('finish', function decompress() {
-                                yauzl.open(fileName + '.zip', function (err, zipFile) {
+                            stream.on('finish', () => {
+                                yauzl.open(fileName + '.zip', (err, zipFile) => {
                                     if (!err) {
-                                        zipFile.on('entry', function (entry) {
-                                            zipFile.openReadStream(entry, function (err, readStream) {
+                                        zipFile.on('entry', entry => {
+                                            zipFile.openReadStream(entry, (err, readStream) => {
                                                 if (!err) {
                                                     readStream.pipe(fs.createWriteStream(databasePath + entry.fileName));
-                                                    self.ghost.createManifest(manifest);
+
                                                     fs.unlink(fileName + '.zip');
+
+                                                    res.status(200).json(manifest).end();
                                                 } else {
                                                     throw err;
                                                 }
@@ -436,13 +420,14 @@ DestinyController.prototype = (function () {
                                     }
                                 });
                             });
+                        } else {
+                            res.status(200).json(manifest).end();
                         }
                     });
             })
-            .fail(function (err) {
-                if (self.loggingProvider) {
-                    self.loggingProvider.info(err);
-                }
+            .catch(err => {
+                log.error(err);
+                res.status(500).json(err);
             });
     };
     /**

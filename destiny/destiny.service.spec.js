@@ -7,19 +7,24 @@ var _ = require('underscore'),
     chance = require('chance')(),
     expect = require('chai').expect,
     request = require('request'),
-    mockBansheeResponse = require('./mocks/bansheeResponse.json'),
-    mockXurResponse = require('./mocks/xurResponse.json'),
+    mockBansheeResponse = require('../mocks/bansheeResponse.json'),
+    mockManifestResponse = require('../mocks/manifestResponse.json'),
+    mockXurResponse = require('../mocks/xurResponse.json'),
     sinon = require('sinon');
 
 var destinyService;
 
 beforeEach(function () {
     var cacheService = {
+        getManifest: function() {},
         getVendor: function() {},
+        setManifest: function() {},
         setVendor: function() {}
     };
 
     sinon.stub(cacheService, 'getVendor').resolves();
+    sinon.stub(cacheService, 'getManifest').resolves();
+
     destinyService = new DestinyService(cacheService);
 });
 
@@ -52,6 +57,27 @@ describe('DestinyService', function () {
                         nextRefreshDate,
                         itemHashes
                     });
+                });
+        });
+
+        afterEach(function () {
+            this.request.restore();
+        });
+    });
+
+    describe('getManifest', function () {
+        beforeEach(function () {
+            this.request = sinon.stub(request, 'get');
+        });
+
+        it('should return the latest manifest', function () {
+            const { Response: manifest1 } = mockManifestResponse;
+
+            this.request.callsArgWith(1, undefined, { statusCode: 200 }, JSON.stringify(mockManifestResponse));
+
+            return destinyService.getManifest()
+                .then(function (manifest) {
+                    expect(manifest).to.eql(manifest1);
                 });
         });
 

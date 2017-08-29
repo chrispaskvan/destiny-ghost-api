@@ -2,9 +2,10 @@
  * Created by chris on 1/3/16.
  */
 var UserController = require('./user.controller'),
+    AuthenticationMiddleWare = require('../authentication/authentication.middleware'),
     express = require('express');
 
-var routes = function (authenticateUser, destinyService, userService) {
+var routes = function (authenticationController, destinyService, userService) {
     'use strict';
     var userRouter = express.Router();
     /**
@@ -12,9 +13,11 @@ var routes = function (authenticateUser, destinyService, userService) {
      * @type {destinyController|exports|module.exports}
      */
     var userController = new UserController(destinyService, userService);
+    const middleware = new AuthenticationMiddleWare(authenticationController)
 
     userRouter.route('/apply')
-        .post(authenticateUser, function (req, res) {
+        .post(function (req, res) {
+            //authenticateUser,
             userController.apply(req, res);
         });
     userRouter.route('/join')
@@ -30,31 +33,39 @@ var routes = function (authenticateUser, destinyService, userService) {
             userController.signOut(req, res);
         });
     userRouter.route('/:emailAddress/emailAddress')
-        .get(authenticateUser, function (req, res) {
+        .get(function (req, res) {
+            //authenticateUser,
             userController.getEmailAddress(req, res);
         });
     userRouter.route('/:gamerTag/gamerTag/:membershipType')
-        .get(authenticateUser, function (req, res) {
+        .get(function (req, res) {
+            //authenticateUser,
             userController.getGamerTag(req, res);
         });
     userRouter.route('/:phoneNumber/phoneNumber')
-        .get(authenticateUser, function (req, res) {
+        .get(function (req, res) {
+            //authenticateUser,
             userController.getPhoneNumber(req, res);
         });
     userRouter.route('/confirm')
-        .post(authenticateUser, function (req, res) {
+        .post(function (req, res) {
+            //authenticateUser,
             userController.confirm(req, res);
         });
     userRouter.route('/current')
-        .get(authenticateUser, function (req, res) {
+        .get(function (req, res, next) {
+            middleware.authenticateUser(req, res, next);
+        }, function (req, res) {
             userController.getCurrentUser(req, res);
         });
     userRouter.route('/:gamerTag')
-        .patch(authenticateUser, function (req, res) {
+        .patch(function (req, res) {
+            //authenticateUser,
             userController.update(req, res);
         });
     userRouter.route('/register/:emailAddressToken')
-        .get(authenticateUser, function (req, res) {
+        .get(function (req, res) {
+            //authenticateUser,
             userController.getUserByEmailAddressToken(req, res);
         });
 

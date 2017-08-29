@@ -9,7 +9,9 @@ var ApplicationInsights = require('applicationinsights'),
     DestinyCache = require('./destiny/destiny.cache'),
     DestinyService = require('./destiny/destiny.service'),
     Log = require('./models/log'),
-    UserAuthentication = require('./users/user.authentication'),
+    AuthenticationService = require('./authentication/authentication.service'),
+    AuthenticationController = require('./authentication/authentication.controller'),
+    NotificationService = require('./notifications/notification.service'),
     UserCache = require('./users/user.cache'),
     UserService = require('./users/user.service'),
     bodyParser = require('body-parser'),
@@ -17,11 +19,17 @@ var ApplicationInsights = require('applicationinsights'),
     documents = require('./helpers/documents'),
     express = require('express'),
     fs = require('fs'),
+    graphql = require('express-graphql'),
     http = require('http'),
     path = require('path'),
     session = require('express-session'),
     redis = require('redis'),
+    twilio = require('twilio'),
     world = require('./helpers/world');
+
+const redisConfig = require('./settings/redis.json');
+const twilioSettings = require('./settings/twilio.' + (process.env.NODE_ENV || 'development') + '.json');
+
 
 var RedisStore = require('connect-redis')(session);
 
@@ -54,7 +62,6 @@ app.use(function (req, res, next) {
 /**
  * Session
  */
-var redisConfig = JSON.parse(fs.readFileSync('./settings/redis.json'));
 var client = redis.createClient(redisConfig.port, redisConfig.host, {
     auth_pass: redisConfig.key // jscs:ignore requireCamelCaseOrUpperCaseIdentifiers
 });
@@ -112,13 +119,17 @@ app.use(logger.errorLogger());
  */
 var destinyCache = new DestinyCache();
 var destinyService = new DestinyService(destinyCache);
+const twilioClient = twilio(twilioSettings.accountSid, twilioSettings.authToken);
+
+const notificationService = new NotificationService(twilioClient);
 var userCache = new UserCache();
 var userService = new UserService(userCache, documents);
-var authenticate = new UserAuthentication(userCache, destinyService, userService).authenticate();
+var authenticationService = new AuthenticationService(userCache, destinyService, userService);
+var authenticationController = new AuthenticationController(authenticationService);
 /**
  * Routes
  */
-var destinyRouter = require('./destiny/destiny.routes')(authenticate, destinyService, userService, world);
+var destinyRouter = require('./destiny/destiny.routes')(authenticationController, destinyService, userService, world);
 app.use('/api/destiny', destinyRouter);
 /**
  * ToDo: Health Check
@@ -128,13 +139,13 @@ app.use('/api/destiny', destinyRouter);
  * twilio client?
  * azure?
  */
-//var notificationRouter = require('./routes/notificationRoutes')();
-//app.use('/api/notifications', notificationRouter);
+var notificationRouter = require('./notifications/notification.routes')(authenticationController, destinyService, notificationService, userService, world);
+app.use('/api/notifications', notificationRouter);
 
-var twilioRouter = require('./routes/twilioRoutes')(authenticate, destinyService, userService);
+var twilioRouter = require('./routes/twilioRoutes')(authenticationController, destinyService, userService);
 app.use('/api/twilio', twilioRouter);
 
-var userRouter = require('./users/user.routes')(authenticate, destinyService, userService);
+var userRouter = require('./users/user.routes')(authenticationController, destinyService, userService);
 app.use('/api/users', userRouter);
 
 // jscs:ignore requireCapitalizedComments
@@ -154,12 +165,24 @@ app.get('/ping', function (req, res) {
     });
 });
 
+const ncSchema = require('./schema');
+app.use('/graphql', graphql({
+    schema: ncSchema,
+    graphiql: true
+}));
+
 // jscs:ignore requireCapitalizedComments
 // noinspection JSLint
 app.use(function (err, req, res, next) {
     appInsights.client.trackRequest(req, res);
-    next();
+    next(err);
 });
+
+
+const Subscriber = require('./helpers/subscriber');
+var subscriber = new Subscriber();
+const Publisher = require('./helpers/publisher');
+var p = new Publisher();
 /**
  * Server
  */

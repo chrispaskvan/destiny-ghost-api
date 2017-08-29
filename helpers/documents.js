@@ -7,48 +7,45 @@
  */
 'use strict';
 var DocumentClient = require('documentdb').DocumentClient,
-    Q = require('q'),
     configuration = require('../settings/documents.json'),
     util = require('util');
 /**
  * Get Collection by Id
  * @param collectionId
- * @returns {promise}
+ * @returns {Promise.<*>}
  */
 function getCollection(collectionId) {
-    var deferred = Q.defer();
+    return new Promise((resolve, reject) => {
+        function getCurrentCollection(err, collection) {
+            if (err) {
+                reject(err);
+            }
 
-    function getCurrentCollection(err, collection) {
-        if (err) {
-            return deferred.reject(err);
+            map[collectionId] = collection;
+
+            resolve(collection);
         }
 
-        map[collectionId] = collection;
-
-        return deferred.resolve(collection);
-    }
-
-    function getCurrentDatabase(err, database) {
-        if (err) {
-            return deferred.reject(err);
+        function getCurrentDatabase(err, database) {
+            if (err) {
+                reject(err);
+            }
+            if (database) {
+                client.queryCollections(database._self,
+                    util.format('SELECT * FROM collections c WHERE c.id = "%s"', collectionId))
+                    .current(getCurrentCollection);
+            } else {
+                resolve();
+            }
         }
-        if (database) {
-            client.queryCollections(database._self,
-                util.format('SELECT * FROM collections c WHERE c.id = "%s"', collectionId))
-                .current(getCurrentCollection);
-        } else {
-            return deferred.resolve();
-        }
-    }
 
-    if (map[collectionId]) {
-        deferred.resolve(map[collectionId]);
-    } else {
+        if (map[collectionId]) {
+            return resolve(map[collectionId]);
+        }
+
         client.queryDatabases(util.format('SELECT * FROM root r WHERE r.id = "%s"', databaseId))
             .current(getCurrentDatabase);
-    }
-
-    return deferred.promise;
+    });
 }
 /**
  *
@@ -76,85 +73,59 @@ var map = Object.create(null);
  * Create Document
  * @param collectionId
  * @param document
- * @returns {promise}
+ * @returns {Promise}
  */
 Documents.prototype.createDocument = function (collectionId, document) {
-    var deferred = Q.defer();
-
-    getCollection(collectionId)
-        .then(function (collection) {
-            if (collection) {
-                client.createDocument(collection._self, document, function (err, document) {
-                    if (err) {
-                        return deferred.reject(err);
-                    }
-
-                    return deferred.resolve(document.id);
-                });
-            }
-        })
-        .fail(function (err) {
-            deferred.reject(err);
-        });
-
-    return deferred.promise;
+    return new Promise((resolve, reject) => {
+        getCollection(collectionId)
+            .then(collection => {
+                if (collection) {
+                    client.createDocument(collection._self, document,
+                        (err, document) => err ? reject(err) : resolve(document.id));
+                }
+            });
+    });
 };
 /**
  * Get Documents by Query
  * @param collectionId
  * @param query
  * @param options
- * @returns {promise}
+ * @returns {Promise}
  */
 Documents.prototype.getDocuments = function (collectionId, query, options) {
-    var deferred = Q.defer();
-
-    function getDocuments(err, results) {
-        if (err) {
-            deferred.reject(err);
-        } else {
-            deferred.resolve(results);
-        }
-    }
-
-    getCollection(collectionId)
-        .then(function (collection) {
-            if (collection) {
-                client.queryDocuments(collection._self, query, options).toArray(getDocuments);
+    return new Promise((resolve, reject) => {
+        function getDocuments(err, results) {
+            if (err) {
+                reject(err);
+            } else {
+                resolve(results);
             }
-        })
-        .fail(function (err) {
-            deferred.reject(err);
-        });
+        }
 
-    return deferred.promise;
+        getCollection(collectionId)
+            .then(collection => {
+                if (collection) {
+                    client.queryDocuments(collection._self, query, options).toArray(getDocuments);
+                }
+            });
+    });
 };
 /**
  * Insert If New or Update Existing Document
  * @param collectionId
  * @param document
- * @returns {promise}
+ * @returns {Promise}
  */
 Documents.prototype.upsertDocument = function (collectionId, document) {
-    var deferred = Q.defer();
-
-    getCollection(collectionId)
-        .then(function (collection) {
-            if (collection) {
-                client.upsertDocument(collection._self, document, function (err) {
-                    if (err) {
-                        return deferred.reject(err);
-                    }
-
-                    return deferred.resolve();
-                });
-            }
-        })
-        .fail(function (err) {
-            deferred.reject(err);
-        });
-
-    return deferred.promise;
+    return new Promise((resolve, reject) => {
+        getCollection(collectionId)
+            .then(collection => {
+                if (collection) {
+                    client.upsertDocument(collection._self, document, err => err ? reject(err) : resolve());
+                }
+            });
+    });
 };
 
 exports = module.exports = new Documents();
