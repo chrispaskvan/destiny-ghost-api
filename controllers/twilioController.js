@@ -42,7 +42,9 @@ function TwilioController(destinyService, userService) {
      * Ghost Model
      * @type {Ghost|exports|module.exports}
      */
-    this.ghost = new Ghost(process.env.DATABASE);
+    this.ghost = new Ghost({
+        destinyService
+    });
     /**
      * World Model
      * @type {World|exports|module.exports}

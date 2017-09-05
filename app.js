@@ -6,6 +6,8 @@
  * @todo clean up
  */
 var ApplicationInsights = require('applicationinsights'),
+    Destiny2Cache = require('./destiny2/destiny2.cache'),
+    Destiny2Service = require('./destiny2/destiny2.service'),
     DestinyCache = require('./destiny/destiny.cache'),
     DestinyService = require('./destiny/destiny.service'),
     Log = require('./models/log'),
@@ -118,19 +120,35 @@ app.use(logger.errorLogger());
  * Dependencies
  */
 var destinyCache = new DestinyCache();
-var destinyService = new DestinyService(destinyCache);
+var destinyService = new DestinyService({
+    cacheService: destinyCache
+});
 const twilioClient = twilio(twilioSettings.accountSid, twilioSettings.authToken);
 
 const notificationService = new NotificationService(twilioClient);
 var userCache = new UserCache();
-var userService = new UserService(userCache, documents);
-var authenticationService = new AuthenticationService(userCache, destinyService, userService);
+var userService = new UserService({
+    cacheService: userCache,
+    documentService: documents
+});
+var authenticationService = new AuthenticationService({
+    cacheService: userCache,
+    destinyService,
+    userService
+});
 var authenticationController = new AuthenticationController(authenticationService);
 /**
  * Routes
  */
 var destinyRouter = require('./destiny/destiny.routes')(authenticationController, destinyService, userService, world);
 app.use('/api/destiny', destinyRouter);
+
+
+var destiny2Cache = new Destiny2Cache();
+var destiny2Service = new Destiny2Service(destiny2Cache);
+var destiny2Router = require('./destiny2/destiny2.routes')(destiny2Service);
+app.use('/api/destiny2', destiny2Router);
+
 /**
  * ToDo: Health Check
  * redis
@@ -139,7 +157,7 @@ app.use('/api/destiny', destinyRouter);
  * twilio client?
  * azure?
  */
-var notificationRouter = require('./notifications/notification.routes')(authenticationController, destinyService, notificationService, userService, world);
+var notificationRouter = require('./notifications/notification.routes')(destinyService, notificationService, userService, world);
 app.use('/api/notifications', notificationRouter);
 
 var twilioRouter = require('./routes/twilioRoutes')(authenticationController, destinyService, userService);

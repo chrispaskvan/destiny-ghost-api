@@ -1,21 +1,19 @@
 /**
- * User Service Tests
+ * Destiny Service Tests
  */
-'use strict';
-var _ = require('underscore'),
-    DestinyService = require('./destiny.service'),
+const DestinyService = require('./destiny.service'),
     chance = require('chance')(),
     expect = require('chai').expect,
-    request = require('request'),
     mockBansheeResponse = require('../mocks/bansheeResponse.json'),
     mockManifestResponse = require('../mocks/manifestResponse.json'),
     mockXurResponse = require('../mocks/xurResponse.json'),
+    request = require('request'),
     sinon = require('sinon');
 
-var destinyService;
+let destinyService;
 
 beforeEach(function () {
-    var cacheService = {
+    const cacheService = {
         getManifest: function() {},
         getVendor: function() {},
         setManifest: function() {},

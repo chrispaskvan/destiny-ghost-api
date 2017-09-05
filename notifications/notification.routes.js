@@ -2,11 +2,10 @@
  * Created by chris on 9/25/15.
  */
 var bunyan = require('bunyan'),
-    DestinyController = require('../destiny/destiny.controller'),
     express = require('express'),
     NotificationController = require('../notifications/notification.controller');
 
-var routes = function (authenticationController, destinyService, notificationService, userService, worldRepository) {
+var routes = function (destinyService, notificationService, userService, worldRepository) {
     'use strict';
     var notificationRouter = express.Router();
     /**
@@ -22,22 +21,18 @@ var routes = function (authenticationController, destinyService, notificationSer
         ]
     });
     /**
-     * Set up routes and initialize the controller.
-     * @type {destinyController|exports|module.exports}
-     */
-    var destinyController = new DestinyController(loggingProvider);
-    /**
      * Initialize the controller.
-     * @type {notificationController|exports|module.exports}
+     * @type {NotificationController}
      */
-    var notificationController = new NotificationController(destinyService, notificationService, userService, worldRepository);
+    var notificationController = new NotificationController(
+        { destinyService, notificationService, userService, worldRepository});
+
     /**
      * Routes
      */
-    notificationRouter.route('/:subscription')
+    notificationRouter.route('/:notificationType')
         .post(function (req, res) {
-            authenticationController.authenticate(req)
-                .then(() => notificationController.create(req, res));
+            notificationController.create(req, res);
         });
     return notificationRouter;
 };

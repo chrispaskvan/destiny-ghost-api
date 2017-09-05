@@ -14,6 +14,11 @@
         "code": "324347",
         "timeStamp": 1499474698
       }
+    },
+    "bungie": {
+      "accessToken": {
+        "value": "1"
+      }
     }
   }
 ]

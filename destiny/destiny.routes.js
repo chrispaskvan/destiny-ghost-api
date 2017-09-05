@@ -1,7 +1,8 @@
 /**
  * Created by chris on 9/25/15.
  */
-var DestinyController = require('../destiny/destiny.controller'),
+const DestinyController = require('../destiny/destiny.controller'),
+    AuthenticationMiddleWare = require('../authentication/authentication.middleware'),
     express = require('express');
 /**
  * Destiny Routes
@@ -16,9 +17,10 @@ var routes = function (authenticationController, destinyService, userService, wo
     var destinyRouter = express.Router();
     /**
      * Set up routes and initialize the controller.
-     * @type {destinyController|exports|module.exports}
+     * @type {DestinyController}
      */
-    var destinyController = new DestinyController(destinyService, userService, worldRepository);
+    var destinyController = new DestinyController({ destinyService, userService, worldRepository});
+    const middleware = new AuthenticationMiddleWare(authenticationController)
     /**
      * Routes
      */
@@ -27,8 +29,9 @@ var routes = function (authenticationController, destinyService, userService, wo
             destinyController.getAuthorizationUrl(req, res);
         });
     destinyRouter.route('/characters')
-        .get(function (req, res) {
-            //authenticateUser,
+        .get(function (req, res, next) {
+            middleware.authenticateUser(req, res, next);
+        }, function (req, res) {
             destinyController.getCharacters(req, res);
         });
     destinyRouter.route('/currentUser/')
@@ -36,13 +39,15 @@ var routes = function (authenticationController, destinyService, userService, wo
             destinyController.getCurrentUser(req, res);
         });
     destinyRouter.route('/fieldTestWeapons/')
-        .get(function (req, res) {
-            //authenticateUser,
+        .get(function (req, res, next) {
+            middleware.authenticateUser(req, res, next);
+        }, function (req, res) {
             destinyController.getFieldTestWeapons(req, res);
         });
     destinyRouter.route('/foundryOrders/')
-        .get(function (req, res) {
-            //authenticateUser,
+        .get(function (req, res, next) {
+            middleware.authenticateUser(req, res, next);
+        }, function (req, res) {
             destinyController.getFoundryOrders(req, res);
         });
     destinyRouter.route('/grimoireCards/:numberOfCards')

@@ -1,19 +1,5 @@
 /**
  * A module for handling Destiny routes..
- *
- * @module destinyController
- * @author Chris Paskvan
- * @requires _
- * @requires Destiny
- * @requires fs
- * @requires Ghost
- * @requires jSend
- * @requires Q
- * @requires request
- * @requires S
- * @requires User
- * @requires World
- * @requires yauzl
  */
 var _ = require('underscore'),
     base64url = require('base64url'),
@@ -25,211 +11,187 @@ var _ = require('underscore'),
     request = require('request'),
     S = require('string'),
     yauzl = require('yauzl');
-/**
- * Destiny Controller
- * @param destinyService
- * @param userService
- * @param worldRepository
- * @constructor
- */
-function DestinyController(destinyService, userService, worldRepository) {
-    'use strict';
+
+class DestinyController {
     /**
-     * Destiny Model
-     * @type {Destiny|exports|module.exports}
+     * @constructor
+     * @param options
      */
-    this.destiny = destinyService;
+    constructor(options) {
+        this.destiny = options.destinyService;
+        this.ghost = new Ghost({
+            destinyService: options.destinyService
+        });
+        this.users = options.userService;
+        this.world = options.worldRepository;
+    }
+
     /**
-     * Ghost Model
-     * @type {Ghost|exports|module.exports}
-     */
-    this.ghost = new Ghost(process.env.DATABASE);
-    this.users = userService;
-    /**
-     * World Model
-     * @type {World|exports|module.exports}
-     */
-    this.world = worldRepository;
-}
-/**
- * @namespace
- * @type {{getCharacters, getCurrentUser, getFieldTestWeapons, getFoundryOrders, getIronBannerEventRewards,
- * getXur, upsertManifest}}
- */
-DestinyController.prototype = (function () {
-    'use strict';
-    /**
-     *
+     * Get a random state.
      * @returns {*}
      * @private
      */
-    var _getRandomState = function () {
+    static _getRandomState() {
         return base64url(crypto.randomBytes(11));
-    };
+    }
+
     /**
      * Get the authorization URL for Bungie application.
      * @param req
      * @param res
      */
-    var getAuthorizationUrl = function (req, res) {
-        const state = _getRandomState();
+    getAuthorizationUrl(req, res) {
+        const state = this.constructor._getRandomState();
 
         req.session.state = state;
-        return this.destiny.getAuthorizationUrl(state)
+        this.destiny.getAuthorizationUrl(state)
             .then(url => res.send(url))
-            .fail(err => {
+            .catch(err => {
                 log.error(err);
                 res.status(500).json(err);
             });
-    };
+    }
+
     /**
      * Get characters for the current user.
      * @returns {*|Array}
      * @private
      */
-    var getCharacters = function (req, res) {
-        var self = this;
+    getCharacters(req, res) {
+        const { session: { displayName, membershipType }} = req;
 
-        this.users.getUserByDisplayName(req.session.displayName, req.session.membershipType)
-            .then(function (currentUser) {
-                return self.destiny.getCharacters(currentUser.membershipId, req.session.membershipType)
-                    .then(function (characters) {
-                        return self.ghost.getWorldDatabasePath()
-                            .then(function (worldDatabasePath) {
-                                self.world.open(worldDatabasePath);
-                                var characterBases = _.map(characters, function (character) {
-                                    return {
-                                        characterId: character.characterBase.characterId,
-                                        classHash: character.characterBase.classHash,
-                                        emblem: character.emblemPath,
-                                        backgroundPath: character.backgroundPath,
-                                        powerLevel: character.characterBase.powerLevel,
-                                        links: [
-                                            {
-                                                rel: 'Character',
-                                                href: '/characters/' + character.characterBase.characterId
-                                            }
-                                        ]
-                                    };
-                                });
-                                var promises = [];
-                                _.each(characterBases, function (characterBase) {
-                                    promises.push(self.world.getClassByHash(characterBase.classHash));
-                                });
-                                return Q.all(promises)
-                                    .then(function (characterClasses) {
-                                        self.world.close();
-                                        _.each(characterBases, function (characterBase, index) {
-                                            characterBase.className = characterClasses[index].className;
-                                        });
-                                        res.json(characterBases);
-                                    });
-                            });
+        this.ghost.getWorldDatabasePath()
+            .then(worldDatabasePath => this.world.open(worldDatabasePath))
+            .then(() => this.users.getUserByDisplayName(displayName, membershipType))
+            .then(currentUser => this.destiny.getCharacters(currentUser.membershipId, membershipType))
+            .then(characters => {
+                const characterBases = characters.map(character =>  {
+                    return {
+                        characterId: character.characterBase.characterId,
+                        classHash: character.characterBase.classHash,
+                        emblem: character.emblemPath,
+                        backgroundPath: character.backgroundPath,
+                        powerLevel: character.characterBase.powerLevel,
+                        links: [
+                            {
+                                rel: 'Character',
+                                href: '/characters/' + character.characterBase.characterId
+                            }
+                        ]
+                    };
+                });
+
+                let promises = [];
+                characterBases.forEach(characterBase =>
+                    promises.push(this.world.getClassByHash(characterBase.classHash)));
+
+                return Promise.all(promises)
+                    .then(characterClasses => {
+                        this.world.close();
+                        characterBases.forEach((characterBase, index) => {
+                            characterBase.className = characterClasses[index].className;
+                        });
+                        res.json(characterBases);
                     });
             })
-            .fail(err => {
+            .catch(err => {
                 log.error(err);
                 res.status(500).json(err);
             });
-    };
+    }
+
     /**
      * Get the currently available field test weapons from the gun smith.
      * @param req
      * @param res
      */
-    var getFieldTestWeapons = function (req, res) {
-        var self = this;
+    getFieldTestWeapons(req, res) {
+        const { session: { displayName, membershipType }} = req;
+        let accessToken;
 
-        this.users.getUserByDisplayName(req.session.displayName, req.session.membershipType)
-            .then(function (currentUser) {
-                var user = currentUser;
+        this.ghost.getWorldDatabasePath()
+            .then(worldDatabasePath => this.world.open(worldDatabasePath))
+            .then(() => this.users.getUserByDisplayName(displayName, membershipType))
+            .then(currentUser => {
+                accessToken = currentUser.bungie.accessToken.value;
 
-                return self.destiny.getCharacters(currentUser.membershipId, currentUser.membershipType)
-                    .then(function (characters) {
-                        return self.destiny.getFieldTestWeapons(characters[0].characterBase.characterId,
-                                user.bungie.accessToken.value)
-                            .then(function (items) {
-                                if (items === undefined || items.length === 0) {
-                                    res.json(jSend.fail('Banshee-44 is the Gunsmith.'));
-                                    return;
-                                }
-                                var itemHashes = _.map(items, function (item) {
-                                    return item.item.itemHash;
-                                });
-                                return self.ghost.getWorldDatabasePath()
-                                    .then(function (worldDatabasePath) {
-                                        self.world.open(worldDatabasePath);
-                                        var promises = [];
-                                        _.each(itemHashes, function (itemHash) {
-                                            promises.push(self.world.getItemByHash(itemHash));
-                                        });
-                                        return Q.all(promises)
-                                            .then(function (items) {
-                                                self.world.close();
-                                                res.json(_.map(items, function (item) {
-                                                    return item.itemName;
-                                                }));
-                                            });
-                                    });
-                            });
-                    });
+                return this.destiny.getCharacters(currentUser.membershipId, membershipType);
             })
-            .fail(err => {
+            .then(characters => {
+                if (characters && characters.length > 0) {
+                    const { characterBase: { characterId }} = characters[0];
+
+                    return this.destiny.getFieldTestWeapons(characterId, accessToken)
+                        .then(vendor => {
+                            const { itemHashes } = vendor;
+                            let promises = [];
+
+                            itemHashes.forEach(itemHash => promises.push(this.world.getItemByHash(itemHash)));
+                            return Promise.all(promises)
+                                .then(items => {
+                                    this.world.close();
+                                    res.json(items.map(item => item.itemName));
+                                });
+                        });
+                }
+
+                return res.status(411).end();
+            })
+            .catch(err => {
                 log.error(err);
                 res.status(500).json(err);
             });
-    };
+    }
+
     /**
      * Get the currently available field test weapons from the gun smith.
      * @param req
      * @param res
      */
-    var getFoundryOrders = function (req, res) {
-        var self = this;
+    getFoundryOrders(req, res) {
+        const { session: { displayName, membershipType }} = req;
+        let accessToken;
 
-        this.users.getUserByDisplayName(req.session.displayName, req.session.membershipType)
-            .then(function (currentUser) {
-                return self.destiny.getCharacters(currentUser.membershipId, currentUser.membershipType)
-                    .then(function (characters) {
-                        return self.destiny.getFoundryOrders(characters[0].characterBase.characterId,
-                                currentUser.bungie.accessToken.value)
-                            .then(function (foundryOrders) {
-                                if (foundryOrders.items.length === 0) {
-                                    res.json(foundryOrders);
-                                    return;
-                                }
-                                var itemHashes = _.map(foundryOrders.items, function (item) {
-                                    return item.item.itemHash;
-                                });
-                                return self.ghost.getWorldDatabasePath()
-                                    .then(function (worldDatabasePath) {
-                                        self.world.open(worldDatabasePath);
-                                        var promises = [];
-                                        _.each(itemHashes, function (itemHash) {
-                                            promises.push(self.world.getItemByHash(itemHash));
-                                        });
-                                        return Q.all(promises)
-                                            .then(function (items) {
-                                                self.world.close();
-                                                res.json(_.map(items, function (item) {
-                                                    return item.itemName;
-                                                }));
-                                            });
-                                    });
-                            });
-                    });
+        this.ghost.getWorldDatabasePath()
+            .then(worldDatabasePath => this.world.open(worldDatabasePath))
+            .then(() => this.users.getUserByDisplayName(displayName, membershipType))
+            .then(currentUser => {
+                accessToken = currentUser.bungie.accessToken.value;
+
+                return this.destiny.getCharacters(currentUser.membershipId, membershipType);
             })
-            .fail(err => {
+            .then(characters => {
+                if (characters && characters.length > 0) {
+                    const { characterBase: { characterId }} = characters[0];
+
+                    return this.destiny.getFoundryOrders(characterId, accessToken)
+                        .then(vendor => {
+                            const { itemHashes } = vendor;
+                            let promises = [];
+
+                            itemHashes.forEach(itemHash => promises.push(this.world.getItemByHash(itemHash)));
+                            return Promise.all(promises)
+                                .then(items => {
+                                    this.world.close();
+                                    res.json(items.map(item => item.itemName));
+                                });
+                        });
+                }
+
+                return res.status(411).end();
+            })
+            .catch(err => {
                 log.error(err);
                 res.status(500).json(err);
             });
-    };
+    }
+
     /**
      * Get the currently available field test weapons from the gun smith.
      * @param req
      * @param res
      */
-    var getIronBannerEventRewards = function (req, res) {
+    getIronBannerEventRewards(req, res) {
         var self = this;
         this.users.getUserByDisplayName(req.session.displayName, req.session.membershipType)
             .then(function (currentUser) {
@@ -291,14 +253,15 @@ DestinyController.prototype = (function () {
                 log.error(err);
                 res.status(500).json(err);
             });
-    };
+    }
+
     /**
      * Get a Random Selection of Grimoire Cards
      * @param req
      * @param res
      * @returns {*}
      */
-    var getGrimoireCards = function (req, res) {
+    getGrimoireCards(req, res) {
         const numberOfCards = parseInt(req.params.numberOfCards, 10);
 
         if (isNaN(numberOfCards)) {
@@ -317,14 +280,14 @@ DestinyController.prototype = (function () {
                 log.error(err);
                 res.status(500).json(err);
             });
-    };
+    }
+
     /**
      * Get the exotic weapons and gear available from Xur.
      * @param req
      * @param res
      */
-    /*jslint unparam: true*/
-    var getXur = function (req, res) {
+    getXur(req, res) {
         var self = this;
 
         return self.destiny.getXur()
@@ -351,11 +314,11 @@ DestinyController.prototype = (function () {
                             .then(function (items) {
                                 var itemPromises = _.map(items, function (item) {
                                     if (item.itemName === 'Exotic Engram' ||
-                                            item.itemName === 'Legacy Engram') {
+                                        item.itemName === 'Legacy Engram') {
                                         return self.world.getItemByHash(item.itemHash)
                                             .then(function (itemDetail) {
                                                 return (new S(item.itemName).chompRight('Engram') +
-                                                itemDetail.itemTypeName);
+                                                    itemDetail.itemTypeName);
                                             });
                                     }
                                     var deferred = Q.defer();
@@ -379,11 +342,12 @@ DestinyController.prototype = (function () {
                 log.error(err);
                 res.status(500).json(err);
             });
-    };
+    }
+
     /**
      * Insert or update the Destiny manifest.
      */
-    var upsertManifest = function (req, res) {
+    upsertManifest(req, res) {
         this.destiny.getManifest()
             .then(manifest => {
                 return this.destiny.getManifest(true)
@@ -393,8 +357,8 @@ DestinyController.prototype = (function () {
                         const fileName = databasePath + relativeUrl.substring(relativeUrl.lastIndexOf('/') + 1);
 
                         if (!lastManifest || lastManifest.version !== manifest.version ||
-                                lastManifest.mobileWorldContentPaths.en !== manifest.mobileWorldContentPaths.en ||
-                                !fs.existsSync(fileName)) {
+                            lastManifest.mobileWorldContentPaths.en !== manifest.mobileWorldContentPaths.en ||
+                            !fs.existsSync(fileName)) {
                             const file = fs.createWriteStream(fileName + '.zip');
                             const stream = request('https://www.bungie.net' + relativeUrl, () => {
                                 log.info('content downloaded from ' + relativeUrl);
@@ -429,19 +393,7 @@ DestinyController.prototype = (function () {
                 log.error(err);
                 res.status(500).json(err);
             });
-    };
-    /**
-     * @public
-     */
-    return {
-        getAuthorizationUrl: getAuthorizationUrl,
-        getCharacters: getCharacters,
-        getFieldTestWeapons: getFieldTestWeapons,
-        getFoundryOrders: getFoundryOrders,
-        getIronBannerEventRewards: getIronBannerEventRewards,
-        getGrimoireCards: getGrimoireCards,
-        getXur: getXur,
-        upsertManifest: upsertManifest
-    };
-}());
+    }
+}
+
 module.exports = DestinyController;

@@ -4,15 +4,18 @@
 class AuthenticationService {
     /**
      * @constructor
+     * @param cacheService
+     * @param destinyService
+     * @param userService
      */
-    constructor(cacheService, destinyService, userService) {
-        this.cacheService = cacheService;
-        this.destinyService = destinyService;
-        this.userService = userService;
+    constructor(options) {
+        this.cacheService = options.cacheService;
+        this.destinyService = options.destinyService;
+        this.userService = options.userService;
     }
 
     /**
-     * Authenticate User by Gamer Tag and Console or Phone Number
+     * Authenticate user by gamer tag and console or phone number.
      * @param {Object} options
      * @returns {Promise}
      */
@@ -31,6 +34,11 @@ class AuthenticationService {
             .then(user => this.validate(user));
     }
 
+    /**
+     * Validate user access token with Bungie.
+     * @param user
+     * @returns {Promise}
+     */
     validate(user) {
         if (!user) {
             return Promise.reject(new Error('User not found'));

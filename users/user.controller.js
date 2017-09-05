@@ -8,7 +8,7 @@
  * @requires Horseman
  * @requires Q
  */
-'use strict';
+'use strict'; // ToDo Clean uP
 var _ = require('underscore'),
     crypto = require('crypto'),
     Ghost = require('../helpers/ghost'),
@@ -22,7 +22,8 @@ var _ = require('underscore'),
  * Time to Live for Tokens
  * @type {number}
  */
-var ttl = 300;
+const ttl = 300;
+
 /**
  * Get the phone number format into the Twilio standard.
  * @param phoneNumber
@@ -33,8 +34,9 @@ function cleanPhoneNumber(phoneNumber) {
     var cleaned = phoneNumber.replace(/\D/g, '');
     return '+1' + cleaned;
 }
+
 /**
- *
+ * Get current epoch.
  */
 function getEpoch() {
     return Math.floor((new Date()).getTime() / 1000);

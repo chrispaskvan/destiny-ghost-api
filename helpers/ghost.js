@@ -13,8 +13,8 @@ class Ghost {
      * @param databaseFullPath
      * @constructor
      */
-    constructor(destinyService) {
-        this.destiny = destinyService;
+    constructor(options) {
+        this.destiny = options.destinyService;
     }
     /**
      * Get the full path to the database.
@@ -24,7 +24,7 @@ class Ghost {
         return this.destiny.getManifest()
             .then(function (manifest) {
                 return manifest ?
-                    path.join('./databases/', path.basename(manifest.mobileWorldContentPaths.en))
+                    path.join(process.env.DATABASE, path.basename(manifest.mobileWorldContentPaths.en))
                     : undefined;
             });
     }

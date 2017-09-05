@@ -1,19 +1,16 @@
 /**
  * Destiny Error Class
  */
-const _ = require('underscore');
-/**
- * Create a new error from an error response to a Destiny web API request.
- * @class
- * @param code {string}
- * @param message {string}
- * @param status {string}
- * @constructor
- */
 class DestinyError extends Error {
+    /**
+     * Create a new error from an error response to a Destiny web API request.
+     * @param code
+     * @param message
+     * @param status
+     */
     constructor(code, message, status) {
         super();
-        _.extend(this, {
+        Object.assign(this, {
             code: code,
             message: message,
             name: 'DestinyError',
