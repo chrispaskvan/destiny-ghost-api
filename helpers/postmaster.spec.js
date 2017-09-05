@@ -12,10 +12,6 @@ describe('Postmaster delivery test', () => {
     const image = 'https://www.bungie.net/common/destiny_content/icons/31a1c9d954b69c41733b2fda109aa27c.png';
     const url = '/register';
 
-    beforeEach(() => {
-        process.env.DOMAIN = 'http://localhost:1100';
-    });
-
     it('Should return a message Id', function (done) {
         const user = users[0];
 
@@ -25,8 +21,5 @@ describe('Postmaster delivery test', () => {
                 expect(response.accepted[0]).to.equal(user.emailAddress);
                 done();
             });
-    });
-    afterEach(function () {
-        delete process.env.DOMAIN;
     });
 });

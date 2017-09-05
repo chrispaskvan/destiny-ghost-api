@@ -16,7 +16,9 @@ describe('It\'s Bungie\'s world, you\'re just querying it.', function () {
     let ghost;
 
     beforeEach(function () {
-        ghost = new Ghost(mockDestinyService);
+        ghost = new Ghost({
+            destinyService: mockDestinyService
+        });
     });
 
     it('Should return the Hunter character class', function (done) {
@@ -30,7 +32,6 @@ describe('It\'s Bungie\'s world, you\'re just querying it.', function () {
                         expect(className).to.equal('Hunter');
                         done();
                     })
-                    .catch(err => done(err))
                     .catch(err => done(err))
                     .finally(() => world.close());
             });

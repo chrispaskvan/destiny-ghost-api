@@ -42,13 +42,13 @@ const servicePlatform = 'https://www.bungie.net/platform';
 /**
  * Destiny Service Class
  */
-class Destiny {
+class DestinyService {
     /**
      * @constructor
      * @param cacheService
      */
-    constructor(cacheService) {
-        this.cacheService = cacheService;
+    constructor(options) {
+        this.cacheService = options.cacheService;
         /**
          * @member {string} apiKey - The Destiny API key.
          */
@@ -339,51 +339,63 @@ class Destiny {
      * @returns {Promise}
      */
     getFieldTestWeapons(characterId, accessToken) {
-        const opts = {
-            headers: {
-                authorization: 'Bearer ' + accessToken,
-                'x-api-key': this.apiKey
-            },
-            url: util.format('%s/Destiny/2/MyAccount/Character/%s/Vendor/%s/',
-                servicePlatform, characterId, gunSmithHash)
-        };
+        return this.cacheService.getVendor(gunSmithHash)
+            .then(vendor => {
+                const now = (new Date()).toISOString();
+                const { nextRefreshDate } = vendor || {};
 
-        return new Promise((resolve, reject) => {
-            request.get(opts, function (error, res, body) {
-                if (!error && res.statusCode === 200) {
-                    const responseBody = JSON.parse(body);
-
-                    if (responseBody.ErrorCode === 1) {
-                        const {Response: {data}} = responseBody;
-
-                        if (data) {
-                            const {vendorHash, nextRefreshDate, saleItemCategories} = data;
-                            const fieldTestWeapons = _.find(saleItemCategories, function (saleItemCategory) {
-                                return saleItemCategory.categoryTitle === 'Field Test Weapons';
-                            });
-                            const itemHashes = fieldTestWeapons.saleItems.map((saleItem) => {
-                                const {item: {itemHash}} = saleItem;
-
-                                return itemHash;
-                            });
-
-                            resolve({
-                                vendorHash,
-                                nextRefreshDate,
-                                itemHashes
-                            });
-                        } else {
-                            resolve([]);
-                        }
-                    } else {
-                        reject(new DestinyError(responseBody.ErrorCode,
-                            responseBody.Message, responseBody.Status));
-                    }
+                if (vendor && nextRefreshDate > now) {
+                    return vendor;
                 } else {
-                    reject(error);
+                    return new Promise((resolve, reject) => {
+                        const opts = {
+                            headers: {
+                                authorization: 'Bearer ' + accessToken,
+                                'x-api-key': this.apiKey
+                            },
+                            url: util.format('%s/Destiny/2/MyAccount/Character/%s/Vendor/%s/',
+                                servicePlatform, characterId, gunSmithHash)
+                        };
+
+                        request.get(opts, (error, res, body) => {
+                            if (!error && res.statusCode === 200) {
+                                const responseBody = JSON.parse(body);
+
+                                if (responseBody.ErrorCode === 1) {
+                                    const { Response: { data }} = responseBody;
+
+                                    if (data) {
+                                        const { vendorHash, nextRefreshDate, saleItemCategories } = data;
+                                        const fieldTestWeapons = saleItemCategories
+                                            .find(saleItemCategory => saleItemCategory.categoryTitle === 'Field Test Weapons');
+                                        const itemHashes = fieldTestWeapons.saleItems.map((saleItem) => {
+                                            const { item: { itemHash }} = saleItem;
+
+                                            return itemHash;
+                                        });
+
+                                        const vendor = {
+                                            vendorHash,
+                                            nextRefreshDate,
+                                            itemHashes
+                                        };
+
+                                        this.cacheService.setVendor(vendor);
+                                        resolve(vendor);
+                                    } else {
+                                        resolve([]);
+                                    }
+                                } else {
+                                    reject(new DestinyError(responseBody.ErrorCode,
+                                        responseBody.Message, responseBody.Status));
+                                }
+                            } else {
+                                reject(error);
+                            }
+                        });
+                    });
                 }
             });
-        });
     }
 
     /**
@@ -393,48 +405,65 @@ class Destiny {
      * @returns {Promise}
      */
     getFoundryOrders(characterId, accessToken) {
-        const opts = {
-            headers: {
-                authorization: 'Bearer ' + accessToken,
-                'x-api-key': this.apiKey
-            },
-            url: util.format('%s/Destiny/2/MyAccount/Character/%s/Vendor/%s/',
-                servicePlatform, characterId, gunSmithHash)
-        };
+        return this.cacheService.getVendor(gunSmithHash)
+            .then(vendor => {
+                const now = (new Date()).toISOString();
+                const { nextRefreshDate } = vendor || {};
 
-        return new Promise((resolve, reject) => {
-            request.get(opts, function (error, res, body) {
-                if (!error && res.statusCode === 200) {
-                    const responseBody = JSON.parse(body);
-
-                    if (responseBody.ErrorCode === 1) {
-                        const {Response: {data}} = responseBody;
-
-                        if (data) {
-                            const foundryOrdersCategory = _.find(data.saleItemCategories,
-                                function (saleItemCategory) {
-                                    return saleItemCategory.categoryTitle === 'Foundry Orders';
-                                });
-                            const foundryOrders = {
-                                items: (typeof foundryOrdersCategory === 'object') ?
-                                    foundryOrdersCategory.saleItems : [],
-                                nextRefreshDate: data.nextRefreshDate
-                            };
-
-                            this.cacheService.set('getFoundryOrders', foundryOrders);
-                            resolve(foundryOrders);
-                        } else {
-                            resolve([]);
-                        }
-                    } else {
-                        reject(new DestinyError(responseBody.ErrorCode,
-                            responseBody.Message, responseBody.Status));
-                    }
+                if (vendor && nextRefreshDate > now) {
+                    return vendor;
                 } else {
-                    reject(error);
+                    const opts = {
+                        headers: {
+                            authorization: 'Bearer ' + accessToken,
+                            'x-api-key': this.apiKey
+                        },
+                        url: util.format('%s/Destiny/2/MyAccount/Character/%s/Vendor/%s/',
+                            servicePlatform, characterId, gunSmithHash)
+                    };
+
+                    return new Promise((resolve, reject) => {
+                        request.get(opts, (error, res, body) => {
+                            if (!error && res.statusCode === 200) {
+                                const responseBody = JSON.parse(body);
+
+                                if (responseBody.ErrorCode === 1) {
+                                    const {Response: {data}} = responseBody;
+
+                                    if (data) {
+                                        const { vendorHash, nextRefreshDate, saleItemCategories } = data;
+                                        const foundryOrdersCategory = saleItemCategories
+                                            .find(saleItemCategory => saleItemCategory.categoryTitle === 'Foundry Orders');
+                                        const foundryOrders = (typeof foundryOrdersCategory === 'object') ?
+                                            foundryOrdersCategory.saleItems : [];
+                                        const itemHashes = foundryOrders.map(saleItem => {
+                                            const { item: { itemHash }} = saleItem;
+
+                                            return itemHash;
+                                        });
+
+                                        const vendor = {
+                                            vendorHash,
+                                            nextRefreshDate,
+                                            itemHashes
+                                        };
+
+                                        this.cacheService.setVendor(vendor);
+                                        resolve(vendor);
+                                    } else {
+                                        resolve([]);
+                                    }
+                                } else {
+                                    reject(new DestinyError(responseBody.ErrorCode,
+                                        responseBody.Message, responseBody.Status));
+                                }
+                            } else {
+                                reject(error);
+                            }
+                        });
+                    });
                 }
             });
-        });
     }
 
     /**
@@ -766,4 +795,4 @@ class Destiny {
     }
 }
 
-exports = module.exports = Destiny;
+exports = module.exports = DestinyService;

@@ -1,4 +1,3 @@
-'use strict';
 const log = require('./log');
 
 describe('Log', () => {

@@ -16,33 +16,31 @@ var _ = require('underscore'),
     S = require('string'),
     fs = require('fs'),
     sqlite3 = require('sqlite3');
-/**
- * Get the Destiny class definitions.
- * @returns {*}
- * @private
- */
-function getClasses(db) {
-    return new Promise((resolve, reject) => {
-        db.serialize(() => {
-            let classes = [];
 
-            db.each('SELECT json FROM DestinyClassDefinition',
-                (err, row) => err ? reject(err) : classes.push(JSON.parse(row.json)),
-                err => err ? reject(err) : resolve(classes));
-        });
-    });
-}
 /**
- *
+ * World Repository
  */
 class World {
     /**
-     * @constructor
+     * Get the Destiny class definitions.
+     * @returns {*}
+     * @private
      */
-    constructor() {}
+    _getClasses(db) {
+        return new Promise((resolve, reject) => {
+            db.serialize(() => {
+                let classes = [];
+
+                db.each('SELECT json FROM DestinyClassDefinition',
+                    (err, row) => err ? reject(err) : classes.push(JSON.parse(row.json)),
+                    err => err ? reject(err) : resolve(classes));
+            });
+        });
+    }
 
     /**
-     * Close the Connection
+     * Close database connection.
+     * @returns {Promise.<T>}
      */
     close() {
         if (this.db) {
@@ -56,143 +54,132 @@ class World {
      * @param classHash {string}
      */
     getClassByHash(classHash) {
-        const deferred = Q.defer();
-
-        getClasses(this.db)
+        return this._getClasses(this.db)
             .then(classes => {
-                deferred.resolve(classes.find(characterClass => characterClass.classHash === classHash));
+                return classes.find(characterClass => characterClass.classHash === classHash);
             });
-
-        return deferred.promise;
     }
+
     /**
      * Get the class by the type provided.
      * @param classType {string}
      * @returns {*}
      */
     getClassByType(classType) {
-        const deferred = Q.defer();
-
-        getClasses(this.db)
-            .then(classes => deferred.resolve(classes.find(characterClass => characterClass.classType === classType)));
-
-        return deferred.promise;
+        return this._getClasses(this.db)
+            .then(classes => classes.find(characterClass => characterClass.classType === classType));
     }
+
     /**
      * Get a Random Number of Cards
      * @param numberOfCards {integer}
      * @returns {Promise}
      */
     getGrimoireCards(numberOfCards) {
-        const deferred = Q.defer();
+        return new Promise((resolve, reject) => {
+            this.db.serialize(() => {
+                let cards = [];
 
-        this.db.serialize(() => {
-            let cards = [];
-
-            this.db.each('SELECT * FROM DestinyGrimoireCardDefinition WHERE id IN (SELECT id FROM DestinyGrimoireCardDefinition ORDER BY RANDOM() LIMIT ' + // jscs:ignore maximumLineLength
-                numberOfCards + ')', (err, row) => err ? deferred.reject(err) : cards.push(JSON.parse(row.json)),
-                err => err ? deferred.reject(err) : deferred.resolve(cards));
+                this.db.each('SELECT * FROM DestinyGrimoireCardDefinition WHERE id IN (SELECT id FROM DestinyGrimoireCardDefinition ORDER BY RANDOM() LIMIT ' + // jscs:ignore maximumLineLength
+                    numberOfCards + ')', (err, row) => err ? reject(err) : cards.push(JSON.parse(row.json)),
+                    err => err ? reject(err) : resolve(cards));
+            });
         });
-
-        return deferred.promise;
     }
+
     /**
      * Look up the item(s) with matching strings in their name(s).
      * @param itemName {string}
      * @returns {Promise}
      */
     getItemByName(itemName) {
-        const deferred = Q.defer();
+        return new Promise((resolve, reject) => {
+            this.db.serialize(() => {
+                const it = new S(itemName).replaceAll('\'', '\'\'').s;
+                let items = [];
 
-        this.db.serialize(() => {
-            const it = new S(itemName).replaceAll('\'', '\'\'').s;
-            let items = [];
-
-            this.db.each('SELECT json FROM DestinyInventoryItemDefinition WHERE json LIKE \'%"itemName":"' +
-                it + '%"%\'', (err, row) => err ? deferred.reject(err) : items.push(JSON.parse(row.json)),
-                (err, rows) => {
-                    if (err) {
-                        deferred.reject(err);
-                    } else {
-                        if (rows === 0) {
-                            deferred.resolve([]);
+                this.db.each('SELECT json FROM DestinyInventoryItemDefinition WHERE json LIKE \'%"itemName":"' +
+                    it + '%"%\'', (err, row) => err ? reject(err) : items.push(JSON.parse(row.json)),
+                    (err, rows) => {
+                        if (err) {
+                            reject(err);
                         } else {
-                            const groups = _.groupBy(items, item => item.itemName);
-                            const keys = Object.keys(groups);
+                            if (rows === 0) {
+                                resolve([]);
+                            } else {
+                                const groups = _.groupBy(items, item => item.itemName);
+                                const keys = Object.keys(groups);
 
-                            deferred.resolve(_.map(keys, (key) => {
-                                return _.min(_.filter(items, (item) => item.itemName === key),
-                                    (item) => item.qualityLevel);
-                            }));
+                                resolve(_.map(keys, (key) => {
+                                    return _.min(_.filter(items, (item) => item.itemName === key),
+                                        (item) => item.qualityLevel);
+                                }));
+                            }
                         }
-                    }
-                });
+                    });
+            });
         });
-
-        return deferred.promise;
     }
+
     /**
      * Get item by the hash provided.
      * @param itemHash
      * @returns {*}
      */
     getItemByHash(itemHash) {
-        const deferred = Q.defer();
-
-        this.db.serialize(() => {
-            this.db.each('SELECT json FROM DestinyInventoryItemDefinition WHERE json LIKE \'%"itemHash":' +
-                itemHash + '%\' LIMIT 1',
-                (err, row) => err ? deferred.reject(err) : deferred.resolve(JSON.parse(row.json)));
+        return new Promise((resolve, reject) => {
+            this.db.serialize(() => {
+                this.db.each('SELECT json FROM DestinyInventoryItemDefinition WHERE json LIKE \'%"itemHash":' +
+                    itemHash + '%\' LIMIT 1',
+                    (err, row) => err ? reject(err) : resolve(JSON.parse(row.json)));
+            });
         });
-
-        return deferred.promise;
     }
+
     /**
      * Get the category definition for the provided hash.
      * @param itemCategoryHash
      * @returns {Promise}
      */
     getItemCategory(itemCategoryHash) {
-        const deferred = Q.defer();
-
-        this.db.serialize(() => {
-            this.db.each('SELECT json FROM DestinyItemCategoryDefinition WHERE id = ' +
-                itemCategoryHash, (err, row) =>  err ? deferred.reject(err) : deferred.resolve(JSON.parse(row.json)),
-                (err, rows) => {
-                    if (err) {
-                        deferred.reject(err);
-                    } else {
-                        if (rows === 0) {
-                            deferred.reject(new Error('No item category found for hash' +
-                                itemCategoryHash));
+        return new Promise((resolve, reject) => {
+            this.db.serialize(() => {
+                this.db.each('SELECT json FROM DestinyItemCategoryDefinition WHERE id = ' +
+                    itemCategoryHash, (err, row) =>  err ? reject(err) : resolve(JSON.parse(row.json)),
+                    (err, rows) => {
+                        if (err) {
+                            reject(err);
                         } else {
-                            deferred.reject(new Error('Hash, ' +
-                                itemCategoryHash + ', is not an unique identifier.'));
+                            if (rows === 0) {
+                                reject(new Error('No item category found for hash' +
+                                    itemCategoryHash));
+                            } else {
+                                reject(new Error('Hash, ' +
+                                    itemCategoryHash + ', is not an unique identifier.'));
+                            }
                         }
-                    }
-                });
+                    });
+            });
         });
-
-        return deferred.promise;
     }
+
     /**
-     *
+     * Get vendor's icon.
      * @param vendorHash
      * @returns {*|promise}
      */
     getVendorIcon(vendorHash) {
-        const deferred = Q.defer();
-
-        this.db.each('SELECT json FROM DestinyVendorDefinition WHERE json LIKE \'%"vendorHash":' +
-            vendorHash + '%\' ORDER BY id LIMIT 1',
-            (err, row) => err ? deferred.reject(err) :
-                deferred.resolve('https://www.bungie.net' + JSON.parse(row.json).summary.vendorIcon),
-            (err) => err ? deferred.reject(err) : deferred.resolve());
-
-        return deferred.promise;
+        return new Promise((resolve, reject) => {
+            this.db.each('SELECT json FROM DestinyVendorDefinition WHERE json LIKE \'%"vendorHash":' +
+                vendorHash + '%\' ORDER BY id LIMIT 1',
+                (err, row) => err ? reject(err) :
+                    resolve('https://www.bungie.net' + JSON.parse(row.json).summary.vendorIcon),
+                (err) => err ? reject(err) : resolve());
+        });
     }
+
     /**
-     *
+     * Open database connection.
      * @param fileName
      * @returns {Promise}
      */

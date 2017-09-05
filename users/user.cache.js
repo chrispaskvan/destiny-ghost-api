@@ -25,7 +25,7 @@ class UserCache {
     }
 
     /**
-     * Delete Cached Key
+     * Delete cache by key.
      * @param key
      * @returns {Promise}
      * @private
@@ -43,7 +43,7 @@ class UserCache {
     }
 
     /**
-     * Delete Cached User
+     * Delete cached user.
      * @param teeth
      * @returns {Promise}
      */
@@ -64,6 +64,12 @@ class UserCache {
         return Promise.all([promise1, promise2]);
     }
 
+    /**
+     * Get cached item by key.
+     * @param key
+     * @returns {Promise}
+     * @private
+     */
     _getCache(key) {
         return new Promise((resolve, reject) => {
             this.client.get(key, function (err, res) {
@@ -77,7 +83,7 @@ class UserCache {
     }
 
     /**
-     * Get Cached User
+     * Get cached user.
      * @param teeth
      * @returns {Promise}
      */
@@ -101,7 +107,7 @@ class UserCache {
     }
 
     /**
-     * Set Cached User
+     * Set cached user.
      * @param user
      * @returns {*}
      */
@@ -127,6 +133,7 @@ class UserCache {
         });
 
         let promise2;
+
         if (phoneNumber) {
             promise2 = new Promise((resolve, reject) => {
                 this.client.set(phoneNumber, JSON.stringify({ displayName, membershipType }), function (err, res) {

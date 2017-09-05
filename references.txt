@@ -30,7 +30,12 @@ https://www.bungie.net/en/Help/Article/45481
 
 DocumentDB Queries
 https://docs.microsoft.com/en-us/azure/cosmos-db/documentdb-sql-query
+https://docs.microsoft.com/en-us/azure/application-insights/app-insights-monitor-web-app-availability
 
 
 https://github.com/mrcrgl/node-querybuilder
 https://docs.microsoft.com/en-us/azure/application-insights/app-insights-monitor-web-app-availability
+
+https://bungie-net.github.io/
+http://goldbergyoni.com/checklist-best-practices-of-node-js-error-handling/
+https://www.diycode.cc/projects/trentm/node-bunyan

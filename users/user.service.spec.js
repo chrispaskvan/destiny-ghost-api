@@ -1,14 +1,12 @@
 /**
  * User Service Tests
  */
-'use strict';
-var _ = require('underscore'),
+const _ = require('underscore'),
+    UserService = require('./user.service'),
     chance = require('chance')(),
+    documentService = require('../helpers/documents'),
     expect = require('chai').expect,
-    sinon = require('sinon'),
-    UserService = require('./user.service');
-
-var documentService = require('../helpers/documents');
+    sinon = require('sinon');
 
 /**
  * Get the phone number format into the Twilio standard.
@@ -17,23 +15,23 @@ var documentService = require('../helpers/documents');
  * @private
  */
 function cleanPhoneNumber(phoneNumber) {
-    var cleaned = phoneNumber.replace(/\D/g, '');
+    const cleaned = phoneNumber.replace(/\D/g, '');
+
     return '+1' + cleaned;
 }
 /**
- * Anonymous User
- * @type {{displayName: string, membershipId: string, membershipType: number}}
+ * Mock Anonymous User
  */
-var anonymousUser = {
+const anonymousUser = {
     displayName: 'displayName1',
     membershipId: '11',
     membershipType: 2
 };
+
 /**
- * User
- * @type {{displayName: string, emailAddress: *, firstName: *, lastName: *, membershipId: string, membershipType: number, notifications: *[], phoneNumber: string}}
+ * Mock User
  */
-var user = {
+const user = {
     displayName: 'displayName1',
     emailAddress: chance.email(),
     firstName: chance.first(),
@@ -53,39 +51,44 @@ var user = {
     }))
 };
 
-var cacheService = {
+/**
+ * Mock Cache Service
+ */
+const cacheService = {
     getUser: function() {
         return Promise.resolve();
     }
 };
 
-var userService;
+let userService;
 
 beforeEach(function () {
-    userService = new UserService(cacheService, documentService);
+    userService = new UserService({ cacheService, documentService });
 });
 
 describe('UserService', function () {
-    var mock;
+    let mock;
+
     beforeEach(function () {
         mock = sinon.mock(documentService);
     });
 
     describe('addUserMessage', function () {
-        var stub;
+        let stub;
+
         beforeEach(function () {
             stub = sinon.stub(userService, 'getUserByDisplayName');
         });
 
         describe('when notification type is Xur', function () {
             it('should add message to list of Xur notifications', function () {
-                var displayName = 'user1';
-                var membershipType = 2;
-                var message = {
+                const displayName = 'user1';
+                const membershipType = 2;
+                const message = {
                     sid: '1'
                 };
-                var notificationType = 'Xur';
-                var user1 = JSON.parse(JSON.stringify(user));
+                const notificationType = 'Xur';
+                const user1 = JSON.parse(JSON.stringify(user));
 
                 user1.notifications[0].messages.push(message);
 
@@ -146,7 +149,7 @@ describe('UserService', function () {
         });
     });
     describe('createUser', function () {
-        var stub;
+        let stub;
 
         beforeEach(function () {
             stub = sinon.stub(userService, 'getUserByDisplayName');
@@ -191,49 +194,38 @@ describe('UserService', function () {
                 mockCache.restore();
             });
         });
-        describe('when display name is defined', function () {
-            describe('when membership type is defined', function () {
-                it('should return an existing user', function () {
-                    mock.expects('getDocuments').once().withArgs(sinon.match.any, sinon.match.any, undefined).resolves([user]);
 
-                    return userService.getUserByDisplayName(user.displayName, user.membershipType)
-                        .then(function (user1) {
-                            expect(user1.displayName).to.equal(user.displayName);
-                            mock.verify();
-                        });
-                });
-            });
-            describe('when membership type is not defined', function () {
-                it('should return an existing user', function () {
-                    mock.expects('getDocuments').once().withArgs(sinon.match.any, sinon.match.any, {
-                        enableCrossPartitionQuery: true
-                    }).resolves([user]);
+        describe('when display name and membership type are defined', function () {
+            it('should return an existing user', function () {
+                mock.expects('getDocuments').once().withArgs(sinon.match.any, sinon.match.any).resolves([user]);
 
-                    return userService.getUserByDisplayName(user.displayName)
-                        .then(function (user1) {
-                            expect(user1.displayName).to.equal(user.displayName);
-                            mock.verify();
-                        });
-                });
+                return userService.getUserByDisplayName(user.displayName, user.membershipType)
+                    .then(function (user1) {
+                        expect(user1.displayName).to.equal(user.displayName);
+                        mock.verify();
+                    });
             });
+
             it('should fail when more than one existing user is found', function () {
                 mock.expects('getDocuments').once().resolves([user, user]);
 
-                return userService.getUserByDisplayName(user.displayName)
+                return userService.getUserByDisplayName(user.displayName, user.membershipType)
                     .catch(function (err) {
                         expect(err).to.be.defined;
                         mock.verify();
                     });
             });
+
             it('should return undefined is user is not found', function () {
                 mock.expects('getDocuments').once().resolves([]);
 
-                return userService.getUserByDisplayName(user.displayName)
+                return userService.getUserByDisplayName(user.displayName, user.membershipType)
                     .then(function (user1) {
                         expect(user1).to.not.be.defined;
                         mock.verify();
                     });
             });
+
             it('should fail when display name is empty', function () {
                 mock.expects('getDocuments').never();
 
@@ -243,10 +235,21 @@ describe('UserService', function () {
                         mock.verify();
                     });
             });
+
+            it('should fail when membership type is not a number', function () {
+                mock.expects('getDocuments').never();
+
+                return userService.getUserByDisplayName(user.displayName, '1')
+                    .catch(function (err) {
+                        expect(err).to.be.defined;
+                        mock.verify();
+                    });
+            });
+
             it('should fail when no documents are returned', function () {
                 mock.expects('getDocuments').once().resolves(undefined);
 
-                return userService.getUserByDisplayName(user.displayName)
+                return userService.getUserByDisplayName(user.displayName, user.membershipType)
                     .catch(function (err) {
                         expect(err).to.be.defined;
                         mock.verify();
@@ -259,30 +262,33 @@ describe('UserService', function () {
             it('should return an existing user', function () {
                 mock.expects('getDocuments').once().resolves([user]);
 
-                return userService.getUserByEmailAddress(user.emailAddress, user.membershipType)
+                return userService.getUserByEmailAddress(user.emailAddress)
                     .then(function (user1) {
                         expect(user1).to.equal(user);
                         mock.verify();
                     });
             });
+
             it('should fail when more than one existing user is found', function () {
                 mock.expects('getDocuments').once().resolves([user, user]);
 
-                return userService.getUserByEmailAddress(user.emailAddress, user.membershipType)
+                return userService.getUserByEmailAddress(user.emailAddress)
                     .catch(function (err) {
                         expect(err).to.be.defined;
                         mock.verify();
                     });
             });
+
             it('should fail when no users are found', function () {
                 mock.expects('getDocuments').once().resolves([]);
 
-                return userService.getUserByEmailAddress(user.emailAddress, user.membershipType)
+                return userService.getUserByEmailAddress(user.emailAddress)
                     .then(function (user1) {
                         expect(user1).to.not.be.defined;
                         mock.verify();
                     });
             });
+
             it('should fail when email address is empty', function () {
                 mock.expects('getDocuments').never();
 
@@ -292,19 +298,11 @@ describe('UserService', function () {
                         mock.verify();
                     });
             });
-            it('should fail when membership type is missing', function () {
-                mock.expects('getDocuments').never();
 
-                return userService.getUserByEmailAddress(user.emailAddress)
-                    .catch(function (err) {
-                        expect(err).to.be.defined;
-                        mock.verify();
-                    });
-            });
             it('should fail when no documents are found', function () {
                 mock.expects('getDocuments').once().resolves(undefined);
 
-                return userService.getUserByEmailAddress(user.emailAddress, user.membershipType)
+                return userService.getUserByEmailAddress(user.emailAddress)
                     .catch(function (err) {
                         expect(err).to.be.defined;
                         mock.verify();

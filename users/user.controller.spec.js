@@ -1,4 +1,3 @@
-'use strict';
 const UserController = require('./user.controller'),
     chai = require('chai'),
     chance = require('chance')(),
