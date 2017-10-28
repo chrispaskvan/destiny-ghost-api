@@ -1,0 +1,23 @@
+{
+  "plugins": [
+    "node"
+  ],
+  "extends": [
+    "eslint:recommended",
+    "plugin:node/recommended"
+  ],
+  "parserOptions": {
+    "sourceType": "module"
+  },
+  "rules": {
+    "node/exports-style": [
+      "error",
+      "module.exports"
+    ],
+    "node/no-unpublished-require": 0,
+    "node/no-missing-require": 0
+  },
+  "env": {
+    "jasmine": true
+  }
+}

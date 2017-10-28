@@ -15,10 +15,11 @@
 'use strict';
 const _ = require('underscore'),
     DestinyError = require('./destiny.error'),
-    bungie = require('../settings/bungie.json'),
+	{ apiKey, authorizationUrl } = require('../settings/bungie.json'),
     { gunSmithHash, lordSaladinHash, xurHash } = require('./destiny.constants'),
     request = require('request'),
     util = require('util');
+
 /**
  * Available Membership Types
  * @type {{TigerXbox: number, TigerPsn: number}}
@@ -29,16 +30,14 @@ const membershipTypes = {
     TigerXbox: 1,
     TigerPsn: 2
 };
+
 /**
  * @constant
  * @type {string}
  * @description Base URL for all of the Bungie API services.
  */
 const servicePlatform = 'https://www.bungie.net/platform';
-/**
- * @throws API key not found.
- * @constructor
- */
+
 /**
  * Destiny Service Class
  */
@@ -49,24 +48,10 @@ class DestinyService {
      */
     constructor(options) {
         this.cacheService = options.cacheService;
-        /**
-         * @member {string} apiKey - The Destiny API key.
-         */
-        this.apiKey = bungie.apiKey;
-        if (!this.apiKey || !_.isString(this.apiKey)) {
-            throw new Error('API key not found');
-        }
-        /**
-         * @member {string} apiKey - The Destiny API key.
-         */
-        this.authorizationUrl = bungie.authorizationUrl;
-        if (!this.authorizationUrl || !_.isString(this.authorizationUrl)) {
-            throw new Error('authorization URL not found');
-        }
     }
 
     /**
-     * Get Bungie Access Token from Code
+     * Get Bungie access token from code.
      * @param code
      * @returns {Promise}
      */
@@ -76,7 +61,7 @@ class DestinyService {
                 code: code
             }),
             headers: {
-                'x-api-key': this.apiKey
+                'x-api-key': apiKey
             },
             url: util.format('%s/App/GetAccessTokensFromCode/', servicePlatform)
         };
@@ -100,7 +85,7 @@ class DestinyService {
     }
 
     /**
-     * Refresh Access Token with Bungie
+     * Refresh access token with Bungie.
      * @param refreshToken
      */
     getAccessTokenFromRefreshToken(refreshToken) {
@@ -109,7 +94,7 @@ class DestinyService {
                 refreshToken: refreshToken
             }),
             headers: {
-                'x-api-key': this.apiKey
+                'x-api-key': apiKey
             },
             url: util.format('%s/App/GetAccessTokensFromRefreshToken/', servicePlatform)
         };
@@ -133,16 +118,16 @@ class DestinyService {
     }
 
     /**
-     * Get Bungie App Authorization
+     * Get Bungie App authorization URL.
      * @param state
      * @returns {Promise}
      */
     getAuthorizationUrl(state) {
-        return Promise.resolve(util.format('%s?state=%s', this.authorizationUrl, state));
+        return Promise.resolve(util.format('%s?state=%s', authorizationUrl, state));
     }
 
     /**
-     * Get Activity of a Character
+     * Get Activity of a character.
      * @param characterId
      * @param membershipId
      * @param accessToken
@@ -152,7 +137,7 @@ class DestinyService {
         const opts = {
             headers: {
                 authorization: 'Bearer ' + accessToken,
-                'x-api-key': this.apiKey
+                'x-api-key': apiKey
             },
             url: util.format('%s/Destiny/2/Account/%s/Character/%s/Activities/',
                 servicePlatform, membershipId, characterId)
@@ -179,7 +164,7 @@ class DestinyService {
     }
 
     /**
-     * Get Details of a Character
+     * Get details of a character.
      * @param membershipId
      * @param characterId
      * @param accessToken
@@ -189,7 +174,7 @@ class DestinyService {
         const opts = {
             headers: {
                 authorization: 'Bearer ' + accessToken,
-                'x-api-key': this.apiKey
+                'x-api-key': apiKey
             },
             url: util.format('%s/Destiny/2/Account/%s/Character/%s/Complete/',
                 servicePlatform, membershipId, characterId)
@@ -218,7 +203,7 @@ class DestinyService {
     }
 
     /**
-     * Get a List of the Member's Characters
+     * Get a list of the member's characters.
      * @param membershipId
      * @param membershipType
      * @returns {Promise}
@@ -226,7 +211,7 @@ class DestinyService {
     getCharacters(membershipId, membershipType) {
         const opts = {
             headers: {
-                'x-api-key': this.apiKey
+                'x-api-key': apiKey
             },
             url: util.format('%s/Destiny/%s/Account/%s/Summary/', servicePlatform,
                 membershipType, membershipId)
@@ -251,7 +236,7 @@ class DestinyService {
     }
 
     /**
-     * Get the Bungie Member Mumber from the User's Display Name
+     * Get the Bungie member number from the user's display name.
      * @param displayName
      * @param membershipType
      * @returns {Promise}
@@ -259,7 +244,7 @@ class DestinyService {
     getMembershipIdFromDisplayName(displayName, membershipType) {
         const opts = {
             headers: {
-                'x-api-key': this.apiKey
+                'x-api-key': apiKey
             },
             url: util.format('%s/Destiny/%s/Stats/GetMembershipIdByDisplayName/%s/',
                 servicePlatform, membershipType, encodeURIComponent(displayName))
@@ -277,7 +262,7 @@ class DestinyService {
     }
 
     /**
-     * Get the Current User Based on the Bungie Access Token
+     * Get the current user based on the Bungie access token.
      * @param accessToken
      * @returns {Promise}
      */
@@ -285,7 +270,7 @@ class DestinyService {
         const opts = {
             headers: {
                 authorization: 'Bearer ' + accessToken,
-                'x-api-key': this.apiKey
+                'x-api-key': apiKey
             },
             url: util.format('%s/User/GetBungieNetUser/', servicePlatform)
         };
@@ -333,7 +318,7 @@ class DestinyService {
     }
 
     /**
-     * Get Available Field Test Weapons from the Gun Smith.
+     * Get available field test weapons from the Gun Smith.
      * @param characterId
      * @param accessToken
      * @returns {Promise}
@@ -351,7 +336,7 @@ class DestinyService {
                         const opts = {
                             headers: {
                                 authorization: 'Bearer ' + accessToken,
-                                'x-api-key': this.apiKey
+                                'x-api-key': apiKey
                             },
                             url: util.format('%s/Destiny/2/MyAccount/Character/%s/Vendor/%s/',
                                 servicePlatform, characterId, gunSmithHash)
@@ -399,7 +384,7 @@ class DestinyService {
     }
 
     /**
-     * Get Available Foundry Orders from the Gun Smith
+     * Get available Foundry Orders from the Gun Smith.
      * @param characterId
      * @param accessToken
      * @returns {Promise}
@@ -416,7 +401,7 @@ class DestinyService {
                     const opts = {
                         headers: {
                             authorization: 'Bearer ' + accessToken,
-                            'x-api-key': this.apiKey
+                            'x-api-key': apiKey
                         },
                         url: util.format('%s/Destiny/2/MyAccount/Character/%s/Vendor/%s/',
                             servicePlatform, characterId, gunSmithHash)
@@ -467,7 +452,7 @@ class DestinyService {
     }
 
     /**
-     * Get Character's Inventory
+     * Get character's inventory.
      * @param characterId
      * @param membershipId
      * @param accessToken
@@ -477,7 +462,7 @@ class DestinyService {
         const opts = {
             headers: {
                 authorization: 'Bearer ' + accessToken,
-                'x-api-key': this.apiKey
+                'x-api-key': apiKey
             },
             url: util.format('%s/Destiny/2/Account/%s/Character/%s/Inventory/',
                 servicePlatform, membershipId, characterId)
@@ -504,7 +489,7 @@ class DestinyService {
     }
 
     /**
-     * Get Available Iron Banner Event Rewards from Lord Saladin
+     * Get available Iron Banner Event rewards from Lord Saladin.
      * @param characterId
      * @param accessToken
      * @returns {Promise}
@@ -513,7 +498,7 @@ class DestinyService {
         const opts = {
             headers: {
                 authorization: 'Bearer ' + accessToken,
-                'x-api-key': this.apiKey
+                'x-api-key': apiKey
             },
             url: util.format('%s/Destiny/2/MyAccount/Character/%s/Vendor/%s/',
                 servicePlatform, characterId, lordSaladinHash)
@@ -551,7 +536,7 @@ class DestinyService {
     }
 
     /**
-     * Get Item from Hash
+     * Get item from hash.
      * @param itemHash
      * @param accessToken
      * @returns {Promise}
@@ -560,7 +545,7 @@ class DestinyService {
         const opts = {
             headers: {
                 authorization: 'Bearer ' + accessToken,
-                'x-api-key': this.apiKey
+                'x-api-key': apiKey
             },
             url: util.format('%s/Destiny/Manifest/2/%s/', servicePlatform, itemHash)
         };
@@ -584,7 +569,7 @@ class DestinyService {
     }
 
     /**
-     * Get the Lastest Destiny Manifest Definition
+     * Get the lastest Destiny Manifest definition.
      * @param noCache
      * @returns {Promise}
      */
@@ -596,7 +581,7 @@ class DestinyService {
                 } else {
                     const opts = {
                         headers: {
-                            'x-api-key': this.apiKey
+                            'x-api-key': apiKey
                         },
                         url: util.format('%s/Destiny/Manifest', servicePlatform)
                     };
@@ -619,7 +604,7 @@ class DestinyService {
     }
 
     /**
-     * Get Character Progression
+     * Get character progression.
      * @param characterId
      * @param membershipId
      * @param accessToken
@@ -629,7 +614,7 @@ class DestinyService {
         const opts = {
             headers: {
                 authorization: 'Bearer ' + accessToken,
-                'x-api-key': this.apiKey
+                'x-api-key': apiKey
             },
             url: util.format('%s/Destiny/2/Account/%s/Character/%s/Progression/',
                 servicePlatform, membershipId, characterId)
@@ -649,7 +634,7 @@ class DestinyService {
     }
 
     /**
-     * Get Vendor Summaries for a Character
+     * Get vendor summaries for a character.
      * @param characterId
      * @param accessToken
      * @returns {Promise}
@@ -658,7 +643,7 @@ class DestinyService {
         const opts = {
             headers: {
                 authorization: 'Bearer ' + accessToken,
-                'x-api-key': this.apiKey
+                'x-api-key': apiKey
             },
             url: util.format('%s/Destiny/2/MyAccount/Character/%s/Vendors/Summaries/',
                 servicePlatform, characterId)
@@ -686,7 +671,7 @@ class DestinyService {
     }
 
     /**
-     * Get Character's Weapons
+     * Get character's weapons.
      * @param characterId
      * @param membershipId
      * @param accessToken
@@ -696,7 +681,7 @@ class DestinyService {
         const opts = {
             headers: {
                 authorization: 'Bearer ' + accessToken,
-                'x-api-key': this.apiKey
+                'x-api-key': apiKey
             },
             url: util.format('%s/Destiny/stats/uniqueweapons/2/%s/%s/',
                 servicePlatform, membershipId, characterId)
@@ -728,12 +713,11 @@ class DestinyService {
         });
     }
 
-    /**
-     * @function
-     * @returns {*|promise}
-     * @description Get the exotic gear and waepons available for sale from XUr.
-     */
-    getXur() {
+	/**
+     * Get the exotic gear and weapons available for sale from Xur.
+	 * @returns {Promise}
+	 */
+	getXur() {
         return this.cacheService.getVendor(xurHash)
             .then(vendor => {
                 const now = (new Date()).toISOString();
@@ -744,7 +728,7 @@ class DestinyService {
                 } else {
                     const opts = {
                         headers: {
-                            'x-api-key': this.apiKey
+                            'x-api-key': apiKey
                         },
                         url: util.format('%s/Destiny/Advisors/Xur/', servicePlatform)
                     };
@@ -795,4 +779,4 @@ class DestinyService {
     }
 }
 
-exports = module.exports = DestinyService;
+module.exports = DestinyService;

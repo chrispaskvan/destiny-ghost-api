@@ -4,23 +4,30 @@
 const DestinyController = require('../destiny/destiny.controller'),
     AuthenticationMiddleWare = require('../authentication/authentication.middleware'),
     express = require('express');
+
 /**
  * Destiny Routes
- * @param authenticateUser
+ * @param authenticationController
  * @param destinyService
  * @param userService
  * @param worldRepository
  * @returns {*}
  */
-var routes = function (authenticationController, destinyService, userService, worldRepository) {
-    'use strict';
-    var destinyRouter = express.Router();
+const routes = function (authenticationController, destinyService, userService, worldRepository) {
+    const destinyRouter = express.Router();
+
     /**
      * Set up routes and initialize the controller.
      * @type {DestinyController}
      */
-    var destinyController = new DestinyController({ destinyService, userService, worldRepository});
-    const middleware = new AuthenticationMiddleWare(authenticationController)
+    const destinyController = new DestinyController({ destinyService, userService, worldRepository });
+
+	/**
+	 * Authentication controller when needed.
+	 * @type {AuthenticationMiddleware}
+	 */
+	const middleware = new AuthenticationMiddleWare(authenticationController)
+
     /**
      * Routes
      */
@@ -66,6 +73,7 @@ var routes = function (authenticationController, destinyService, userService, wo
         .get(function (req, res) {
             destinyController.getXur(req, res);
         });
+
     return destinyRouter;
 };
 

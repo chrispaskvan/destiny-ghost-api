@@ -1,16 +1,12 @@
 /**
  * A module for handling Destiny routes..
  */
-var _ = require('underscore'),
-    base64url = require('base64url'),
+const _ = require('underscore'),
+	Ghost = require('../ghost/ghost'),
+	S = require('string'),
+	base64url = require('base64url'),
     crypto = require('crypto'),
-    fs = require('fs'),
-    Ghost = require('../helpers/ghost'),
-    log = require('../helpers/log'),
-    Q = require('q'),
-    request = require('request'),
-    S = require('string'),
-    yauzl = require('yauzl');
+    log = require('../helpers/log');
 
 class DestinyController {
     /**
@@ -91,11 +87,13 @@ class DestinyController {
                         characterBases.forEach((characterBase, index) => {
                             characterBase.className = characterClasses[index].className;
                         });
+
                         res.json(characterBases);
                     });
             })
             .catch(err => {
                 log.error(err);
+	            this.world.close();
                 res.status(500).json(err);
             });
     }
@@ -139,6 +137,7 @@ class DestinyController {
             })
             .catch(err => {
                 log.error(err);
+	            this.world.close();
                 res.status(500).json(err);
             });
     }
@@ -182,7 +181,8 @@ class DestinyController {
             })
             .catch(err => {
                 log.error(err);
-                res.status(500).json(err);
+	            this.world.close();
+	            res.status(500).json(err);
             });
     }
 
@@ -192,66 +192,65 @@ class DestinyController {
      * @param res
      */
     getIronBannerEventRewards(req, res) {
-        var self = this;
-        this.users.getUserByDisplayName(req.session.displayName, req.session.membershipType)
-            .then(function (currentUser) {
-                return self.destiny.getCharacters(currentUser.membershipId, req.session.membershipType)
-                    .then(function (characters) {
-                        var characterPromises = [];
-                        _.each(characters, function (character) {
-                            characterPromises.push(
-                                self.destiny.getIronBannerEventRewards(character.characterBase.characterId,
-                                    currentUser.bungie.accessToken.value)
-                            );
+		const { session: { displayName, membershipType }} = req;
+		let accessToken;
+
+		this.ghost.getWorldDatabasePath()
+			.then(worldDatabasePath => this.world.open(worldDatabasePath))
+			.then(() => this.users.getUserByDisplayName(displayName, membershipType))
+			.then(currentUser => {
+				accessToken = currentUser.bungie.accessToken.value;
+
+				return this.destiny.getCharacters(currentUser.membershipId, membershipType);
+			})
+			.then(characters => {
+				let characterPromises = [];
+
+                _.each(characters, character => {
+                    characterPromises.push(
+                        this.destiny.getIronBannerEventRewards(character.characterBase.characterId, accessToken)
+                    );
+                });
+
+                return Promise.all(characterPromises)
+                    .then(characterItems => {
+                        const items = _.flatten(characterItems);
+                        const itemHashes = _.uniq(_.map(items, function (item) {
+                            return item.item.itemHash;
+                        }));
+
+                        let promises = [];
+
+                        _.each(itemHashes, function (itemHash) {
+                            promises.push(this.world.getItemByHash(itemHash));
                         });
-                        return Q.all(characterPromises)
-                            .then(function (characterItems) {
-                                var items = _.flatten(characterItems);
-                                var itemHashes = _.uniq(_.map(items, function (item) {
-                                    return item.item.itemHash;
-                                }));
-                                return self.ghost.getWorldDatabasePath()
-                                    .then(function (worldDatabasePath) {
-                                        self.world.open(worldDatabasePath);
-                                        var promises = [];
-                                        _.each(itemHashes, function (itemHash) {
-                                            promises.push(self.world.getItemByHash(itemHash));
-                                        });
-                                        return Q.all(promises)
-                                            .then(function (items) {
-                                                self.world.close();
-                                                var weapons = _.filter(items, function (item) {
-                                                    return _.contains(item.itemCategoryHashes, 1);
-                                                });
-                                                var hunterArmor = _.filter(items, function (item) {
-                                                    return _.contains(item.itemCategoryHashes, 20) &&
-                                                        _.contains(item.itemCategoryHashes, 23);
-                                                });
-                                                var titanArmor = _.filter(items, function (item) {
-                                                    return _.contains(item.itemCategoryHashes, 20) &&
-                                                        _.contains(item.itemCategoryHashes, 22);
-                                                });
-                                                var warlockArmor = _.filter(items, function (item) {
-                                                    return _.contains(item.itemCategoryHashes, 20) &&
-                                                        _.contains(item.itemCategoryHashes, 21);
-                                                });
-                                                res.json({ weapons: _.map(weapons, function (item) {
-                                                    return item.itemName;
-                                                }), armor: { hunter: _.map(hunterArmor, function (item) {
-                                                    return item.itemName;
-                                                }), titan: _.map(titanArmor, function (item) {
-                                                    return item.itemName;
-                                                }), warlock: _.map(warlockArmor, function (item) {
-                                                    return item.itemName;
-                                                })}});
-                                            });
-                                    });
+
+                        return Promise.all(promises)
+                            .then(function (items) {
+                                const weapons = _.filter(items, item => _.contains(item.itemCategoryHashes, 1));
+                                const hunterArmor = _.filter(items, item => _.contains(item.itemCategoryHashes, 20) &&
+                                    _.contains(item.itemCategoryHashes, 23));
+                                const titanArmor = _.filter(items, item => _.contains(item.itemCategoryHashes, 20) &&
+                                    _.contains(item.itemCategoryHashes, 22));
+                                const warlockArmor = _.filter(items, item => _.contains(item.itemCategoryHashes, 20) &&
+                                        _.contains(item.itemCategoryHashes, 21));
+
+	                            this.world.close();
+	                            res.json({
+                                    weapons: _.map(weapons,item => item.itemName),
+                                    armor: {
+                                        hunter: _.map(hunterArmor, item => item.itemName),
+                                        titan: _.map(titanArmor, item => item.itemName),
+                                        warlock: _.map(warlockArmor, item => item.itemName)
+                                    }
+                                });
                             });
                     });
             })
-            .fail(err => {
+            .catch(err => {
                 log.error(err);
-                res.status(500).json(err);
+	            this.world.close();
+	            res.status(500).json(err);
             });
     }
 
@@ -268,17 +267,17 @@ class DestinyController {
             return res.status(422).end();
         }
 
-        this.ghost.getWorldDatabasePath()
-            .then(worldDatabasePath => {
-                this.world.open(worldDatabasePath);
-
-                return this.world.getGrimoireCards(numberOfCards)
-                    .then(grimoireCards => res.status(200).json(grimoireCards).end())
-                    .finally(() => this.world.close());
+		this.ghost.getWorldDatabasePath()
+			.then(worldDatabasePath => this.world.open(worldDatabasePath))
+            .then(this.world.getGrimoireCards(numberOfCards))
+            .then(grimoireCards => {
+	            this.world.close();
+	            res.status(200).json(grimoireCards)
             })
             .catch(err => {
                 log.error(err);
-                res.status(500).json(err);
+	            this.world.close();
+	            res.status(500).json(err);
             });
     }
 
@@ -288,59 +287,48 @@ class DestinyController {
      * @param res
      */
     getXur(req, res) {
-        var self = this;
-
-        return self.destiny.getXur()
-            .then(function (vendor) {
+        return this.destiny.getXur()
+            .then(vendor => {
                 const { itemHashes, nextRefreshDate } = vendor;
 
                 if (itemHashes === undefined || itemHashes.length === 0) {
-                    res.status(200).json({ itemHashes: [], nextRefreshDate: nextRefreshDate });
-
-                    return;
+                    return res.status(200).json({ itemHashes: [], nextRefreshDate: nextRefreshDate });
                 }
 
-                return self.ghost.getWorldDatabasePath()
-                    .then(function (worldDatabasePath) {
-                        var promises = [];
+				return this.ghost.getWorldDatabasePath()
+					.then(worldDatabasePath => this.world.open(worldDatabasePath))
+                    .then(() => {
+                        let promises = [];
 
-                        self.world.open(worldDatabasePath);
+                        itemHashes.forEach(itemHash => promises.push(this.world.getItemByHash(itemHash)));
 
-                        _.each(itemHashes, function (itemHash) {
-                            promises.push(self.world.getItemByHash(itemHash));
-                        });
-
-                        return Q.all(promises)
-                            .then(function (items) {
-                                var itemPromises = _.map(items, function (item) {
+                        return Promise.all(promises)
+                            .then(items => {
+                                const itemPromises = _.map(items, item => {
                                     if (item.itemName === 'Exotic Engram' ||
-                                        item.itemName === 'Legacy Engram') {
-                                        return self.world.getItemByHash(item.itemHash)
+                                            item.itemName === 'Legacy Engram') {
+                                        return this.world.getItemByHash(item.itemHash)
                                             .then(function (itemDetail) {
                                                 return (new S(item.itemName).chompRight('Engram') +
                                                     itemDetail.itemTypeName);
                                             });
                                     }
-                                    var deferred = Q.defer();
 
-                                    deferred.resolve(item.itemName);
-
-                                    return deferred.promise;
+                                    return Promise.resolve(item.itemName);
                                 });
 
-                                return Q.all(itemPromises)
-                                    .then(function (items) {
-                                        res.json(items);
+                                return Promise.all(itemPromises)
+                                    .then(items => {
+	                                    this.world.close();
+	                                    res.json(items);
                                     });
-                            })
-                            .fin(function () {
-                                self.world.close();
                             });
                     });
             })
-            .fail(function (err) {
+            .catch(function (err) {
                 log.error(err);
-                res.status(500).json(err);
+	            this.world.close();
+	            res.status(500).json(err);
             });
     }
 
@@ -352,38 +340,11 @@ class DestinyController {
             .then(manifest => {
                 return this.destiny.getManifest(true)
                     .then(lastManifest => {
-                        const databasePath = './databases/';
-                        const { mobileWorldContentPaths: { en: relativeUrl }}  = manifest;
-                        const fileName = databasePath + relativeUrl.substring(relativeUrl.lastIndexOf('/') + 1);
-
-                        if (!lastManifest || lastManifest.version !== manifest.version ||
-                            lastManifest.mobileWorldContentPaths.en !== manifest.mobileWorldContentPaths.en ||
-                            !fs.existsSync(fileName)) {
-                            const file = fs.createWriteStream(fileName + '.zip');
-                            const stream = request('https://www.bungie.net' + relativeUrl, () => {
-                                log.info('content downloaded from ' + relativeUrl);
-                            }).pipe(file);
-                            stream.on('finish', () => {
-                                yauzl.open(fileName + '.zip', (err, zipFile) => {
-                                    if (!err) {
-                                        zipFile.on('entry', entry => {
-                                            zipFile.openReadStream(entry, (err, readStream) => {
-                                                if (!err) {
-                                                    readStream.pipe(fs.createWriteStream(databasePath + entry.fileName));
-
-                                                    fs.unlink(fileName + '.zip');
-
-                                                    res.status(200).json(manifest).end();
-                                                } else {
-                                                    throw err;
-                                                }
-                                            });
-                                        });
-                                    } else {
-                                        throw err;
-                                    }
+                        if (!lastManifest || lastManifest.version !== manifest.version) {
+                            this.ghost.updateManifest(manifest)
+                                .then(() => {
+                                    res.status(200).json(manifest).end();
                                 });
-                            });
                         } else {
                             res.status(200).json(manifest).end();
                         }

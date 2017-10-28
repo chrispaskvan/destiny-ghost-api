@@ -19,4 +19,4 @@ class DestinyError extends Error {
     }
 }
 
-exports = module.exports = DestinyError;
+module.exports = DestinyError;

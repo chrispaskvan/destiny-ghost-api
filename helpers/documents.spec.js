@@ -19,7 +19,7 @@ describe('Documents', () => {
 
             return documentService.getDocuments(collectionId, query, options)
                 .then(documents => {
-                    expect(documents).to.be.defined;
+                    expect(documents).to.not.be.undefined;
                     expect(documents.length).to.equal(1);
                 });
         });

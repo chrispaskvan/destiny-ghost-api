@@ -86,4 +86,4 @@ class DestinyCache {
     }
 }
 
-exports = module.exports = DestinyCache;
+module.exports = DestinyCache;

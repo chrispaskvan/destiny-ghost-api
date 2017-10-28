@@ -11,64 +11,57 @@
  * @requires request
  * @requires nodemailer-smtp-transport
  */
-var _ = require('underscore'),
-    nodemailer = require('nodemailer'),
-    Q = require('q'),
+const nodemailer = require('nodemailer'),
     S = require('string'),
     smtpConfiguration = require('../settings/smtp.json'),
     smtpTransport = require('nodemailer-smtp-transport');
 
-var Postmaster = function () {
-    'use strict';
-    var registrationHtml = 'Hi {{firstName}},<br /><br />' +
-        'Please click the link below to continue the registration process.<br /><br />';
-    var registrationText = 'Hi {{firstName}},\r\n\r\n' +
-        'Open the link below to continue the registration process.\r\n\r\n';
-    var mailOptions = {};
-    var transporter = nodemailer.createTransport(smtpTransport(smtpConfiguration));
+const registrationHtml = 'Hi {{firstName}},<br /><br />' +
+	'Please click the link below to continue the registration process.<br /><br />';
+const registrationText = 'Hi {{firstName}},\r\n\r\n' +
+	'Open the link below to continue the registration process.\r\n\r\n';
+const mailOptions = {};
+const transporter = nodemailer.createTransport(smtpTransport(smtpConfiguration));
 
-    function getRandomColor() {
-        var color = '#';
-        var index;
-        var letters = '0123456789ABCDEF';
+class Postmaster {
 
-        for (index = 0; index < 6; index += 1) {
-            color += letters[Math.floor(Math.random() * 16)];
-        }
+	static _getRandomColor() {
+		var color = '#';
+		var index;
+		var letters = '0123456789ABCDEF';
 
-        return color;
-    }
+		for (index = 0; index < 6; index += 1) {
+			color += letters[Math.floor(Math.random() * 16)];
+		}
 
-    var register = function (user, image, url) {
-        var deferred = Q.defer();
-        _.extend(mailOptions, {
-            from: smtpConfiguration.from,
-            tls: {
-                rejectUnauthorized: false
-            },
-            subject: 'Destiny Ghost Registration',
-            text: new S(registrationText).template(user).s + 'http://app.destiny-ghost.com' + url +
-                '?token=' + user.membership.tokens.blob,
-            to: user.emailAddress,
-            html: (image ? '<img src=\'' + image + '\' style=\'background-color: ' +
-                getRandomColor() + ';\'><br />' : '') +
-                new S(registrationHtml).template(user).s + 'http://app.destiny-ghost.com' + url +
-                '?token=' + user.membership.tokens.blob
-        });
-        transporter.sendMail(mailOptions, function (err, response) {
-            if (err) {
-                deferred.reject(err);
-            } else {
-                deferred.resolve(response);
-            }
-        });
+		return color;
+	}
 
-        return deferred.promise;
-    };
-
-    return {
-        register: register
-    };
-};
+	register(user, image, url) {
+		return new Promise((resolve, reject) => {
+			Object.assign(mailOptions, {
+				from: smtpConfiguration.from,
+				tls: {
+					rejectUnauthorized: false
+				},
+				subject: 'Destiny Ghost Registration',
+				text: new S(registrationText).template(user).s + 'http://app.destiny-ghost.com' + url +
+				'?token=' + user.membership.tokens.blob,
+				to: user.emailAddress,
+				html: (image ? '<img src=\'' + image + '\' style=\'background-color: ' +
+					this.constructor._getRandomColor() + ';\'><br />' : '') +
+				new S(registrationHtml).template(user).s + 'http://app.destiny-ghost.com' + url +
+				'?token=' + user.membership.tokens.blob
+			});
+			transporter.sendMail(mailOptions, function (err, response) {
+				if (err) {
+					reject(err);
+				} else {
+					resolve(response);
+				}
+			});
+		});
+	}
+}
 
 module.exports = Postmaster;

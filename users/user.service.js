@@ -3,7 +3,7 @@ const _ = require('underscore'),
     defaults = require('json-schema-defaults'),
     notificationTypes = require('../notifications/notification.types'),
     twilio = require('twilio'),
-    twilioSettings = require('../settings/twilio.' + (process.env.NODE_ENV || 'development') + '.json'),
+    { accountSid, authToken } = require('../settings/twilio.' + (process.env.NODE_ENV || 'development') + '.json'),
     validator = require('is-my-json-valid');
 
 /**
@@ -177,7 +177,7 @@ class UserService {
         this.cacheService = options.cacheService;
         this.documents = options.documentService;
 
-        this.client = new twilio.LookupsClient(twilioSettings.accountSid, twilioSettings.authToken);
+        this.client = new twilio(accountSid, authToken);
     }
 
     /**
@@ -302,7 +302,7 @@ class UserService {
                         _.defaults(filteredUser, defaults(userSchema));
                         _.extend(existingUser, filteredUser);
 
-                        return this.documents.upsertDocument(collectionId, document);
+                        return this.documents.upsertDocument(collectionId, existingUser);
                     });
             });
     }
@@ -594,4 +594,4 @@ class UserService {
     }
 }
 
-exports = module.exports = UserService;
+module.exports = UserService;

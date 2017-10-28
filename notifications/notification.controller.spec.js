@@ -16,7 +16,8 @@ let notificationController;
 beforeEach(function () {
     const destinyService = {
         getCharacters: () => Promise.resolve(characters),
-        getFieldTestWeapons: () => Promise.resolve({
+		getCurrentUser: () => Promise.resolve(),
+		getFieldTestWeapons: () => Promise.resolve({
             vendor: '1',
             nextRefreshDate: '2017-08-17T00:57:49.000Z',
             itemHashes: [1, 2, 3]

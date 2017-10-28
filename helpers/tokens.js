@@ -52,4 +52,4 @@ class Tokens {
     }
 }
 
-exports = module.exports = Tokens;
+module.exports = Tokens;

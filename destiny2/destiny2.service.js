@@ -12,40 +12,29 @@
  * @requires request
  * @requires util
  */
-const _ = require('underscore'),
+const DestinyError = require('../destiny/destiny.error'),
+    DestinyService = require('../destiny/destiny.service'),
     { apiKey } = require('../settings/bungie.json'),
     request = require('request'),
     util = require('util');
-/**
- * Available Membership Types
- * @type {{TigerXbox: number, TigerPsn: number}}
- * @description Membership types as defined by the Bungie Destiny API
- * outlined at {@link http://bungienetplatform.wikia.com/wiki/BungieMembershipType}.
- */
-const membershipTypes = {
-    TigerXbox: 1,
-    TigerPsn: 2
-};
+
 /**
  * @constant
  * @type {string}
  * @description Base URL for all of the Bungie API services.
  */
 const servicePlatform = 'https://www.bungie.net/platform';
-/**
- * @throws API key not found.
- * @constructor
- */
+
 /**
  * Destiny2 Service Class
  */
-class Destiny2Service {
+class Destiny2Service extends DestinyService {
     /**
      * @constructor
-     * @param cacheService
+     * @param options
      */
-    constructor(cacheService) {
-        this.cacheService = cacheService;
+    constructor(options) {
+        super(options);
     }
 
     /**
@@ -63,18 +52,56 @@ class Destiny2Service {
 
         return new Promise((resolve, reject) => {
             request.get(opts, (err, res, body) => {
-                if (!err && res.statusCode === 200) {
-                    const manifest = JSON.parse(body).Response;
+				if (!err && res.statusCode === 200) {
+					const responseBody = JSON.parse(body);
 
-                    this.cacheService.setManifest(manifest);
+					if (responseBody.ErrorCode !== 1) {
+						reject(new DestinyError(responseBody.ErrorCode || -1,
+							responseBody.Message || '', responseBody.ErrorStatus || ''));
+					} else {
+						const { Response: manifest } = responseBody;
 
-                    resolve(manifest);
+						this.cacheService.setManifest(manifest);
+
+						resolve(manifest);
+					}
                 } else {
                     reject(err);
                 }
             });
         });
     }
+
+    getLeaderboard(membershipId, membershipType, accessToken) {
+		const opts = {
+			headers: {
+				authorization: 'Bearer ' + accessToken,
+				'x-api-key': apiKey
+			},
+			url: util.format('%s/Destiny2/Stats/Leaderboards/%s/%s/2305843009266849896', servicePlatform,
+				membershipType, membershipId)
+		};
+
+		return new Promise((resolve, reject) => {
+			request.get(opts, function (err, res, body) {
+				if (!err && res.statusCode === 200) {
+					const responseBody = JSON.parse(body);
+
+					if (responseBody.ErrorCode === 1) {
+						const { Response: { characters: { data }}} = responseBody;
+						const characters = Object.keys(data).map(character => data[character]);
+
+						resolve(characters);
+					} else {
+						reject(new DestinyError(responseBody.ErrorCode || -1,
+							responseBody.Message || '', responseBody.ErrorStatus || ''));
+					}
+				} else {
+					reject(err);
+				}
+			});
+		});
+	}
 
     /**
      * Get the cached Destiny Manifest definition if available, otherwise get the latest from Bungie.
@@ -91,6 +118,36 @@ class Destiny2Service {
                 return this._getManifest();
             });
     }
+
+    getProfile(membershipId, membershipType) {
+		const opts = {
+			headers: {
+				'x-api-key': apiKey
+			},
+			url: util.format('%s/Destiny2/%s/Profile/%s?components=Characters', servicePlatform,
+				membershipType, membershipId)
+		};
+
+		return new Promise((resolve, reject) => {
+			request.get(opts, function (err, res, body) {
+				if (!err && res.statusCode === 200) {
+					const responseBody = JSON.parse(body);
+
+					if (responseBody.ErrorCode === 1) {
+						const { Response: { characters: { data }}} = responseBody;
+						const characters = Object.keys(data).map(character => data[character]);
+
+						resolve(characters);
+					} else {
+						reject(new DestinyError(responseBody.ErrorCode || -1,
+							responseBody.Message || '', responseBody.ErrorStatus || ''));
+					}
+				} else {
+					reject(err);
+				}
+			});
+		});
+	}
 }
 
-exports = module.exports = Destiny2Service;
+module.exports = Destiny2Service;

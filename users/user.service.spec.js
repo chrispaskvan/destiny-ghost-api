@@ -113,7 +113,7 @@ describe('UserService', function () {
             it('should reject the anonymous user', function () {
                 return userService.createAnonymousUser(_.omit(anonymousUser, 'membershipId'))
                     .catch(function (err) {
-                        expect(err).to.be.defined;
+                        expect(err).to.not.be.undefined;
                     });
             });
         });
@@ -159,7 +159,7 @@ describe('UserService', function () {
             it('should reject the user', function () {
                 return userService.createUser(_.omit(user, 'phoneNumber'))
                     .catch(function (err) {
-                        expect(err).to.be.defined;
+                        expect(err).to.not.be.undefined;
                     });
             });
         });
@@ -211,7 +211,7 @@ describe('UserService', function () {
 
                 return userService.getUserByDisplayName(user.displayName, user.membershipType)
                     .catch(function (err) {
-                        expect(err).to.be.defined;
+                        expect(err).to.not.be.undefined;
                         mock.verify();
                     });
             });
@@ -221,7 +221,7 @@ describe('UserService', function () {
 
                 return userService.getUserByDisplayName(user.displayName, user.membershipType)
                     .then(function (user1) {
-                        expect(user1).to.not.be.defined;
+                        expect(user1).to.be.undefined;
                         mock.verify();
                     });
             });
@@ -231,7 +231,7 @@ describe('UserService', function () {
 
                 return userService.getUserByDisplayName()
                     .catch(function (err) {
-                        expect(err).to.be.defined;
+                        expect(err).to.not.be.undefined;
                         mock.verify();
                     });
             });
@@ -241,7 +241,7 @@ describe('UserService', function () {
 
                 return userService.getUserByDisplayName(user.displayName, '1')
                     .catch(function (err) {
-                        expect(err).to.be.defined;
+                        expect(err).to.not.be.undefined;
                         mock.verify();
                     });
             });
@@ -251,7 +251,7 @@ describe('UserService', function () {
 
                 return userService.getUserByDisplayName(user.displayName, user.membershipType)
                     .catch(function (err) {
-                        expect(err).to.be.defined;
+                        expect(err).to.not.be.undefined;
                         mock.verify();
                     });
             });
@@ -274,7 +274,7 @@ describe('UserService', function () {
 
                 return userService.getUserByEmailAddress(user.emailAddress)
                     .catch(function (err) {
-                        expect(err).to.be.defined;
+                        expect(err).to.not.be.undefined;
                         mock.verify();
                     });
             });
@@ -284,7 +284,7 @@ describe('UserService', function () {
 
                 return userService.getUserByEmailAddress(user.emailAddress)
                     .then(function (user1) {
-                        expect(user1).to.not.be.defined;
+                        expect(user1).to.be.undefined;
                         mock.verify();
                     });
             });
@@ -294,7 +294,7 @@ describe('UserService', function () {
 
                 return userService.getUserByEmailAddress()
                     .catch(function (err) {
-                        expect(err).to.be.defined;
+                        expect(err).to.not.be.undefined;
                         mock.verify();
                     });
             });
@@ -304,7 +304,7 @@ describe('UserService', function () {
 
                 return userService.getUserByEmailAddress(user.emailAddress)
                     .catch(function (err) {
-                        expect(err).to.be.defined;
+                        expect(err).to.not.be.undefined;
                         mock.verify();
                     });
             });

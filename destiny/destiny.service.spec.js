@@ -14,16 +14,21 @@ let destinyService;
 
 beforeEach(function () {
     const cacheService = {
-        getManifest: function() {},
-        getVendor: function() {},
-        setManifest: function() {},
-        setVendor: function() {}
+        getManifest: function() {
+            return Promise.resolve();
+        },
+        getVendor: function() {
+            return Promise.resolve();
+        },
+        setManifest: function() {
+            return Promise.resolve();
+        },
+        setVendor: function() {
+            return Promise.resolve();
+        }
     };
 
-    sinon.stub(cacheService, 'getVendor').resolves();
-    sinon.stub(cacheService, 'getManifest').resolves();
-
-    destinyService = new DestinyService(cacheService);
+    destinyService = new DestinyService({ cacheService });
 });
 
 describe('DestinyService', function () {

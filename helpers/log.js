@@ -17,7 +17,6 @@ const defaults = {
 
 class Log {
     constructor() {
-        console.log('Creating logger ................logger..........');
         this.logger = bunyan.createLogger(defaults);
     }
 
@@ -30,4 +29,4 @@ class Log {
     }
 }
 
-exports = module.exports = new Log();
+module.exports = new Log();

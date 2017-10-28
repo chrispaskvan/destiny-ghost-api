@@ -4,9 +4,7 @@
 class AuthenticationService {
     /**
      * @constructor
-     * @param cacheService
-     * @param destinyService
-     * @param userService
+     * @param options
      */
     constructor(options) {
         this.cacheService = options.cacheService;
@@ -31,15 +29,16 @@ class AuthenticationService {
             this.userService.getUserByDisplayName(displayName, membershipType);
 
         return promise
-            .then(user => this.validate(user));
+            .then(user => this._validate(user));
     }
 
     /**
      * Validate user access token with Bungie.
      * @param user
      * @returns {Promise}
-     */
-    validate(user) {
+	 * @private
+	 */
+	_validate(user) {
         if (!user) {
             return Promise.reject(new Error('User not found'));
         }
@@ -82,4 +81,4 @@ class AuthenticationService {
     }
 }
 
-exports = module.exports = AuthenticationService;
+module.exports = AuthenticationService;

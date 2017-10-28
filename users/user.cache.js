@@ -152,4 +152,4 @@ class UserCache {
     }
 }
 
-exports = module.exports = UserCache;
+module.exports = UserCache;

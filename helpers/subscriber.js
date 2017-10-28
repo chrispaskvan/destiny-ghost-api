@@ -30,7 +30,7 @@ function getFromTheBus(serviceBusService) {
                 log.error(err);
             }
         })
-        .finally(() => {
+        .fin(() => {
             setTimeout(getFromTheBus(serviceBusService), 1000);
         });
 }
