@@ -20,12 +20,17 @@ class AuthenticationMiddleware {
      */
     async authenticateUser(req, res, next) {
         try {
-            await this.authentication.authenticate(req);
+            const user = await this.authentication.authenticate(req);
+            if (user) {
+                next();
+            } else {
+                res.status(401).end();
+            }
         } catch (err) {
             log.error(err);
+            next();
         }
-        next();
     }
 }
 
-exports = module.exports = AuthenticationMiddleware;
+module.exports = AuthenticationMiddleware;

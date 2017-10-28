@@ -1,9 +1,7 @@
 /**
- * Token Tests
+ * Bitly Tests
  */
-'use strict';
-var _ = require('underscore'),
-    expect = require('chai').expect,
+const expect = require('chai').expect,
     bitly = require('./bitly');
 
 describe('Bitly', function () {
@@ -14,16 +12,17 @@ describe('Bitly', function () {
                     expect(url).to.not.be.undefined;
                     done();
                 })
-                .fail(function (err) {
+                .catch(function (err) {
                     done(err);
                 });
         });
+
         it('should not return a short URL', function (done) {
             bitly.getShortUrl()
                 .then(function () {
                     done(new Error('expected method to reject'));
                 })
-                .fail(function (err) {
+                .catch(function (err) {
                     expect(err).to.not.be.undefined;
                     done();
                 });

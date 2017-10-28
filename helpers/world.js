@@ -10,9 +10,7 @@
  * @requires S
  * @requires sqlite3
  */
-'use strict';
-var _ = require('underscore'),
-    Q = require('q'),
+const _ = require('underscore'),
     S = require('string'),
     fs = require('fs'),
     sqlite3 = require('sqlite3');
@@ -40,7 +38,7 @@ class World {
 
     /**
      * Close database connection.
-     * @returns {Promise.<T>}
+     * @returns {Promise}
      */
     close() {
         if (this.db) {
@@ -142,20 +140,26 @@ class World {
      * @returns {Promise}
      */
     getItemCategory(itemCategoryHash) {
-        return new Promise((resolve, reject) => {
-            this.db.serialize(() => {
-                this.db.each('SELECT json FROM DestinyItemCategoryDefinition WHERE id = ' +
-                    itemCategoryHash, (err, row) =>  err ? reject(err) : resolve(JSON.parse(row.json)),
-                    (err, rows) => {
+		return new Promise((resolve, reject) => {
+			this.db.serialize(() => {
+				let categories = [];
+
+				this.db.each('SELECT json FROM DestinyItemCategoryDefinition WHERE id = ' +
+					itemCategoryHash, (err, row) =>  err ? reject(err) : categories.push(JSON.parse(row.json)),
+					(err, rows) => {
                         if (err) {
                             reject(err);
                         } else {
                             if (rows === 0) {
-                                reject(new Error('No item category found for hash' +
-                                    itemCategoryHash));
-                            } else {
-                                reject(new Error('Hash, ' +
-                                    itemCategoryHash + ', is not an unique identifier.'));
+								reject(new Error('No item category found for hash' +
+									itemCategoryHash));
+							} else {
+								if (rows > 1) {
+									reject(new Error('Hash, ' +
+										itemCategoryHash + ', is not an unique identifier.'));
+                                }
+
+                                resolve(categories[0]);
                             }
                         }
                     });
@@ -193,4 +197,4 @@ class World {
     }
 }
 
-exports = module.exports = new World();
+module.exports = World;

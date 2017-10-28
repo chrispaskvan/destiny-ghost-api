@@ -1,48 +1,98 @@
 /**
- * A module for handling Destiny routes..
+ * A module for handling Destiny 2 routes.
  *
  * @module destinyController
  * @author Chris Paskvan
- * @requires _
- * @requires Destiny
- * @requires fs
- * @requires Ghost
- * @requires jSend
- * @requires Q
- * @requires request
- * @requires S
- * @requires User
- * @requires World
- * @requires yauzl
  */
-var _ = require('underscore'),
+const DestinyController = require('../destiny/destiny.controller'),
     fs = require('fs'),
     log = require('../helpers/log'),
     request = require('request'),
     yauzl = require('yauzl');
+
 /**
- * Destiny Controller
- * @param options
- * @constructor
+ * Destiny Controller Service
  */
-/**
- * @namespace
- * @type {{getCharacters, getCurrentUser, getFieldTestWeapons, getFoundryOrders, getIronBannerEventRewards,
- * getXur, upsertManifest}}
- */
-class Destiny2Controller {
+class Destiny2Controller extends DestinyController {
     constructor(options) {
-        this.destiny = options.destiny2Service;
+        super(options);
     }
 
-    getManifest(req, res) {
+	getLeaderboard(req, res) {
+		const { session: { displayName, membershipType }} = req;
+		let accessToken;
+
+		this.users.getUserByDisplayName(displayName, membershipType)
+			.then(currentUser => {
+				accessToken = currentUser.bungie.accessToken.value;
+
+				return this.destiny.getLeaderboard(currentUser.membershipId, membershipType, accessToken)
+					.then(leaderboard => {
+						res.status(200).json(leaderboard).end();
+					});
+			})
+			.catch(err => {
+				log.error(err);
+				res.status(500).json(err);
+			});
+	}
+
+
+	getManifest(req, res) {
         this.destiny.getManifest()
             .then(manifest => {
                 res.status(200).json(manifest).end();
             });
     }
 
-    upsertManifest(req, res) {
+	/**
+	 * Get characters for the current user.
+	 * @returns {*|Array}
+	 * @private
+	 */
+	getProfile(req, res) {
+		const { session: { displayName, membershipType }} = req;
+
+		this.ghost.getWorldDatabasePath()
+			.then(worldDatabasePath => this.world.open(worldDatabasePath))
+			.then(() => this.users.getUserByDisplayName(displayName, membershipType))
+			.then(currentUser => this.destiny.getProfile(currentUser.membershipId, membershipType))
+			.then(characters => {
+				let promises = [];
+				let characterBases = characters.map(character => {
+					promises.push(this.world.getClassByHash(character.classHash));
+
+					return {
+						characterId: character.characterId,
+						classHash: character.classHash,
+						emblem: character.emblemPath,
+						backgroundPath: character.emblemBackgroundPath,
+						powerLevel: character.light,
+						links: [
+							{
+								rel: 'Character',
+								href: '/characters/' + character.characterId
+							}
+						]
+					}
+				});
+
+				return Promise.all(promises)
+					.then(characterClasses => {
+						characterBases.forEach((characterBase, index) => {
+							characterBase.className = characterClasses[index].displayProperties.name;
+						});
+						res.status(200).json(characterBases);
+					});
+			})
+			.catch(err => {
+				log.error(err);
+				this.world.close();
+				res.status(500).json(err);
+			});
+	}
+
+	upsertManifest(req, res) {
         this.destiny.getManifest()
             .then(manifest => {
                 return this.destiny.getManifest(true)

@@ -4,18 +4,20 @@
  * for instructions on how to debug these routes locally. Remember
  * to update the DOMAIN environment variable.
  */
-var express = require('express'),
-    TwilioController = require('../controllers/twilioController');
+const AuthenticationMiddleWare = require('../authentication/authentication.middleware'),
+    TwilioController = require('./twilio.controller'),
+    express = require('express');
 
-var routes = function (authenticateUser, destinyService, userService) {
-    'use strict';
-    var twilioRouter = express.Router();
-    var twilioController = new TwilioController(destinyService, userService);
+const routes = function (authenticationController, destinyService, userService, worldRepository) {
+	const middleware = new AuthenticationMiddleWare(authenticationController);
+    const twilioRouter = express.Router();
+    const twilioController = new TwilioController({ destinyService, userService, worldRepository });
 
     twilioRouter.route('/destiny/r')
-        .post(function (req, res) {
-            //authenticateUser,
-            twilioController.request(req, res);
+		.post(function (req, res, next) {
+			middleware.authenticateUser(req, res, next);
+		}, function (req, res) {
+			twilioController.request(req, res);
         });
     twilioRouter.route('/destiny/s')
         .post(function (req, res) {

@@ -6,8 +6,7 @@
  * @author Chris Paskvan
  * @requires azure
  */
-'use strict';
-var azure = require('azure'),
+const azure = require('azure'),
     log = require('./log'),
     settings = require('../settings/serviceBus.json'),
     Q = require('q');
@@ -50,7 +49,7 @@ class Publisher {
                 wasTopicCreated = !(!topicCreated[0] && topicCreated[1].statusCode !== 409);
                 log.info('topic created', topicCreated);
             })
-            .finally(() => createTopicPromise = undefined);
+            .then(() => createTopicPromise = undefined);
 
         return createTopicPromise;
     }

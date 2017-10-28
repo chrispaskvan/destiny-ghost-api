@@ -12,47 +12,47 @@
  * @requires request
  * @requires util
  */
-'use strict';
-var Q = require('q'),
-    request = require('request'),
+const request = require('request'),
     settings = require('../settings/bitly.json'),
     util = require('util');
+
 /**
  * @param {string} bitylSettingsFullPath - Full path to the JSON Bitly settings file.
  * @constructor
  */
-var Bitly = {
-    /**
-     * @function
-     * @param {string} url - URL to be shortened.
-     * @returns {string} - The resulting short URL.
-     * @description Transform the provided URL into a custom short URL.
-     */
-    getShortUrl: function (url) {
-        var data;
-        var deferred = Q.defer();
-        var opts = { url: util.format('https://api-ssl.bitly.com/v3/shorten?access_token=%s&longUrl=%s',
-            settings.accessToken, encodeURIComponent(url))};
+class Bitly {
+	/**
+	 * @function
+	 * @param {string} url - URL to be shortened.
+	 * @returns {string} - The resulting short URL.
+	 * @description Transform the provided URL into a custom short URL.
+	 */
+    static getShortUrl(url) {
+		const opts = { url: util.format('https://api-ssl.bitly.com/v3/shorten?access_token=%s&longUrl=%s',
+			settings.accessToken, encodeURIComponent(url))};
 
-        if (typeof url !== 'string') {
-            deferred.reject('URL is not a string');
-        } else {
-            request(opts, function (error, response, body) {
-                if (!error && response.statusCode === 200) {
-                    try {
-                        data = JSON.parse(body).data;
-                    } catch (e) {
-                        deferred.reject(e.message);
-                    }
-                    deferred.resolve(data ? data.url : undefined);
-                } else {
-                    deferred.reject(error);
-                }
-            });
-        }
+		if (typeof url !== 'string') {
+			return Promise.reject('URL is not a string');
+		}
 
-        return deferred.promise;
+		return new Promise((resolve, reject) => {
+			request(opts, function (err, response, body) {
+				if (!err && response.statusCode === 200) {
+					let data;
+
+					try {
+						data = JSON.parse(body).data;
+					} catch (e) {
+						reject(e.message);
+					}
+
+					resolve(data ? data.url : undefined);
+				} else {
+					reject(err);
+				}
+			});
+        });
     }
-};
+}
 
-exports = module.exports = Bitly;
+module.exports = Bitly;

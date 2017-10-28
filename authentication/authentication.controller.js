@@ -32,4 +32,4 @@ class AuthenticationController {
     }
 }
 
-exports = module.exports = AuthenticationController;
+module.exports = AuthenticationController;

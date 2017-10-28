@@ -1,131 +1,130 @@
 /**
- * A module for creating tokens.
+ * A module for interacting with Cosmos.
  *
  * @module Documents
  * @summary Helper class for interfacing with DocumentDB.
  * @author Chris Paskvan
  */
-'use strict';
-var DocumentClient = require('documentdb').DocumentClient,
-    configuration = require('../settings/documents.json'),
+const DocumentClient = require('documentdb').DocumentClient,
+    { authenticationKey, databaseId, host } = require('../settings/documents.json'),
     util = require('util');
-/**
- * Get Collection by Id
- * @param collectionId
- * @returns {Promise.<*>}
- */
-function getCollection(collectionId) {
-    return new Promise((resolve, reject) => {
-        function getCurrentCollection(err, collection) {
-            if (err) {
-                reject(err);
-            }
 
-            map[collectionId] = collection;
+class Documents {
+    constructor() {
+		/**
+		 * Initialize Client
+		 * @type {*|DocumentClient}
+		 */
+		this.client = new DocumentClient(host, {
+			masterKey: authenticationKey
+		});
+		/**
+		 * Local Cache
+		 * @type {object}
+		 */
+		this.map = Object.create(null);
+    }
 
-            resolve(collection);
-        }
+	/**
+     * Get collection by Id.
+	 * @param collectionId
+	 * @returns {Promise}
+	 * @private
+	 */
+	_getCollection(collectionId) {
+		return new Promise((resolve, reject) => {
+			function getCurrentCollection(err, collection) {
+				if (err) {
+					reject(err);
+				}
 
-        function getCurrentDatabase(err, database) {
-            if (err) {
-                reject(err);
-            }
-            if (database) {
-                client.queryCollections(database._self,
-                    util.format('SELECT * FROM collections c WHERE c.id = "%s"', collectionId))
-                    .current(getCurrentCollection);
-            } else {
-                resolve();
-            }
-        }
+				this.map[collectionId] = collection;
 
-        if (map[collectionId]) {
-            return resolve(map[collectionId]);
-        }
+				resolve(collection);
+			}
 
-        client.queryDatabases(util.format('SELECT * FROM root r WHERE r.id = "%s"', databaseId))
-            .current(getCurrentDatabase);
-    });
+			function getCurrentDatabase(err, database) {
+				if (err) {
+					reject(err);
+				}
+				if (database) {
+					this.client.queryCollections(database._self,
+						util.format('SELECT * FROM collections c WHERE c.id = "%s"', collectionId))
+							.current(getCurrentCollection.bind(this));
+				} else {
+					resolve();
+				}
+			}
+
+			if (this.map[collectionId]) {
+				return resolve(this.map[collectionId]);
+			}
+
+			this.client.queryDatabases(util.format('SELECT * FROM root r WHERE r.id = "%s"', databaseId))
+				.current(getCurrentDatabase.bind(this));
+		});
+	}
+
+	/**
+	 * Create a document.
+	 * @param collectionId
+	 * @param document
+	 * @returns {Promise}
+	 */
+	createDocument(collectionId, document) {
+		return new Promise((resolve, reject) => {
+			this._getCollection(collectionId)
+				.then(collection => {
+					if (collection) {
+						this.client.createDocument(collection._self, document,
+							(err, document) => err ? reject(err) : resolve(document.id));
+					}
+				});
+		});
+	}
+
+	/**
+	 * Get documents from a query.
+	 * @param collectionId
+	 * @param query
+	 * @param options
+	 * @returns {Promise}
+	 */
+	getDocuments(collectionId, query, options) {
+		return new Promise((resolve, reject) => {
+			function getDocuments(err, results) {
+				if (err) {
+					reject(err);
+				} else {
+					resolve(results);
+				}
+			}
+
+			this._getCollection(collectionId)
+				.then(collection => {
+					if (collection) {
+						this.client.queryDocuments(collection._self, query, options).toArray(getDocuments);
+					}
+				});
+		});
+	}
+
+	/**
+	 * Insert if new or update an existing document.
+	 * @param collectionId
+	 * @param document
+	 * @returns {Promise}
+	 */
+	upsertDocument(collectionId, document) {
+		return new Promise((resolve, reject) => {
+			this._getCollection(collectionId)
+				.then(collection => {
+					if (collection) {
+						this.client.upsertDocument(collection._self, document, err => err ? reject(err) : resolve());
+					}
+				});
+		});
+	}
 }
-/**
- *
- * @constructor
- */
-function Documents() {}
-/**
- * Database Id
- * @type {string}
- */
-var databaseId = 'Gjallarhorn';
-/**
- * Initialize Client
- * @type {*|DocumentClient}
- */
-var client = new DocumentClient(configuration.host, {
-    masterKey: configuration.authenticationKey
-});
-/**
- * Local Cache
- * @type {object}
- */
-var map = Object.create(null);
-/**
- * Create Document
- * @param collectionId
- * @param document
- * @returns {Promise}
- */
-Documents.prototype.createDocument = function (collectionId, document) {
-    return new Promise((resolve, reject) => {
-        getCollection(collectionId)
-            .then(collection => {
-                if (collection) {
-                    client.createDocument(collection._self, document,
-                        (err, document) => err ? reject(err) : resolve(document.id));
-                }
-            });
-    });
-};
-/**
- * Get Documents by Query
- * @param collectionId
- * @param query
- * @param options
- * @returns {Promise}
- */
-Documents.prototype.getDocuments = function (collectionId, query, options) {
-    return new Promise((resolve, reject) => {
-        function getDocuments(err, results) {
-            if (err) {
-                reject(err);
-            } else {
-                resolve(results);
-            }
-        }
 
-        getCollection(collectionId)
-            .then(collection => {
-                if (collection) {
-                    client.queryDocuments(collection._self, query, options).toArray(getDocuments);
-                }
-            });
-    });
-};
-/**
- * Insert If New or Update Existing Document
- * @param collectionId
- * @param document
- * @returns {Promise}
- */
-Documents.prototype.upsertDocument = function (collectionId, document) {
-    return new Promise((resolve, reject) => {
-        getCollection(collectionId)
-            .then(collection => {
-                if (collection) {
-                    client.upsertDocument(collection._self, document, err => err ? reject(err) : resolve());
-                }
-            });
-    });
-};
-
-exports = module.exports = new Documents();
+module.exports = new Documents();

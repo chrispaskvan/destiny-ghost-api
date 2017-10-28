@@ -1,15 +1,13 @@
 /**
  * Token Tests
  */
-'use strict';
-var _ = require('underscore'),
-    expect = require('chai').expect,
+const expect = require('chai').expect,
     tokens = require('./tokens');
 
 describe('Tokens', function () {
     describe('getBlob', function () {
         it('should return a blob', function () {
-            var blob = tokens.getBlob();
+            const blob = tokens.getBlob();
 
             expect(blob).to.not.be.undefined;
         });
@@ -17,15 +15,15 @@ describe('Tokens', function () {
     describe('getCode', function () {
         describe('when a code is requested without specifying a length', function () {
             it('should return a code with the default length of 6', function () {
-                var token = tokens.getCode();
+                const token = tokens.getCode();
 
                 expect(token.length).to.equal(6);
             });
         });
         describe('when the number of characters in the code is specified', function () {
             it('should return a code of the specified length', function () {
-                var size = 12;
-                var token = tokens.getCode(size);
+                const size = 12;
+                const token = tokens.getCode(size);
 
                 expect(token.length).to.equal(size);
             });

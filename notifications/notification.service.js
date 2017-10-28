@@ -47,4 +47,4 @@ class Notifications {
     }
 }
 
-exports = module.exports = Notifications;
+module.exports = Notifications;

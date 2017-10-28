@@ -1,0 +1,46 @@
+{
+  "Response": {
+    "version": "60088.17.09.26.2246-5",
+    "mobileAssetContentPath": "/common/destiny2_content/sqlite/asset/asset_sql_content_9d7532501d78552adce26945a198235d.content",
+    "mobileGearAssetDataBases": [
+      {
+        "version": 0,
+        "path": "/common/destiny2_content/sqlite/asset/asset_sql_content_9d7532501d78552adce26945a198235d.content"
+      },
+      {
+        "version": 1,
+        "path": "/common/destiny2_content/sqlite/asset/asset_sql_content_eab728c947eb55f4c219c7b4aaa5d42a.content"
+      },
+      {
+        "version": 2,
+        "path": "/common/destiny2_content/sqlite/asset/asset_sql_content_eab728c947eb55f4c219c7b4aaa5d42a.content"
+      }
+    ],
+    "mobileWorldContentPaths": {
+      "en": "/common/destiny2_content/sqlite/en/world_sql_content_edf4d47841acbd74f02ae136523ecc37.content",
+      "fr": "/common/destiny2_content/sqlite/fr/world_sql_content_59f2d8d99903b3b134db86e725151d1d.content",
+      "es": "/common/destiny2_content/sqlite/es/world_sql_content_4a764b528523800ad00caf96a063aa4e.content",
+      "de": "/common/destiny2_content/sqlite/de/world_sql_content_4967491b636d653aa4e6cc9db752bcd6.content",
+      "it": "/common/destiny2_content/sqlite/it/world_sql_content_0b3a5e038c9fcc0924ce6fdb4969d9ce.content",
+      "ja": "/common/destiny2_content/sqlite/ja/world_sql_content_e8195d9c40c0e08661f10bdc8b710543.content",
+      "pt-br": "/common/destiny2_content/sqlite/pt-br/world_sql_content_61029e8aac53638c51c0bd09a214ee06.content",
+      "es-mx": "/common/destiny2_content/sqlite/es-mx/world_sql_content_453b4126b258b6abeee72a2355bb105c.content",
+      "ru": "/common/destiny2_content/sqlite/ru/world_sql_content_d0f4fdc3ef66e3711ee5d44bbff06da8.content",
+      "pl": "/common/destiny2_content/sqlite/pl/world_sql_content_2dff360c99d2365dce481d87d3ddb2a5.content",
+      "zh-cht": "/common/destiny2_content/sqlite/zh-cht/world_sql_content_d7a9f5db5f30e8378e2f15f4d2319339.content"
+    },
+    "mobileClanBannerDatabasePath": "/common/destiny2_content/clanbanner/clanbanner_sql_content_12a291b583d3f5ce5c30a648fa58b482.content",
+    "mobileGearCDN": {
+      "Geometry": "/common/destiny2_content/geometry/platform/mobile/geometry",
+      "Texture": "/common/destiny2_content/geometry/platform/mobile/textures",
+      "PlateRegion": "/common/destiny2_content/geometry/platform/mobile/plated_textures",
+      "Gear": "/common/destiny2_content/geometry/gear",
+      "Shader": "/common/destiny2_content/geometry/platform/mobile/shaders"
+    }
+  },
+  "ErrorCode": 1,
+  "ThrottleSeconds": 0,
+  "ErrorStatus": "Success",
+  "Message": "Ok",
+  "MessageData": {}
+}
