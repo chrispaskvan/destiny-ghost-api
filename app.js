@@ -1,9 +1,8 @@
 /**
  * Created by chris on 8/23/15.
  */
-const applicationInsights = require('applicationinsights'),
+const AuthenticationController = require('./authentication/authentication.controller'),
 	AuthenticationService = require('./authentication/authentication.service'),
-	AuthenticationController = require('./authentication/authentication.controller'),
     Destiny2Cache = require('./destiny2/destiny2.cache'),
     Destiny2Service = require('./destiny2/destiny2.service'),
     DestinyCache = require('./destiny/destiny.cache'),
@@ -12,11 +11,11 @@ const applicationInsights = require('applicationinsights'),
     UserCache = require('./users/user.cache'),
     UserService = require('./users/user.service'),
 	appInsightsConfig = require('./settings/applicationInsights.json'),
+	applicationInsights = require('applicationinsights'),
     bodyParser = require('body-parser'),
     cookieParser = require('cookie-parser'),
     documents = require('./helpers/documents'),
     express = require('express'),
-    graphql = require('express-graphql'),
     path = require('path'),
     session = require('express-session'),
     redis = require('redis'),
@@ -57,32 +56,6 @@ const client = redis.createClient(redisConfig.port, redisConfig.host, {
     auth_pass: redisConfig.key // jscs:ignore requireCamelCaseOrUpperCaseIdentifiers
 });
 
-/**
- * Test Redis
- */
-const key = 'Dredgen Yorn';
-const value = 'Thorn';
-client.set(key, value, function (err, res) {
-    if (err) {
-        console.log('Redis client #set error ' + err);
-    } else {
-        console.log('Redis client #set returned ' + res);
-    }
-});
-client.get(key, function (err, res) {
-    if (err) {
-        console.log('Redis client #set error ' + err);
-    } else {
-        console.log('Redis client #get ' + (res === value ? 'succeeded' : 'failed'));
-    }
-});
-client.del(key, function (err, res) {
-    if (err) {
-        console.log('Redis client #del error ' + err);
-    } else {
-        console.log('Redis client #del ' + (res === 1 ? 'succeeded' : 'failed'));
-    }
-});
 
 /**
  * Attach Session
@@ -143,14 +116,10 @@ const destiny2Service = new Destiny2Service({ cacheService: destiny2Cache });
 const destiny2Router = require('./destiny2/destiny2.routes')(authenticationController, destiny2Service, userService, world2);
 app.use('/api/destiny2', destiny2Router);
 
-/**
- * ToDo: Health Check
- * redis
- * documentdb
- * destiny api
- * twilio client?
- * azure?
- */
+
+const healthRouter = require('./health/health.routes')(destiny2Service, documents, client, world2);
+app.use('/api/health', healthRouter);
+
 const twilioRouter = require('./twilio/twilio.routes')(authenticationController, destiny2Service, userService, world2);
 app.use('/api/twilio', twilioRouter);
 
@@ -173,12 +142,6 @@ app.get('/ping', function (req, res) {
         pong: Date.now()
     });
 });
-
-const ncSchema = require('./schema');
-app.use('/graphql', graphql({
-    schema: ncSchema,
-    graphiql: true
-}));
 
 // jscs:ignore requireCapitalizedComments
 // noinspection JSLint
