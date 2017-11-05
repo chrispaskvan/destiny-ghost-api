@@ -12,6 +12,17 @@
   "engines": {
     "node": ">=8.0.0"
   },
+  "nyc": {
+    "require": [
+      "babel-register"
+    ],
+    "reporter": [
+      "lcov",
+      "text"
+    ],
+    "sourceMap": false,
+    "instrument": false
+  },
   "dependencies": {
     "applicationinsights": "^1.0.0",
     "azure": "^2.2.1-preview",
@@ -49,15 +60,21 @@
     "yauzl": "^2.3.1"
   },
   "devDependencies": {
+    "babel-cli": "^6.26.0",
+    "babel-plugin-istanbul": "^4.1.5",
+    "babel-preset-es2015": "^6.24.1",
+    "babel-register": "^6.26.0",
     "chai": "^4.1.2",
     "chai-as-promised": "^7.1.1",
     "chance": "^1.0.12",
+    "cross-env": "^5.1.1",
     "eslint": "^4.10.0",
     "eslint-plugin-node": "^5.2.1",
     "gulp-env": "^0.2.0",
     "gulp-istanbul": "^1.1.1",
     "mocha": "^4.0.1",
     "node-mocks-http": "^1.6.6",
+    "nyc": "^11.3.0",
     "rewire": "^2.5.1",
     "sinon": "^4.0.2",
     "sinon-chai": "^2.14.0"

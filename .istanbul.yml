@@ -1,5 +1,8 @@
 instrumentation:
-    excludes: 
-        - './**/*.spec.js'
+    root: .
+    extensions:
+        - .js
+    default-excludes: true
+    excludes: ['**/*.spec.js']
 reporting:
     dir: ./.coverage
