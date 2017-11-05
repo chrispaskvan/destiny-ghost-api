@@ -6,9 +6,10 @@ const documentService = require('./documents'),
     expect = require('chai').expect;
 
 describe('Documents', () => {
+	const collectionId = 'Users';
+
     describe('getDocuments', () => {
         it('should return 1 document', () => {
-            const collectionId = 'Users';
             const options = {
                 enableCrossPartitionQuery: true,
                 pageSize: 1

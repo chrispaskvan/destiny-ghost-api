@@ -1,7 +1,7 @@
 /**
  * Created by chris on 9/25/15.
  */
-const Destiny2Controller = require('../destiny2/destiny2.controller'),
+const Destiny2Controller = require('./destiny2.controller'),
 	AuthenticationMiddleWare = require('../authentication/authentication.middleware'),
 	express = require('express');
 
