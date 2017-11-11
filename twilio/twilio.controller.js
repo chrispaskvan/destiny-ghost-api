@@ -22,7 +22,7 @@ const _ = require('underscore'),
 	bitly = require('../helpers/bitly'),
 	log = require('../helpers/log'),
 	twilio = require('twilio'),
-	{ authToken } = require('../settings/twilio.' + (process.env.NODE_ENV || 'development') + '.json');
+	{ attributes, authToken } = require('../settings/twilio.' + (process.env.NODE_ENV || 'development') + '.json');
 
 
 class TwilioController {
@@ -161,7 +161,7 @@ class TwilioController {
 		const twiml = new MessagingResponse();
 
 		if (twilio.validateRequest(authToken, header, process.env.DOMAIN + req.originalUrl, req.body)) {
-			twiml.message(this._getRandomResponseForAnError());
+			twiml.message(attributes, this._getRandomResponseForAnError());
 			res.writeHead(200, {
 				'Content-Type': 'text/xml'
 			});
@@ -203,6 +203,7 @@ class TwilioController {
 						return;
 					}
 					res.cookie('isRegistered', true);
+					this.users.addUserMessage(user.displayName, user.membershipType, req.body);
 
 					const itemHash = req.cookies.itemHash;
 					const message = req.body.Body.trim().toLowerCase();
@@ -213,7 +214,7 @@ class TwilioController {
 						if (itemHash) {
 							return bitly.getShortUrl('http://db.destinytracker.com/d2/en/items/' + itemHash)
 								.then(function (shortURL) {
-									twiml.message('Destiny Tracker\n' + shortURL);
+									twiml.message(attributes, 'Destiny Tracker\n' + shortURL);
 									res.writeHead(200, {
 										'Content-Type': 'text/xml'
 									});
@@ -221,14 +222,14 @@ class TwilioController {
 								});
 						}
 
-						twiml.message('More what?');
+						twiml.message(attributes, 'More what?');
 						res.writeHead(200, {
 							'Content-Type': 'text/xml'
 						});
 						res.end(twiml.toString());
 					} else {
 						if (counter > 25) {
-							twiml.message('Let me check with the Speaker regarding your good standing with the Vanguard.');
+							twiml.message(attributes, 'Let me check with the Speaker regarding your good standing with the Vanguard.');
 							res.writeHead(429, {
 								'Content-Type': 'text/xml'
 							});
@@ -242,7 +243,7 @@ class TwilioController {
 									res.cookie('counter', counter);
 									switch (items.length) {
 										case 0: {
-											twiml.message(this._getRandomResponseForNoResults());
+											twiml.message(attributes, this._getRandomResponseForNoResults());
 											res.writeHead(200, {
 												'Content-Type': 'text/xml'
 											});
@@ -257,9 +258,10 @@ class TwilioController {
 											const template = '{{itemName}} {{itemCategory}}';
 
 											if (user.type === 'landline') {
-												twiml.message((new S(template).template(items[0]).s).substr(0, 130));
+												twiml.message(attributes, (new S(template).template(items[0]).s).substr(0, 130));
 											} else {
-												twiml.message(new S(template).template(items[0]).s).media(items[0].icon);
+												twiml.message(attributes,
+													new S(template).template(items[0]).s).media(items[0].icon);
 											}
 											res.writeHead(200, {
 												'Content-Type': 'text/xml'
@@ -276,7 +278,7 @@ class TwilioController {
 												return memo + '\n' + key;
 											}, ' ').trim();
 
-											twiml.message(result.substr(0, 130));
+											twiml.message(attributes, result.substr(0, 130));
 											res.writeHead(200, {
 												'Content-Type': 'text/xml'
 											});
@@ -308,6 +310,12 @@ class TwilioController {
 		const twiml = new MessagingResponse();
 
 		if (twilio.validateRequest(authToken, header, process.env.DOMAIN + req.originalUrl, req.body)) {
+			this.users.getUserByPhoneNumber(req.body.To)
+				.then(user => {
+					if (user) {
+						this.users.addUserMessage(user.displayName, user.membershipType, req.body);
+					}
+				});
 			log.error(JSON.stringify(req.body));
 			res.writeHead(200, {
 				'Content-Type': 'text/xml'

@@ -66,7 +66,7 @@ class AuthenticationService {
                             if (user.dateRegistered) {
                                 return Promise.all([
                                     this.cacheService.setUser(user),
-                                    this.userService.updateUser(user)
+                                    this.userService.updateUserBungie(user.id, bungie)
                                 ])
                                     .then(() => user);
                             } else {

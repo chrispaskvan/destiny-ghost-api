@@ -82,6 +82,25 @@ class UserController {
 	}
 
 	/**
+	 * Allow only replace operations of mutable fields.
+	 * @param patches
+	 * @private
+	 */
+	static _scrubOperations(patches) {
+		const mutable = new Set(['firstName', 'lastName']);
+		const replacements = patches.filter(patch => {
+			return patch.op === 'replace';
+		});
+
+		return replacements.filter(replacement => {
+			const properties = new Set(replacement.path.split('/'));
+			const intersection = new Set([...properties].filter(x => mutable.has(x)));
+
+			return intersection.size;
+		});
+	}
+
+	/**
 	 * Confirm registration request by creating an account if appropriate.
 	 * @param req
 	 * @param res
@@ -204,8 +223,9 @@ class UserController {
 	 */
 	apply(req, res) {
 		let promises = [];
+		const { session: { displayName, membershipType }} = req;
 
-		this.users.getUserByDisplayName(req.session.displayName, req.session.membershipType)
+		this.users.getUserByDisplayName(displayName, membershipType)
 			.then(user => {
 				if (!user) {
 					return res.status(401).end();
@@ -270,7 +290,7 @@ class UserController {
 
 		if (displayName) {
 			return res.status(200)
-				.json({ displayName: req.session.displayName });
+				.json({ displayName });
 		}
 		if (sessionState !== queryState) {
 			return res.sendStatus(403);
@@ -320,25 +340,21 @@ class UserController {
 
 	/**
 	 * Uses JSON patch as described {@link https://github.com/Starcounter-Jack/JSON-Patch here}.
+	 * {@tutorial http://williamdurand.fr/2014/02/14/please-do-not-patch-like-an-idiot}
 	 * @param req
 	 * @param res
 	 * @returns {*}
-	 * @todo Deny operations on immutable properties.
 	 */
 	update(req, res) {
-		const { body: patches, params: { membershipId }} = req;
+		const { body: patches, session: { displayName, membershipType }} = req;
 
-		if (!membershipId) {
-			return res.status(409).send('membershipId not found');
-		}
-
-		this.users.getUserByMembershipId(membershipId)
+		this.users.getUserByDisplayName(displayName, membershipType)
 			.then(user => {
 				if (!user) {
 					return res.status(404).send('user not found');
 				}
 
-				jsonpatch.apply(user, patches);
+				jsonpatch.applyPatch(user, this.constructor._scrubOperations(patches));
 
 				return this.users.updateUser(user)
 					.then(function () {
