@@ -24,6 +24,7 @@ function cleanPhoneNumber(phoneNumber) {
  */
 const anonymousUser = {
     displayName: 'displayName1',
+	id: '1',
     membershipId: '11',
     membershipType: 2
 };
@@ -35,6 +36,7 @@ const user = {
     displayName: 'displayName1',
     emailAddress: chance.email(),
     firstName: chance.first(),
+    id: '2',
     lastName: chance.last(),
     membershipId: '11',
     membershipType: 2,
@@ -310,6 +312,59 @@ describe('UserService', function () {
             });
         });
     });
+	describe('getUserById', function () {
+		describe('when user id defined', function () {
+			it('should return an existing user', function () {
+				mock.expects('getDocuments').once().resolves([user]);
+
+				return userService.getUserById(user.id)
+					.then(function (user1) {
+						expect(user1).to.equal(user);
+						mock.verify();
+					});
+			});
+
+			it('should fail when more than one existing user is found', function () {
+				mock.expects('getDocuments').once().resolves([user, user]);
+
+				return userService.getUserById(user.id)
+					.catch(function (err) {
+						expect(err).to.not.be.undefined;
+						mock.verify();
+					});
+			});
+
+			it('should fail when no users are found', function () {
+				mock.expects('getDocuments').once().resolves([]);
+
+				return userService.getUserById(user.id)
+					.then(function (user1) {
+						expect(user1).to.be.undefined;
+						mock.verify();
+					});
+			});
+
+			it('should fail when user id is empty', function () {
+				mock.expects('getDocuments').never();
+
+				return userService.getUserById()
+					.catch(function (err) {
+						expect(err).to.not.be.undefined;
+						mock.verify();
+					});
+			});
+
+			it('should fail when no documents are found', function () {
+				mock.expects('getDocuments').once().resolves(undefined);
+
+				return userService.getUserById(user.id)
+					.catch(function (err) {
+						expect(err).to.not.be.undefined;
+						mock.verify();
+					});
+			});
+		});
+	});
 
     afterEach(function () {
         mock.restore();

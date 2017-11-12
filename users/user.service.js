@@ -191,7 +191,7 @@ class UserService {
     addUserMessage(displayName, membershipType, message, notificationType) {
         const self = this;
 
-        return this.getUserByDisplayName(displayName, membershipType)
+        return this.getUserByDisplayName(displayName, membershipType, true)
             .then(user => {
                 let notification;
                 let messages = [];
@@ -200,21 +200,26 @@ class UserService {
                 if (notificationKey) {
                     notification = user.notifications.find(
                         notification => notification.type === notificationType);
-                    if (notification) {
-                        messages = notification.messages || [];
-                    } else {
-                        user.notifications.push({
-                            enabled: false,
-                            type: notificationType,
-                            messages
-                        });
-                    }
+					if (!notification) {
+						notification = {
+							enabled: false,
+							type: notificationType,
+							messages
+						};
+						user.notifications.push(notification);
+					} else if (!notification.messages) {
+						notification.messages = [];
+					}
+					messages = notification.messages;
                 } else {
-                    messages = user.messages || [];
+                    if (!user.messages) {
+                        user.messages = [];
+                    }
+                    messages = user.messages;
                 }
-                if (messages) {
-                    messages.push(message);
-                }
+
+                message.DateTime = new Date().toISOString();
+                messages.push(message);
 
                 return self.documents.upsertDocument(collectionId, user)
                     .then(() => undefined);
@@ -358,7 +363,7 @@ class UserService {
      * @param membershipType
      * @returns {Promise}
      */
-    getUserByDisplayName(displayName, membershipType) {
+    getUserByDisplayName(displayName, membershipType, noCache) {
         const qb = new QueryBuilder();
 
         if (typeof displayName !== 'string' || _.isEmpty(displayName)) {
@@ -373,8 +378,8 @@ class UserService {
 
         return this.cacheService.getUser(displayName, membershipType)
             .then(user => {
-                if (user) {
-                    return user;
+				if (!noCache && user) {
+					return user;
                 } else {
                     return this.documents.getDocuments(collectionId, qb.getQuery())
                         .then(documents => {
@@ -454,7 +459,35 @@ class UserService {
             });
     }
 
-    /**
+	/**
+	 * Get user from id.
+	 * @param userId
+	 * @returns {Promise}
+	 */
+	getUserById(userId) {
+		const qb = new QueryBuilder();
+
+		if (typeof userId !== 'string' || _.isEmpty(userId)) {
+			return Promise.reject(new Error('userId string is required'));
+		}
+
+		qb.where('id', userId);
+
+        return this.documents.getDocuments(collectionId, qb.getQuery())
+            .then(documents => {
+                if (documents) {
+                    if (documents.length > 1) {
+                        throw new Error('more than 1 document found for userId ' + userId);
+                    }
+
+                    return documents[0];
+                }
+
+                throw new Error('documents undefined');
+            });
+	}
+
+	/**
      * Get user from membership Id.
      * @param membershipId
      * @returns {Promise}
@@ -588,10 +621,27 @@ class UserService {
         return this.getUserByDisplayName(user.displayName, user.membershipType)
             .then(userDocument => {
                 Object.assign(userDocument, user);
+
                 return this.documents.upsertDocument(collectionId, userDocument)
                     .then(() => undefined);
             });
     }
+
+	/**
+	 * Replace the Bungie authentication information.
+	 * @param userId
+	 * @param bungie
+	 * @returns {Promise}
+	 */
+	updateUserBungie(userId, bungie) {
+        return this.getUserById(userId)
+            .then(userDocument => {
+				userDocument.bungie = bungie;
+
+				return this.documents.upsertDocument(collectionId, userDocument)
+					.then(() => undefined);
+			});
+	}
 }
 
 module.exports = UserService;

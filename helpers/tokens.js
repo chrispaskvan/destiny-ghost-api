@@ -34,7 +34,7 @@ class Tokens {
      * @param {number} length - The number of characters. Defaults to 6.
      * @returns {string}
      */
-    static getCode(length) {
+    static getCode(length = 6) {
         const chars = '1234567890';
         let cursor = 0;
 
