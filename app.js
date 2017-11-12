@@ -1,22 +1,13 @@
 /**
- * Created by chris on 8/23/15.
+ * Application Server
  */
-const AuthenticationController = require('./authentication/authentication.controller'),
-	AuthenticationService = require('./authentication/authentication.service'),
-    Destiny2Cache = require('./destiny2/destiny2.cache'),
-    Destiny2Service = require('./destiny2/destiny2.service'),
-    DestinyCache = require('./destiny/destiny.cache'),
-    DestinyService = require('./destiny/destiny.service'),
-	Log = require('./models/log'),
+const Log = require('./models/log'),
+	Routes = require('./routes'),
 	RateLimiter = require('rolling-rate-limiter'),
-    UserCache = require('./users/user.cache'),
-    UserService = require('./users/user.service'),
-	World2 = require('./helpers/world2'),
 	appInsightsConfig = require('./settings/applicationInsights.json'),
 	applicationInsights = require('applicationinsights'),
     bodyParser = require('body-parser'),
     cookieParser = require('cookie-parser'),
-    documents = require('./helpers/documents'),
     express = require('express'),
 	limiterConfig = require('./settings/limiter.json'),
     path = require('path'),
@@ -29,6 +20,9 @@ const RedisStore = require('connect-redis')(session);
 const app = express();
 const port = process.env.PORT || 1100;
 
+/**
+ * Application Insights
+ */
 applicationInsights.setup(appInsightsConfig.instrumentationKey).start();
 applicationInsights.defaultClient.commonProperties = {
     environment: 'M2'
@@ -52,7 +46,7 @@ app.use(function (req, res, next) {
 });
 
 /**
- * Session
+ * Redis Client
  */
 const client = redis.createClient(redisConfig.port, redisConfig.host, {
     auth_pass: redisConfig.key // jscs:ignore requireCamelCaseOrUpperCaseIdentifiers
@@ -105,53 +99,16 @@ app.use(function(req, res, next) {
 
 /**
  * Logs
- * @type {Log|exports|module.exports}
  */
 const logger = new Log();
 app.use(logger.requestLogger());
 app.use(logger.errorLogger());
 
 /**
- * Dependencies
- */
-const destinyCache = new DestinyCache();
-const destinyService = new DestinyService({
-    cacheService: destinyCache
-});
-
-const userCache = new UserCache();
-const userService = new UserService({
-    cacheService: userCache,
-    documentService: documents
-});
-
-const authenticationService = new AuthenticationService({
-    cacheService: userCache,
-    destinyService,
-    userService
-});
-const authenticationController = new AuthenticationController(authenticationService);
-
-/**
  * Routes
  */
-const world2 = new World2();
-const destinyRouter = require('./destiny/destiny.routes')(authenticationController, destinyService, userService, world2);
-app.use('/api/destiny', destinyRouter);
-
-const destiny2Cache = new Destiny2Cache();
-const destiny2Service = new Destiny2Service({ cacheService: destiny2Cache });
-const destiny2Router = require('./destiny2/destiny2.routes')(authenticationController, destiny2Service, userService, world2);
-app.use('/api/destiny2', destiny2Router);
-
-const healthRouter = require('./health/health.routes')(destiny2Service, documents, client, world2);
-app.use('/api/health', healthRouter);
-
-const twilioRouter = require('./twilio/twilio.routes')(authenticationController, destiny2Service, userService, world2);
-app.use('/api/twilio', twilioRouter);
-
-const userRouter = require('./users/user.routes')(authenticationController, destinyService, userService);
-app.use('/api/users', userRouter);
+const routes = new Routes(client);
+app.use('/', routes);
 
 // jscs:ignore requireCapitalizedComments
 // noinspection JSLint

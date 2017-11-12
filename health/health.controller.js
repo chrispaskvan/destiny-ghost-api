@@ -1,7 +1,7 @@
 /**
- * A module for handling Destiny 2 routes.
+ * A module for reporting the health status of dependent services.
  *
- * @module destinyController
+ * @module healthController
  * @author Chris Paskvan
  */
 const Ghost = require('../ghost/ghost'),
@@ -13,6 +13,12 @@ const Ghost = require('../ghost/ghost'),
  * @type {string}
  */
 const notAvailable = 'N/A';
+
+/**
+ * Number of failing services
+ * @type {number}
+ */
+let failures;
 
 /**
  * Destiny Controller Service
@@ -97,6 +103,11 @@ class HealthController {
 		});
 	}
 
+	_unhealthy(err) {
+		failures++;
+		log.error(err);
+	}
+
 	_validateKey(key, value) {
 		return new Promise((resolve, reject) => {
 			this.store.get(key, function (err, res) {
@@ -125,18 +136,20 @@ class HealthController {
 	}
 
 	async getHealth(req, res) {
-		const documents = await this._documents()
-			.catch(err => log.error(err)) || -1;
-		const manifestVersion = await this._destinyService()
-			.catch(err => log.error(err)) || notAvailable;
-		const store = await this._store()
-			.catch(err => log.error(err)) || false;
-		const twilio = await this._twilio()
-			.catch(err => log.error(err)) || notAvailable;
-		const world = await this._world()
-			.catch(err => log.error(err)) || notAvailable;
+		failures = 0;
 
-		res.status(200).json({
+		const documents = await this._documents()
+			.catch(err => this._unhealthy(err)) || -1;
+		const manifestVersion = await this._destinyService()
+			.catch(err => this._unhealthy(err)) || notAvailable;
+		const store = await this._store()
+			.catch(err => this._unhealthy(err)) || false;
+		const twilio = await this._twilio()
+			.catch(err => this._unhealthy(err)) || notAvailable;
+		const world = await this._world()
+			.catch(err => this._unhealthy(err)) || notAvailable;
+
+		res.status(failures ? 503 : 200).json({
 			documents,
 			store,
 			manifest: manifestVersion,
