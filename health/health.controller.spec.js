@@ -103,7 +103,7 @@ describe('HealthController', () => {
 				worlRepositoryStub = sinon.stub(worldRepository, 'getItemByName').rejects();
 
 				res.on('end', function () {
-					expect(res.statusCode).to.equal(200);
+					expect(res.statusCode).to.equal(503);
 
 					const body = JSON.parse(res._getData());
 					expect(body).to.deep.equal({
