@@ -2,7 +2,7 @@ const HealthController = require('./health.controller'),
 	chai = require('chai'),
 	expect = require('chai').expect,
 	httpMocks = require('node-mocks-http'),
-	{ Response: manifest } = require('../mocks/manifestResponse.json'),
+	{ Response: manifest } = require('../mocks/manifest2Response.json'),
 	request = require('request'),
 	sinon = require('sinon'),
 	sinonChai = require('sinon-chai');
@@ -79,7 +79,7 @@ describe('HealthController', () => {
 					expect(body).to.deep.equal({
 						documents: 2,
 						store: true,
-						manifest: '56578.17.04.12.1251-6',
+						manifest: '60480.17.10.23.1314-2',
 						twilio: 'All Systems Go',
 						world: 'The Number'
 					});

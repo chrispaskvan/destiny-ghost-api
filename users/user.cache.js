@@ -64,6 +64,10 @@ class UserCache {
         return Promise.all([promise1, promise2]);
     }
 
+    destroy() {
+        this.client.quit();
+    }
+
     /**
      * Get cached item by key.
      * @param key

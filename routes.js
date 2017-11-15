@@ -9,8 +9,8 @@ const AuthenticationController = require('./authentication/authentication.contro
 	DestinyService = require('./destiny/destiny.service'),
 	UserCache = require('./users/user.cache'),
 	UserService = require('./users/user.service'),
-	documents = require('./helpers/documents'),
-	World2 = require('./helpers/world2');
+	World2 = require('./helpers/world2'),
+	documents = require('./helpers/documents');
 
 class Routes {
 	constructor(client) {
@@ -37,15 +37,17 @@ class Routes {
 		});
 		const authenticationController = new AuthenticationController(authenticationService);
 
-		/**
-		 * Routes
-		 */
 		const world2 = new World2();
-		const destinyRouter = require('./destiny/destiny.routes')(authenticationController, destinyService, userService, world2);
-		routes.use('/api/destiny', destinyRouter);
 
 		const destiny2Cache = new Destiny2Cache();
 		const destiny2Service = new Destiny2Service({ cacheService: destiny2Cache });
+
+		/**
+		 * Routes
+		 */
+		const destinyRouter = require('./destiny/destiny.routes')(authenticationController, destinyService, userService, world2);
+		routes.use('/api/destiny', destinyRouter);
+
 		const destiny2Router = require('./destiny2/destiny2.routes')(authenticationController, destiny2Service, userService, world2);
 		routes.use('/api/destiny2', destiny2Router);
 
@@ -57,6 +59,14 @@ class Routes {
 
 		const userRouter = require('./users/user.routes')(authenticationController, destinyService, userService);
 		routes.use('/api/users', userRouter);
+
+		/**
+		 * Validate the existence and the freshness of the Bungie database.
+		 */
+		routes.validateManifest = function() {
+			destinyRouter.validateManifest();
+			destiny2Router.validateManifest();
+		};
 
 		return routes;
 	}

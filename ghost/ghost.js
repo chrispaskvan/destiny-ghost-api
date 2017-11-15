@@ -34,7 +34,7 @@ class Ghost {
     }
 
    updateManifest(manifest) {
-		const databasePath = './databases/';
+		const databasePath = process.env.DATABASE;
 		const { mobileWorldContentPaths: { en: relativeUrl }}  = manifest;
 		const fileName = databasePath + relativeUrl.substring(relativeUrl.lastIndexOf('/') + 1);
 

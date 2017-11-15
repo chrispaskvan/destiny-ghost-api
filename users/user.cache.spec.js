@@ -23,3 +23,7 @@ describe('UserCache', function () {
             }).then(user2 => expect(user2).to.be.undefined);
     });
 });
+
+afterEach(function () {
+	cacheService.destroy();
+});
