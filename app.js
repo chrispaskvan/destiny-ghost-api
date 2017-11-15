@@ -9,6 +9,7 @@ const Log = require('./models/log'),
     bodyParser = require('body-parser'),
     cookieParser = require('cookie-parser'),
     express = require('express'),
+	fs = require('fs'),
 	limiterConfig = require('./settings/limiter.json'),
     path = require('path'),
     session = require('express-session'),
@@ -87,7 +88,7 @@ app.use(function(req, res, next) {
 	limiter(identifier, function(err, timeLeft) {
 		if (err) {
 			return res.status(500).send();
-		} else if (timeLeft &&
+		} else if (process.env.NODE_ENV === 'production' && timeLeft &&
 			!limiterConfig.administrators.find(administrator =>
 				administrator.displayName === displayName && administrator.membershipType === membershipType)) {
 			return res.status(429).send("You must wait " + timeLeft + " ms before you can make requests.");
@@ -115,9 +116,6 @@ app.use('/', routes);
 app.get('/', function (req, res) {
     res.sendFile(path.join(__dirname + '/signIn.html'));
 });
-app.get('/coverage', function (req, res) {
-    res.sendFile(path.join(__dirname + '/.coverage/lcov-report/index.html'));
-});
 
 // jscs:ignore requireCapitalizedComments
 // noinspection JSLint
@@ -135,18 +133,20 @@ app.use(function (err, req, res, next) {
 });
 
 /**
- * ToDo: Notification System
-const Subscriber = require('./helpers/subscriber');
-const subscriber = new Subscriber();
-const Publisher = require('./helpers/publisher');
-const publisher = new Publisher();
-*/
+ * Check for the latest manifest definition and database from Bungie.
+ */
+const databases = process.env.DATABASE;
+if (!fs.existsSync(databases)) {
+	fs.mkdirSync(databases);
+}
+routes.validateManifest();
 
 /**
  * Server
  */
 const start = new Date();
 app.listen(port, function init() {
+	// eslint-disable-next-line no-console
     console.log('Gulp is running on port ' + port + '.');
 
 	const end = new Date();

@@ -18,6 +18,11 @@ class Destiny2Controller extends DestinyController {
         super(options);
     }
 
+	/**
+	 * Leaderboard
+	 * @param req
+	 * @param res
+	 */
 	getLeaderboard(req, res) {
 		const { session: { displayName, membershipType }} = req;
 		let accessToken;
@@ -37,7 +42,11 @@ class Destiny2Controller extends DestinyController {
 			});
 	}
 
-
+	/**
+	 * Get the current manifest definition from Bungie.
+	 * @param req
+	 * @param res
+	 */
 	getManifest(req, res) {
         this.destiny.getManifest()
             .then(manifest => {
@@ -97,7 +106,7 @@ class Destiny2Controller extends DestinyController {
             .then(manifest => {
                 return this.destiny.getManifest(true)
                     .then(latestManifest => {
-                        const databasePath = './databases/';
+                        const databasePath = process.env.DATABASE;
                         const { mobileWorldContentPaths: { en: relativeUrl }}  = latestManifest;
                         const fileName = databasePath + relativeUrl.substring(relativeUrl.lastIndexOf('/') + 1);
 

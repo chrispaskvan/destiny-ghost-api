@@ -6,6 +6,7 @@ const _ = require('underscore'),
 	S = require('string'),
 	base64url = require('base64url'),
 	crypto = require('crypto'),
+	fs = require('fs'),
 	log = require('../helpers/log');
 
 class DestinyController {
@@ -339,14 +340,20 @@ class DestinyController {
 		this.destiny.getManifest()
 			.then(manifest => {
 				return this.destiny.getManifest(true)
-					.then(lastManifest => {
-						if (!lastManifest || lastManifest.version !== manifest.version) {
+					.then(latestManifest => {
+						const databasePath = process.env.DATABASE;
+						const { mobileWorldContentPaths: { en: relativeUrl }}  = manifest;
+						const fileName = databasePath + relativeUrl.substring(relativeUrl.lastIndexOf('/') + 1);
+
+						if (!latestManifest || latestManifest.version !== manifest.version ||
+								latestManifest.mobileWorldContentPaths.en !== manifest.mobileWorldContentPaths.en ||
+								!fs.existsSync(fileName)) {
 							this.ghost.updateManifest(manifest)
 								.then(() => {
-									res.status(200).json(manifest).end();
+									res.status(200).json(manifest);
 								});
 						} else {
-							res.status(200).json(manifest).end();
+							res.status(200).json(manifest);
 						}
 					});
 			})

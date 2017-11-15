@@ -108,7 +108,7 @@ describe('UserController', () => {
 		describe('when session displayName and membershipType are defined', function () {
 			describe('when user and destiny services return a user', function () {
 				it('should return the current user', function (done) {
-					const req  = httpMocks.createRequest({
+					const req = httpMocks.createRequest({
 						session: {
 							displayName,
 							membershipType
@@ -144,7 +144,7 @@ describe('UserController', () => {
 
 			describe('when destiny service returns undefined', function () {
 				it('should not return a user', function (done) {
-					const req  = httpMocks.createRequest({
+					const req = httpMocks.createRequest({
 						session: {
 							displayName,
 							membershipType
@@ -171,7 +171,7 @@ describe('UserController', () => {
 
 			describe('when user service returns undefined', function () {
 				it('should not return a user', function (done) {
-					const req  = httpMocks.createRequest({
+					const req = httpMocks.createRequest({
 						session: {
 							displayName,
 							membershipType

@@ -3,7 +3,9 @@
  */
 const DestinyController = require('../destiny/destiny.controller'),
     AuthenticationMiddleWare = require('../authentication/authentication.middleware'),
-    express = require('express');
+    express = require('express'),
+	httpMocks = require('node-mocks-http'),
+	log = require('../helpers/log');
 
 /**
  * Destiny Routes
@@ -74,7 +76,23 @@ const routes = function (authenticationController, destinyService, userService, 
             destinyController.getXur(req, res);
         });
 
-    return destinyRouter;
+	/**
+	 * Validate the existence and the freshness of the Bungie database.
+	 */
+	destinyRouter.validateManifest = function () {
+		const req = httpMocks.createRequest();
+		const res = httpMocks.createResponse({
+			eventEmitter: require('events').EventEmitter
+		});
+
+		destinyController.upsertManifest(req, res);
+
+		res.on('end', function () {
+			log.info('destiny validateManifest returned a response status code of ' + res.statusCode);
+		});
+	};
+
+	return destinyRouter;
 };
 
 module.exports = routes;

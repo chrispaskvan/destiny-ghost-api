@@ -3,7 +3,7 @@ const Destiny2Controller = require('./destiny2.controller'),
 	chance = require('chance')(),
 	expect = require('chai').expect,
 	httpMocks = require('node-mocks-http'),
-	{ Response: manifest } = require('../mocks/manifestResponse.json'),
+	{ Response: manifest } = require('../mocks/manifest2Response.json'),
 	sinon = require('sinon'),
 	sinonChai = require('sinon-chai');
 
@@ -59,7 +59,7 @@ describe('Destiny2Controller', () => {
 		describe('when session displayName and membershipType are defined', function () {
 			describe('when user and destiny services return a user', function () {
 				it('should return user profile', function (done) {
-					const req  = httpMocks.createRequest({
+					const req = httpMocks.createRequest({
 						session: {
 							displayName,
 							membershipType
