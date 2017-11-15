@@ -26,6 +26,7 @@
   "dependencies": {
     "applicationinsights": "^1.0.0",
     "azure": "^2.2.1-preview",
+    "azure-cli": "^0.10.17",
     "base64url": "^2.0.0",
     "body-parser": "^1.18.2",
     "bunyan": "^1.8.12",
