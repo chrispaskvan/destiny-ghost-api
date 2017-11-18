@@ -43,7 +43,6 @@ const user = {
     notifications: [
         {
             enabled: true,
-            messages: [],
             type: 'Xur'
         }
     ],
@@ -68,7 +67,7 @@ beforeEach(function () {
     userService = new UserService({ cacheService, documentService });
 });
 
-describe('UserService', function () {
+describe.only('UserService', function () {
     let mock;
 
     beforeEach(function () {
@@ -83,7 +82,7 @@ describe('UserService', function () {
         });
 
         describe('when notification type is Xur', function () {
-            it('should add message to list of Xur notifications', function () {
+            it('should add message to the list of Xur notifications', function () {
                 const displayName = 'user1';
                 const membershipType = 2;
                 const message = {
@@ -92,7 +91,7 @@ describe('UserService', function () {
                 const notificationType = 'Xur';
                 const user1 = JSON.parse(JSON.stringify(user));
 
-                user1.notifications[0].messages.push(message);
+                Object.assign(user1.notifications[0], { messages: [message] });
 
                 stub.resolves(user);
                 mock.expects('upsertDocument').once().withArgs(sinon.match.any, user1).resolves();
@@ -103,9 +102,58 @@ describe('UserService', function () {
                     });
             });
         });
-    });
+
+        describe('when user has no previous messages of the notification type', function () {
+            it('should create a new list of this notification type', function () {
+				const displayName = 'user1';
+				const membershipType = 2;
+				const message = {
+					sid: '1'
+				};
+				const notificationType = 'Banshee-44';
+				const user1 = JSON.parse(JSON.stringify(user));
+
+				user1.notifications.push({
+					enabled: false,
+					type: notificationType,
+					messages: [message]
+				});
+
+				stub.resolves(user);
+				mock.expects('upsertDocument').once().withArgs(sinon.match.any, user1).resolves();
+
+				return userService.addUserMessage(displayName, membershipType, message, notificationType)
+					.then(function () {
+						mock.verify();
+					});
+            });
+        });
+
+		describe('when user notification type is unknown', function () {
+			it('should add to the list of generic messages', function () {
+				const displayName = 'user1';
+				const membershipType = 2;
+				const message = {
+					sid: '1'
+				};
+				const notificationType = 'Failsafe';
+				const user1 = JSON.parse(JSON.stringify(user));
+
+				Object.assign(user1, { messages: [message] });
+
+				stub.resolves(user);
+				mock.expects('upsertDocument').once().withArgs(sinon.match.any, user1).resolves();
+
+				return userService.addUserMessage(displayName, membershipType, message, notificationType)
+					.then(function () {
+						mock.verify();
+					});
+			});
+		});
+	});
+
     describe('createAnonymousUser', function () {
-        var stub;
+        let stub;
 
         beforeEach(function () {
             stub = sinon.stub(userService, 'getUserByDisplayName');
@@ -119,6 +167,7 @@ describe('UserService', function () {
                     });
             });
         });
+
         describe('when anonymous user is valid', function () {
             describe('when the anonymous user exists', function () {
                 it('should reject the anonymous user', function () {
@@ -132,6 +181,7 @@ describe('UserService', function () {
                         });
                 });
             });
+
             describe('when the anonymous user does not exists', function () {
                 it('should reject the anonymous user', function () {
                     stub.resolves();
@@ -150,6 +200,7 @@ describe('UserService', function () {
             stub.restore();
         });
     });
+
     describe('createUser', function () {
         let stub;
 
@@ -173,6 +224,7 @@ describe('UserService', function () {
             stub.restore();
         });
     });
+
     describe('getUserByDisplayName', function () {
         describe('when user is cached', function () {
             let mockCache;
@@ -259,6 +311,7 @@ describe('UserService', function () {
             });
         });
     });
+
     describe('getUserByEmailAddress', function () {
         describe('when email address and membership type are defined', function () {
             it('should return an existing user', function () {
@@ -312,6 +365,7 @@ describe('UserService', function () {
             });
         });
     });
+
 	describe('getUserById', function () {
 		describe('when user id defined', function () {
 			it('should return an existing user', function () {
@@ -363,6 +417,95 @@ describe('UserService', function () {
 						mock.verify();
 					});
 			});
+		});
+	});
+
+	describe('updateUser', function () {
+		let stub;
+
+		beforeEach(function () {
+			stub = sinon.stub(userService, 'getUserByDisplayName');
+		});
+
+		describe('when user exists', function () {
+			describe('and user update is valid', function () {
+				it('should resolve undefined', function () {
+					const user1 = JSON.parse(JSON.stringify(user));
+					user1.firstName = chance.first();
+
+					stub.resolves(user);
+					mock.expects('upsertDocument').once().withArgs(sinon.match.any, user1).resolves();
+
+					return userService.updateUser(user1)
+						.then(function (user1) {
+							expect(user1).to.be.undefined;
+							mock.verify();
+						});
+				});
+			});
+
+			describe('and user update is invalid', function () {
+				it('should fail validation of user schema', function () {
+					const user1 = {
+						firstName: chance.first()
+					};
+
+					stub.resolves(user);
+					mock.expects('upsertDocument').never();
+
+					return userService.updateUser(user1)
+						.catch(function (err) {
+							expect(err).to.not.be.undefined;
+							mock.verify();
+						});
+				});
+			});
+		});
+
+		afterEach(function () {
+			stub.restore();
+		});
+	});
+
+	describe('updateUserBungie', function () {
+		let stub;
+
+		beforeEach(function () {
+			stub = sinon.stub(userService, 'getUserById');
+		});
+
+		describe('when user id exists', function () {
+			it('should return an existing user', function () {
+				const bungie = {};
+				const user1 = JSON.parse(JSON.stringify(user));
+
+				Object.assign(user1, { bungie });
+				stub.resolves(user);
+				mock.expects('upsertDocument').once().withArgs(sinon.match.any, user1).resolves(undefined);
+
+				return userService.updateUserBungie(user.id, bungie)
+					.then(function (user1) {
+						expect(user1).to.be.undefined;
+						mock.verify();
+					});
+			});
+		});
+
+		describe('when user id does not exists', function () {
+			it('should not modify user document', function () {
+				stub.resolves(undefined);
+				mock.expects('upsertDocument').never()
+
+				return userService.updateUserBungie(user.id)
+					.catch(function (err) {
+						expect(err).to.not.be.undefined;
+						mock.verify();
+					});
+			});
+		});
+
+		afterEach(function () {
+			stub.restore();
 		});
 	});
 
