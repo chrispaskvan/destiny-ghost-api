@@ -636,6 +636,10 @@ class UserService {
 	updateUserBungie(userId, bungie) {
         return this.getUserById(userId)
             .then(userDocument => {
+                if (!userDocument) {
+                    throw new Error('user not found with id ' + userId);
+                }
+
 				userDocument.bungie = bungie;
 
 				return this.documents.upsertDocument(collectionId, userDocument)
