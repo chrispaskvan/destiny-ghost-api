@@ -16,9 +16,7 @@
       }
     },
     "bungie": {
-      "accessToken": {
-        "value": "1"
-      }
+      "access_token": "1"
     }
   }
 ]

@@ -43,7 +43,7 @@ class AuthenticationService {
             return Promise.reject(new Error('User not found'));
         }
 
-        const { bungie: { accessToken: { value: accessToken }, refreshToken: { value: refreshToken }}} = user;
+        const { bungie: { access_token: accessToken, refresh_token: refreshToken }} = user;
 
         return this.destinyService.getCurrentUser(accessToken)
             .then(() => {
