@@ -15,7 +15,7 @@
 'use strict';
 const _ = require('underscore'),
     DestinyError = require('./destiny.error'),
-	{ apiKey, authorizationUrl } = require('../settings/bungie.json'),
+	{ apiKey, authorizationUrl, clientId, clientSecret } = require('../settings/bungie.json'),
     { gunSmithHash, lordSaladinHash, xurHash } = require('./destiny.constants'),
     request = require('request'),
     util = require('util');
@@ -57,26 +57,21 @@ class DestinyService {
      */
     getAccessTokenFromCode(code) {
         const opts = {
-            body: JSON.stringify({
-                code: code
-            }),
-            headers: {
-                'x-api-key': apiKey
-            },
-            url: util.format('%s/App/GetAccessTokensFromCode/', servicePlatform)
-        };
+			body: util.format('client_id=%s&client_secret=%s&grant_type=authorization_code&code=%s',
+				clientId, clientSecret, code),
+			headers: {
+				'Content-Type': 'application/x-www-form-urlencoded',
+				'x-api-key': apiKey
+			},
+			url: util.format('%s/app/oauth/token/', servicePlatform)
+		};
 
         return new Promise((resolve, reject) => {
             request.post(opts, function (err, res, body) {
                 if (!err && res.statusCode === 200) {
                     const responseBody = JSON.parse(body);
 
-                    if (responseBody.ErrorCode === 1) {
-                        resolve(responseBody.Response);
-                    } else {
-                        reject(new DestinyError(responseBody.ErrorCode || -1,
-                            responseBody.Message || '', responseBody.ErrorStatus || ''));
-                    }
+                    resolve(responseBody);
                 } else {
                     reject(err);
                 }
@@ -90,26 +85,21 @@ class DestinyService {
      */
     getAccessTokenFromRefreshToken(refreshToken) {
         const opts = {
-            body: JSON.stringify({
-                refreshToken: refreshToken
-            }),
-            headers: {
-                'x-api-key': apiKey
-            },
-            url: util.format('%s/App/GetAccessTokensFromRefreshToken/', servicePlatform)
-        };
+			body: util.format('client_id=%s&client_secret=%s&grant_type=refresh_token&refresh_token=%s',
+				clientId, clientSecret, refreshToken),
+			headers: {
+				'Content-Type': 'application/x-www-form-urlencoded',
+				'x-api-key': apiKey
+			},
+			url: util.format('%s/app/oauth/token/', servicePlatform)
+		};
 
         return new Promise((resolve, reject) => {
             request.post(opts, function (err, res, body) {
                 if (!err && res.statusCode === 200) {
                     const responseBody = JSON.parse(body);
 
-                    if (responseBody.ErrorCode === 1) {
-                        resolve(responseBody.Response);
-                    } else {
-                        reject(new DestinyError(responseBody.ErrorCode || -1,
-                            responseBody.Message || '', responseBody.ErrorStatus || ''));
-                    }
+                    resolve(responseBody);
                 } else {
                     reject(err);
                 }
@@ -123,7 +113,7 @@ class DestinyService {
      * @returns {Promise}
      */
     getAuthorizationUrl(state) {
-        return Promise.resolve(util.format('%s?state=%s', authorizationUrl, state));
+        return Promise.resolve(util.format('%s?client_id=%s&response_type=code&state=%s', authorizationUrl, clientId, state));
     }
 
     /**

@@ -67,7 +67,7 @@ beforeEach(function () {
     userService = new UserService({ cacheService, documentService });
 });
 
-describe.only('UserService', function () {
+describe('UserService', function () {
     let mock;
 
     beforeEach(function () {
@@ -149,6 +149,10 @@ describe.only('UserService', function () {
 						mock.verify();
 					});
 			});
+		});
+
+		afterEach(function () {
+			stub.restore();
 		});
 	});
 
@@ -494,7 +498,7 @@ describe.only('UserService', function () {
 		describe('when user id does not exists', function () {
 			it('should not modify user document', function () {
 				stub.resolves(undefined);
-				mock.expects('upsertDocument').never()
+				mock.expects('upsertDocument').never();
 
 				return userService.updateUserBungie(user.id)
 					.catch(function (err) {

@@ -298,7 +298,7 @@ class UserController {
 
 		this.destiny.getAccessTokenFromCode(code)
 			.then(bungieUser => {
-				const { accessToken: { value }} = bungieUser;
+				const { access_token: value } = bungieUser;
 
 				return this.destiny.getCurrentUser(value)
 					.then(user => {
