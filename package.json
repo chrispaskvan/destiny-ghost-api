@@ -55,7 +55,6 @@
     "q": "^1.5.1",
     "redis": "^2.7.1",
     "request": "^2.83.0",
-    "rolling-rate-limiter": "^0.1.10",
     "sqlite3": "^3.1.13",
     "string": "^3.3.1",
     "twilio": "^3.10.0",

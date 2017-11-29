@@ -46,19 +46,19 @@ class Routes {
 		 * Routes
 		 */
 		const destinyRouter = require('./destiny/destiny.routes')(authenticationController, destinyService, userService, world2);
-		routes.use('/api/destiny', destinyRouter);
+		routes.use('/destiny', destinyRouter);
 
 		const destiny2Router = require('./destiny2/destiny2.routes')(authenticationController, destiny2Service, userService, world2);
-		routes.use('/api/destiny2', destiny2Router);
+		routes.use('/destiny2', destiny2Router);
 
 		const healthRouter = require('./health/health.routes')(destiny2Service, documents, client, world2);
-		routes.use('/api/health', healthRouter);
+		routes.use('/health', healthRouter);
 
 		const twilioRouter = require('./twilio/twilio.routes')(authenticationController, destiny2Service, userService, world2);
-		routes.use('/api/twilio', twilioRouter);
+		routes.use('/twilio', twilioRouter);
 
 		const userRouter = require('./users/user.routes')(authenticationController, destinyService, userService);
-		routes.use('/api/users', userRouter);
+		routes.use('/users', userRouter);
 
 		/**
 		 * Validate the existence and the freshness of the Bungie database.
