@@ -28,7 +28,7 @@ class Notifications {
             to,
             from: settings.phoneNumber,
             body,
-            statusCallback: process.env.DOMAIN + '/api/twilio/destiny/s'
+            statusCallback: process.env.DOMAIN + '/twilio/destiny/s'
         };
 
         if (mediaUrl) {

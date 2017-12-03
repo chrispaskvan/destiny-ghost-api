@@ -56,9 +56,8 @@ const user = {
  * Mock Cache Service
  */
 const cacheService = {
-    getUser: function() {
-        return Promise.resolve();
-    }
+    getUser: () => Promise.resolve(),
+	setUser: () => Promise.resolve()
 };
 
 let userService;

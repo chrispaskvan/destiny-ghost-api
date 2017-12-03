@@ -36,7 +36,7 @@
                     jQuery.ajax({
                         contentType: 'application/json; charset=utf-8',
                         type: 'GET',
-                        url: '/api/users/signout'
+                        url: '/users/signout'
                     })
                         .always(function () {
                             window.location.reload();
@@ -53,7 +53,7 @@
                 jQuery.ajax({
                     contentType: 'application/json; charset=utf-8',
                     type: 'GET',
-                    url: '/api/destiny/signIn'
+                    url: '/destiny/signIn'
                 })
                     .done(function (url) {
                         ko.applyBindings(new anonymousUserViewModel(url), document.getElementById('anonymous1'));
@@ -66,7 +66,7 @@
                 jQuery.ajax({
                     contentType: 'application/json; charset=utf-8',
                     type: 'GET',
-                    url: '/api/users/signin/bungie' + uri.search()
+                    url: '/users/signin/bungie' + uri.search()
                 })
                     .done(authenticated)
                     .fail(anonymous);
@@ -74,7 +74,7 @@
                 jQuery.ajax({
                     contentType: 'application/json; charset=utf-8',
                     type: 'GET',
-                    url: '/api/users/current'
+                    url: '/users/current'
                 })
                     .done(authenticated)
                     .fail(anonymous);

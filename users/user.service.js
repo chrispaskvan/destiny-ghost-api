@@ -114,6 +114,15 @@ const userSchema = {
                 type: 'object'
             }
         },
+		patches: {
+			default: [],
+			required: false,
+			type: 'array',
+			uniqueItems: true,
+			items: {
+				type: 'object'
+			}
+		},
         phoneNumber: {
             readOnly: true,
             required: true,
@@ -473,7 +482,9 @@ class UserService {
 
 		qb.where('id', userId);
 
-        return this.documents.getDocuments(collectionId, qb.getQuery())
+        return this.documents.getDocuments(collectionId, qb.getQuery(), {
+			enableCrossPartitionQuery: true
+		})
             .then(documents => {
                 if (documents) {
                     if (documents.length > 1) {
@@ -623,7 +634,7 @@ class UserService {
                 Object.assign(userDocument, user);
 
                 return this.documents.upsertDocument(collectionId, userDocument)
-                    .then(() => undefined);
+                    .then(() => this.cacheService.setUser(userDocument));
             });
     }
 

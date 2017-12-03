@@ -7,7 +7,7 @@
 const _ = require('underscore'),
     Ghost = require('../ghost/ghost'),
 	Postmaster = require('../helpers/postmaster'),
-	jsonpatch = require('fast-json-patch'),
+	jsonpatch = require('rfc6902'),
 	log = require('../helpers/log'),
     tokens = require('../helpers/tokens');
 
@@ -37,6 +37,20 @@ class UserController {
 		this.postmaster = new Postmaster();
 		this.users = options.userService;
 		this.world = options.worldRepository;
+	}
+
+	/**
+	 * Apply JSON patches successively in reverse order.
+	 * @param patches {Array}
+	 * @param user {Object}
+	 * @private
+	 */
+	static _applyPatches(patches, user) {
+		patches.forEach(patch => {
+			jsonpatch.applyPatch(user, patch.patch);
+		});
+
+		return user;
 	}
 
 	/**
@@ -74,7 +88,7 @@ class UserController {
 			links: [
 				{
 					rel: 'characters',
-					href: '/api/destiny/characters'
+					href: '/destiny/characters'
 				}
 			],
 			profilePicturePath
@@ -119,7 +133,7 @@ class UserController {
 				registeredUser.dateRegistered = new Date().toISOString();
 
 				return this.users.updateUser(registeredUser)
-					.then(function () {
+					.then(() => {
 						req.session.displayName = registeredUser.displayName;
 						req.session.membershipType = registeredUser.membershipType;
 						res.status(200).end();
@@ -178,9 +192,52 @@ class UserController {
 		}
 
 		this.users.getUserByEmailAddress(emailAddress)
-			.then(function (user) {
+			.then(user => {
 				if (user) {
 					return res.status(204).end();
+				}
+
+				return res.status(404).end();
+			})
+			.catch(err => {
+				log.error(err);
+				res.status(500).json(err);
+			});
+	}
+
+	/**
+	 * Check if the phone number is registered to a current user.
+	 * @param req
+	 * @param res
+	 */
+	getUserById(req, res) {
+		const { params: { id, version: _version }} = req;
+
+		if (!id) {
+			return res.status(409).send('phone number not found');
+		}
+
+		let version = parseInt(_version, 10);
+		if (isNaN(version)) {
+			version = 0;
+		}
+
+		this.users.getUserById(id)
+			.then(user => {
+				if (user) {
+					if (version) {
+						const patches = _.filter(user.patches, patch => patch.version >= version) || [];
+
+						if (patches.length > 0) {
+							return res.status(200).json(this.constructor._applyPatches(_.chain(patches)
+								.sortBy(patch => -1 * patch.version)
+								.value(), user));
+						}
+
+						return res.status(404).end();
+					}
+
+					return res.status(200).json(user);
 				}
 
 				return res.status(404).end();
@@ -204,10 +261,11 @@ class UserController {
 		}
 
 		this.users.getUserByPhoneNumber(phoneNumber)
-			.then(function (user) {
+			.then(user => {
 				if (user) {
 					return res.status(204).end();
 				}
+
 				return res.status(404).end();
 			})
 			.catch(err => {
@@ -270,7 +328,7 @@ class UserController {
                             .then(() => this.world.close());
 					});
 			})
-			.catch(function (err) {
+			.catch(err => {
 				log.error(err);
 				this.world.close();
 				res.status(500).json(err);
@@ -312,7 +370,7 @@ class UserController {
 							bungie: bungieUser
 						});
 						this.users.createAnonymousUser(user)
-							.then(function () {
+							.then(() => {
 								req.session.displayName = user.displayName;
 								req.session.membershipType = user.membershipType;
 								req.session.state = undefined;
@@ -322,7 +380,7 @@ class UserController {
 							});
 					});
 			})
-			.catch(function (err) {
+			.catch(err => {
 				log.error(err);
 				return res.status(401).send(err.message);
 			});
@@ -348,17 +406,30 @@ class UserController {
 	update(req, res) {
 		const { body: patches, session: { displayName, membershipType }} = req;
 
-		this.users.getUserByDisplayName(displayName, membershipType)
+		this.users.getUserByDisplayName(displayName, membershipType, true)
 			.then(user => {
 				if (!user) {
 					return res.status(404).send('user not found');
 				}
 
+				const _user = JSON.parse(JSON.stringify(user));
 				jsonpatch.applyPatch(user, this.constructor._scrubOperations(patches));
 
+				const patch = jsonpatch.createPatch(user, _user);
+				const version = user.version || 1;
+				user.version = version + 1;
+
+				if (!user.patches) {
+					user.patches = [];
+				}
+				user.patches.push({
+					patch,
+					version
+				});
+
 				return this.users.updateUser(user)
-					.then(function () {
-						res.json(user);
+					.then(() => {
+						res.json(user)
 					});
 			})
 			.catch(err => {
