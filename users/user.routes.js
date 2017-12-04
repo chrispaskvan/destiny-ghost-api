@@ -1,9 +1,11 @@
 const AuthenticationMiddleWare = require('../authentication/authentication.middleware'),
+    RoleMiddleware = require('./role.middleware'),
 	UserController = require('./user.controller'),
     express = require('express');
 
 const routes = function (authenticationController, destinyService, userService) {
 	const middleware = new AuthenticationMiddleWare(authenticationController);
+	const roles = new RoleMiddleware(authenticationController);
 	const userController = new UserController({ destinyService, userService });
     const userRouter = express.Router();
 
@@ -55,6 +57,14 @@ const routes = function (authenticationController, destinyService, userService) 
         }, function (req, res) {
             userController.update(req, res);
         });
+	userRouter.route('/:id/version/:version')
+		.get(function (req, res, next) {
+			middleware.authenticateUser(req, res, next);
+		}, function (req, res, next) {
+			roles.administrativeUser(req, res, next);
+		}, function (req, res) {
+			userController.getUserById(req, res);
+		});
 
     return userRouter;
 };

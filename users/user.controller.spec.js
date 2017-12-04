@@ -14,7 +14,8 @@ const destinyService = {
 const displayName = chance.name();
 const membershipType = chance.integer({ min: 1, max: 2 });
 const userService = {
-	getUserByDisplayName: () => {}
+	getUserByDisplayName: () => {},
+	updateUser: () => {}
 };
 
 let destinyServiceStub;
@@ -49,7 +50,7 @@ describe('UserController', () => {
 					links: [
 						{
 							rel: 'characters',
-							href: '/api/destiny/characters'
+							href: '/destiny/characters'
 						}
 					]
 				});
@@ -84,7 +85,7 @@ describe('UserController', () => {
 					links: [
 						{
 							rel: 'characters',
-							href: '/api/destiny/characters'
+							href: '/destiny/characters'
 						}
 					]
 				});
@@ -121,7 +122,7 @@ describe('UserController', () => {
 						links: [
 							{
 								rel: 'characters',
-								href: '/api/destiny/characters'
+								href: '/destiny/characters'
 							}
 						]
 					});
@@ -184,7 +185,7 @@ describe('UserController', () => {
 						links: [
 							{
 								rel: 'characters',
-								href: '/api/destiny/characters'
+								href: '/destiny/characters'
 							}
 						]
 					});
@@ -199,10 +200,87 @@ describe('UserController', () => {
 				});
 			});
 		});
+
+		afterEach(function () {
+			destinyServiceStub.restore();
+			userServiceStub.restore();
+		})
 	});
 
-	afterEach(function () {
-		destinyServiceStub.restore();
-		userServiceStub.restore();
-	})
+	describe('update', () => {
+		describe('when user is undefined', function () {
+			it('should not return a user', function (done) {
+				const req = httpMocks.createRequest({
+					session: {}
+				});
+
+				userServiceStub = sinon.stub(userService, 'getUserByDisplayName').resolves();
+
+				res.on('end', function () {
+					expect(res.statusCode).to.equal(404);
+					done();
+				});
+
+				userController.update(req, res);
+			});
+		});
+
+		describe('when user is defined', function () {
+			it('should patch the user', function (done) {
+				const firstName = '11';
+				const mock = sinon.mock(userService);
+				const req = httpMocks.createRequest({
+					body: [
+						{
+							op: 'replace',
+							path: '/firstName',
+							value: firstName
+						}
+					],
+					session: {
+						displayName,
+						membershipType
+					}
+				});
+				const user = {
+					displayName,
+					firstName: '08',
+					membershipType
+				};
+
+				userServiceStub = sinon.stub(userService, 'getUserByDisplayName').resolves(user);
+				mock.expects('updateUser').once().withArgs({
+					displayName,
+					firstName,
+					membershipType,
+					version: 2,
+					patches: [
+						{
+							patch: [
+								{
+									op: 'replace',
+									path: '/firstName',
+									value: '08'
+								}
+							],
+							version: 1
+						}
+					]
+				}).resolves();
+
+				res.on('end', function() {
+					expect(res.statusCode).to.equal(200);
+					mock.verify();
+					mock.restore();
+					done();
+				});
+
+				userController.update(req, res);
+			});
+		});
+
+		afterEach(function () {
+			userServiceStub.restore();
+		})
+	});
 });

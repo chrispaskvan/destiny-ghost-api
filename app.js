@@ -3,14 +3,12 @@
  */
 const Log = require('./models/log'),
 	Routes = require('./routes'),
-	RateLimiter = require('rolling-rate-limiter'),
 	appInsightsConfig = require('./settings/applicationInsights.json'),
 	applicationInsights = require('applicationinsights'),
     bodyParser = require('body-parser'),
     cookieParser = require('cookie-parser'),
     express = require('express'),
 	fs = require('fs'),
-	limiterConfig = require('./settings/limiter.json'),
     path = require('path'),
     session = require('express-session'),
     redis = require('redis'),
@@ -69,34 +67,6 @@ const ghostSession = session({
     })
 });
 app.use(ghostSession);
-
-/**
- * Rate Limiter
- */
-const limiter = RateLimiter(Object.assign(limiterConfig, {
-	redis: client
-}));
-
-app.use(function(req, res, next) {
-	const { session: { displayName, membershipType }} = req;
-	let { ipAddress: identifier } = req;
-
-	if (displayName && membershipType) {
-		identifier = displayName + ':' + membershipType;
-	}
-
-	limiter(identifier, function(err, timeLeft) {
-		if (err) {
-			return res.status(500).send();
-		} else if (process.env.NODE_ENV === 'production' && timeLeft &&
-			!limiterConfig.administrators.find(administrator =>
-				administrator.displayName === displayName && administrator.membershipType === membershipType)) {
-			return res.status(429).send("You must wait " + timeLeft + " ms before you can make requests.");
-		} else {
-			return next();
-		}
-	});
-});
 
 /**
  * Logs
