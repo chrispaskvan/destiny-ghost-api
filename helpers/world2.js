@@ -52,8 +52,13 @@ class World2 extends World {
                                 const keys = Object.keys(groups);
 
                                 resolve(_.map(keys, (key) => {
-                                    return _.min(_.filter(items, (item) => item.displayProperties.name === key),
-                                        (item) => item.quality.qualityLevel);
+                                    const item = _.min(_.filter(items, (item) => item.displayProperties.name === key),
+                                        (item) => item.quality ? item.quality.qualityLevel : 0);
+
+                                    return Object.assign(item, {
+										itemCategory: item.itemTypeAndTierDisplayName,
+										itemName: item.displayProperties.name
+									})
                                 }));
                             }
                         }
@@ -110,11 +115,6 @@ class World2 extends World {
         });
     }
 
-	/**
-	 * Get the category definition for the provided hash.
-	 * @param itemCategoryHash
-	 * @returns {Promise}
-	 */
 	/**
      * Get the lore by item hash.
 	 * @param hash

@@ -1,8 +1,10 @@
 /**
  * Created by chris on 9/25/15.
  */
-const Destiny2Controller = require('./destiny2.controller'),
-	AuthenticationMiddleWare = require('../authentication/authentication.middleware'),
+const AuthenticationMiddleWare = require('../authentication/authentication.middleware'),
+	Destiny2Controller = require('./destiny2.controller'),
+	cors = require('cors'),
+	corsConfig = require('../settings/cors.' + (process.env.NODE_ENV || 'development') + '.json'),
 	express = require('express'),
 	httpMocks = require('node-mocks-http'),
 	log = require('../helpers/log');
@@ -34,7 +36,7 @@ const routes = function (authenticationController, destiny2Service, userService,
      * Routes
      */
     destiny2Router.route('/leaderboard')
-		.get(function (req, res, next) {
+		.get(cors(corsConfig), function (req, res, next) {
 			middleware.authenticateUser(req, res, next);
 		}, function (req, res) {
 			destiny2Controller.getLeaderboard(req, res);
@@ -48,10 +50,16 @@ const routes = function (authenticationController, destiny2Service, userService,
             destiny2Controller.upsertManifest(req, res);
         });
     destiny2Router.route('/profile')
-		.get(function (req, res, next) {
+		.get(cors(corsConfig), function (req, res, next) {
 			middleware.authenticateUser(req, res, next);
 		}, function (req, res) {
 			destiny2Controller.getProfile(req, res);
+		});
+	destiny2Router.route('/xur')
+		.get(cors(corsConfig), function (req, res, next) {
+			middleware.authenticateUser(req, res, next);
+		}, function (req, res) {
+			destiny2Controller.getXur(req, res);
 		});
 
 	/**

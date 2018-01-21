@@ -84,6 +84,27 @@ class Documents {
 	}
 
 	/**
+	 * Delete document by Id.
+	 * @param collectionId
+	 * @param documentId
+	 * @returns {Promise}
+	 */
+	deleteDocumentById(collectionId, documentId, partitionKey) {
+		const documentUrl = `dbs/${databaseId}/colls/${collectionId}/docs/${documentId}`;
+
+		return new Promise((resolve, reject) => {
+			this.client.deleteDocument(documentUrl,  {
+				partitionKey: [partitionKey]
+			}, (err, result) => {
+				if (err) reject(err);
+				else {
+					resolve(result);
+				}
+			});
+		});
+	}
+
+	/**
 	 * Get documents from a query.
 	 * @param collectionId
 	 * @param query

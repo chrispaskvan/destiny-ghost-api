@@ -8,186 +8,105 @@ const AuthenticationService = require('./authentication.service'),
 	[user] = require('../mocks/users.json');
 
 const cacheService = {
-	setUser: function() {
-		return Promise.resolve();
-	}
+	setUser: () => Promise.resolve()
 };
 const destinyService = {
-	getAccessTokenFromRefreshToken: function () {
-		return Promise.resolve(user.bungie);
-	},
-	getCurrentUser: function () {
-		return Promise.resolve(user);
-	}
+	getAccessTokenFromRefreshToken: () => Promise.resolve(user.bungie),
+	getCurrentUser: () => Promise.resolve(user)
 };
 const userService = {
-	getUserByDisplayName: function () {
-		return Promise.resolve(user);
-	},
-	getUserByPhoneNumber: function () {
-		return Promise.resolve(user);
-	},
-	updateAnonymousUser: function () {
-		return Promise.resolve();
-	},
-	updateUserBungie: function () {
-		return Promise.resolve();
-	}
+	getUserByDisplayName: () => Promise.resolve(user),
+	getUserByPhoneNumber: () => Promise.resolve(user),
+	updateUserBungie: () => Promise.resolve()
 };
 
 let authenticationService;
 
-beforeEach(function () {
+beforeEach(() => {
 	authenticationService = new AuthenticationService({ cacheService, destinyService, userService });
 });
 
-describe('AuthenticationService', function () {
-	describe('authenticate', function () {
-		describe('when displayName and membershipType exist', function () {
-			describe('when user exists', function () {
-				describe('when token is fresh', function () {
+describe('AuthenticationService', () => {
+	describe('authenticate', () => {
+		describe('when displayName and membershipType exist', () => {
+			describe('when user exists', () => {
+				describe('when token is fresh', () => {
 					let spy;
+					let stub;
 
-					beforeEach(function () {
+					beforeEach(() => {
 						spy = sinon.spy(cacheService, 'setUser');
+						stub = sinon.stub(userService, 'getUserByDisplayName');
 					});
 
-					describe('when user is registered', function () {
-						let stub;
+					it('should cache and return a user', () => {
+						const displayName = chance.word();
+						const membershipType = 2;
+						const user1 = JSON.parse(JSON.stringify(user));
 
-						beforeEach(function () {
-							stub = sinon.stub(userService, 'getUserByDisplayName');
-						});
+						stub.resolves(user1);
 
-						it('should cache and return a user', function () {
-							const displayName = chance.word();
-							const membershipType = 2;
-							const user1 = JSON.parse(JSON.stringify(user));
-
-							stub.resolves(Object.assign(user1, {
-								dateRegistered: '2017-07-08T00:46:13.705Z'
-							}));
-
-							return authenticationService.authenticate({
-								displayName,
-								membershipType
-							})
-								.then(function (user) {
-									expect(user).to.deep.eql(user1);
-									expect(spy).to.have.been.calledOnce;
-								});
-						});
-
-						afterEach(function () {
-							stub.restore();
-						});
+						return authenticationService.authenticate({
+							displayName,
+							membershipType
+						})
+							.then(user => {
+								expect(user).to.deep.eql(user1);
+								expect(spy).to.have.been.calledOnce;
+							});
 					});
 
-					describe('when user is not registered', function () {
-						it('should return a user', function () {
-							const displayName = chance.word();
-							const membershipType = 2;
-
-							return authenticationService.authenticate({
-								displayName,
-								membershipType
-							})
-								.then(function (user1) {
-									expect(user1).to.deep.eql(user);
-									expect(spy).to.have.not.been.called;
-								});
-						});
-					});
-
-					afterEach(function () {
+					afterEach(() => {
 						spy.restore();
+						stub.restore();
 					});
 				});
 
-				describe('when token is not fresh', function () {
+				describe('when token is not fresh', () => {
+					let rub;
+					let spy;
 					let stub;
 
-					beforeEach(function () {
+					beforeEach(() => {
 						stub = sinon.stub(destinyService, 'getCurrentUser');
+						rub = sinon.stub(userService, 'getUserByDisplayName');
+						spy = sinon.spy(userService, 'updateUserBungie');
 					});
 
-					describe('when user is registered', function () {
-						let rub;
-						let spy;
+					it('should cache and return a user', () => {
+						const displayName = chance.word();
+						const membershipType = 2;
+						const user1 = JSON.parse(JSON.stringify(user));
 
-						beforeEach(function () {
-							rub = sinon.stub(userService, 'getUserByDisplayName');
-							spy = sinon.spy(userService, 'updateUserBungie');
-						});
+						rub.resolves(user1);
+						stub.rejects();
 
-						it('should cache and return a user', function () {
-							const displayName = chance.word();
-							const membershipType = 2;
-							const user1 = JSON.parse(JSON.stringify(user));
-
-							rub.resolves(Object.assign(user1, {
-								dateRegistered: '2017-07-08T00:46:13.705Z'
-							}));
-							stub.rejects();
-
-							return authenticationService.authenticate({
-								displayName,
-								membershipType
-							})
-								.then(function (user) {
-									expect(user).to.deep.eql(user1);
-									expect(spy).to.have.been.calledOnce;
-								});
-						});
-
-						afterEach(function () {
-							rub.restore();
-							spy.restore();
-						});
+						return authenticationService.authenticate({
+							displayName,
+							membershipType
+						})
+							.then(user => {
+								expect(user).to.deep.eql(user1);
+								expect(spy).to.have.been.calledOnce;
+							});
 					});
 
-					describe('when user is not registered', function () {
-						let spy;
-
-						beforeEach(function () {
-							spy = sinon.spy(userService, 'updateAnonymousUser');
-						});
-
-						it('should return a user', function () {
-							const displayName = chance.word();
-							const membershipType = 2;
-
-							stub.rejects();
-
-							return authenticationService.authenticate({
-								displayName,
-								membershipType
-							})
-								.then(function (user1) {
-									expect(user1).to.deep.eql(user);
-									expect(spy).to.have.been.called;
-								});
-						});
-
-						afterEach(function () {
-							spy.restore();
-						});
-					});
-
-					afterEach(function () {
+					afterEach(() => {
+						rub.restore();
+						spy.restore();
 						stub.restore();
 					});
 				});
 			});
 
-			describe('when user does not exist', function () {
+			describe('when user does not exist', () => {
 				let stub;
 
-				beforeEach(function () {
+				beforeEach(() => {
 					stub = sinon.stub(userService, 'getUserByDisplayName');
 				});
 
-				it('should cache and return a user', function () {
+				it('should cache and return a user', () => {
 					const displayName = chance.word();
 					const membershipType = 2;
 
@@ -197,12 +116,12 @@ describe('AuthenticationService', function () {
 						displayName,
 						membershipType
 					})
-						.catch(function (err) {
+						.catch(err => {
 							expect(err).to.not.be.undefined;
 						});
 				});
 
-				afterEach(function () {
+				afterEach(() => {
 					stub.restore();
 				});
 			});

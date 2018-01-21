@@ -26,7 +26,8 @@ const anonymousUser = {
     displayName: 'displayName1',
 	id: '1',
     membershipId: '11',
-    membershipType: 2
+    membershipType: 2,
+	profilePicturePath: '/thing1'
 };
 
 /**
@@ -176,12 +177,9 @@ describe('UserService', function () {
                 it('should reject the anonymous user', function () {
                     stub.resolves(anonymousUser);
                     mock.expects('createDocument').never();
-                    mock.expects('upsertDocument').once();
 
                     return userService.createAnonymousUser(anonymousUser)
-                        .then(function () {
-                            mock.verify();
-                        });
+                        .catch(() => mock.verify());
                 });
             });
 
@@ -189,7 +187,6 @@ describe('UserService', function () {
                 it('should reject the anonymous user', function () {
                     stub.resolves();
                     mock.expects('createDocument').once();
-                    mock.expects('upsertDocument').never();
 
                     return userService.createAnonymousUser(anonymousUser)
                         .then(function () {
@@ -296,7 +293,7 @@ describe('UserService', function () {
             it('should fail when membership type is not a number', function () {
                 mock.expects('getDocuments').never();
 
-                return userService.getUserByDisplayName(user.displayName, '1')
+                return userService.getUserByDisplayName(user.displayName, '')
                     .catch(function (err) {
                         expect(err).to.not.be.undefined;
                         mock.verify();

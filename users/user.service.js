@@ -1,9 +1,8 @@
 const _ = require('underscore'),
+	Joi = require('joi'),
     QueryBuilder = require('../helpers/queryBuilder'),
     defaults = require('json-schema-defaults'),
     notificationTypes = require('../notifications/notification.types'),
-    twilio = require('twilio'),
-    { accountSid, authToken } = require('../settings/twilio.' + (process.env.NODE_ENV || 'development') + '.json'),
     validator = require('is-my-json-valid');
 
 /**
@@ -17,32 +16,30 @@ const collectionId = 'Users';
  * @private
  */
 const anonymousUserSchema = {
-    name: 'User',
-    type: 'object',
-    properties: {
-        displayName: {
-            minLength: 3,
-            maxLength: 16,
-            required: true,
-            type: 'string'
-        },
-        membershipId: {
-            required: true,
-            type: 'string'
-        },
-        membershipType: {
-            required: true,
-            type: 'integer',
-            minimum: 1,
-            maximum: 2
-        },
-        profilePicturePath: {
-            type: 'string'
-        },
-        membership: {
-            type: 'object'
-        }
-    }
+	name: 'AnonymousUser',
+	type: 'object',
+	properties: {
+		displayName: {
+			minLength: 3,
+			maxLength: 16,
+			required: true,
+			type: 'string'
+		},
+		membershipId: {
+			required: true,
+			type: 'string'
+		},
+		membershipType: {
+			required: true,
+			type: 'integer',
+			minimum: 1,
+			maximum: 2
+		},
+		profilePicturePath: {
+			required: true,
+			type: 'string'
+		}
+	}
 };
 
 /**
@@ -186,7 +183,7 @@ class UserService {
         this.cacheService = options.cacheService;
         this.documents = options.documentService;
 
-        this.client = new twilio(accountSid, authToken);
+        this.client = options.client;
     }
 
     /**
@@ -198,8 +195,6 @@ class UserService {
      * @returns {Promise}
      */
     addUserMessage(displayName, membershipType, message, notificationType) {
-        const self = this;
-
         return this.getUserByDisplayName(displayName, membershipType, true)
             .then(user => {
                 let notification;
@@ -230,7 +225,7 @@ class UserService {
                 message.DateTime = new Date().toISOString();
                 messages.push(message);
 
-                return self.documents.upsertDocument(collectionId, user)
+                return this.documents.upsertDocument(collectionId, user)
                     .then(() => undefined);
             });
     }
@@ -241,8 +236,6 @@ class UserService {
      * @returns {*}
      */
     createAnonymousUser(user) {
-        const self = this;
-
         const validateUser = validator(anonymousUserSchema, {
             greedy: true
         });
@@ -251,16 +244,19 @@ class UserService {
             return Promise.reject(Error(JSON.stringify(validateUser.errors)));
         }
 
-        return this.getUserByDisplayName(user.displayName, user.membershipType)
-            .then(document => {
-                if (document) {
-                    Object.assign(document, user);
-                    return self.documents.upsertDocument(collectionId, document);
-                }
+		return this.getUserByDisplayName(user.displayName, user.membershipType, true)
+			.then(existingUser => {
+				if (existingUser) {
+					if (existingUser.dateRegistered) {
+						return Promise.reject(new Error('User is already registered.'));
+					}
 
-                return self.documents.createDocument(collectionId, user);
-            });
-    }
+					return Promise.reject(new Error('Anonymous user already signed in.'));
+				}
+
+				return this.documents.createDocument(collectionId, user);
+			});
+	}
 
     /**
      * Create a user.
@@ -301,7 +297,7 @@ class UserService {
                         user.emailAddress + ', is already registered.'));
                 }
 
-                return this.getUserByDisplayName(user.displayName, user.membershipType);
+                return this.getUserByDisplayName(user.displayName, user.membershipType, true);
             })
             .then(existingUser => {
                 return this.getPhoneNumberType(user.phoneNumber)
@@ -319,6 +315,17 @@ class UserService {
                         return this.documents.upsertDocument(collectionId, existingUser);
                     });
             });
+    }
+
+	/**
+     * Delete a user.
+	 * @param documentId
+	 * @param membershipType
+	 * @returns {Promise.<T>}
+	 */
+	deleteUser(documentId, membershipType) {
+        this.documents.deleteDocumentById(collectionId, documentId, membershipType)
+        return Promise.resolve();
     }
 
     /**
@@ -371,16 +378,21 @@ class UserService {
      * @param displayName
      * @param membershipType
      * @returns {Promise}
-     */
-    getUserByDisplayName(displayName, membershipType, noCache) {
-        const qb = new QueryBuilder();
+	 */
+	getUserByDisplayName(displayName, membershipType, noCache) {
+		const qb = new QueryBuilder();
+		const schema = Joi.object().keys({
+			displayName: Joi.string().required(),
+			membershipType: Joi.number().required(),
+			noCache: Joi.boolean().optional()
+		});
+		const { error } = Joi.validate({ displayName, membershipType, noCache }, schema,  { abortEarly: false });
 
-        if (typeof displayName !== 'string' || _.isEmpty(displayName)) {
-            return Promise.reject(new Error('displayName string is required'));
-        }
-        if (!membershipType || !_.isNumber(membershipType)) {
-            return Promise.reject(new Error('membershipType number is required'));
-        }
+		if (error) {
+			const messages = error.details.map(detail => detail.message);
+
+			return Promise.reject(messages.join(','));
+		}
 
         qb.where('displayName', displayName);
         qb.where('membershipType', membershipType);

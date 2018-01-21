@@ -39,7 +39,7 @@
                         url: '/users/signout'
                     })
                         .always(function () {
-                            window.location.reload();
+                            window.location = '/';
                         });
                 };
             };
@@ -58,6 +58,7 @@
                     .done(function (url) {
                         ko.applyBindings(new anonymousUserViewModel(url), document.getElementById('anonymous1'));
                         jQuery("#anonymous1").fadeIn();
+	                    window.history.replaceState(null, null, window.location.pathname);
                     });
             }
 
