@@ -3,7 +3,7 @@ const mockTwilioCreateMessageResponse = require('../mocks/twilioCreateMessageRes
 
 const Notifications = require('./notification.service');
 
-const twilioClient = {
+const client = {
     messages: {
         create: function (message, callback) {
             callback(null, mockTwilioCreateMessageResponse);
@@ -14,7 +14,7 @@ const twilioClient = {
 let notificationService;
 
 beforeEach(function () {
-    notificationService = new Notifications(twilioClient);
+    notificationService = new Notifications({ client });
 });
 
 describe('Notifications', function () {

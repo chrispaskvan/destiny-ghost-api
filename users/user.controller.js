@@ -81,10 +81,25 @@ class UserController {
 	 * @returns {{displayName: *, membershipType: *, links: [null], profilePicturePath: *}}
 	 * @private
 	 */
-    static _getUserResponse({ displayName, membershipType, profilePicturePath }) {
-		return {
+    static _getUserResponse({ dateRegistered, displayName, emailAddress, firstName, lastName, membershipType, notifications = [], phoneNumber, profilePicturePath }) {
+		const subscriptions = notifications.map(notification => {
+			const { enabled, type } = notification;
+
+			return {
+				enabled,
+				type
+			};
+		});
+
+        return {
+			dateRegistered,
 			displayName,
+			emailAddress,
+			firstName,
+			lastName,
 			membershipType,
+			notifications: subscriptions,
+			phoneNumber,
 			links: [
 				{
 					rel: 'characters',
@@ -115,12 +130,28 @@ class UserController {
 	}
 
 	/**
+	 * Sign the user in by setting the session.
+	 * @param req
+	 * @param res
+	 * @param user
+	 * @private
+	 */
+	static _signIn(req, res, user) {
+		req.session.displayName = user.displayName;
+		req.session.membershipType = user.membershipType;
+		req.session.state = undefined;
+
+		return res.status(200)
+			.json({displayName: user.displayName});
+	}
+
+	/**
 	 * Confirm registration request by creating an account if appropriate.
 	 * @param req
 	 * @param res
 	 */
 	join(req, res) {
-		const { body: { user }} = req;
+		const { body: user } = req;
 
 		this.users.getUserByEmailAddressToken(user.tokens.emailAddress)
 			.then(registeredUser => {
@@ -133,11 +164,7 @@ class UserController {
 				registeredUser.dateRegistered = new Date().toISOString();
 
 				return this.users.updateUser(registeredUser)
-					.then(() => {
-						req.session.displayName = registeredUser.displayName;
-						req.session.membershipType = registeredUser.membershipType;
-						res.status(200).end();
-					});
+					.then(() => res.status(200).end());
 			})
 			.catch(err => {
 				log.error(err);
@@ -160,9 +187,11 @@ class UserController {
         this.users.getUserByDisplayName(displayName, membershipType)
 			.then(user => {
 				if (user) {
-					return this.destiny.getCurrentUser(user.bungie.accessToken.value)
-						.then(user => {
-							if (user) {
+					const { bungie: { access_token: accessToken }} = user;
+
+					return this.destiny.getCurrentUser(accessToken)
+						.then(bungieUser => {
+							if (bungieUser) {
 								return res.status(200)
 									.json(this.constructor._getUserResponse(user));
 							}
@@ -275,58 +304,65 @@ class UserController {
 	}
 
 	/**
-	 * User initial registration request.
+	 * User initial application request.
 	 * @param req
 	 * @param res
 	 */
-	apply(req, res) {
-		let promises = [];
-		const { session: { displayName, membershipType }} = req;
+	async signUp(req, res) {
+		const { body: user, session: { displayName, membershipType }} = req;
 
-		this.users.getUserByDisplayName(displayName, membershipType)
-			.then(user => {
-				if (!user) {
-					return res.status(401).end();
+		if (!(user.firstName && user.lastName && user.phoneNumber && user.emailAddress)) {
+			return res.status(422).end();
+		}
+
+		let bungieUser = await this.users.getUserByDisplayName(displayName, membershipType);
+		user.phoneNumber = this.constructor._cleanPhoneNumber(user.phoneNumber);
+		Object.assign(user, bungieUser, {
+			membership: {
+				tokens: {
+					blob: tokens.getBlob(),
+					code: tokens.getCode(),
+					timeStamp: this.constructor._getEpoch()
+				}
+			}
+		});
+
+		const promises = [
+			this.users.getUserByEmailAddress(user.emailAddress),
+			this.users.getUserByPhoneNumber(user.phoneNumber)
+		];
+
+		return Promise.all(promises)
+			.then(users => {
+				const registeredUsers = users.filter(user => user && user.dateRegistered);
+
+				if (registeredUsers.length) {
+					return res.status(409).end();
 				}
 
-				_.extend(user, _.extend(req.body, {
-					membership: {
-						tokens: {
-							blob: tokens.getBlob(),
-							code: tokens.getCode(),
-							timeStamp: this.constructor._getEpoch()
-						}
-					}
-				}));
-				user.phoneNumber = this.constructor._cleanPhoneNumber(user.phoneNumber);
+				return this.ghost.getWorldDatabasePath()
+					.then(worldDatabasePath => this.world.open(worldDatabasePath))
+                    .then(() => this.world.getVendorIcon(postmasterHash))
+                    .then(iconUrl => {
+						let promises = [];
 
-				promises.push(this.users.getUserByEmailAddress(user.emailAddress));
-				promises.push(this.users.getUserByPhoneNumber(user.phoneNumber));
+						promises.push(this.notifications.sendMessage('Enter ' +
+							user.membership.tokens.code + ' to verify your phone number.',
+							user.phoneNumber, user.type === 'mobile' ? iconUrl : ''));
+						promises.push(this.postmaster.register(user, iconUrl, '/register'));
 
-				return Promise.all(promises)
-					.then(users => {
-						if (users.find(user => user && user.dateRegistered).length) {
-							return res.status(409).end();
-						}
+						return Promise.all(promises);
+					})
+					.then(result => {
+						const [message, postMark] = result;
 
-						this.ghost.getWorldDatabasePath()
-							.then(worldDatabasePath => this.world.open(worldDatabasePath))
-                            .then(() => this.world.getVendorIcon(postmasterHash))
-                            .then(iconUrl => {
-                                return this.notifications.sendMessage('Enter ' +
-                                        user.membership.tokens.code + ' to verify your phone number.',
-                                        user.phoneNumber, user.type === 'mobile' ? iconUrl : '')
-                                    .then(message => [message, this.postmaster.register(user, iconUrl, '/register')])
-                                    .spread((message, postmark) => {
-                                        user.membership.message = message;
-                                        user.membership.postmark = postmark;
+						user.membership.message = message;
+						user.membership.postmark = postMark;
 
-                                        return this.users.updateUser(user);
-                                    })
-                                    .then(() => res.status(200).end());
-                            })
-                            .then(() => this.world.close());
-					});
+						return this.users.updateUser(user);
+                    })
+                    .then(() => res.status(200).end())
+                    .then(() => this.world.close());
 			})
 			.catch(err => {
 				log.error(err);
@@ -356,33 +392,38 @@ class UserController {
 
 		this.destiny.getAccessTokenFromCode(code)
 			.then(bungieUser => {
-				const { access_token: value } = bungieUser;
+				const { access_token: accessToken } = bungieUser;
+				let user = { bungie: bungieUser };
 
-				return this.destiny.getCurrentUser(value)
-					.then(user => {
-						if (!user) {
+				return this.destiny.getCurrentUser(accessToken)
+					.then(currentUser => {
+						if (!currentUser) {
 							return res.status(451).end(); // ToDo: Document
 						}
-						if (!user.membershipId) {
+						if (!currentUser.membershipId) {
 							return res.status(404).end();
 						}
-						_.extend(user, {
-							bungie: bungieUser
-						});
-						this.users.createAnonymousUser(user)
-							.then(() => {
-								req.session.displayName = user.displayName;
-								req.session.membershipType = user.membershipType;
-								req.session.state = undefined;
 
-								return res.status(200)
-									.json({ displayName: user.displayName });
+						const { displayName, membershipId, membershipType, profilePicturePath } = currentUser;
+						Object.assign(user, { displayName, membershipId, membershipType, profilePicturePath });
+
+						return this.users.getUserByMembershipId(user.membershipId)
+							.then(destinyGhostUser => {
+								if (!destinyGhostUser) {
+									return this.users.createAnonymousUser(user)
+										.then(() => this.constructor._signIn(req, res, user));
+								}
+
+								Object.assign(destinyGhostUser,  user);
+
+								return (destinyGhostUser.dateRegistered ? this.users.updateUser(destinyGhostUser) : this.users.updateAnonymousUser(destinyGhostUser))
+									.then(() => this.constructor._signIn(req, res, user));
 							});
 					});
 			})
 			.catch(err => {
 				log.error(err);
-				return res.status(401).send(err.message);
+				return res.status(401).json(err);
 			});
 	}
 

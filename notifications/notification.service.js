@@ -13,8 +13,8 @@ const settings = require('../settings/twilio.' + (process.env.NODE_ENV || 'devel
  * Notifications Class
  */
 class Notifications {
-    constructor(twilioClient) {
-        this.client = twilioClient;
+    constructor(options) {
+        this.client = options.client;
     }
 
     /**

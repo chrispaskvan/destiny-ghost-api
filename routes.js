@@ -7,13 +7,16 @@ const AuthenticationController = require('./authentication/authentication.contro
 	Destiny2Service = require('./destiny2/destiny2.service'),
 	DestinyCache = require('./destiny/destiny.cache'),
 	DestinyService = require('./destiny/destiny.service'),
+	NotificationService = require('./notifications/notification.service'),
 	UserCache = require('./users/user.cache'),
 	UserService = require('./users/user.service'),
 	World2 = require('./helpers/world2'),
-	documents = require('./helpers/documents');
+	documents = require('./helpers/documents'),
+	twilio = require('twilio'),
+	{ accountSid, authToken } = require('./settings/twilio.' + (process.env.NODE_ENV || 'development') + '.json');
 
 class Routes {
-	constructor(client) {
+	constructor(store) {
 		const routes = require('express').Router();
 
 		/**
@@ -24,9 +27,11 @@ class Routes {
 			cacheService: destinyCache
 		});
 
+		const client = twilio(accountSid, authToken);
 		const userCache = new UserCache();
 		const userService = new UserService({
 			cacheService: userCache,
+			client,
 			documentService: documents
 		});
 
@@ -42,6 +47,9 @@ class Routes {
 		const destiny2Cache = new Destiny2Cache();
 		const destiny2Service = new Destiny2Service({ cacheService: destiny2Cache });
 
+		const notificationService = new NotificationService({
+			client
+		});
 		/**
 		 * Routes
 		 */
@@ -51,13 +59,13 @@ class Routes {
 		const destiny2Router = require('./destiny2/destiny2.routes')(authenticationController, destiny2Service, userService, world2);
 		routes.use('/destiny2', destiny2Router);
 
-		const healthRouter = require('./health/health.routes')(destiny2Service, documents, client, world2);
+		const healthRouter = require('./health/health.routes')(destiny2Service, documents, store, world2);
 		routes.use('/health', healthRouter);
 
 		const twilioRouter = require('./twilio/twilio.routes')(authenticationController, destiny2Service, userService, world2);
 		routes.use('/twilio', twilioRouter);
 
-		const userRouter = require('./users/user.routes')(authenticationController, destinyService, userService);
+		const userRouter = require('./users/user.routes')(authenticationController, destinyService, notificationService, userService, world2);
 		routes.use('/users', userRouter);
 
 		/**

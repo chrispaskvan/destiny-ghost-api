@@ -41,6 +41,7 @@ class DestinyController {
 		const state = this.constructor._getRandomState();
 
 		req.session.state = state;
+
 		this.destiny.getAuthorizationUrl(state)
 			.then(url => res.send(url))
 			.catch(err => {
@@ -112,7 +113,7 @@ class DestinyController {
 			.then(worldDatabasePath => this.world.open(worldDatabasePath))
 			.then(() => this.users.getUserByDisplayName(displayName, membershipType))
 			.then(currentUser => {
-				accessToken = currentUser.bungie.accessToken.value;
+				accessToken = currentUser.bungie.access_token;
 
 				return this.destiny.getCharacters(currentUser.membershipId, membershipType);
 			})
@@ -156,7 +157,7 @@ class DestinyController {
 			.then(worldDatabasePath => this.world.open(worldDatabasePath))
 			.then(() => this.users.getUserByDisplayName(displayName, membershipType))
 			.then(currentUser => {
-				accessToken = currentUser.bungie.accessToken.value;
+				accessToken = currentUser.bungie.access_token;
 
 				return this.destiny.getCharacters(currentUser.membershipId, membershipType);
 			})
@@ -200,7 +201,7 @@ class DestinyController {
 			.then(worldDatabasePath => this.world.open(worldDatabasePath))
 			.then(() => this.users.getUserByDisplayName(displayName, membershipType))
 			.then(currentUser => {
-				accessToken = currentUser.bungie.accessToken.value;
+				accessToken = currentUser.bungie.access_token;
 
 				return this.destiny.getCharacters(currentUser.membershipId, membershipType);
 			})
@@ -270,7 +271,7 @@ class DestinyController {
 
 		this.ghost.getWorldDatabasePath()
 			.then(worldDatabasePath => this.world.open(worldDatabasePath))
-			.then(this.world.getGrimoireCards(numberOfCards))
+			.then(() => this.world.getGrimoireCards(numberOfCards))
 			.then(grimoireCards => {
 				this.world.close();
 				res.status(200).json(grimoireCards)

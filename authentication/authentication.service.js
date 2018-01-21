@@ -48,12 +48,8 @@ class AuthenticationService {
         return this.destinyService.getCurrentUser(accessToken)
             .then(() => {
                 if (user) {
-                    if (user.dateRegistered) {
-                        return this.cacheService.setUser(user)
-                            .then(() => user);
-                    } else {
-                        return user;
-                    }
+                    return this.cacheService.setUser(user)
+                        .then(() => user);
                 }
 
                 throw new Error('Bungie user not found');
@@ -63,16 +59,12 @@ class AuthenticationService {
                     .then(bungie => {
                         if (bungie) {
                             user.bungie = bungie;
-                            if (user.dateRegistered) {
-                                return Promise.all([
-                                    this.cacheService.setUser(user),
-                                    this.userService.updateUserBungie(user.id, bungie)
-                                ])
-                                    .then(() => user);
-                            } else {
-                                return this.userService.updateAnonymousUser(user)
-                                    .then(() => user);
-                            }
+
+                            return Promise.all([
+                                this.cacheService.setUser(user),
+                                this.userService.updateUserBungie(user.id, bungie)
+                            ])
+                                .then(() => user);
                         }
 
                         throw new Error('Bungie user failed to authenticate');

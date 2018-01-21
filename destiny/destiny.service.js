@@ -12,7 +12,6 @@
  * @requires request
  * @requires util
  */
-'use strict';
 const _ = require('underscore'),
     DestinyError = require('./destiny.error'),
 	{ apiKey, authorizationUrl, clientId, clientSecret } = require('../settings/bungie.json'),

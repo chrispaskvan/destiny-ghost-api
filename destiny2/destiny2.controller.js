@@ -25,11 +25,10 @@ class Destiny2Controller extends DestinyController {
 	 */
 	getLeaderboard(req, res) {
 		const { session: { displayName, membershipType }} = req;
-		let accessToken;
 
 		this.users.getUserByDisplayName(displayName, membershipType)
 			.then(currentUser => {
-				accessToken = currentUser.bungie.accessToken.value;
+				const { bungie: { access_token: accessToken }} = currentUser;
 
 				return this.destiny.getLeaderboard(currentUser.membershipId, membershipType, accessToken)
 					.then(leaderboard => {
@@ -101,6 +100,39 @@ class Destiny2Controller extends DestinyController {
 			});
 	}
 
+	/**
+	 * Get Xur's inventory.
+	 * @returns {*|Array}
+	 * @private
+	 */
+	getXur(req, res) {
+		const { session: { displayName, membershipType }} = req;
+
+		this.users.getUserByDisplayName(displayName, membershipType)
+			.then(currentUser => {
+				const { bungie: { access_token: accessToken }, membershipId } = currentUser;
+
+				return this.destiny.getProfile(membershipId, membershipType)
+					.then(characters => {
+						if (characters && characters.length) {
+							return this.destiny.getXur(membershipId, membershipType, characters[0].characterId, accessToken)
+								.then(items => res.status(200).json(items));
+						}
+
+						res.status(404);
+					});
+			})
+			.catch(err => {
+				log.error(err);
+				res.status(500).json(err);
+			});
+	}
+
+	/**
+	 *
+	 * @param req
+	 * @param res
+	 */
 	upsertManifest(req, res) {
         this.destiny.getManifest()
             .then(manifest => {

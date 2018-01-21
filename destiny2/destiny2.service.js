@@ -15,6 +15,7 @@
 const DestinyError = require('../destiny/destiny.error'),
     DestinyService = require('../destiny/destiny.service'),
     { apiKey } = require('../settings/bungie.json'),
+	{ xurHash } = require('./destiny2.constants'),
     request = require('request'),
     util = require('util');
 
@@ -23,7 +24,7 @@ const DestinyError = require('../destiny/destiny.error'),
  * @type {string}
  * @description Base URL for all of the Bungie API services.
  */
-const servicePlatform = 'https://www.bungie.net/platform';
+const servicePlatform = 'https://www.bungie.net/Platform';
 
 /**
  * Destiny2 Service Class
@@ -39,6 +40,7 @@ class Destiny2Service extends DestinyService {
 
     /**
      * Get the latest Destiny Manifest definition.
+     *
      * @returns {Promise}
      * @private
      */
@@ -72,6 +74,13 @@ class Destiny2Service extends DestinyService {
         });
     }
 
+	/**
+	 *
+	 * @param membershipId
+	 * @param membershipType
+	 * @param accessToken
+	 * @returns {Promise}
+	 */
     getLeaderboard(membershipId, membershipType, accessToken) {
 		const opts = {
 			headers: {
@@ -119,7 +128,13 @@ class Destiny2Service extends DestinyService {
             });
     }
 
-    getProfile(membershipId, membershipType) {
+	/**
+	 * Get user profile.
+	 * @param membershipId
+	 * @param membershipType
+	 * @returns {Promise}
+	 */
+	getProfile(membershipId, membershipType) {
 		const opts = {
 			headers: {
 				'x-api-key': apiKey
@@ -138,6 +153,44 @@ class Destiny2Service extends DestinyService {
 						const characters = Object.keys(data).map(character => data[character]);
 
 						resolve(characters);
+					} else {
+						reject(new DestinyError(responseBody.ErrorCode || -1,
+							responseBody.Message || '', responseBody.ErrorStatus || ''));
+					}
+				} else {
+					reject(err);
+				}
+			});
+		});
+	}
+
+	/**
+	 * Get Xur's inventory.
+	 * @param membershipId
+	 * @param membershipType
+	 * @param characterId
+	 * @param accessToken
+	 * @returns {Promise}
+	 */
+	getXur(membershipId, membershipType, characterId, accessToken) {
+		const opts = {
+			headers: {
+				authorization: 'Bearer ' + accessToken,
+				'x-api-key': apiKey
+			},
+			url: util.format('%s/Destiny2/%s/Profile/%s/Character/%s/Vendors/%s?components=None', servicePlatform,
+				membershipType, membershipId, characterId, xurHash)
+		};
+
+		return new Promise((resolve, reject) => {
+			request.get(opts, function (err, res, body) {
+				if (!err && res.statusCode === 200) {
+					const responseBody = JSON.parse(body);
+
+					if (responseBody.ErrorCode === 1) {
+						const { Response: {  vendor }} = responseBody;
+
+						resolve(vendor);
 					} else {
 						reject(new DestinyError(responseBody.ErrorCode || -1,
 							responseBody.Message || '', responseBody.ErrorStatus || ''));

@@ -58,9 +58,9 @@ class TwilioController {
 
 				return Promise.all(promises)
 					.then(itemCategories => {
-						const filteredCategories = _.filter(itemCategories, itemCategory => itemCategory.hash !== 0);
+						const filteredCategories = _.filter(itemCategories, itemCategory => itemCategory.hash > 1);
 						const sortedCategories = _.sortBy(filteredCategories,
-							itemCategory =>	(-1 * itemCategory.hash));
+							itemCategory =>	itemCategory.hash);
 						const itemCategory =
 							_.reduce(sortedCategories, (memo, itemCategory) => (memo + itemCategory.shortTitle + ' '), ' ')
 								.trim();
@@ -68,7 +68,8 @@ class TwilioController {
 						this.world.close();
 
 						return [{
-							itemCategory: itemCategory,
+							itemCategory: (item.inventory ? (item.inventory.tierTypeName + ' ') : '') + itemCategory +
+								(filteredCategories.length < 2 ? (' ' + item.itemTypeDisplayName) : ''),
 							icon: 'https://www.bungie.net' + item.displayProperties.icon,
 							itemHash: item.hash,
 							itemName: item.displayProperties.name,
@@ -275,10 +276,11 @@ class TwilioController {
 											});
 											const keys = Object.keys(groups);
 											const result = _.reduce(keys, (memo, key) => {
-												return memo + '\n' + key;
+												return memo + '\n' + key + ' ' + groups[key][0].itemCategory;
 											}, ' ').trim();
 
 											twiml.message(attributes, result.substr(0, 130));
+											res.clearCookie('itemHash');
 											res.writeHead(200, {
 												'Content-Type': 'text/xml'
 											});

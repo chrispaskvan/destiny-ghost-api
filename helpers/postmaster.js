@@ -24,13 +24,11 @@ const mailOptions = {};
 const transporter = nodemailer.createTransport(smtpTransport(smtpConfiguration));
 
 class Postmaster {
-
 	static _getRandomColor() {
-		var color = '#';
-		var index;
-		var letters = '0123456789ABCDEF';
+		let color = '#';
+		const letters = '0123456789ABCDEF';
 
-		for (index = 0; index < 6; index += 1) {
+		for (let index = 0; index < 6; index += 1) {
 			color += letters[Math.floor(Math.random() * 16)];
 		}
 

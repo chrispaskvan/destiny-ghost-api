@@ -13,7 +13,7 @@ const Log = require('./models/log'),
     session = require('express-session'),
     redis = require('redis'),
 	redisConfig = require('./settings/redis.json'),
-    sessionConfig = require('./settings/session.json');
+	sessionConfig = require('./settings/session.' + (process.env.NODE_ENV || 'development') + '.json');
 
 const RedisStore = require('connect-redis')(session);
 const app = express();
@@ -23,10 +23,13 @@ const port = process.env.PORT || 1100;
  * Application Insights
  */
 applicationInsights.setup(appInsightsConfig.instrumentationKey).start();
-applicationInsights.defaultClient.commonProperties = {
-    environment: 'M2'
-};
-applicationInsights.defaultClient.trackEvent('Server restarted.');
+
+// jscs:ignore requireCapitalizedComments
+// noinspection JSLint
+app.use(function (err, req, res, next) {
+	applicationInsights.defaultClient.trackRequest(req, res);
+	next(err);
+});
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({
@@ -38,9 +41,8 @@ app.use(cookieParser());
  * Set Access Headers
  */
 app.use(function (req, res, next) {
-    res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, PATCH, DELETE');
-    res.setHeader('Access-Control-Allow-Credentials', true);
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
     next();
 });
 
@@ -55,16 +57,17 @@ const client = redis.createClient(redisConfig.port, redisConfig.host, {
  * Attach Session
  */
 const ghostSession = session({
-    cookie: {
-        secure: false
-    },
-    name: sessionConfig.cookie.name,
-    resave: false,
-    saveUninitialized: true,
-    secret: sessionConfig.secret,
-    store: new RedisStore({
-        client: client
-    })
+	cookie: {
+		domain: sessionConfig.cookie.domain,
+		secure: false
+	},
+	name: sessionConfig.cookie.name,
+	resave: false,
+	saveUninitialized: true,
+	secret: sessionConfig.secret,
+	store: new RedisStore({
+		client: client
+	})
 });
 app.use(ghostSession);
 
@@ -93,13 +96,6 @@ app.get('/ping', function (req, res) {
     res.json({
         pong: Date.now()
     });
-});
-
-// jscs:ignore requireCapitalizedComments
-// noinspection JSLint
-app.use(function (err, req, res, next) {
-	applicationInsights.defaultClient.trackRequest(req, res);
-    next(err);
 });
 
 /**

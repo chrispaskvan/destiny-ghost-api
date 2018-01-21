@@ -3,6 +3,7 @@
  */
 const DestinyController = require('../destiny/destiny.controller'),
     AuthenticationMiddleWare = require('../authentication/authentication.middleware'),
+	cors = require('cors'),
     express = require('express'),
 	httpMocks = require('node-mocks-http'),
 	log = require('../helpers/log');
@@ -34,9 +35,8 @@ const routes = function (authenticationController, destinyService, userService, 
      * Routes
      */
     destinyRouter.route('/signIn/')
-        .get(function (req, res) {
-            destinyController.getAuthorizationUrl(req, res);
-        });
+        .get(cors(), (req, res) => destinyController.getAuthorizationUrl(req, res));
+
     destinyRouter.route('/characters')
         .get(function (req, res, next) {
             middleware.authenticateUser(req, res, next);
@@ -60,7 +60,7 @@ const routes = function (authenticationController, destinyService, userService, 
             destinyController.getFoundryOrders(req, res);
         });
     destinyRouter.route('/grimoireCards/:numberOfCards')
-        .get(function (req, res) {
+        .get(cors(), function (req, res) {
             destinyController.getGrimoireCards(req, res);
         });
     destinyRouter.route('/ironBannerEventRewards/')
