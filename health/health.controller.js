@@ -24,7 +24,7 @@ let failures;
  * Destiny Controller Service
  */
 class HealthController {
-	constructor(options) {
+	constructor(options = {}) {
 		this.destinyService = options.destinyService;
 		this.documents = options.documents;
 		this.ghost = new Ghost({

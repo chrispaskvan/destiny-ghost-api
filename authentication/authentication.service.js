@@ -6,7 +6,7 @@ class AuthenticationService {
      * @constructor
      * @param options
      */
-    constructor(options) {
+    constructor(options = {}) {
         this.cacheService = options.cacheService;
         this.destinyService = options.destinyService;
         this.userService = options.userService;

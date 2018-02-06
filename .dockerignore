@@ -2,14 +2,12 @@
 .coverage
 .dockerignore
 .eslintrc
-.git
 .gitignore
 .idea
 .istanbul.yml
 Dockerfile
 README.md
 databases
-gulpfile.js
 logs
 mocks
 node_modules

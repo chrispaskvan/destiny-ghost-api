@@ -22,7 +22,7 @@ const _ = require('underscore'),
 	bitly = require('../helpers/bitly'),
 	log = require('../helpers/log'),
 	twilio = require('twilio'),
-	{ attributes, authToken } = require('../settings/twilio.' + (process.env.NODE_ENV || 'development') + '.json');
+	{ attributes, authToken } = require('../settings/twilio.' + process.env.NODE_ENV + '.json');
 
 
 class TwilioController {
@@ -30,7 +30,7 @@ class TwilioController {
 	 * @constructor
 	 * @param options
 	 */
-	constructor(options) {
+	constructor(options = {}) {
 		this.destiny = options.destinyService;
 		this.ghost = new Ghost({
 			destinyService: options.destinyService
@@ -122,7 +122,7 @@ class TwilioController {
 	_queryItem(itemName) {
 		return this.ghost.getWorldDatabasePath()
 			.then(worldDatabasePath => this.world.open(worldDatabasePath))
-			.then(() => this.world.getItemByName(itemName.replace(/[\u2018\u2019]/g, "'")))
+			.then(() => this.world.getItemByName(itemName.replace(/[\u2018\u2019]/g, '\'')))
 			.then(items => {
 				this.world.close();
 

@@ -45,7 +45,7 @@ class DestinyService {
      * @constructor
      * @param cacheService
      */
-    constructor(options) {
+    constructor(options = {}) {
         this.cacheService = options.cacheService;
     }
 

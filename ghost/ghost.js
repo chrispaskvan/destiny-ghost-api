@@ -16,7 +16,7 @@ class Ghost {
 	 * @constructor
 	 * @param options
 	 */
-	constructor(options) {
+	constructor(options = {}) {
         this.destiny = options.destinyService;
     }
     /**

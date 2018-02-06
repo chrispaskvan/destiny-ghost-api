@@ -12,7 +12,7 @@ const HealthController = require('./health.controller'),
  * @param worldRepository
  * @returns {*}
  */
-const routes = function (destinyService, documents, store, worldRepository) {
+const routes = function ({ destinyService, documents, store, worldRepository }) {
 	const healthRouter = express.Router();
 
 	/**

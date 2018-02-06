@@ -16,7 +16,7 @@ const DestinyController = require('../destiny/destiny.controller'),
  * @param worldRepository
  * @returns {*}
  */
-const routes = function (authenticationController, destinyService, userService, worldRepository) {
+const routes = function ({ authenticationController, destinyService, userService, worldRepository }) {
     const destinyRouter = express.Router();
 
     /**
@@ -29,7 +29,7 @@ const routes = function (authenticationController, destinyService, userService, 
 	 * Authentication controller when needed.
 	 * @type {AuthenticationMiddleware}
 	 */
-	const middleware = new AuthenticationMiddleWare(authenticationController)
+	const middleware = new AuthenticationMiddleWare({ authenticationController })
 
     /**
      * Routes

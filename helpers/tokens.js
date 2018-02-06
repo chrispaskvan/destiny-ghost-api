@@ -6,8 +6,8 @@
  * @author Chris Paskvan
  * @requires crypto
  */
-'use strict';
-var crypto = require('crypto');
+const crypto = require('crypto');
+
 /**
  * Returns true if the number is an integer greater than 0.
  * @param number
@@ -16,12 +16,14 @@ var crypto = require('crypto');
 function isNormalInteger(number) {
     return Math.floor(Number(number)) > 0;
 }
+
 /**
  * Get a Token
  * @param length
  * @returns {string}
  */
 class Tokens {
+
     /**
      * Get a 16-bit Random String
      * @returns {string}
@@ -29,6 +31,7 @@ class Tokens {
     static getBlob() {
         return crypto.randomBytes(16).toString('hex');
     }
+
     /**
      * Get a Numeric Code
      * @param {number} length - The number of characters. Defaults to 6.

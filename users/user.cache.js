@@ -91,23 +91,21 @@ class UserCache {
      * @param teeth
      * @returns {Promise}
      */
-    getUser(...teeth) {
+    async getUser(...teeth) {
         const key = this.constructor.getCacheKey(...teeth);
 
-        return this._getCache(key)
-            .then(user => {
-                if (user) {
-                    const {displayName, membershipId, membershipType} = user;
+        const user = await this._getCache(key);
+        if (user) {
+            const {displayName, membershipId, membershipType} = user;
 
-                    if (!membershipId && displayName && membershipType) {
-                        return this.getUser(displayName, membershipType);
-                    }
+            if (!membershipId && displayName && membershipType) {
+                return this.getUser(displayName, membershipType);
+            }
 
-                    return user;
-                }
+            return user;
+        }
 
-                return undefined;
-            });
+        return undefined;
     }
 
     /**

@@ -7,13 +7,13 @@
  * @description Utility functions for submitting a SMS/MMS message with Twilio,
  * recording the message, and updating the message status.
  */
-const settings = require('../settings/twilio.' + (process.env.NODE_ENV || 'development') + '.json');
+const settings = require('../settings/twilio.' + process.env.NODE_ENV + '.json');
 
 /**
  * Notifications Class
  */
 class Notifications {
-    constructor(options) {
+    constructor(options = {}) {
         this.client = options.client;
     }
 

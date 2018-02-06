@@ -7,7 +7,7 @@ class AuthenticationMiddleware {
      * @constructor
      * @param authenticationController
      */
-    constructor(authenticationController) {
+    constructor({ authenticationController }) {
         this.authentication = authenticationController;
     }
 

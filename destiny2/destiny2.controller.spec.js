@@ -27,18 +27,18 @@ beforeEach(function () {
 	const worldRepository = {
 		close: () => Promise.resolve(),
 		getClassByHash: () => Promise.resolve({
-			"classType": 1,
-			"displayProperties": {
-				"name": "Hunter",
-				"hasIcon": false
+			classType: 1,
+			displayProperties: {
+				name: 'Hunter',
+				hasIcon: false
 			},
-			"genderedClassNames": {
-				"Male": "Hunter",
-				"Female": "Hunter"
+			genderedClassNames: {
+				Male: 'Hunter',
+				Female: 'Hunter'
 			},
-			"hash": 671679327,
-			"index": 1,
-			"redacted": false
+			hash: 671679327,
+			index: 1,
+			redacted: false
 		}),
 		open: () => Promise.resolve()
 	};
@@ -68,7 +68,7 @@ describe('Destiny2Controller', () => {
 
 					destiny2ServiceStub = sinon.stub(destiny2Service, 'getProfile').resolves([
 						{
-							characterId: "1111111111111111111",
+							characterId: '1111111111111111111',
 							classHash: 671679327,
 							light: 284,
 							links: [
