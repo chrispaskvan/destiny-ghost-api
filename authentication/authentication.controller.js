@@ -6,7 +6,7 @@ class AuthenticationController {
      * @constructor
      * @param authenticationService
      */
-    constructor(authenticationService) {
+    constructor({ authenticationService }) {
         this.authentication = authenticationService;
     }
 

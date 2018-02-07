@@ -1,6 +1,8 @@
 /**
  * Application Server
  */
+require('dotenv').config();
+
 const Log = require('./models/log'),
 	Routes = require('./routes'),
 	appInsightsConfig = require('./settings/applicationInsights.json'),
@@ -9,15 +11,17 @@ const Log = require('./models/log'),
     cookieParser = require('cookie-parser'),
     express = require('express'),
 	fs = require('fs'),
+	http = require('http'),
     path = require('path'),
     session = require('express-session'),
     redis = require('redis'),
 	redisConfig = require('./settings/redis.json'),
-	sessionConfig = require('./settings/session.' + (process.env.NODE_ENV || 'development') + '.json');
+	sessionConfig = require('./settings/session.' + process.env.NODE_ENV + '.json'),
+	terminus = require('@godaddy/terminus');
 
 const RedisStore = require('connect-redis')(session);
 const app = express();
-const port = process.env.PORT || 1100;
+const port = process.env.PORT;
 
 /**
  * Application Insights
@@ -110,10 +114,21 @@ routes.validateManifest();
 /**
  * Server
  */
+const server = http.createServer(app);
+terminus(server, {
+	signal: 'SIGINT',
+	onSignal: function () {
+		return new Promise((resolve) => {
+			client.quit();
+			resolve();
+		});
+	}
+});
+
 const start = new Date();
-app.listen(port, function init() {
+server.listen(port, function init() {
 	// eslint-disable-next-line no-console
-    console.log('Gulp is running on port ' + port + '.');
+    console.log('Running on port ' + port + '.');
 
 	const end = new Date();
 	const duration = end - start;

@@ -8,8 +8,8 @@ const AuthenticationMiddleWare = require('../authentication/authentication.middl
     TwilioController = require('./twilio.controller'),
     express = require('express');
 
-const routes = function (authenticationController, destinyService, userService, worldRepository) {
-	const middleware = new AuthenticationMiddleWare(authenticationController);
+const routes = function ({ authenticationController, destinyService, userService, worldRepository }) {
+	const middleware = new AuthenticationMiddleWare({ authenticationController });
     const twilioRouter = express.Router();
     const twilioController = new TwilioController({ destinyService, userService, worldRepository });
 

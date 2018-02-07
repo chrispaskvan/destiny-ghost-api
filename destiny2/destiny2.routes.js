@@ -4,7 +4,7 @@
 const AuthenticationMiddleWare = require('../authentication/authentication.middleware'),
 	Destiny2Controller = require('./destiny2.controller'),
 	cors = require('cors'),
-	corsConfig = require('../settings/cors.' + (process.env.NODE_ENV || 'development') + '.json'),
+	corsConfig = require('../settings/cors.' + process.env.NODE_ENV + '.json'),
 	express = require('express'),
 	httpMocks = require('node-mocks-http'),
 	log = require('../helpers/log');
@@ -17,7 +17,7 @@ const AuthenticationMiddleWare = require('../authentication/authentication.middl
  * @param worldRepository
  * @returns {*}
  */
-const routes = function (authenticationController, destiny2Service, userService, worldRepository) {
+const routes = function ({ authenticationController, destiny2Service, userService, worldRepository }) {
     const destiny2Router = express.Router();
 
     /**
@@ -30,7 +30,7 @@ const routes = function (authenticationController, destiny2Service, userService,
 	 * Authentication controller when needed.
 	 * @type {AuthenticationMiddleware}
 	 */
-	const middleware = new AuthenticationMiddleWare(authenticationController);
+	const middleware = new AuthenticationMiddleWare({ authenticationController });
 
     /**
      * Routes

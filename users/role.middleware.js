@@ -8,7 +8,7 @@ class RoleMiddleware {
 	 * @constructor
 	 * @param authenticationController
 	 */
-	constructor(authenticationController) {
+	constructor({ authenticationController }) {
 		this.authentication = authenticationController;
 	}
 

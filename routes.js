@@ -13,7 +13,7 @@ const AuthenticationController = require('./authentication/authentication.contro
 	World2 = require('./helpers/world2'),
 	documents = require('./helpers/documents'),
 	twilio = require('twilio'),
-	{ accountSid, authToken } = require('./settings/twilio.' + (process.env.NODE_ENV || 'development') + '.json');
+	{ accountSid, authToken } = require('./settings/twilio.' + process.env.NODE_ENV + '.json');
 
 class Routes {
 	constructor(store) {
@@ -40,32 +40,57 @@ class Routes {
 			destinyService,
 			userService
 		});
-		const authenticationController = new AuthenticationController(authenticationService);
+		const authenticationController = new AuthenticationController({ authenticationService });
 
 		const world2 = new World2();
-
 		const destiny2Cache = new Destiny2Cache();
 		const destiny2Service = new Destiny2Service({ cacheService: destiny2Cache });
-
 		const notificationService = new NotificationService({
 			client
 		});
+
 		/**
 		 * Routes
 		 */
-		const destinyRouter = require('./destiny/destiny.routes')(authenticationController, destinyService, userService, world2);
+		const destinyRouter = require('./destiny/destiny.routes')({
+			authenticationController,
+			destinyService,
+			userService,
+			worldRepository: world2
+		});
 		routes.use('/destiny', destinyRouter);
 
-		const destiny2Router = require('./destiny2/destiny2.routes')(authenticationController, destiny2Service, userService, world2);
+		const destiny2Router = require('./destiny2/destiny2.routes')({
+			authenticationController,
+			destiny2Service,
+			userService,
+			worldRepository: world2
+		});
 		routes.use('/destiny2', destiny2Router);
 
-		const healthRouter = require('./health/health.routes')(destiny2Service, documents, store, world2);
+		const healthRouter = require('./health/health.routes')({
+			destinyService: destiny2Service,
+			documents,
+			store,
+			worldRepository: world2
+		});
 		routes.use('/health', healthRouter);
 
-		const twilioRouter = require('./twilio/twilio.routes')(authenticationController, destiny2Service, userService, world2);
+		const twilioRouter = require('./twilio/twilio.routes')({
+			authenticationController,
+			destinyService: destiny2Service,
+			userService,
+			worldRepository: world2
+		});
 		routes.use('/twilio', twilioRouter);
 
-		const userRouter = require('./users/user.routes')(authenticationController, destinyService, notificationService, userService, world2);
+		const userRouter = require('./users/user.routes')({
+			authenticationController,
+			destinyService,
+			notificationService,
+			userService,
+			worldRepository: world2
+		});
 		routes.use('/users', userRouter);
 
 		/**

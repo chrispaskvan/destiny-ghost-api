@@ -10,7 +10,7 @@ const Destiny2Service = require('./destiny2.service'),
 
 const mockUser = {
 	membershipId: '11',
-	membershipType: 2,
+	membershipType: 2
 };
 
 let destiny2Service;

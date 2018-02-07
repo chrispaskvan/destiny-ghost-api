@@ -62,7 +62,7 @@ describe('HealthController', () => {
 
 				this.request.callsArgWith(1, undefined, { statusCode: 200 }, JSON.stringify({
 					status: {
-						description: "All Systems Go"
+						description: 'All Systems Go'
 					}
 				}));
 

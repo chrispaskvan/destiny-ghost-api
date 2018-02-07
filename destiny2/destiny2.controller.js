@@ -14,7 +14,7 @@ const DestinyController = require('../destiny/destiny.controller'),
  * Destiny Controller Service
  */
 class Destiny2Controller extends DestinyController {
-    constructor(options) {
+    constructor(options = {}) {
         super(options);
     }
 

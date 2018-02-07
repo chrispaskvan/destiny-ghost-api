@@ -2,12 +2,12 @@ const AuthenticationMiddleWare = require('../authentication/authentication.middl
 	RoleMiddleware = require('./role.middleware'),
 	UserController = require('./user.controller'),
 	cors = require('cors'),
-	corsConfig = require('../settings/cors.' + (process.env.NODE_ENV || 'development') + '.json'),
+	corsConfig = require('../settings/cors.' + process.env.NODE_ENV + '.json'),
 	express = require('express');
 
-const routes = function (authenticationController, destinyService, notificationService, userService, worldRepository) {
-	const middleware = new AuthenticationMiddleWare(authenticationController);
-	const roles = new RoleMiddleware(authenticationController);
+const routes = function ({ authenticationController, destinyService, notificationService, userService, worldRepository }) {
+	const middleware = new AuthenticationMiddleWare({ authenticationController });
+	const roles = new RoleMiddleware({ authenticationController });
 	const userController = new UserController({ destinyService, notificationService, userService, worldRepository });
 	const userRouter = express.Router();
 

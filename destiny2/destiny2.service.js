@@ -34,7 +34,7 @@ class Destiny2Service extends DestinyService {
      * @constructor
      * @param options
      */
-    constructor(options) {
+    constructor(options = {}) {
         super(options);
     }
 
@@ -117,15 +117,13 @@ class Destiny2Service extends DestinyService {
      * @param noCache
      * @returns {Promise}
      */
-    getManifest(noCache) {
-        return this.cacheService.getManifest()
-            .then(manifest => {
-                if (!noCache && manifest) {
-                    return manifest;
-                }
+    async getManifest(noCache) {
+        const manifest = await this.cacheService.getManifest();
+        if (!noCache && manifest) {
+            return manifest;
+        }
 
-                return this._getManifest();
-            });
+        return this._getManifest();
     }
 
 	/**

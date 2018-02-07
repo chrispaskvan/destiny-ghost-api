@@ -36,7 +36,7 @@ class World2 extends World {
     getItemByName(itemName) {
         return new Promise((resolve, reject) => {
             this.db.serialize(() => {
-                const it = itemName.replace(/'/g, "''");
+                const it = itemName.replace(/'/g, '\'\'');
                 let items = [];
 
                 this.db.each('SELECT json FROM DestinyInventoryItemDefinition WHERE json LIKE \'%"name":"' +

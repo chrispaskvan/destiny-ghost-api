@@ -14,7 +14,7 @@ class DestinyController {
 	 * @constructor
 	 * @param options
 	 */
-	constructor(options) {
+	constructor(options = {}) {
 		this.destiny = options.destinyService;
 		this.ghost = new Ghost({
 			destinyService: options.destinyService

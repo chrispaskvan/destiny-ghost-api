@@ -28,7 +28,7 @@ const ttl = 300;
  * User Controller Class
  */
 class UserController {
-	constructor(options) {
+	constructor(options = {}) {
 		this.destiny = options.destinyService;
 		this.ghost = new Ghost({
 			destinyService: options.destinyService
@@ -177,35 +177,32 @@ class UserController {
 	 * @param req
 	 * @param res
 	 */
-	getCurrentUser(req, res) {
+	async getCurrentUser(req, res) {
 		const { session: { displayName, membershipType }} = req;
 
 		if (!displayName || !membershipType) {
 			return res.status(401).end();
 		}
 
-        this.users.getUserByDisplayName(displayName, membershipType)
-			.then(user => {
-				if (user) {
-					const { bungie: { access_token: accessToken }} = user;
+		try {
+			const user = await this.users.getUserByDisplayName(displayName, membershipType);
+			if (user) {
+				const { bungie: { access_token: accessToken }} = user;
 
-					return this.destiny.getCurrentUser(accessToken)
-						.then(bungieUser => {
-							if (bungieUser) {
-								return res.status(200)
-									.json(this.constructor._getUserResponse(user));
-							}
-
-							return res.status(401).end();
-						});
+				const bungieUser = await this.destiny.getCurrentUser(accessToken);
+				if (bungieUser) {
+					return res.status(200)
+						.json(this.constructor._getUserResponse(user));
 				}
 
 				return res.status(401).end();
-			})
-			.catch(err => {
-				log.error(err);
-				res.status(500).json(err);
-			});
+			}
+
+			return res.status(401).end();
+		} catch (err) {
+			log.error(err);
+			res.status(500).json(err);
+		}
 	}
 
 	/**
@@ -376,7 +373,7 @@ class UserController {
 	 * @param req
 	 * @param res
 	 */
-	signIn(req, res) {
+	async signIn(req, res) {
 		const {
 			query: { code, state: queryState },
 			session: { displayName, state: sessionState }
@@ -390,41 +387,36 @@ class UserController {
 			return res.sendStatus(403);
 		}
 
-		this.destiny.getAccessTokenFromCode(code)
-			.then(bungieUser => {
-				const { access_token: accessToken } = bungieUser;
-				let user = { bungie: bungieUser };
+		try {
+			const bungieUser = await this.destiny.getAccessTokenFromCode(code);
+			const { access_token: accessToken } = bungieUser;
+			let user = { bungie: bungieUser };
 
-				return this.destiny.getCurrentUser(accessToken)
-					.then(currentUser => {
-						if (!currentUser) {
-							return res.status(451).end(); // ToDo: Document
-						}
-						if (!currentUser.membershipId) {
-							return res.status(404).end();
-						}
+			const currentUser = await this.destiny.getCurrentUser(accessToken);
+			if (!currentUser) {
+				return res.status(451).end(); // ToDo: Document
+			}
+			if (!currentUser.membershipId) {
+				return res.status(404).end();
+			}
 
-						const { displayName, membershipId, membershipType, profilePicturePath } = currentUser;
-						Object.assign(user, { displayName, membershipId, membershipType, profilePicturePath });
+			const { displayName, membershipId, membershipType, profilePicturePath } = currentUser;
+			Object.assign(user, { displayName, membershipId, membershipType, profilePicturePath });
 
-						return this.users.getUserByMembershipId(user.membershipId)
-							.then(destinyGhostUser => {
-								if (!destinyGhostUser) {
-									return this.users.createAnonymousUser(user)
-										.then(() => this.constructor._signIn(req, res, user));
-								}
+			const destinyGhostUser = await this.users.getUserByMembershipId(user.membershipId);
+			if (!destinyGhostUser) {
+				return this.users.createAnonymousUser(user)
+					.then(() => this.constructor._signIn(req, res, user));
+			}
 
-								Object.assign(destinyGhostUser,  user);
+			Object.assign(destinyGhostUser,  user);
 
-								return (destinyGhostUser.dateRegistered ? this.users.updateUser(destinyGhostUser) : this.users.updateAnonymousUser(destinyGhostUser))
-									.then(() => this.constructor._signIn(req, res, user));
-							});
-					});
-			})
-			.catch(err => {
-				log.error(err);
-				return res.status(401).json(err);
-			});
+			return (destinyGhostUser.dateRegistered ? this.users.updateUser(destinyGhostUser) : this.users.updateAnonymousUser(destinyGhostUser))
+				.then(() => this.constructor._signIn(req, res, user));
+		} catch (err) {
+			log.error(err);
+			return res.status(401).json(err);
+		}
 	}
 
 	/**
