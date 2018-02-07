@@ -125,7 +125,8 @@ class HealthController {
 			const worldDatabasePath = await this.ghost.getWorldDatabasePath();
 			await this.worldRepository.open(worldDatabasePath);
 
-			const [{ displayProperties: { description = notAvailable }}] = await this.worldRepository.getItemByName('Better Devils');
+			const [{ displayProperties: { description = notAvailable }}] =
+				await this.worldRepository.getItemByName('Older Sister III');
 			await this.worldRepository.close();
 
 			return description;
