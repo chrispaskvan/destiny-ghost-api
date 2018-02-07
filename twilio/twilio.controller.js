@@ -46,41 +46,42 @@ class TwilioController {
 	 * @returns {*|promise}
 	 * @private
 	 */
-	_getItem(item) {
+	async _getItem(item) {
 		let promises = [];
 
-		return this.ghost.getWorldDatabasePath()
-			.then(worldDatabasePath => this.world.open(worldDatabasePath))
-			.then(() => {
-				_.each(item.itemCategoryHashes, itemCategoryHash => {
-					promises.push(this.world.getItemCategory(itemCategoryHash));
+		try {
+			const worldDatabasePath = await this.ghost.getWorldDatabasePath();
+			await this.world.open(worldDatabasePath);
+			_.each(item.itemCategoryHashes, itemCategoryHash => {
+				promises.push(this.world.getItemCategory(itemCategoryHash));
+			});
+
+			const items = await Promise.all(promises)
+				.then(itemCategories => {
+					const filteredCategories = _.filter(itemCategories, itemCategory => itemCategory.hash > 1);
+					const sortedCategories = _.sortBy(filteredCategories,
+						itemCategory =>	itemCategory.hash);
+					const itemCategory =
+						_.reduce(sortedCategories, (memo, itemCategory) => (memo + itemCategory.shortTitle + ' '), ' ')
+							.trim();
+
+					this.world.close();
+
+					return [{
+						itemCategory: (item.inventory ? (item.inventory.tierTypeName + ' ') : '') + itemCategory +
+						(filteredCategories.length < 2 ? (' ' + item.itemTypeDisplayName) : ''),
+						icon: 'https://www.bungie.net' + item.displayProperties.icon,
+						itemHash: item.hash,
+						itemName: item.displayProperties.name,
+						itemType: item.itemType
+					}];
 				});
 
-				return Promise.all(promises)
-					.then(itemCategories => {
-						const filteredCategories = _.filter(itemCategories, itemCategory => itemCategory.hash > 1);
-						const sortedCategories = _.sortBy(filteredCategories,
-							itemCategory =>	itemCategory.hash);
-						const itemCategory =
-							_.reduce(sortedCategories, (memo, itemCategory) => (memo + itemCategory.shortTitle + ' '), ' ')
-								.trim();
-
-						this.world.close();
-
-						return [{
-							itemCategory: (item.inventory ? (item.inventory.tierTypeName + ' ') : '') + itemCategory +
-								(filteredCategories.length < 2 ? (' ' + item.itemTypeDisplayName) : ''),
-							icon: 'https://www.bungie.net' + item.displayProperties.icon,
-							itemHash: item.hash,
-							itemName: item.displayProperties.name,
-							itemType: item.itemType
-						}];
-					});
-			})
-			.catch(err => {
-				this.world.close();
-				throw err;
-			});
+			return items;
+		} catch (err) {
+			this.world.close();
+			throw err;
+		}
 	}
 
 	/**
@@ -119,37 +120,33 @@ class TwilioController {
 	 * @param itemName
 	 * @returns {*|promise}
 	 */
-	_queryItem(itemName) {
-		return this.ghost.getWorldDatabasePath()
-			.then(worldDatabasePath => this.world.open(worldDatabasePath))
-			.then(() => this.world.getItemByName(itemName.replace(/[\u2018\u2019]/g, '\'')))
-			.then(items => {
-				this.world.close();
+	async _queryItem(itemName) {
+		try {
+			const worldDatabasePath = await this.ghost.getWorldDatabasePath();
+			await this.world.open(worldDatabasePath);
+			const items = await this.world.getItemByName(itemName.replace(/[\u2018\u2019]/g, '\''));
+			this.world.close();
 
-				if (items.length > 0) {
-					if (items.length > 1) {
-						const groups = _.groupBy(items, item => item.itemName);
-						const keys = Object.keys(groups);
+			if (items.length > 0) {
+				if (items.length > 1) {
+					const groups = _.groupBy(items, item => item.itemName);
+					const keys = Object.keys(groups);
 
-						if (keys.length === 1) {
-							return this._getItem(items[0]);
-						}
-
-						return items;
+					if (keys.length === 1) {
+						return await this._getItem(items[0]);
 					}
 
-					return this._getItem(items[0])
-						.then(items => {
-							return items;
-						});
+					return items;
 				}
 
-				return [];
-			})
-			.catch(err => {
-				this.world.close();
-				throw err;
-			});
+				return await this._getItem(items[0]);
+			}
+
+			return [];
+		} catch (err) {
+			this.world.close();
+			throw err;
+		}
 	}
 
 	/**
@@ -180,7 +177,7 @@ class TwilioController {
 	 * @param req
 	 * @param res
 	 */
-	request(req, res) {
+	async request(req, res) {
 		const header = req.headers['x-twilio-signature'];
 		const twiml = new MessagingResponse();
 
