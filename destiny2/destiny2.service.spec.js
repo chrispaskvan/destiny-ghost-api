@@ -15,12 +15,12 @@ const mockUser = {
 
 let destiny2Service;
 
-beforeEach(function () {
+beforeEach(() => {
     const cacheService = {
-        getManifest: function() {},
-        getVendor: function() {},
-        setManifest: function() {},
-        setVendor: function() {}
+        getManifest: () => {},
+        getVendor: () => {},
+        setManifest: () => {},
+        setVendor: () => {}
     };
 
     sinon.stub(cacheService, 'getVendor').resolves();
@@ -29,46 +29,46 @@ beforeEach(function () {
     destiny2Service = new Destiny2Service({ cacheService });
 });
 
-describe('Destiny2Service', function () {
-    describe('getManifest', function () {
-        beforeEach(function () {
+describe('Destiny2Service', () => {
+    describe('getManifest', () => {
+        beforeEach(() => {
             this.request = sinon.stub(request, 'get');
         });
 
-        it('should return the latest manifest', function () {
+        it('should return the latest manifest', () => {
             const { Response: mockManifest } = mockManifestResponse;
 
             this.request.callsArgWith(1, undefined, { statusCode: 200 }, JSON.stringify(mockManifestResponse));
 
             return destiny2Service.getManifest()
-                .then(function (manifest) {
+                .then(manifest => {
                     expect(manifest).to.eql(mockManifest);
                 });
         });
 
-        afterEach(function () {
+        afterEach(() => {
             this.request.restore();
         });
     });
 
-    describe('getProfile', function () {
-		beforeEach(function () {
+    describe('getProfile', () => {
+		beforeEach(() => {
 			this.request = sinon.stub(request, 'get');
 		});
 
-		it('should return the user\'s list of characters', function () {
+		it('should return the user\'s list of characters', () => {
 			const { Response: { characters: { data }}} = mockProfileCharactersResponse;
 			const mockCharacters = Object.keys(data).map(character => data[character]);
 
 			this.request.callsArgWith(1, undefined, { statusCode: 200 }, JSON.stringify(mockProfileCharactersResponse));
 
 			return destiny2Service.getProfile(mockUser.membershipId, mockUser.membershipType)
-				.then(function (characters) {
+				.then(characters => {
 					expect(characters).to.eql(mockCharacters);
 				});
 		});
 
-		afterEach(function () {
+		afterEach(() => {
 			this.request.restore();
 		});
 	});

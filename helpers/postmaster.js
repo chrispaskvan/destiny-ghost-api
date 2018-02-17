@@ -22,6 +22,7 @@ const registrationText = 'Hi {{firstName}},\r\n\r\n' +
 	'Open the link below to continue the registration process.\r\n\r\n';
 const mailOptions = {};
 const transporter = nodemailer.createTransport(smtpTransport(smtpConfiguration));
+const website = process.env.WEBSITE;
 
 class Postmaster {
 	static _getRandomColor() {
@@ -43,15 +44,15 @@ class Postmaster {
 					rejectUnauthorized: false
 				},
 				subject: 'Destiny Ghost Registration',
-				text: new S(registrationText).template(user).s + 'http://app.destiny-ghost.com' + url +
+				text: new S(registrationText).template(user).s + website + url +
 				'?token=' + user.membership.tokens.blob,
 				to: user.emailAddress,
 				html: (image ? '<img src=\'' + image + '\' style=\'background-color: ' +
 					this.constructor._getRandomColor() + ';\'><br />' : '') +
-				new S(registrationHtml).template(user).s + 'http://app.destiny-ghost.com' + url +
+				new S(registrationHtml).template(user).s + website + url +
 				'?token=' + user.membership.tokens.blob
 			});
-			transporter.sendMail(mailOptions, function (err, response) {
+			transporter.sendMail(mailOptions, (err, response) => {
 				if (err) {
 					reject(err);
 				} else {

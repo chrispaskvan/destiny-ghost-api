@@ -40,10 +40,14 @@ class AuthenticationService {
 	 */
 	_validate(user) {
         if (!user) {
-            return Promise.reject(new Error('User not found'));
+	        return Promise.resolve();
         }
 
-        const { bungie: { access_token: accessToken, refresh_token: refreshToken }} = user;
+        const { bungie: { access_token: accessToken, refresh_token: refreshToken } = {}} = user;
+
+        if (!accessToken) {
+	        return Promise.resolve();
+        }
 
         return this.destinyService.getCurrentUser(accessToken)
             .then(() => {
@@ -52,7 +56,7 @@ class AuthenticationService {
                         .then(() => user);
                 }
 
-                throw new Error('Bungie user not found');
+	            return Promise.resolve();
             })
             .catch(() => {
                 return this.destinyService.getAccessTokenFromRefreshToken(refreshToken)
@@ -67,7 +71,7 @@ class AuthenticationService {
                                 .then(() => user);
                         }
 
-                        throw new Error('Bungie user failed to authenticate');
+	                    return Promise.resolve();
                     });
             });
     }

@@ -8,25 +8,20 @@ const AuthenticationMiddleWare = require('../authentication/authentication.middl
     TwilioController = require('./twilio.controller'),
     express = require('express');
 
-const routes = function ({ authenticationController, destinyService, userService, worldRepository }) {
+const routes = ({ authenticationController, destinyService, userService, worldRepository }) => {
 	const middleware = new AuthenticationMiddleWare({ authenticationController });
     const twilioRouter = express.Router();
     const twilioController = new TwilioController({ destinyService, userService, worldRepository });
 
     twilioRouter.route('/destiny/r')
-		.post(function (req, res, next) {
-			middleware.authenticateUser(req, res, next);
-		}, function (req, res) {
-			twilioController.request(req, res);
-        });
+		.post((req, res, next) => middleware.authenticateUser(req, res, next),
+			(req, res) => twilioController.request(req, res));
+
     twilioRouter.route('/destiny/s')
-        .post(function (req, res) {
-            twilioController.statusCallback(req, res);
-        });
+        .post((req, res) => twilioController.statusCallback(req, res));
+
     twilioRouter.route('/destiny/f')
-        .post(function (req, res) {
-            twilioController.fallback(req, res);
-        });
+        .post((req, res) => twilioController.fallback(req, res));
 
     return twilioRouter;
 };

@@ -39,8 +39,7 @@ class World2 extends World {
                 const it = itemName.replace(/'/g, '\'\'');
                 let items = [];
 
-                this.db.each('SELECT json FROM DestinyInventoryItemDefinition WHERE json LIKE \'%"name":"' +
-                    it + '%"%\'', (err, row) => err ? reject(err) : items.push(JSON.parse(row.json)),
+                this.db.each(`SELECT json FROM DestinyInventoryItemDefinition WHERE json LIKE '%"name":"${it}%"%'`, (err, row) => err ? reject(err) : items.push(JSON.parse(row.json)),
                     (err, rows) => {
                         if (err) {
                             reject(err);
@@ -75,8 +74,7 @@ class World2 extends World {
     getItemByHash(itemHash) {
         return new Promise((resolve, reject) => {
             this.db.serialize(() => {
-                this.db.each('SELECT json FROM DestinyInventoryItemDefinition WHERE json LIKE \'%"hash":' +
-                    itemHash + '%\' LIMIT 1',
+                this.db.each(`SELECT json FROM DestinyInventoryItemDefinition WHERE json LIKE '%"hash":${itemHash}%' LIMIT 1`,
                     (err, row) => err ? reject(err) : resolve(JSON.parse(row.json)));
             });
         });
@@ -92,8 +90,8 @@ class World2 extends World {
 			this.db.serialize(() => {
 				let categories = [];
 
-				this.db.each('SELECT json FROM DestinyItemCategoryDefinition WHERE id = ' +
-					itemCategoryHash, (err, row) =>  err ? reject(err) : categories.push(JSON.parse(row.json)),
+				this.db.each(`SELECT json FROM DestinyItemCategoryDefinition WHERE json LIKE '%"hash":${itemCategoryHash}%' LIMIT 1`,
+					(err, row) =>  err ? reject(err) : categories.push(JSON.parse(row.json)),
                     (err, rows) => {
                         if (err) {
                             reject(err);
@@ -123,8 +121,7 @@ class World2 extends World {
 	getLore(hash) {
 		return new Promise((resolve, reject) => {
 			this.db.serialize(() => {
-				this.db.each('SELECT json FROM DestinyLoreDefinition WHERE json LIKE \'%"hash":' +
-					hash + '%\' LIMIT 1',
+				this.db.each(`SELECT json FROM DestinyLoreDefinition WHERE json LIKE \'%"hash":${hash}%' LIMIT 1`,
 					(err, row) => err ? reject(err) : resolve(JSON.parse(row.json)));
 			});
 		});

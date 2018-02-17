@@ -4,12 +4,12 @@ const UserCache = require('./user.cache'),
 
 let cacheService;
 
-beforeEach(function () {
+beforeEach(() => {
     cacheService = new UserCache();
 });
 
-describe('UserCache', function () {
-    it('set, get, and delete user', function () {
+describe('UserCache', () => {
+    it('set, get, and delete user', () => {
         return cacheService.setUser(mockUser)
             .then(() => cacheService.getUser(mockUser.phoneNumber))
             .then(user1 => {
@@ -24,6 +24,4 @@ describe('UserCache', function () {
     });
 });
 
-afterEach(function () {
-	cacheService.destroy();
-});
+afterEach(() => cacheService.destroy());

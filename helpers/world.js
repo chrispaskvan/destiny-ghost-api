@@ -78,8 +78,7 @@ class World {
             this.db.serialize(() => {
                 let cards = [];
 
-                this.db.each('SELECT * FROM DestinyGrimoireCardDefinition WHERE id IN (SELECT id FROM DestinyGrimoireCardDefinition ORDER BY RANDOM() LIMIT ' + // jscs:ignore maximumLineLength
-                    numberOfCards + ')', (err, row) => err ? reject(err) : cards.push(JSON.parse(row.json)),
+                this.db.each(`SELECT * FROM DestinyGrimoireCardDefinition WHERE id IN (SELECT id FROM DestinyGrimoireCardDefinition ORDER BY RANDOM() LIMIT ${numberOfCards})`, (err, row) => err ? reject(err) : cards.push(JSON.parse(row.json)),
                     err => err ? reject(err) : resolve(cards));
             });
         });
@@ -96,8 +95,8 @@ class World {
                 const it = new S(itemName).replaceAll('\'', '\'\'').s;
                 let items = [];
 
-                this.db.each('SELECT json FROM DestinyInventoryItemDefinition WHERE json LIKE \'%"itemName":"' +
-                    it + '%"%\'', (err, row) => err ? reject(err) : items.push(JSON.parse(row.json)),
+                this.db.each(`SELECT json FROM DestinyInventoryItemDefinition WHERE json LIKE \'%"itemName":"${it}%"%'`,
+                    (err, row) => err ? reject(err) : items.push(JSON.parse(row.json)),
                     (err, rows) => {
                         if (err) {
                             reject(err);
@@ -127,8 +126,7 @@ class World {
     getItemByHash(itemHash) {
         return new Promise((resolve, reject) => {
             this.db.serialize(() => {
-                this.db.each('SELECT json FROM DestinyInventoryItemDefinition WHERE json LIKE \'%"itemHash":' +
-                    itemHash + '%\' LIMIT 1',
+                this.db.each(`SELECT json FROM DestinyInventoryItemDefinition WHERE json LIKE '%"itemHash":${itemHash}%' LIMIT 1`,
                     (err, row) => err ? reject(err) : resolve(JSON.parse(row.json)));
             });
         });
@@ -144,8 +142,8 @@ class World {
 			this.db.serialize(() => {
 				let categories = [];
 
-				this.db.each('SELECT json FROM DestinyItemCategoryDefinition WHERE id = ' +
-					itemCategoryHash, (err, row) =>  err ? reject(err) : categories.push(JSON.parse(row.json)),
+				this.db.each(`SELECT json FROM DestinyItemCategoryDefinition WHERE id = ${itemCategoryHash}`,
+                    (err, row) =>  err ? reject(err) : categories.push(JSON.parse(row.json)),
 					(err, rows) => {
                         if (err) {
                             reject(err);
@@ -174,8 +172,7 @@ class World {
      */
     getVendorIcon(vendorHash) {
         return new Promise((resolve, reject) => {
-            this.db.each('SELECT json FROM DestinyVendorDefinition WHERE json LIKE \'%"vendorHash":' +
-                vendorHash + '%\' ORDER BY id LIMIT 1',
+            this.db.each(`SELECT json FROM DestinyVendorDefinition WHERE json LIKE '%"vendorHash":${vendorHash}%' ORDER BY id LIMIT 1`,
                 (err, row) => err ? reject(err) :
                     resolve('https://www.bungie.net' + JSON.parse(row.json).summary.vendorIcon),
                 (err) => err ? reject(err) : resolve());

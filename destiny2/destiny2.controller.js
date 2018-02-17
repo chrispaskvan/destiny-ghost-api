@@ -105,27 +105,24 @@ class Destiny2Controller extends DestinyController {
 	 * @returns {*|Array}
 	 * @private
 	 */
-	getXur(req, res) {
+	async getXur(req, res) {
 		const { session: { displayName, membershipType }} = req;
 
-		this.users.getUserByDisplayName(displayName, membershipType)
-			.then(currentUser => {
-				const { bungie: { access_token: accessToken }, membershipId } = currentUser;
+		try {
+			const currentUser = await this.users.getUserByDisplayName(displayName, membershipType)
+			const { bungie: { access_token: accessToken }, membershipId } = currentUser;
 
-				return this.destiny.getProfile(membershipId, membershipType)
-					.then(characters => {
-						if (characters && characters.length) {
-							return this.destiny.getXur(membershipId, membershipType, characters[0].characterId, accessToken)
-								.then(items => res.status(200).json(items));
-						}
+			const characters = await this.destiny.getProfile(membershipId, membershipType)
+			if (characters && characters.length) {
+				return this.destiny.getXur(membershipId, membershipType, characters[0].characterId, accessToken)
+					.then(items => res.status(200).json(items));
+			}
 
-						res.status(404);
-					});
-			})
-			.catch(err => {
-				log.error(err);
-				res.status(500).json(err);
-			});
+			res.status(404);
+		} catch (err) {
+			log.error(err);
+			res.status(500).json(err);
+		}
 	}
 
 	/**

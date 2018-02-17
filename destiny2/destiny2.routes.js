@@ -17,7 +17,7 @@ const AuthenticationMiddleWare = require('../authentication/authentication.middl
  * @param worldRepository
  * @returns {*}
  */
-const routes = function ({ authenticationController, destiny2Service, userService, worldRepository }) {
+const routes = ({ authenticationController, destiny2Service, userService, worldRepository }) => {
     const destiny2Router = express.Router();
 
     /**
@@ -36,36 +36,30 @@ const routes = function ({ authenticationController, destiny2Service, userServic
      * Routes
      */
     destiny2Router.route('/leaderboard')
-		.get(cors(corsConfig), function (req, res, next) {
-			middleware.authenticateUser(req, res, next);
-		}, function (req, res) {
-			destiny2Controller.getLeaderboard(req, res);
-		});
+		.get(cors(corsConfig),
+			(req, res, next) => middleware.authenticateUser(req, res, next),
+			(req, res) => destiny2Controller.getLeaderboard(req, res));
+
     destiny2Router.route('/manifest')
-        .get(function (req, res) {
-            destiny2Controller.getManifest(req, res);
-        });
+        .get((req, res) => destiny2Controller.getManifest(req, res));
+
     destiny2Router.route('/manifest')
-        .put(function (req, res) {
-            destiny2Controller.upsertManifest(req, res);
-        });
+        .put((req, res) => destiny2Controller.upsertManifest(req, res));
+
     destiny2Router.route('/profile')
-		.get(cors(corsConfig), function (req, res, next) {
-			middleware.authenticateUser(req, res, next);
-		}, function (req, res) {
-			destiny2Controller.getProfile(req, res);
-		});
+		.get(cors(corsConfig),
+			(req, res, next) => middleware.authenticateUser(req, res, next),
+			(req, res) => destiny2Controller.getProfile(req, res));
+
 	destiny2Router.route('/xur')
-		.get(cors(corsConfig), function (req, res, next) {
-			middleware.authenticateUser(req, res, next);
-		}, function (req, res) {
-			destiny2Controller.getXur(req, res);
-		});
+		.get(cors(corsConfig),
+			(req, res, next) => middleware.authenticateUser(req, res, next),
+			(req, res) => destiny2Controller.getXur(req, res));
 
 	/**
 	 * Validate the existence and the freshness of the Bungie database.
 	 */
-	destiny2Router.validateManifest = function () {
+	destiny2Router.validateManifest = () => {
 		const req = httpMocks.createRequest();
 		const res = httpMocks.createResponse({
 			eventEmitter: require('events').EventEmitter
@@ -73,7 +67,7 @@ const routes = function ({ authenticationController, destiny2Service, userServic
 
 		destiny2Controller.upsertManifest(req, res);
 
-		res.on('end', function () {
+		res.on('end', () => {
 			log.info('destiny 2 validateManifest returned a response status code of ' + res.statusCode);
 		});
 	};

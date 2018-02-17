@@ -3,8 +3,7 @@
  */
 require('dotenv').config();
 
-const Log = require('./models/log'),
-	Routes = require('./routes'),
+const Routes = require('./routes'),
 	appInsightsConfig = require('./settings/applicationInsights.json'),
 	applicationInsights = require('applicationinsights'),
     bodyParser = require('body-parser'),
@@ -12,7 +11,8 @@ const Log = require('./models/log'),
     express = require('express'),
 	fs = require('fs'),
 	http = require('http'),
-    path = require('path'),
+	log = require('./helpers/log'),
+	path = require('path'),
     session = require('express-session'),
     redis = require('redis'),
 	redisConfig = require('./settings/redis.json'),
@@ -76,11 +76,10 @@ const ghostSession = session({
 app.use(ghostSession);
 
 /**
- * Logs
+ * Request/Response and Error Middleware Loggers
  */
-const logger = new Log();
-app.use(logger.requestLogger());
-app.use(logger.errorLogger());
+app.use(log.requestLogger());
+app.use(log.errorLogger());
 
 /**
  * Routes
