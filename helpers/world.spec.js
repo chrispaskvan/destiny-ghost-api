@@ -12,16 +12,16 @@ const mockDestinyService = {
 
 const world = new World();
 
-describe('It\'s Bungie\'s 1st world. You\'re just querying it.', function () {
+describe('It\'s Bungie\'s 1st world. You\'re just querying it.', () => {
 	let ghost;
 
-	beforeEach(function () {
+	beforeEach(() => {
 		ghost = new Ghost({
 			destinyService: mockDestinyService
 		});
 	});
 
-	it('should return the Hunter character class', function (done) {
+	it('should return the Hunter character class', (done) => {
 		ghost.getWorldDatabasePath()
 			.then(path => {
 				world.open(path);
@@ -41,7 +41,7 @@ describe('It\'s Bungie\'s 1st world. You\'re just querying it.', function () {
 			});
 	});
 
-	it('should return the Fusion Rifle category definition', function (done) {
+	it('should return the Fusion Rifle category definition', (done) => {
 		ghost.getWorldDatabasePath()
 			.then(path => {
 				world.open(path);
@@ -59,7 +59,7 @@ describe('It\'s Bungie\'s 1st world. You\'re just querying it.', function () {
 			});
 	});
 
-	it('should return Fatebringer', function (done) {
+	it('should return Fatebringer', (done) => {
 		ghost.getWorldDatabasePath()
 			.then(path => {
 				world.open(path);
@@ -77,7 +77,7 @@ describe('It\'s Bungie\'s 1st world. You\'re just querying it.', function () {
 			});
 	});
 
-	it('should return year 2 Hawkmoon', function (done) {
+	it('should return year 2 Hawkmoon', (done) => {
 		ghost.getWorldDatabasePath()
 			.then(path => {
 				world.open(path);
@@ -98,7 +98,7 @@ describe('It\'s Bungie\'s 1st world. You\'re just querying it.', function () {
 			});
 	});
 
-	it('should return the icon of the Agent of Nine', function (done) {
+	it('should return the icon of the Agent of Nine', (done) => {
 		ghost.getWorldDatabasePath()
 			.then(path => {
 				world.open(path);

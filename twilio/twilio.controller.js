@@ -42,7 +42,6 @@ class TwilioController {
 	/**
 	 * Search database.
 	 * @param item {string}
-	 * @param world
 	 * @returns {*|promise}
 	 * @private
 	 */
@@ -56,28 +55,24 @@ class TwilioController {
 				promises.push(this.world.getItemCategory(itemCategoryHash));
 			});
 
-			const items = await Promise.all(promises)
-				.then(itemCategories => {
-					const filteredCategories = _.filter(itemCategories, itemCategory => itemCategory.hash > 1);
-					const sortedCategories = _.sortBy(filteredCategories,
-						itemCategory =>	itemCategory.hash);
-					const itemCategory =
-						_.reduce(sortedCategories, (memo, itemCategory) => (memo + itemCategory.shortTitle + ' '), ' ')
-							.trim();
+			const itemCategories = await Promise.all(promises);
+			const filteredCategories = _.filter(itemCategories, itemCategory => itemCategory.hash > 1);
+			const sortedCategories = _.sortBy(filteredCategories,
+				itemCategory =>	itemCategory.hash);
+			const itemCategory =
+				_.reduce(sortedCategories, (memo, itemCategory) => (memo + itemCategory.shortTitle + ' '), ' ')
+					.trim();
 
-					this.world.close();
+			this.world.close();
 
-					return [{
-						itemCategory: (item.inventory ? (item.inventory.tierTypeName + ' ') : '') + itemCategory +
-						(filteredCategories.length < 2 ? (' ' + item.itemTypeDisplayName) : ''),
-						icon: 'https://www.bungie.net' + item.displayProperties.icon,
-						itemHash: item.hash,
-						itemName: item.displayProperties.name,
-						itemType: item.itemType
-					}];
-				});
-
-			return items;
+			return [{
+				itemCategory: (item.inventory ? (item.inventory.tierTypeName + ' ') : '') + itemCategory +
+				(filteredCategories.length < 2 ? (' ' + item.itemTypeDisplayName) : ''),
+				icon: 'https://www.bungie.net' + item.displayProperties.icon,
+				itemHash: item.hash,
+				itemName: item.displayProperties.name,
+				itemType: item.itemType
+			}];
 		} catch (err) {
 			this.world.close();
 			throw err;
@@ -89,7 +84,7 @@ class TwilioController {
 	 * @returns {string}
 	 * @private
 	 */
-	_getRandomResponseForAnError() {
+	static _getRandomResponseForAnError() {
 		const responses = [
 			'Sorry. I lost your message in the Ascendant realm. Blame Oryx.',
 			'Skolas escaped the Prison of Elders again. He must be responsible for this mishap.',
@@ -105,7 +100,7 @@ class TwilioController {
 	 * @returns {string}
 	 * @private
 	 */
-	_getRandomResponseForNoResults() {
+	static _getRandomResponseForNoResults() {
 		const responses = [
 			'Are you sure that\'s how it\'s spelled?',
 			'Does it look like a Gjallarhorn?',
@@ -159,7 +154,7 @@ class TwilioController {
 		const twiml = new MessagingResponse();
 
 		if (twilio.validateRequest(authToken, header, process.env.DOMAIN + req.originalUrl, req.body)) {
-			twiml.message(attributes, this._getRandomResponseForAnError());
+			twiml.message(attributes, TwilioController._getRandomResponseForAnError());
 			res.writeHead(200, {
 				'Content-Type': 'text/xml'
 			});
@@ -181,121 +176,118 @@ class TwilioController {
 		const header = req.headers['x-twilio-signature'];
 		const twiml = new MessagingResponse();
 
-		if (twilio.validateRequest(authToken, header, process.env.DOMAIN + req.originalUrl, req.body)) {
-			let counter = parseInt(req.cookies.counter, 10) || 0;
+		try {
+			if (twilio.validateRequest(authToken, header, process.env.DOMAIN + req.originalUrl, req.body)) {
+				let counter = parseInt(req.cookies.counter, 10) || 0;
 
-			this.users.getUserByPhoneNumber(req.body.From)
-				.then(user => {
-					if (!user || !user.dateRegistered) {
-						if (!req.cookies.isRegistered) {
-							twiml.message('Register your phone at app.destiny-ghost.com/register'); // ToDo: Domain name is hard coded here.
-							res.writeHead(200, {
-								'Content-Type': 'text/xml'
-							});
-							res.end(twiml.toString());
-						} else {
-							res.writeHead(403);
-							res.end();
-						}
-
-						return;
-					}
-					res.cookie('isRegistered', true);
-					this.users.addUserMessage(user.displayName, user.membershipType, req.body);
-
-					const itemHash = req.cookies.itemHash;
-					const message = req.body.Body.trim().toLowerCase();
-					/**
-					 * @ToDo Handle STOP and HELP
-					 */
-					if (new S(message).startsWith('more')) {
-						if (itemHash) {
-							return bitly.getShortUrl('http://db.destinytracker.com/d2/en/items/' + itemHash)
-								.then(function (shortURL) {
-									twiml.message(attributes, 'Destiny Tracker\n' + shortURL);
-									res.writeHead(200, {
-										'Content-Type': 'text/xml'
-									});
-									res.end(twiml.toString());
-								});
-						}
-
-						twiml.message(attributes, 'More what?');
+				const user = await this.users.getUserByPhoneNumber(req.body.From);
+				if (!user || !user.dateRegistered) {
+					if (!req.cookies.isRegistered) {
+						twiml.message(`Register your phone at ${process.env.WEBSITE}/register`);
 						res.writeHead(200, {
 							'Content-Type': 'text/xml'
 						});
 						res.end(twiml.toString());
 					} else {
-						if (counter > 25) {
-							twiml.message(attributes, 'Let me check with the Speaker regarding your good standing with the Vanguard.');
-							res.writeHead(429, {
-								'Content-Type': 'text/xml'
-							});
-							res.end(twiml.toString());
-						} else {
-							const searchTerm = req.body.Body.trim().toLowerCase();
+						res.writeHead(403);
+						res.end();
+					}
 
-							return this._queryItem(searchTerm)
-								.then(items => {
-									counter = counter + 1;
-									res.cookie('counter', counter);
-									switch (items.length) {
-										case 0: {
-											twiml.message(attributes, this._getRandomResponseForNoResults());
-											res.writeHead(200, {
-												'Content-Type': 'text/xml'
-											});
+					return;
+				}
+				res.cookie('isRegistered', true);
+				this.users.addUserMessage(user.displayName, user.membershipType, req.body);
 
-											return res.end(twiml.toString());
-										}
-										case 1: {
-											res.cookie('itemHash', items[0].itemHash);
-											items[0].itemCategory = new S(items[0].itemCategory).strip('Weapon')
-												.collapseWhitespace().s.trim();
-
-											const template = '{{itemName}} {{itemCategory}}';
-
-											if (user.type === 'landline') {
-												twiml.message(attributes, (new S(template).template(items[0]).s).substr(0, 130));
-											} else {
-												twiml.message(attributes,
-													new S(template).template(items[0]).s).media(items[0].icon);
-											}
-											res.writeHead(200, {
-												'Content-Type': 'text/xml'
-											});
-
-											return res.end(twiml.toString());
-										}
-										default: {
-											const groups = _.groupBy(items, function (item) {
-												return item.itemName;
-											});
-											const keys = Object.keys(groups);
-											const result = _.reduce(keys, (memo, key) => {
-												return memo + '\n' + key + ' ' + groups[key][0].itemCategory;
-											}, ' ').trim();
-
-											twiml.message(attributes, result.substr(0, 130));
-											res.clearCookie('itemHash');
-											res.writeHead(200, {
-												'Content-Type': 'text/xml'
-											});
-
-											return res.end(twiml.toString());
-										}
-									}
+				const itemHash = req.cookies.itemHash;
+				const message = req.body.Body.trim().toLowerCase();
+				/**
+				 * @ToDo Handle STOP and HELP
+				 */
+				if (new S(message).startsWith('more')) {
+					if (itemHash) {
+						return bitly.getShortUrl('http://db.destinytracker.com/d2/en/items/' + itemHash)
+							.then(function (shortURL) {
+								twiml.message(attributes, 'Destiny Tracker\n' + shortURL);
+								res.writeHead(200, {
+									'Content-Type': 'text/xml'
 								});
+								res.end(twiml.toString());
+							});
+					}
+
+					twiml.message(attributes, 'More what?');
+					res.writeHead(200, {
+						'Content-Type': 'text/xml'
+					});
+					res.end(twiml.toString());
+				} else {
+					if (counter > 25) {
+						twiml.message(attributes, 'Let me check with the Speaker regarding your good standing with the Vanguard.');
+						res.writeHead(429, {
+							'Content-Type': 'text/xml'
+						});
+						res.end(twiml.toString());
+					} else {
+						const searchTerm = req.body.Body.trim().toLowerCase();
+						const items = await this._queryItem(searchTerm);
+
+						counter = counter + 1;
+						res.cookie('counter', counter);
+						switch (items.length) {
+							case 0: {
+								twiml.message(attributes, TwilioController._getRandomResponseForNoResults());
+								res.writeHead(200, {
+									'Content-Type': 'text/xml'
+								});
+
+								return res.end(twiml.toString());
+							}
+							case 1: {
+								res.cookie('itemHash', items[0].itemHash);
+								items[0].itemCategory = new S(items[0].itemCategory).strip('Weapon')
+									.collapseWhitespace().s.trim();
+
+								const template = '{{itemName}} {{itemCategory}}';
+
+								if (user.type === 'landline') {
+									twiml.message(attributes, (new S(template).template(items[0]).s).substr(0, 130));
+								} else {
+									twiml.message(attributes,
+										new S(template).template(items[0]).s).media(items[0].icon);
+								}
+								res.writeHead(200, {
+									'Content-Type': 'text/xml'
+								});
+
+								return res.end(twiml.toString());
+							}
+							default: {
+								const groups = _.groupBy(items, function (item) {
+									return item.itemName;
+								});
+								const keys = Object.keys(groups);
+								const result = _.reduce(keys, (memo, key) => {
+									return memo + '\n' + key + ' ' + groups[key][0].itemCategory;
+								}, ' ').trim();
+
+								twiml.message(attributes, result.substr(0, 130));
+								res.clearCookie('itemHash');
+								res.writeHead(200, {
+									'Content-Type': 'text/xml'
+								});
+
+								return res.end(twiml.toString());
+							}
 						}
 					}
-				})
-				.catch(err => {
-					log.error(err);
-					res.status(500).json(err);
-				});
-		} else {
-			res.writeHead(403);
-			res.end();
+				}
+			} else {
+				res.writeHead(403);
+				res.end();
+			}
+		} catch (err) {
+			log.error(err);
+			res.status(500).json(err);
 		}
 	}
 

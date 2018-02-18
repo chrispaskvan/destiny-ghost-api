@@ -12,16 +12,16 @@ const mockDestinyService = {
 
 const world = new World();
 
-describe('It\'s Bungie\'s 2nd world. You\'re just querying it.', function () {
+describe('It\'s Bungie\'s 2nd world. You\'re just querying it.', () => {
 	let ghost;
 
-	beforeEach(function () {
+	beforeEach(() => {
 		ghost = new Ghost({
 			destinyService: mockDestinyService
 		});
 	});
 
-	it('should return the Hunter character class', function (done) {
+	it('should return the Hunter character class', (done) => {
 		ghost.getWorldDatabasePath()
 			.then(path => {
 				world.open(path);

@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "test": "./node_modules/.bin/mocha --opts .mocharc ./**/*.spec.js",
-    "coverage": "rm -fr ./.coverage; istanbul cover ./node_modules/.bin/mocha -- --opts .mocharc ./**/*.spec.js",
+    "coverage": "rm -fr ./.coverage; istanbul cover _mocha -- --opts .mocharc ./**/*.spec.js",
     "test:watch": "./node_modules/.bin/mocha --opts .mocharc -w ./**/*.spec.js"
   },
   "author": "Chris Paskvan",
@@ -31,6 +31,7 @@
     "base64url": "^2.0.0",
     "body-parser": "^1.18.2",
     "bunyan": "^1.8.12",
+    "bunyan-pretty-colors": "^0.1.7",
     "connect-redis": "^3.3.3",
     "cookie": "^0.3.1",
     "cookie-parser": "^1.4.0",

@@ -327,7 +327,7 @@ class DestinyController {
 							});
 					});
 			})
-			.catch(function (err) {
+			.catch(err => {
 				log.error(err);
 				this.world.close();
 				res.status(500).json(err);

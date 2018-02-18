@@ -22,22 +22,22 @@ let destinyServiceStub;
 let userController;
 let userServiceStub;
 
-beforeEach(function () {
+beforeEach(() => {
 	userController = new UserController({ destinyService, userService });
 });
 
 describe('UserController', () => {
 	let res;
 
-	beforeEach(function () {
+	beforeEach(() => {
 		res = httpMocks.createResponse({
 			eventEmitter: require('events').EventEmitter
 		});
 	});
 
 	describe('getCurrentUser', () => {
-		describe('when session displayName is undefined', function () {
-			it('should not return a user', function (done) {
+		describe('when session displayName is undefined', () => {
+			it('should not return a user', (done) => {
 				const req = httpMocks.createRequest({
 					session: {
 						displayName
@@ -62,7 +62,7 @@ describe('UserController', () => {
 					}
 				});
 
-				res.on('end', function () {
+				res.on('end', () => {
 					expect(res.statusCode).to.equal(401);
 					done();
 				});
@@ -71,8 +71,8 @@ describe('UserController', () => {
 			});
 		});
 
-		describe('when session membershipType is undefined', function () {
-			it('should not return a user', function (done) {
+		describe('when session membershipType is undefined', () => {
+			it('should not return a user', (done) => {
 				const req = httpMocks.createRequest({
 					session: {
 						membershipType
@@ -97,7 +97,7 @@ describe('UserController', () => {
 					}
 				});
 
-				res.on('end', function () {
+				res.on('end', () => {
 					expect(res.statusCode).to.equal(401);
 					done();
 				});
@@ -106,9 +106,9 @@ describe('UserController', () => {
 			});
 		});
 
-		describe('when session displayName and membershipType are defined', function () {
-			describe('when user and destiny services return a user', function () {
-				it('should return the current user', function (done) {
+		describe('when session displayName and membershipType are defined', () => {
+			describe('when user and destiny services return a user', () => {
+				it('should return the current user', (done) => {
 					const req = httpMocks.createRequest({
 						session: {
 							displayName,
@@ -134,7 +134,7 @@ describe('UserController', () => {
 						}
 					});
 
-					res.on('end', function() {
+					res.on('end', () => {
 						expect(res.statusCode).to.equal(200);
 						done();
 					});
@@ -143,8 +143,8 @@ describe('UserController', () => {
 				});
 			});
 
-			describe('when destiny service returns undefined', function () {
-				it('should not return a user', function (done) {
+			describe('when destiny service returns undefined', () => {
+				it('should not return a user', (done) => {
 					const req = httpMocks.createRequest({
 						session: {
 							displayName,
@@ -161,7 +161,7 @@ describe('UserController', () => {
 						}
 					});
 
-					res.on('end', function() {
+					res.on('end', () => {
 						expect(res.statusCode).to.equal(401);
 						done();
 					});
@@ -170,8 +170,8 @@ describe('UserController', () => {
 				});
 			});
 
-			describe('when user service returns undefined', function () {
-				it('should not return a user', function (done) {
+			describe('when user service returns undefined', () => {
+				it('should not return a user', (done) => {
 					const req = httpMocks.createRequest({
 						session: {
 							displayName,
@@ -191,7 +191,7 @@ describe('UserController', () => {
 					});
 					userServiceStub = sinon.stub(userService, 'getUserByDisplayName').resolves();
 
-					res.on('end', function() {
+					res.on('end', () => {
 						expect(res.statusCode).to.equal(401);
 						done();
 					});
@@ -201,22 +201,22 @@ describe('UserController', () => {
 			});
 		});
 
-		afterEach(function () {
+		afterEach(() => {
 			destinyServiceStub.restore();
 			userServiceStub.restore();
 		})
 	});
 
 	describe('update', () => {
-		describe('when user is undefined', function () {
-			it('should not return a user', function (done) {
+		describe('when user is undefined', () => {
+			it('should not return a user', (done) => {
 				const req = httpMocks.createRequest({
 					session: {}
 				});
 
 				userServiceStub = sinon.stub(userService, 'getUserByDisplayName').resolves();
 
-				res.on('end', function () {
+				res.on('end', () => {
 					expect(res.statusCode).to.equal(404);
 					done();
 				});
@@ -225,8 +225,8 @@ describe('UserController', () => {
 			});
 		});
 
-		describe('when user is defined', function () {
-			it('should patch the user', function (done) {
+		describe('when user is defined', () => {
+			it('should patch the user', (done) => {
 				const firstName = '11';
 				const mock = sinon.mock(userService);
 				const req = httpMocks.createRequest({
@@ -268,7 +268,7 @@ describe('UserController', () => {
 					]
 				}).resolves();
 
-				res.on('end', function() {
+				res.on('end', () => {
 					expect(res.statusCode).to.equal(200);
 					mock.verify();
 					mock.restore();
@@ -279,7 +279,7 @@ describe('UserController', () => {
 			});
 		});
 
-		afterEach(function () {
+		afterEach(() => {
 			userServiceStub.restore();
 		})
 	});

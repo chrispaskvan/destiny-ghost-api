@@ -12,35 +12,27 @@ const DestinyService = require('./destiny.service'),
 
 let destinyService;
 
-beforeEach(function () {
+beforeEach(() => {
     const cacheService = {
-        getManifest: function() {
-            return Promise.resolve();
-        },
-        getVendor: function() {
-            return Promise.resolve();
-        },
-        setManifest: function() {
-            return Promise.resolve();
-        },
-        setVendor: function() {
-            return Promise.resolve();
-        }
+        getManifest: () => Promise.resolve(),
+        getVendor: () => Promise.resolve(),
+        setManifest: () => Promise.resolve(),
+        setVendor: () => Promise.resolve()
     };
 
     destinyService = new DestinyService({ cacheService });
 });
 
-describe('DestinyService', function () {
+describe('DestinyService', () => {
     const accessToken = chance.hash();
     const characterId = chance.guid();
 
-    describe('getFieldTestWeapons', function () {
-        beforeEach(function () {
+    describe('getFieldTestWeapons', () => {
+        beforeEach(() => {
             this.request = sinon.stub(request, 'get');
         });
 
-        it('should return an array of field test weapon hashes', function () {
+        it('should return an array of field test weapon hashes', () => {
             const { Response: { data: { vendorHash, nextRefreshDate, saleItemCategories }}} = mockBansheeResponse;
             const fieldTestWeapons = saleItemCategories.find((saleItemCategory) => {
                 return saleItemCategory.categoryTitle === 'Field Test Weapons';
@@ -54,7 +46,7 @@ describe('DestinyService', function () {
             this.request.callsArgWith(1, undefined, { statusCode: 200 }, JSON.stringify(mockBansheeResponse));
 
             return destinyService.getFieldTestWeapons(characterId, accessToken)
-                .then(function (fieldTestWeapons) {
+                .then(fieldTestWeapons => {
                     expect(fieldTestWeapons).to.eql({
                         vendorHash,
                         nextRefreshDate,
@@ -63,38 +55,34 @@ describe('DestinyService', function () {
                 });
         });
 
-        afterEach(function () {
-            this.request.restore();
-        });
+        afterEach(() => this.request.restore());
     });
 
-    describe('getManifest', function () {
-        beforeEach(function () {
+    describe('getManifest', () => {
+        beforeEach(() => {
             this.request = sinon.stub(request, 'get');
         });
 
-        it('should return the latest manifest', function () {
+        it('should return the latest manifest', () => {
             const { Response: manifest1 } = mockManifestResponse;
 
             this.request.callsArgWith(1, undefined, { statusCode: 200 }, JSON.stringify(mockManifestResponse));
 
             return destinyService.getManifest()
-                .then(function (manifest) {
+                .then(manifest => {
                     expect(manifest).to.eql(manifest1);
                 });
         });
 
-        afterEach(function () {
-            this.request.restore();
-        });
+        afterEach(() => this.request.restore());
     });
 
-    describe('getXur', function () {
-        beforeEach(function () {
+    describe('getXur', () => {
+        beforeEach(() => {
             this.request = sinon.stub(request, 'get');
         });
 
-        it('should return an array of exotic gear hashes', function () {
+        it('should return an array of exotic gear hashes', () => {
             const { Response: { data: { vendorHash, nextRefreshDate, saleItemCategories }}} = mockXurResponse;
             const exoticGear = saleItemCategories.find((saleItemCategory) => {
                 return saleItemCategory.categoryTitle === 'Exotic Gear';
@@ -108,7 +96,7 @@ describe('DestinyService', function () {
             this.request.callsArgWith(1, undefined, { statusCode: 200 }, JSON.stringify(mockXurResponse));
 
             return destinyService.getXur(accessToken)
-                .then(function (xur) {
+                .then(xur => {
                     expect(xur).to.eql({
                         vendorHash,
                         nextRefreshDate,
@@ -117,8 +105,6 @@ describe('DestinyService', function () {
                 });
         });
 
-        afterEach(function () {
-            this.request.restore();
-        });
+        afterEach(() => this.request.restore());
     });
 });

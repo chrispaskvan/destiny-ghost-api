@@ -96,7 +96,7 @@ class Routes {
 		/**
 		 * Validate the existence and the freshness of the Bungie database.
 		 */
-		routes.validateManifest = function() {
+		routes.validateManifest = () => {
 			destinyRouter.validateManifest();
 			destiny2Router.validateManifest();
 		};

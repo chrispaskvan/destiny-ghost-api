@@ -16,7 +16,7 @@ const DestinyController = require('../destiny/destiny.controller'),
  * @param worldRepository
  * @returns {*}
  */
-const routes = function ({ authenticationController, destinyService, userService, worldRepository }) {
+const routes = ({ authenticationController, destinyService, userService, worldRepository }) => {
     const destinyRouter = express.Router();
 
     /**
@@ -38,48 +38,37 @@ const routes = function ({ authenticationController, destinyService, userService
         .get(cors(), (req, res) => destinyController.getAuthorizationUrl(req, res));
 
     destinyRouter.route('/characters')
-        .get(function (req, res, next) {
-            middleware.authenticateUser(req, res, next);
-        }, function (req, res) {
-            destinyController.getCharacters(req, res);
-        });
+        .get((req, res, next) => middleware.authenticateUser(req, res, next),
+	        (req, res) => destinyController.getCharacters(req, res));
+
     destinyRouter.route('/currentUser/')
-        .get(function (req, res) {
-            destinyController.getCurrentUser(req, res);
-        });
+        .get((req, res) => destinyController.getCurrentUser(req, res));
+
     destinyRouter.route('/fieldTestWeapons/')
-        .get(function (req, res, next) {
-            middleware.authenticateUser(req, res, next);
-        }, function (req, res) {
-            destinyController.getFieldTestWeapons(req, res);
-        });
+        .get((req, res, next) => middleware.authenticateUser(req, res, next),
+	        (req, res) => destinyController.getFieldTestWeapons(req, res));
+
     destinyRouter.route('/foundryOrders/')
-        .get(function (req, res, next) {
-            middleware.authenticateUser(req, res, next);
-        }, function (req, res) {
-            destinyController.getFoundryOrders(req, res);
-        });
+        .get((req, res, next) => middleware.authenticateUser(req, res, next),
+	        (req, res) => destinyController.getFoundryOrders(req, res));
+
     destinyRouter.route('/grimoireCards/:numberOfCards')
-        .get(cors(), function (req, res) {
-            destinyController.getGrimoireCards(req, res);
-        });
+        .get(cors(),
+	        (req, res) => destinyController.getGrimoireCards(req, res));
+
     destinyRouter.route('/ironBannerEventRewards/')
-        .get(function (req, res) {
-            destinyController.getIronBannerEventRewards(req, res);
-        });
+        .get((req, res) => destinyController.getIronBannerEventRewards(req, res));
+
     destinyRouter.route('/manifest')
-        .get(function (req, res) {
-            destinyController.upsertManifest(req, res);
-        });
+        .get((req, res) => destinyController.upsertManifest(req, res));
+
     destinyRouter.route('/xur/')
-        .get(function (req, res) {
-            destinyController.getXur(req, res);
-        });
+        .get((req, res) => destinyController.getXur(req, res));
 
 	/**
 	 * Validate the existence and the freshness of the Bungie database.
 	 */
-	destinyRouter.validateManifest = function () {
+	destinyRouter.validateManifest = () => {
 		const req = httpMocks.createRequest();
 		const res = httpMocks.createResponse({
 			eventEmitter: require('events').EventEmitter
@@ -87,8 +76,8 @@ const routes = function ({ authenticationController, destinyService, userService
 
 		destinyController.upsertManifest(req, res);
 
-		res.on('end', function () {
-			log.info('destiny validateManifest returned a response status code of ' + res.statusCode);
+		res.on('end', () => {
+			log.info(`destiny validateManifest responded with a status code of ${res.statusCode}`);
 		});
 	};
 

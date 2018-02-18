@@ -23,7 +23,7 @@ let destiny2ServiceStub;
 let destiny2Controller;
 let userServiceStub;
 
-beforeEach(function () {
+beforeEach(() => {
 	const worldRepository = {
 		close: () => Promise.resolve(),
 		getClassByHash: () => Promise.resolve({
@@ -49,16 +49,16 @@ beforeEach(function () {
 describe('Destiny2Controller', () => {
 	let res;
 
-	beforeEach(function () {
+	beforeEach(() => {
 		res = httpMocks.createResponse({
 			eventEmitter: require('events').EventEmitter
 		});
 	});
 
 	describe('getProfile', () => {
-		describe('when session displayName and membershipType are defined', function () {
-			describe('when user and destiny services return a user', function () {
-				it('should return user profile', function (done) {
+		describe('when session displayName and membershipType are defined', () => {
+			describe('when user and destiny services return a user', () => {
+				it('should return user profile', (done) => {
 					const req = httpMocks.createRequest({
 						session: {
 							displayName,
@@ -102,7 +102,7 @@ describe('Destiny2Controller', () => {
 		});
 	});
 
-	afterEach(function () {
+	afterEach(() => {
 		destiny2ServiceStub.restore();
 		userServiceStub.restore();
 	})

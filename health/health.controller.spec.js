@@ -35,14 +35,14 @@ let storeGetStub;
 let storeSetStub;
 let worlRepositoryStub;
 
-beforeEach(function () {
+beforeEach(() => {
 	healthController = new HealthController({ destinyService, documents, store, worldRepository });
 });
 
 describe('HealthController', () => {
 	let res;
 
-	beforeEach(function () {
+	beforeEach(() => {
 		res = httpMocks.createResponse({
 			eventEmitter: require('events').EventEmitter
 		});
@@ -50,8 +50,8 @@ describe('HealthController', () => {
 	});
 
 	describe('getHealth', () => {
-		describe('when all services are healthy', function () {
-			it('should return a positive response', function (done) {
+		describe('when all services are healthy', () => {
+			it('should return a positive response', (done) => {
 				const req = httpMocks.createRequest();
 
 				destinyServiceStub = sinon.stub(destinyService, 'getManifest').resolves(manifest);
@@ -72,7 +72,7 @@ describe('HealthController', () => {
 					}
 				}]);
 
-				res.on('end', function () {
+				res.on('end', () => {
 					expect(res.statusCode).to.equal(200);
 
 					const body = JSON.parse(res._getData());
@@ -90,8 +90,8 @@ describe('HealthController', () => {
 				healthController.getHealth(req, res);
 			});
 		});
-		describe('when all services are unhealthy', function () {
-			it('should return a negative response', function (done) {
+		describe('when all services are unhealthy', () => {
+			it('should return a negative response', (done) => {
 				const req = httpMocks.createRequest();
 
 				destinyServiceStub = sinon.stub(destinyService, 'getManifest').rejects();
@@ -102,7 +102,7 @@ describe('HealthController', () => {
 				this.request.callsArgWith(1, undefined, { statusCode: 400 });
 				worlRepositoryStub = sinon.stub(worldRepository, 'getItemByName').rejects();
 
-				res.on('end', function () {
+				res.on('end', () => {
 					expect(res.statusCode).to.equal(503);
 
 					const body = JSON.parse(res._getData());
@@ -122,7 +122,7 @@ describe('HealthController', () => {
 		});
 	});
 
-	afterEach(function () {
+	afterEach(() => {
 		destinyServiceStub.restore();
 		documentsStub.restore();
 		storeDelStub.restore();
