@@ -1,6 +1,6 @@
 {
   "name": "destiny-ghost-api",
-  "version": "1.1.1",
+  "version": "2.0.11",
   "description": "",
   "main": "server.js",
   "scripts": {
