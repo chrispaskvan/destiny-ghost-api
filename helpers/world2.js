@@ -90,7 +90,7 @@ class World2 extends World {
 			this.db.serialize(() => {
 				let categories = [];
 
-				this.db.each(`SELECT json FROM DestinyItemCategoryDefinition WHERE json LIKE '%"hash":${itemCategoryHash}%' LIMIT 1`,
+				this.db.each(`SELECT json FROM DestinyItemCategoryDefinition WHERE json LIKE '%"hash":${itemCategoryHash},%' LIMIT 1`,
 					(err, row) =>  err ? reject(err) : categories.push(JSON.parse(row.json)),
                     (err, rows) => {
                         if (err) {

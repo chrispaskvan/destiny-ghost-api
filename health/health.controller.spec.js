@@ -79,7 +79,7 @@ describe('HealthController', () => {
 					expect(body).to.deep.equal({
 						documents: 2,
 						store: true,
-						manifest: '60480.17.10.23.1314-2',
+						manifest: '61966.18.01.12.0839-8',
 						twilio: 'All Systems Go',
 						world: 'The Number'
 					});
