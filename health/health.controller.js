@@ -126,7 +126,7 @@ class HealthController {
 			await this.worldRepository.open(worldDatabasePath);
 
 			const [{ displayProperties: { description = notAvailable }}] =
-				await this.worldRepository.getItemByName('Garden Progeny 1');
+				await this.worldRepository.getItemByName('The Number');
 			await this.worldRepository.close();
 
 			return description;

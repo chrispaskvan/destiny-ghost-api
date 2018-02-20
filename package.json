@@ -1,7 +1,7 @@
 {
   "name": "destiny-ghost-api",
   "version": "2.0.11",
-  "description": "",
+  "description": "Node.js API for querying the Destiny database via SMS messages.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -11,6 +11,10 @@
   },
   "author": "Chris Paskvan",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chrispaskvan/destiny-ghost-api"
+  },
   "engines": {
     "node": ">=8.0.0",
     "npm": "5.4.0"
