@@ -7,33 +7,8 @@
  * @requires azure
  * {@link https://docs.microsoft.com/en-us/azure/service-bus-messaging/service-bus-nodejs-how-to-use-topics-subscriptions}
  */
-'use strict';
-var azure = require('azure'),
-    log = require('./log'),
-    settings = require('../settings/serviceBus.json'),
-    Q = require('q');
-
-function getFromTheBus(serviceBusService) {
-    const deleteMessage = Q.nbind(serviceBusService.deleteMessage, serviceBusService);
-    const receiveSubscriptionMessage = Q.nbind(serviceBusService.receiveSubscriptionMessage, serviceBusService);
-
-    receiveSubscriptionMessage(settings.queueName, settings.subscriptionName, {
-        isPeekLock: true,
-        timeoutIntervalInS: 5
-    })
-        .then((lockedMessage) => {
-            return deleteMessage(lockedMessage[0])
-                .then((response) => response.isSuccessful);
-        })
-        .catch(err => {
-            if (err !== 'No messages to receive') {
-                log.error(err);
-            }
-        })
-        .fin(() => {
-            setTimeout(getFromTheBus(serviceBusService), 1000);
-        });
-}
+const azure = require('azure'),
+    settings = require('../settings/serviceBus.json');
 
 class Subscriber {
     /**
@@ -41,19 +16,48 @@ class Subscriber {
      */
     constructor() {
         const retryOperations = new azure.ExponentialRetryPolicyFilter();
-        const serviceBusService = azure.createServiceBusService(settings.connectionString)
-            .withFilter(retryOperations);
 
-        serviceBusService.createSubscription(settings.queueName, settings.subscriptionName, err => {
-            if (!err || (err && err.code === '409')) {
-                getFromTheBus(serviceBusService);
-            } else {
-                if (err) {
-                    log.error(err);
-                }
-            }
-        });
+        this.serviceBusService = azure.createServiceBusService(settings.connectionString)
+            .withFilter(retryOperations);
     }
+
+	listen(callback) {
+		this.serviceBusService.createSubscription(settings.queueName, settings.subscriptionName, (err) => {
+			if (err && err.code !== '409') {
+				throw err;
+			}
+
+			this.getFromTheBus(callback);
+		});
+    }
+
+	getFromTheBus(callback) {
+		this.serviceBusService.receiveSubscriptionMessage(settings.queueName, settings.subscriptionName, {
+			isPeekLock: true,
+			timeoutIntervalInS: 5
+		}, (err, lockedMessage) => {
+			if (err) {
+				if (err !== 'No messages to receive') {
+					throw err;
+				}
+
+				setTimeout(() => this.getFromTheBus(callback), 1000);
+			} else {
+				const { body, customProperties: { notificationtype: notificationType }} = lockedMessage;
+				const user = JSON.parse(body);
+
+				callback(user, notificationType);
+
+				this.serviceBusService.deleteMessage(lockedMessage, err => {
+					if (err) {
+						console.log('message deletion failed: ', err);
+					}
+
+					this.getFromTheBus(callback);
+				});
+			}
+		});
+	}
 }
 
 module.exports = Subscriber;

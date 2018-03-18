@@ -176,7 +176,7 @@ class Destiny2Service extends DestinyService {
 				authorization: 'Bearer ' + accessToken,
 				'x-api-key': apiKey
 			},
-			url: util.format('%s/Destiny2/%s/Profile/%s/Character/%s/Vendors/%s?components=None', servicePlatform,
+			url: util.format('%s/Destiny2/%s/Profile/%s/Character/%s/Vendors/%s?components=402', servicePlatform,
 				membershipType, membershipId, characterId, xurHash)
 		};
 
@@ -186,9 +186,10 @@ class Destiny2Service extends DestinyService {
 					const responseBody = JSON.parse(body);
 
 					if (responseBody.ErrorCode === 1) {
-						const { Response: {  vendor }} = responseBody;
+						const { Response: {  sales: { data }}} = responseBody;
+						const itemHashes = Object.entries(data).map(([, value]) => value.itemHash);
 
-						resolve(vendor);
+						resolve(itemHashes);
 					} else {
 						reject(new DestinyError(responseBody.ErrorCode || -1,
 							responseBody.Message || '', responseBody.ErrorStatus || ''));

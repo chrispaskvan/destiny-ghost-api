@@ -59,8 +59,11 @@ const routes = ({ authenticationController, destinyService, userService, worldRe
     destinyRouter.route('/ironBannerEventRewards/')
         .get((req, res) => destinyController.getIronBannerEventRewards(req, res));
 
-    destinyRouter.route('/manifest')
-        .get((req, res) => destinyController.upsertManifest(req, res));
+	destinyRouter.route('/manifest')
+		.get((req, res) => destinyController.getManifest(req, res));
+
+	destinyRouter.route('/manifest')
+        .post((req, res) => destinyController.upsertManifest(req, res));
 
     destinyRouter.route('/xur/')
         .get((req, res) => destinyController.getXur(req, res));
