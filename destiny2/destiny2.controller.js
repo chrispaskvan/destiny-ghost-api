@@ -109,19 +109,29 @@ class Destiny2Controller extends DestinyController {
 		const { session: { displayName, membershipType }} = req;
 
 		try {
-			const currentUser = await this.users.getUserByDisplayName(displayName, membershipType)
+			const currentUser = await this.users.getUserByDisplayName(displayName, membershipType);
 			const { bungie: { access_token: accessToken }, membershipId } = currentUser;
 
-			const characters = await this.destiny.getProfile(membershipId, membershipType)
+			const characters = await this.destiny.getProfile(membershipId, membershipType);
 			if (characters && characters.length) {
-				return this.destiny.getXur(membershipId, membershipType, characters[0].characterId, accessToken)
-					.then(items => res.status(200).json(items));
+				const itemHashes = await this.destiny.getXur(membershipId, membershipType, characters[0].characterId, accessToken);
+				if (!itemHashes.length) {
+					return res.status(200).json(itemHashes);
+				}
+
+				const worldDatabasePath = await this.ghost.getWorldDatabasePath();
+				await this.world.open(worldDatabasePath);
+				const items = await Promise.all(itemHashes.map(itemHash => this.world.getItemByHash(itemHash)));
+				await this.world.close();
+
+				return res.status(200).json(items);
 			}
 
 			res.status(404);
 		} catch (err) {
 			log.error(err);
 			res.status(500).json(err);
+			await this.worldRepository.close();
 		}
 	}
 
