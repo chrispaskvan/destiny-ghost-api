@@ -3,7 +3,7 @@
  * @requires path
  */
 const fs = require('fs'),
-	log = require('../helpers/log'),
+	log = require('./log'),
 	path = require('path'),
 	request = require('request'),
 	yauzl = require('yauzl');

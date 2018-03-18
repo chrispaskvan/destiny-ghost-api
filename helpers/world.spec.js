@@ -1,7 +1,7 @@
 /**
  * World Model Tests
  */
-const Ghost = require('../ghost/ghost'),
+const Ghost = require('./ghost'),
 	World = require('./world'),
 	expect = require('chai').expect,
 	mockManifest = require('../mocks/manifestResponse').Response;

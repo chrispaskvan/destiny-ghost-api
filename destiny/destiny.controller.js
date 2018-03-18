@@ -2,7 +2,7 @@
  * A module for handling Destiny routes..
  */
 const _ = require('underscore'),
-	Ghost = require('../ghost/ghost'),
+	Ghost = require('../helpers/ghost'),
 	S = require('string'),
 	base64url = require('base64url'),
 	crypto = require('crypto'),
@@ -280,6 +280,18 @@ class DestinyController {
 				log.error(err);
 				this.world.close();
 				res.status(500).json(err);
+			});
+	}
+
+	/**
+	 * Get the current manifest definition from Bungie.
+	 * @param req
+	 * @param res
+	 */
+	getManifest(req, res) {
+		this.destiny.getManifest()
+			.then(manifest => {
+				res.status(200).json(manifest).end();
 			});
 	}
 

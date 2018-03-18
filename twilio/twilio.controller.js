@@ -16,7 +16,7 @@
  * @requires World
  */
 const _ = require('underscore'),
-	Ghost = require('../ghost/ghost'),
+	Ghost = require('../helpers/ghost'),
 	MessagingResponse = require('twilio').twiml.MessagingResponse,
 	S = require('string'),
 	bitly = require('../helpers/bitly'),
@@ -307,7 +307,7 @@ class TwilioController {
 						this.users.addUserMessage(user.displayName, user.membershipType, req.body);
 					}
 				});
-			log.error(JSON.stringify(req.body));
+			log.info(JSON.stringify(req.body));
 			res.writeHead(200, {
 				'Content-Type': 'text/xml'
 			});
