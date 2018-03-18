@@ -5,7 +5,7 @@
  * @author Chris Paskvan
  */
 const _ = require('underscore'),
-    Ghost = require('../ghost/ghost'),
+    Ghost = require('../helpers/ghost'),
 	Postmaster = require('../helpers/postmaster'),
 	jsonpatch = require('rfc6902'),
 	log = require('../helpers/log'),

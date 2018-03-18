@@ -44,7 +44,7 @@ const routes = ({ authenticationController, destiny2Service, userService, worldR
         .get((req, res) => destiny2Controller.getManifest(req, res));
 
     destiny2Router.route('/manifest')
-        .put((req, res) => destiny2Controller.upsertManifest(req, res));
+        .post((req, res) => destiny2Controller.upsertManifest(req, res));
 
     destiny2Router.route('/profile')
 		.get(cors(corsConfig),
