@@ -25,8 +25,8 @@ class NotificationController {
 	async _send(user, notificationType) {
 		const { membershipId, membershipType, phoneNumber } = user;
 
-		try {
-			if (notificationType === notificationTypes.Xur) {
+		if (notificationType === notificationTypes.Xur) {
+			try {
 				const { bungie: { access_token: accessToken }} = await this.authentication.authenticate(user);
 				const characters = await this.destiny.getProfile(membershipId, membershipType);
 
@@ -36,15 +36,15 @@ class NotificationController {
 
 					await this.world.open(worldDatabasePath);
 					const items = await Promise.all(itemHashes.map(itemHash => this.world.getItemByHash(itemHash)));
-					await this.world.close();
 
 					const message = items.map(({ displayProperties: { name }}) => name).join('\n');
 
 					await this.notifications.sendMessage(message, phoneNumber);
 				}
+			} catch (err) {
+				await this.notifications.sendMessage('Xur has closed shop. He\'ll return Friday.', phoneNumber);
+				log.error(err);
 			}
-		} catch (err) {
-			log.error(err);
 		}
 	}
 
