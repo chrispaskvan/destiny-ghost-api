@@ -96,8 +96,7 @@ class Routes {
 			authenticationController,
 			authenticationService,
 			destinyService: destiny2Service,
-			userService,
-			worldRepository: world2
+			userService
 		});
 		routes.use('/twilio', twilioRouter);
 
