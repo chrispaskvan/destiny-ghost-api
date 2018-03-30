@@ -84,16 +84,14 @@ class Routes {
 			authenticationService,
 			destinyService: destiny2Service,
 			notificationService,
-			userService,
-			worldRepository: world2
+			userService
 		});
 		routes.use('/notifications', notificationRouter);
 
 		const twilioRouter = require('./twilio/twilio.routes')({
 			authenticationController,
 			destinyService: destiny2Service,
-			userService,
-			worldRepository: world2
+			userService
 		});
 		routes.use('/twilio', twilioRouter);
 

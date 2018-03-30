@@ -11,28 +11,12 @@
  * @requires sqlite3
  */
 const _ = require('underscore'),
-	Sequelize = require('sequelize'),
 	World = require('./world');
 
 /**
  * World2 Repository
  */
 class World2 extends World {
-	constructor() {
-		super();
-
-		this.sequelize = new Sequelize({
-			dialect: 'sqlite',
-			pool: {
-				max: 5,
-				min: 0,
-				acquire: 30000,
-				idle: 10000
-			},
-			storage: './databases/world_sql_content_e5b3365414a1273a84dd5d953f254790.content'
-		});
-
-	}
     /**
      * Get the class according to the provided hash.
      * @param classHash {string}

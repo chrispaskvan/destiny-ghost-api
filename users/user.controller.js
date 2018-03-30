@@ -7,6 +7,7 @@
 const _ = require('underscore'),
     Ghost = require('../helpers/ghost'),
 	Postmaster = require('../helpers/postmaster'),
+	World2 = require('../helpers/world2'),
 	jsonpatch = require('rfc6902'),
 	log = require('../helpers/log'),
     tokens = require('../helpers/tokens');
@@ -36,7 +37,6 @@ class UserController {
 		this.notifications = options.notificationService;
 		this.postmaster = new Postmaster();
 		this.users = options.userService;
-		this.world = options.worldRepository;
 	}
 
 	/**
@@ -328,6 +328,7 @@ class UserController {
 			this.users.getUserByEmailAddress(user.emailAddress),
 			this.users.getUserByPhoneNumber(user.phoneNumber)
 		];
+		const world = new World2();
 
 		return Promise.all(promises)
 			.then(users => {
@@ -338,8 +339,8 @@ class UserController {
 				}
 
 				return this.ghost.getWorldDatabasePath()
-					.then(worldDatabasePath => this.world.open(worldDatabasePath))
-                    .then(() => this.world.getVendorIcon(postmasterHash))
+					.then(worldDatabasePath => world.open(worldDatabasePath))
+                    .then(() => world.getVendorIcon(postmasterHash))
                     .then(iconUrl => {
 						let promises = [];
 
@@ -359,11 +360,11 @@ class UserController {
 						return this.users.updateUser(user);
                     })
                     .then(() => res.status(200).end())
-                    .then(() => this.world.close());
+                    .then(() => world.close());
 			})
 			.catch(err => {
 				log.error(err);
-				this.world.close();
+				world.close();
 				res.status(500).json(err);
 			});
 	}

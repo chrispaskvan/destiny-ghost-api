@@ -1,6 +1,7 @@
 const Ghost = require('../helpers/ghost'),
 	Publisher = require('../helpers/publisher'),
 	Subscriber = require('../helpers/subscriber'),
+	World2 = require('../helpers/world2'),
 	log = require('../helpers/log'),
 	notificationHeaders = require('../settings/notificationHeaders.json'),
 	notificationTypes = require('../notifications/notification.types');
@@ -17,7 +18,6 @@ class NotificationController {
 		});
 		this.notifications = options.notificationService;
 		this.users = options.userService;
-		this.world = options.worldRepository;
 
 		subscriber.listen(this._send.bind(this));
 	}
@@ -33,12 +33,13 @@ class NotificationController {
 				if (characters && characters.length) {
 					const itemHashes = await this.destiny.getXur(membershipId, membershipType, characters[0].characterId, accessToken);
 					const worldDatabasePath = await this.ghost.getWorldDatabasePath();
+					const world = new World2();
 
-					await this.world.open(worldDatabasePath);
-					const items = await Promise.all(itemHashes.map(itemHash => this.world.getItemByHash(itemHash)));
+					await world.open(worldDatabasePath);
+					const items = await Promise.all(itemHashes.map(itemHash => world.getItemByHash(itemHash)));
+					world.close();
 
 					const message = items.map(({ displayProperties: { name }}) => name).join('\n');
-
 					await this.notifications.sendMessage(message, phoneNumber);
 				}
 			} catch (err) {

@@ -4,6 +4,7 @@
 const _ = require('underscore'),
 	Ghost = require('../helpers/ghost'),
 	S = require('string'),
+	World2 = require('../helpers/world2'),
 	base64url = require('base64url'),
 	crypto = require('crypto'),
 	fs = require('fs'),
@@ -20,7 +21,6 @@ class DestinyController {
 			destinyService: options.destinyService
 		});
 		this.users = options.userService;
-		this.world = options.worldRepository;
 	}
 
 	/**
@@ -56,10 +56,11 @@ class DestinyController {
 	 * @private
 	 */
 	getCharacters(req, res) {
+		const world = new World2();
 		const { session: { displayName, membershipType }} = req;
 
 		this.ghost.getWorldDatabasePath()
-			.then(worldDatabasePath => this.world.open(worldDatabasePath))
+			.then(worldDatabasePath => world.open(worldDatabasePath))
 			.then(() => this.users.getUserByDisplayName(displayName, membershipType))
 			.then(currentUser => this.destiny.getCharacters(currentUser.membershipId, membershipType))
 			.then(characters => {
@@ -81,11 +82,11 @@ class DestinyController {
 
 				let promises = [];
 				characterBases.forEach(characterBase =>
-					promises.push(this.world.getClassByHash(characterBase.classHash)));
+					promises.push(world.getClassByHash(characterBase.classHash)));
 
 				return Promise.all(promises)
 					.then(characterClasses => {
-						this.world.close();
+						world.close();
 						characterBases.forEach((characterBase, index) => {
 							characterBase.className = characterClasses[index].className;
 						});
@@ -95,7 +96,7 @@ class DestinyController {
 			})
 			.catch(err => {
 				log.error(err);
-				this.world.close();
+				world.close();
 				res.status(500).json(err);
 			});
 	}
@@ -106,11 +107,12 @@ class DestinyController {
 	 * @param res
 	 */
 	getFieldTestWeapons(req, res) {
+		const world = new World2();
 		const { session: { displayName, membershipType }} = req;
 		let accessToken;
 
 		this.ghost.getWorldDatabasePath()
-			.then(worldDatabasePath => this.world.open(worldDatabasePath))
+			.then(worldDatabasePath => world.open(worldDatabasePath))
 			.then(() => this.users.getUserByDisplayName(displayName, membershipType))
 			.then(currentUser => {
 				accessToken = currentUser.bungie.access_token;
@@ -126,10 +128,10 @@ class DestinyController {
 							const { itemHashes } = vendor;
 							let promises = [];
 
-							itemHashes.forEach(itemHash => promises.push(this.world.getItemByHash(itemHash)));
+							itemHashes.forEach(itemHash => promises.push(world.getItemByHash(itemHash)));
 							return Promise.all(promises)
 								.then(items => {
-									this.world.close();
+									world.close();
 									res.json(items.map(item => item.itemName));
 								});
 						});
@@ -139,7 +141,7 @@ class DestinyController {
 			})
 			.catch(err => {
 				log.error(err);
-				this.world.close();
+				world.close();
 				res.status(500).json(err);
 			});
 	}
@@ -150,11 +152,12 @@ class DestinyController {
 	 * @param res
 	 */
 	getFoundryOrders(req, res) {
+		const world = new World2();
 		const { session: { displayName, membershipType }} = req;
 		let accessToken;
 
 		this.ghost.getWorldDatabasePath()
-			.then(worldDatabasePath => this.world.open(worldDatabasePath))
+			.then(worldDatabasePath => world.open(worldDatabasePath))
 			.then(() => this.users.getUserByDisplayName(displayName, membershipType))
 			.then(currentUser => {
 				accessToken = currentUser.bungie.access_token;
@@ -170,10 +173,10 @@ class DestinyController {
 							const { itemHashes } = vendor;
 							let promises = [];
 
-							itemHashes.forEach(itemHash => promises.push(this.world.getItemByHash(itemHash)));
+							itemHashes.forEach(itemHash => promises.push(world.getItemByHash(itemHash)));
 							return Promise.all(promises)
 								.then(items => {
-									this.world.close();
+									world.close();
 									res.json(items.map(item => item.itemName));
 								});
 						});
@@ -183,7 +186,7 @@ class DestinyController {
 			})
 			.catch(err => {
 				log.error(err);
-				this.world.close();
+				world.close();
 				res.status(500).json(err);
 			});
 	}
@@ -194,11 +197,12 @@ class DestinyController {
 	 * @param res
 	 */
 	getIronBannerEventRewards(req, res) {
+		const world = new World2();
 		const { session: { displayName, membershipType }} = req;
 		let accessToken;
 
 		this.ghost.getWorldDatabasePath()
-			.then(worldDatabasePath => this.world.open(worldDatabasePath))
+			.then(worldDatabasePath => world.open(worldDatabasePath))
 			.then(() => this.users.getUserByDisplayName(displayName, membershipType))
 			.then(currentUser => {
 				accessToken = currentUser.bungie.access_token;
@@ -224,7 +228,7 @@ class DestinyController {
 						let promises = [];
 
 						_.each(itemHashes, function (itemHash) {
-							promises.push(this.world.getItemByHash(itemHash));
+							promises.push(world.getItemByHash(itemHash));
 						});
 
 						return Promise.all(promises)
@@ -237,7 +241,7 @@ class DestinyController {
 								const warlockArmor = _.filter(items, item => _.contains(item.itemCategoryHashes, 20) &&
 										_.contains(item.itemCategoryHashes, 21));
 
-								this.world.close();
+								world.close();
 								res.json({
 									weapons: _.map(weapons,item => item.itemName),
 									armor: {
@@ -251,7 +255,7 @@ class DestinyController {
 			})
 			.catch(err => {
 				log.error(err);
-				this.world.close();
+				world.close();
 				res.status(500).json(err);
 			});
 	}
@@ -263,6 +267,7 @@ class DestinyController {
 	 * @returns {*}
 	 */
 	getGrimoireCards(req, res) {
+		const world = new World2();
 		const numberOfCards = parseInt(req.params.numberOfCards, 10);
 
 		if (isNaN(numberOfCards)) {
@@ -270,15 +275,15 @@ class DestinyController {
 		}
 
 		this.ghost.getWorldDatabasePath()
-			.then(worldDatabasePath => this.world.open(worldDatabasePath))
-			.then(() => this.world.getGrimoireCards(numberOfCards))
+			.then(worldDatabasePath => world.open(worldDatabasePath))
+			.then(() => world.getGrimoireCards(numberOfCards))
 			.then(grimoireCards => {
-				this.world.close();
+				world.close();
 				res.status(200).json(grimoireCards)
 			})
 			.catch(err => {
 				log.error(err);
-				this.world.close();
+				world.close();
 				res.status(500).json(err);
 			});
 	}
@@ -301,6 +306,8 @@ class DestinyController {
 	 * @param res
 	 */
 	getXur(req, res) {
+		const world = new World2();
+
 		return this.destiny.getXur()
 			.then(vendor => {
 				const { itemHashes, nextRefreshDate } = vendor;
@@ -310,18 +317,18 @@ class DestinyController {
 				}
 
 				return this.ghost.getWorldDatabasePath()
-					.then(worldDatabasePath => this.world.open(worldDatabasePath))
+					.then(worldDatabasePath => world.open(worldDatabasePath))
 					.then(() => {
 						let promises = [];
 
-						itemHashes.forEach(itemHash => promises.push(this.world.getItemByHash(itemHash)));
+						itemHashes.forEach(itemHash => promises.push(world.getItemByHash(itemHash)));
 
 						return Promise.all(promises)
 							.then(items => {
 								const itemPromises = _.map(items, item => {
 									if (item.itemName === 'Exotic Engram' ||
 											item.itemName === 'Legacy Engram') {
-										return this.world.getItemByHash(item.itemHash)
+										return world.getItemByHash(item.itemHash)
 											.then(function (itemDetail) {
 												return (new S(item.itemName).chompRight('Engram') +
 													itemDetail.itemTypeName);
@@ -333,7 +340,7 @@ class DestinyController {
 
 								return Promise.all(itemPromises)
 									.then(items => {
-										this.world.close();
+										world.close();
 										res.json(items);
 									});
 							});
@@ -341,7 +348,7 @@ class DestinyController {
 			})
 			.catch(err => {
 				log.error(err);
-				this.world.close();
+				world.close();
 				res.status(500).json(err);
 			});
 	}

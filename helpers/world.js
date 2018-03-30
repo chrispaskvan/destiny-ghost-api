@@ -189,7 +189,7 @@ class World {
             if (!fs.existsSync(fileName)) {
                 reject(new Error('Database file not found.'));
             }
-            this.db = new sqlite3.cached.Database(fileName, sqlite3.OPEN_READONLY, () => resolve());
+            this.db = new sqlite3.Database(fileName, sqlite3.OPEN_READONLY, () => resolve());
         });
     }
 }

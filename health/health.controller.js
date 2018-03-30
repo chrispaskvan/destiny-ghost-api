@@ -5,6 +5,8 @@
  * @author Chris Paskvan
  */
 const Ghost = require('../helpers/ghost'),
+	World = require('../helpers/world'),
+	World2 = require('../helpers/world2'),
 	log = require('../helpers/log'),
 	request = require('request');
 
@@ -35,8 +37,6 @@ class HealthController {
 			destinyService: options.destiny2Service
 		});
 		this.store = options.store;
-		this.worldRepository = options.worldRepository;
-		this.world2Repository = options.world2Repository;
 	}
 
 	_deleteKey(key) {
@@ -132,33 +132,37 @@ class HealthController {
 	}
 
 	async _world() {
+		const world = new World();
+
 		try {
 			const worldDatabasePath = await this.ghost.getWorldDatabasePath();
-			await this.worldRepository.open(worldDatabasePath);
+			await world.open(worldDatabasePath);
 
 			const [item] =
-				await this.worldRepository.getItemByName('Aegis of the Reef');
-			await this.worldRepository.close();
+				await world.getItemByName('Aegis of the Reef');
+			await world.close();
 
 			return item.itemDescription;
 		} catch (err) {
-			this.worldRepository.close();
+			world.close();
 			throw err;
 		}
 	}
 
 	async _world2() {
+		const world2 = new World2();
+
 		try {
 			const worldDatabasePath = await this.ghost2.getWorldDatabasePath();
-			await this.world2Repository.open(worldDatabasePath);
+			await world2.open(worldDatabasePath);
 
 			const [{ displayProperties: { description = notAvailable }}] =
-				await this.world2Repository.getItemByName('Jack Queen King 3');
-			await this.world2Repository.close();
+				await world2.getItemByName('Jack Queen King 3');
+			await world2.close();
 
 			return description;
 		} catch (err) {
-			this.world2Repository.close();
+			world2.close();
 			throw err;
 		}
 	}
