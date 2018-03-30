@@ -33,8 +33,7 @@ class Subscriber {
 
 	getFromTheBus(callback) {
 		this.serviceBusService.receiveSubscriptionMessage(settings.queueName, settings.subscriptionName, {
-			isPeekLock: true,
-			timeoutIntervalInS: 5
+			isPeekLock: true
 		}, (err, lockedMessage) => {
 			if (err) {
 				if (err !== 'No messages to receive') {
@@ -53,7 +52,7 @@ class Subscriber {
 						console.log('message deletion failed: ', err);
 					}
 
-					this.getFromTheBus(callback);
+					setTimeout(() => this.getFromTheBus(callback), 1);
 				});
 			}
 		});

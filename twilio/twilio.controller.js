@@ -19,6 +19,7 @@ const _ = require('underscore'),
 	Ghost = require('../helpers/ghost'),
 	MessagingResponse = require('twilio').twiml.MessagingResponse,
 	S = require('string'),
+	World2 = require('../helpers/world2'),
 	bitly = require('../helpers/bitly'),
 	log = require('../helpers/log'),
 	twilio = require('twilio'),
@@ -35,7 +36,6 @@ class TwilioController {
 		this.ghost = new Ghost({
 			destinyService: options.destinyService
 		});
-		this.world = options.worldRepository;
 		this.users = options.userService;
 	}
 
@@ -46,13 +46,15 @@ class TwilioController {
 	 * @private
 	 */
 	async _getItem(item) {
+		const world = new World2();
 		let promises = [];
 
 		try {
 			const worldDatabasePath = await this.ghost.getWorldDatabasePath();
-			await this.world.open(worldDatabasePath);
+
+			await world.open(worldDatabasePath);
 			_.each(item.itemCategoryHashes, itemCategoryHash => {
-				promises.push(this.world.getItemCategory(itemCategoryHash));
+				promises.push(world.getItemCategory(itemCategoryHash));
 			});
 
 			const itemCategories = await Promise.all(promises);
@@ -63,7 +65,7 @@ class TwilioController {
 				_.reduce(sortedCategories, (memo, itemCategory) => (memo + itemCategory.shortTitle + ' '), ' ')
 					.trim();
 
-			this.world.close();
+			world.close();
 
 			return [{
 				itemCategory: (item.inventory ? (item.inventory.tierTypeName + ' ') : '') + itemCategory +
@@ -74,7 +76,7 @@ class TwilioController {
 				itemType: item.itemType
 			}];
 		} catch (err) {
-			this.world.close();
+			world.close();
 			throw err;
 		}
 	}
@@ -116,11 +118,14 @@ class TwilioController {
 	 * @returns {*|promise}
 	 */
 	async _queryItem(itemName) {
+		const world = new World2();
+
 		try {
 			const worldDatabasePath = await this.ghost.getWorldDatabasePath();
-			await this.world.open(worldDatabasePath);
-			const items = await this.world.getItemByName(itemName.replace(/[\u2018\u2019]/g, '\''));
-			this.world.close();
+
+			await world.open(worldDatabasePath);
+			const items = await world.getItemByName(itemName.replace(/[\u2018\u2019]/g, '\''));
+			world.close();
 
 			if (items.length > 0) {
 				if (items.length > 1) {
@@ -139,7 +144,7 @@ class TwilioController {
 
 			return [];
 		} catch (err) {
-			this.world.close();
+			world.close();
 			throw err;
 		}
 	}

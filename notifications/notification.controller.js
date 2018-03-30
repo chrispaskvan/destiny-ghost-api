@@ -1,6 +1,7 @@
 const Ghost = require('../helpers/ghost'),
 	Publisher = require('../helpers/publisher'),
 	Subscriber = require('../helpers/subscriber'),
+	World2 = require('../helpers/world2'),
 	log = require('../helpers/log'),
 	notificationHeaders = require('../settings/notificationHeaders.json'),
 	notificationTypes = require('../notifications/notification.types');
@@ -17,7 +18,6 @@ class NotificationController {
 		});
 		this.notifications = options.notificationService;
 		this.users = options.userService;
-		this.world = options.worldRepository;
 
 		subscriber.listen(this._send.bind(this));
 	}
@@ -25,26 +25,27 @@ class NotificationController {
 	async _send(user, notificationType) {
 		const { membershipId, membershipType, phoneNumber } = user;
 
-		try {
-			if (notificationType === notificationTypes.Xur) {
+		if (notificationType === notificationTypes.Xur) {
+			try {
 				const { bungie: { access_token: accessToken }} = await this.authentication.authenticate(user);
 				const characters = await this.destiny.getProfile(membershipId, membershipType);
 
 				if (characters && characters.length) {
 					const itemHashes = await this.destiny.getXur(membershipId, membershipType, characters[0].characterId, accessToken);
 					const worldDatabasePath = await this.ghost.getWorldDatabasePath();
+					const world = new World2();
 
-					await this.world.open(worldDatabasePath);
-					const items = await Promise.all(itemHashes.map(itemHash => this.world.getItemByHash(itemHash)));
-					await this.world.close();
+					await world.open(worldDatabasePath);
+					const items = await Promise.all(itemHashes.map(itemHash => world.getItemByHash(itemHash)));
+					world.close();
 
 					const message = items.map(({ displayProperties: { name }}) => name).join('\n');
-
 					await this.notifications.sendMessage(message, phoneNumber);
 				}
+			} catch (err) {
+				await this.notifications.sendMessage('Xur has closed shop. He\'ll return Friday.', phoneNumber);
+				log.error(err);
 			}
-		} catch (err) {
-			log.error(err);
 		}
 	}
 
