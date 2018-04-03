@@ -32,6 +32,7 @@ class TwilioController {
 	 * @param options
 	 */
 	constructor(options = {}) {
+		this.authentication = options.authenticationService;
 		this.destiny = options.destinyService;
 		this.ghost = new Ghost({
 			destinyService: options.destinyService
@@ -205,6 +206,7 @@ class TwilioController {
 
 				const itemHash = req.cookies.itemHash;
 				const message = req.body.Body.trim().toLowerCase();
+
 				/**
 				 * @ToDo Handle STOP and HELP
 				 */
@@ -225,6 +227,34 @@ class TwilioController {
 						'Content-Type': 'text/xml'
 					});
 					res.end(twiml.toString());
+				} else if (new S(message).equalsIgnoreCase('xur')) {
+					try {
+						const { bungie: { access_token: accessToken }, membershipId, membershipType } = await this.authentication.authenticate(user);
+						const characters = await this.destiny.getProfile(membershipId, membershipType);
+
+						if (characters && characters.length) {
+							const itemHashes = await this.destiny.getXur(membershipId, membershipType, characters[0].characterId, accessToken);
+							const worldDatabasePath = await this.ghost.getWorldDatabasePath();
+							const world = new World2();
+
+							await world.open(worldDatabasePath);
+							const items = await Promise.all(itemHashes.map(itemHash => world.getItemByHash(itemHash)));
+							world.close();
+
+							const result = _.reduce(items, (memo, { displayProperties }) =>
+								(memo + displayProperties.name + '\n'), ' ').trim();
+
+							twiml.message(attributes, result.substr(0, 130));
+							res.clearCookie('itemHash');
+							res.writeHead(200, {
+								'Content-Type': 'text/xml'
+							});
+
+							return res.end(twiml.toString());
+						}
+					} catch (err) {
+						log.error(err);
+					}
 				} else {
 					if (counter > 25) {
 						twiml.message(attributes, 'Let me check with the Speaker regarding your good standing with the Vanguard.');

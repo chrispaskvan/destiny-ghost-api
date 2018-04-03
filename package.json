@@ -38,7 +38,7 @@
     "connect-redis": "^3.3.3",
     "cookie-parser": "^1.4.0",
     "cors": "^2.8.4",
-    "cuid": "^2.1.0",
+    "cuid": "^2.1.1",
     "documentdb": "^1.14.2",
     "dotenv": "^5.0.1",
     "express": "^4.16.3",
@@ -46,7 +46,7 @@
     "is-my-json-valid": "^2.17.2",
     "joi": "^13.1.2",
     "json-schema-defaults": "^0.4.0",
-    "nodemailer": "^4.6.3",
+    "nodemailer": "^4.6.4",
     "nodemailer-smtp-transport": "^2.0.0",
     "redis": "^2.7.1",
     "request": "^2.85.0",
@@ -65,7 +65,7 @@
     "node-mocks-http": "^1.6.7",
     "nyc": "^11.6.0",
     "proxyquire": "^2.0.1",
-    "sinon": "^4.4.6",
+    "sinon": "^4.5.0",
     "sinon-chai": "^3.0.0"
   }
 }

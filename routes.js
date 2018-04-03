@@ -90,6 +90,7 @@ class Routes {
 
 		const twilioRouter = require('./twilio/twilio.routes')({
 			authenticationController,
+			authenticationService,
 			destinyService: destiny2Service,
 			userService
 		});
