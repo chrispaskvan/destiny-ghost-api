@@ -349,6 +349,7 @@ class UserService {
 		}
 		qb
 			.select('displayName')
+			.select('membershipId')
 			.select('membershipType')
 			.select('phoneNumber')
 			.from(collectionId)

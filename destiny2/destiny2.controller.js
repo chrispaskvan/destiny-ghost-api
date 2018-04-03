@@ -5,6 +5,7 @@
  * @author Chris Paskvan
  */
 const DestinyController = require('../destiny/destiny.controller'),
+	World2 = require('../helpers/world2'),
     fs = require('fs'),
     log = require('../helpers/log'),
     request = require('request'),
@@ -59,16 +60,17 @@ class Destiny2Controller extends DestinyController {
 	 * @private
 	 */
 	getProfile(req, res) {
+		const world = new World2();
 		const { session: { displayName, membershipType }} = req;
 
 		this.ghost.getWorldDatabasePath()
-			.then(worldDatabasePath => this.world.open(worldDatabasePath))
+			.then(worldDatabasePath => world.open(worldDatabasePath))
 			.then(() => this.users.getUserByDisplayName(displayName, membershipType))
 			.then(currentUser => this.destiny.getProfile(currentUser.membershipId, membershipType))
 			.then(characters => {
 				let promises = [];
 				let characterBases = characters.map(character => {
-					promises.push(this.world.getClassByHash(character.classHash));
+					promises.push(world.getClassByHash(character.classHash));
 
 					return {
 						characterId: character.characterId,
@@ -95,7 +97,7 @@ class Destiny2Controller extends DestinyController {
 			})
 			.catch(err => {
 				log.error(err);
-				this.world.close();
+				world.close();
 				res.status(500).json(err);
 			});
 	}
@@ -106,22 +108,33 @@ class Destiny2Controller extends DestinyController {
 	 * @private
 	 */
 	async getXur(req, res) {
+		const world = new World2();
 		const { session: { displayName, membershipType }} = req;
 
 		try {
-			const currentUser = await this.users.getUserByDisplayName(displayName, membershipType)
+			const currentUser = await this.users.getUserByDisplayName(displayName, membershipType);
 			const { bungie: { access_token: accessToken }, membershipId } = currentUser;
 
-			const characters = await this.destiny.getProfile(membershipId, membershipType)
+			const characters = await this.destiny.getProfile(membershipId, membershipType);
 			if (characters && characters.length) {
-				return this.destiny.getXur(membershipId, membershipType, characters[0].characterId, accessToken)
-					.then(items => res.status(200).json(items));
+				const itemHashes = await this.destiny.getXur(membershipId, membershipType, characters[0].characterId, accessToken);
+				if (!itemHashes.length) {
+					return res.status(200).json(itemHashes);
+				}
+
+				const worldDatabasePath = await this.ghost.getWorldDatabasePath();
+				await world.open(worldDatabasePath);
+				const items = await Promise.all(itemHashes.map(itemHash => world.getItemByHash(itemHash)));
+				await world.close();
+
+				return res.status(200).json(items);
 			}
 
 			res.status(404);
 		} catch (err) {
 			log.error(err);
 			res.status(500).json(err);
+			await world.close();
 		}
 	}
 

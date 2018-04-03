@@ -4,7 +4,9 @@
  * @module healthController
  * @author Chris Paskvan
  */
-const Ghost = require('../ghost/ghost'),
+const Ghost = require('../helpers/ghost'),
+	World = require('../helpers/world'),
+	World2 = require('../helpers/world2'),
 	log = require('../helpers/log'),
 	request = require('request');
 
@@ -26,12 +28,15 @@ let failures;
 class HealthController {
 	constructor(options = {}) {
 		this.destinyService = options.destinyService;
+		this.destiny2Service = options.destiny2Service;
 		this.documents = options.documents;
 		this.ghost = new Ghost({
 			destinyService: options.destinyService
 		});
+		this.ghost2 = new Ghost({
+			destinyService: options.destiny2Service
+		});
 		this.store = options.store;
-		this.worldRepository = options.worldRepository;
 	}
 
 	_deleteKey(key) {
@@ -48,6 +53,12 @@ class HealthController {
 
 	async _destinyService() {
 		const manifest = await this.destinyService.getManifest();
+
+		return manifest.version;
+	}
+
+	async _destiny2Service() {
+		const manifest = await this.destiny2Service.getManifest();
 
 		return manifest.version;
 	}
@@ -103,7 +114,7 @@ class HealthController {
 		});
 	}
 
-	_unhealthy(err) {
+	static _unhealthy(err) {
 		failures++;
 		log.error(err);
 	}
@@ -120,18 +131,38 @@ class HealthController {
 		});
 	}
 
-	async _world () {
+	async _world() {
+		const world = new World();
+
 		try {
 			const worldDatabasePath = await this.ghost.getWorldDatabasePath();
-			await this.worldRepository.open(worldDatabasePath);
+			await world.open(worldDatabasePath);
+
+			const [item] =
+				await world.getItemByName('Aegis of the Reef');
+			await world.close();
+
+			return item.itemDescription;
+		} catch (err) {
+			world.close();
+			throw err;
+		}
+	}
+
+	async _world2() {
+		const world2 = new World2();
+
+		try {
+			const worldDatabasePath = await this.ghost2.getWorldDatabasePath();
+			await world2.open(worldDatabasePath);
 
 			const [{ displayProperties: { description = notAvailable }}] =
-				await this.worldRepository.getItemByName('The Number');
-			await this.worldRepository.close();
+				await world2.getItemByName('Jack Queen King 3');
+			await world2.close();
 
 			return description;
 		} catch (err) {
-			this.worldRepository.close();
+			world2.close();
 			throw err;
 		}
 	}
@@ -140,22 +171,32 @@ class HealthController {
 		failures = 0;
 
 		const documents = await this._documents()
-			.catch(err => this._unhealthy(err)) || -1;
+			.catch(err => HealthController._unhealthy(err)) || -1;
 		const manifestVersion = await this._destinyService()
-			.catch(err => this._unhealthy(err)) || notAvailable;
+			.catch(err => HealthController._unhealthy(err)) || notAvailable;
+		const manifest2Version = await this._destiny2Service()
+			.catch(err => HealthController._unhealthy(err)) || notAvailable;
 		const store = await this._store()
-			.catch(err => this._unhealthy(err)) || false;
+			.catch(err => HealthController._unhealthy(err)) || false;
 		const twilio = await this._twilio()
-			.catch(err => this._unhealthy(err)) || notAvailable;
+			.catch(err => HealthController._unhealthy(err)) || notAvailable;
 		const world = await this._world()
-			.catch(err => this._unhealthy(err)) || notAvailable;
+			.catch(err => HealthController._unhealthy(err)) || notAvailable;
+		const world2 = await this._world2()
+			.catch(err => HealthController._unhealthy(err)) || notAvailable;
 
 		res.status(failures ? 503 : 200).json({
 			documents,
 			store,
-			manifest: manifestVersion,
 			twilio,
-			world
+			destiny: {
+				manifest: manifestVersion,
+				world: world
+			},
+			destiny2: {
+				manifest: manifest2Version,
+				world: world2
+			}
 		});
 	}
 }
