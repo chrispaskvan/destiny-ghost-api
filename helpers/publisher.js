@@ -41,7 +41,14 @@ class Publisher {
 	    });
     }
 
-    static sendTopicMessage(message, serviceBusService) {
+	/**
+	 * Put a message on the topic queue.
+	 *
+	 * @param message
+	 * @param serviceBusService
+	 * @returns {Promise}
+	 */
+	static sendTopicMessage(message, serviceBusService) {
 	    return new Promise((resolve, reject) => {
 		    serviceBusService.sendTopicMessage(queueName, message, function (err, res) {
 			    if (err) {
@@ -53,7 +60,10 @@ class Publisher {
 	    });
     }
 
-    static throwIfMissingNotificationType() {
+	/**
+	 * Missing Notification Type Error
+	 */
+	static throwIfMissingNotificationType() {
         throw new Error('notification type is required');
     }
 

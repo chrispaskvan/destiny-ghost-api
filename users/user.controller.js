@@ -20,7 +20,7 @@ const _ = require('underscore'),
 const postmasterHash = '2021251983';
 
 /**
- * Time to Live for Tokens
+ * Time To Live for Tokens
  * @type {number}
  */
 const ttl = 300;

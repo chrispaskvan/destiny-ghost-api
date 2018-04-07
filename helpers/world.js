@@ -11,7 +11,6 @@
  * @requires sqlite3
  */
 const _ = require('underscore'),
-    S = require('string'),
     fs = require('fs'),
     sqlite3 = require('sqlite3');
 
@@ -92,7 +91,7 @@ class World {
     getItemByName(itemName) {
         return new Promise((resolve, reject) => {
             this.db.serialize(() => {
-                const it = new S(itemName).replaceAll('\'', '\'\'').s;
+                const it = itemName.replace(/\'/g, '\'\'');
                 let items = [];
 
                 this.db.each(`SELECT json FROM DestinyInventoryItemDefinition WHERE json LIKE \'%"itemName":"${it}%"%'`,

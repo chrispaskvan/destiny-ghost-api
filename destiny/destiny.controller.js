@@ -1,15 +1,14 @@
-/**
- * A module for handling Destiny routes..
- */
 const _ = require('underscore'),
 	Ghost = require('../helpers/ghost'),
-	S = require('string'),
 	World2 = require('../helpers/world2'),
 	base64url = require('base64url'),
 	crypto = require('crypto'),
 	fs = require('fs'),
 	log = require('../helpers/log');
 
+/**
+ * Controller class for Destiny routes.
+ */
 class DestinyController {
 	/**
 	 * @constructor
@@ -330,8 +329,8 @@ class DestinyController {
 											item.itemName === 'Legacy Engram') {
 										return world.getItemByHash(item.itemHash)
 											.then(function (itemDetail) {
-												return (new S(item.itemName).chompRight('Engram') +
-													itemDetail.itemTypeName);
+												return item.itemName.replace('Engram', '') +
+													itemDetail.itemTypeName;
 											});
 									}
 

@@ -1,7 +1,6 @@
 /**
  * Publish Messages
  */
-'use strict';
 const Chance = require('chance'),
     Publisher = require('./publisher'),
     expect = require('chai').expect;

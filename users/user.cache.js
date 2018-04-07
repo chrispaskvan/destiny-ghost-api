@@ -1,4 +1,3 @@
-'use strict';
 const redis = require('redis'),
     redisConfig = require('../settings/redis.json');
 

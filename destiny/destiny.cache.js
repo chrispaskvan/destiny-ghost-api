@@ -77,7 +77,7 @@ class DestinyCache {
         const { vendorHash } = vendor;
 
         if (typeof vendorHash !== 'number') {
-            Promise.reject(new Error('vendorHash number is required.'));
+            return Promise.reject(new Error('vendorHash number is required.'));
         }
 
         return new Promise((resolve, reject) => {

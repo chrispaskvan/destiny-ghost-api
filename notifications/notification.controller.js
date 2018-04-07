@@ -6,6 +6,9 @@ const Ghost = require('../helpers/ghost'),
 	notificationHeaders = require('../settings/notificationHeaders.json'),
 	notificationTypes = require('../notifications/notification.types');
 
+/**
+ * Controller class for Notification routes.
+ */
 class NotificationController {
 	constructor(options = {}) {
 		const subscriber = new Subscriber();

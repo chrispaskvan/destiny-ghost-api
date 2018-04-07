@@ -19,6 +19,7 @@ const _ = require('underscore'),
 	{ name } = require('../package.json');
 
 let prettyStdOut = new PrettyStream();
+
 prettyStdOut.pipe(process.stdout);
 
 /**
@@ -132,11 +133,6 @@ class Log {
 				res.requestId = req.requestId;
 				this.logger.info({ res });
 
-				/**
-				 * Prevent the following warning:
-				 * possible EventEmitter memory leak detected. 11 finish listeners added.
-				 * @see {link:http://www.jongleberry.com/understanding-possible-eventemitter-leaks.html}
-				 */
 				res.removeListener('finish', logResponse);
 				res.setMaxListeners(res.getMaxListeners() - 1);
 			};

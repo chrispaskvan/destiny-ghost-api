@@ -27,6 +27,7 @@ class Documents {
 
 	/**
      * Get collection by Id.
+	 *
 	 * @param collectionId
 	 * @returns {Promise}
 	 * @private
@@ -67,6 +68,7 @@ class Documents {
 
 	/**
 	 * Create a document.
+	 *
 	 * @param collectionId
 	 * @param document
 	 * @returns {Promise}
@@ -75,18 +77,22 @@ class Documents {
 		return new Promise((resolve, reject) => {
 			this._getCollection(collectionId)
 				.then(collection => {
-					if (collection) {
-						this.client.createDocument(collection._self, document,
-							(err, document) => err ? reject(err) : resolve(document.id));
+					if (!collection) {
+						reject(new Error(`Collection ${collectionId} not found`));
 					}
+
+					this.client.createDocument(collection._self, document,
+						(err, document) => err ? reject(err) : resolve(document.id));
 				});
 		});
 	}
 
 	/**
 	 * Delete document by Id.
+	 *
 	 * @param collectionId
 	 * @param documentId
+	 * @param partitionKey
 	 * @returns {Promise}
 	 */
 	deleteDocumentById(collectionId, documentId, partitionKey) {
@@ -96,10 +102,11 @@ class Documents {
 			this.client.deleteDocument(documentUrl,  {
 				partitionKey: [partitionKey]
 			}, (err, result) => {
-				if (err) reject(err);
-				else {
-					resolve(result);
+				if (err) {
+					reject(err);
 				}
+
+				resolve(result);
 			});
 		});
 	}
@@ -116,16 +123,18 @@ class Documents {
 			function getDocuments(err, results) {
 				if (err) {
 					reject(err);
-				} else {
-					resolve(results);
 				}
+
+				resolve(results);
 			}
 
 			this._getCollection(collectionId)
 				.then(collection => {
-					if (collection) {
-						this.client.queryDocuments(collection._self, query, options).toArray(getDocuments);
+					if (!collection) {
+						reject(new Error(`Collection ${collectionId} not found`));
 					}
+
+					this.client.queryDocuments(collection._self, query, options).toArray(getDocuments);
 				});
 		});
 	}
@@ -140,9 +149,11 @@ class Documents {
 		return new Promise((resolve, reject) => {
 			this._getCollection(collectionId)
 				.then(collection => {
-					if (collection) {
-						this.client.upsertDocument(collection._self, document, err => err ? reject(err) : resolve());
+					if (!collection) {
+						reject(new Error(`Collection ${collectionId} not found`));
 					}
+
+					this.client.upsertDocument(collection._self, document, err => err ? reject(err) : resolve());
 				});
 		});
 	}

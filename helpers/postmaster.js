@@ -1,30 +1,24 @@
-/**
- * A module for managing custom email delivery.
- *
- * @module Postmaster
- * @summary Send email specific to base operations.
- * @author Chris Paskvan
- * @requires _
- * @requires @nodemailer
- * @requires Q
- * @requires S
- * @requires request
- * @requires nodemailer-smtp-transport
- */
 const nodemailer = require('nodemailer'),
-    S = require('string'),
     smtpConfiguration = require('../settings/smtp.json'),
     smtpTransport = require('nodemailer-smtp-transport');
 
-const registrationHtml = 'Hi {{firstName}},<br /><br />' +
-	'Please click the link below to continue the registration process.<br /><br />';
-const registrationText = 'Hi {{firstName}},\r\n\r\n' +
-	'Open the link below to continue the registration process.\r\n\r\n';
 const mailOptions = {};
-const transporter = nodemailer.createTransport(smtpTransport(smtpConfiguration));
 const website = process.env.WEBSITE;
 
+/**
+ * Postmaster Class
+ */
 class Postmaster {
+	constructor() {
+		this.transporter = nodemailer.createTransport(smtpTransport(smtpConfiguration));
+	}
+
+	/**
+	 * Get a random color.
+	 *
+	 * @returns {string}
+	 * @private
+	 */
 	static _getRandomColor() {
 		let color = '#';
 		const letters = '0123456789ABCDEF';
@@ -36,7 +30,15 @@ class Postmaster {
 		return color;
 	}
 
-	register(user, image, url) {
+	/**
+	 * Send registration email to user.
+	 *
+	 * @param user
+	 * @param image
+	 * @param url
+	 * @returns {Promise}
+	 */
+	register({ emailAddress, firstName, membership: { tokens: { blob }}}, image, url) {
 		return new Promise((resolve, reject) => {
 			Object.assign(mailOptions, {
 				from: smtpConfiguration.from,
@@ -44,20 +46,18 @@ class Postmaster {
 					rejectUnauthorized: false
 				},
 				subject: 'Destiny Ghost Registration',
-				text: new S(registrationText).template(user).s + website + url +
-				'?token=' + user.membership.tokens.blob,
-				to: user.emailAddress,
-				html: (image ? '<img src=\'' + image + '\' style=\'background-color: ' +
-					this.constructor._getRandomColor() + ';\'><br />' : '') +
-				new S(registrationHtml).template(user).s + website + url +
-				'?token=' + user.membership.tokens.blob
+				text: `Hi ${firstName},\r\n\r\nOpen the link below to continue the registration process.\r\n\r\n${website}${url}?token=${blob}`,
+				to: emailAddress,
+				html: (image ? `<img src=\'${image}\' style=\'background-color: ${this.constructor._getRandomColor()};\'><br />` : '') +
+					`Hi ${firstName},<br /><br />Please click the link below to continue the registration process.<br /><br />${website}${url}?token=${blob}`
 			});
-			transporter.sendMail(mailOptions, (err, response) => {
+
+			this.transporter.sendMail(mailOptions, (err, response) => {
 				if (err) {
 					reject(err);
-				} else {
-					resolve(response);
 				}
+
+				resolve(response);
 			});
 		});
 	}

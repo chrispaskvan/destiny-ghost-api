@@ -24,7 +24,7 @@ class Bitly {
 	/**
 	 * @function
 	 * @param {string} url - URL to be shortened.
-	 * @returns {string} - The resulting short URL.
+	 * @returns {Promise} - The resulting short URL.
 	 * @description Transform the provided URL into a custom short URL.
 	 */
     static getShortUrl(url) {

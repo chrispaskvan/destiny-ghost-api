@@ -10,6 +10,7 @@ class DestinyError extends Error {
      */
     constructor(code, message, status) {
         super();
+
         Object.assign(this, {
             code: code,
             message: message,

@@ -1,7 +1,3 @@
-/**
- * @class Ghost
- * @requires path
- */
 const fs = require('fs'),
 	log = require('./log'),
 	path = require('path'),
@@ -19,9 +15,11 @@ class Ghost {
 	constructor(options = {}) {
         this.destiny = options.destinyService;
     }
+
     /**
      * Get the full path to the database.
-     * @returns {*|promise}
+     *
+     * @returns {Promise}
      */
     getWorldDatabasePath() {
         return this.destiny.getManifest()
@@ -33,9 +31,15 @@ class Ghost {
             });
     }
 
-   updateManifest(manifest) {
+	/**
+	 * Download and unzip the manifest database.
+	 *
+	 * @param manifest
+	 * @returns {*}
+	 */
+	updateManifest(manifest) {
 		const databasePath = process.env.DATABASE;
-		const { mobileWorldContentPaths: { en: relativeUrl }}  = manifest;
+		const { mobileWorldContentPaths: { en: relativeUrl }} = manifest;
 		const fileName = databasePath + relativeUrl.substring(relativeUrl.lastIndexOf('/') + 1);
 
 		if (fs.existsSync(fileName)) {
@@ -51,22 +55,21 @@ class Ghost {
 			stream.on('finish', () => {
 				yauzl.open(fileName + '.zip', (err, zipFile) => {
 					if (!err) {
-						zipFile.on('entry', entry => {
-							zipFile.openReadStream(entry, (err, readStream) => {
-								if (!err) {
-									readStream.pipe(fs.createWriteStream(databasePath + entry.fileName));
-
-									fs.unlink(fileName + '.zip');
-
-									resolve(manifest);
-								} else {
-									reject(err);
-								}
-							});
-						});
-					} else {
-						reject(err);
+						return reject(err);
 					}
+
+					zipFile.on('entry', entry => {
+						zipFile.openReadStream(entry, (err, readStream) => {
+							if (!err) {
+								return reject(err);
+							}
+
+							readStream.pipe(fs.createWriteStream(databasePath + entry.fileName));
+							fs.unlink(fileName + '.zip');
+
+							resolve(manifest);
+						});
+					});
 				});
 			});
 		});
