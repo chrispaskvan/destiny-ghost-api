@@ -3,17 +3,29 @@
  *
  * @module twilioController
  * @author Chris Paskvan
+ * @requires _
+ * @requires Bitly
+ * @requires fs
+ * @requires Ghost
+ * @requires Notifications
+ * @requires path
+ * @requires Q
+ * @requires S
+ * @requires twilio
+ * @requires User
+ * @requires World
  */
 const _ = require('underscore'),
+	Ghost = require('../helpers/ghost'),
 	MessagingResponse = require('twilio').twiml.MessagingResponse,
+	S = require('string'),
+	World2 = require('../helpers/world2'),
 	bitly = require('../helpers/bitly'),
 	log = require('../helpers/log'),
 	twilio = require('twilio'),
 	{ attributes, authToken } = require('../settings/twilio.' + process.env.NODE_ENV + '.json');
 
-/**
- * Twilio Controller
- */
+
 class TwilioController {
 	/**
 	 * @constructor
@@ -22,22 +34,28 @@ class TwilioController {
 	constructor(options = {}) {
 		this.authentication = options.authenticationService;
 		this.destiny = options.destinyService;
+		this.ghost = new Ghost({
+			destinyService: options.destinyService
+		});
 		this.users = options.userService;
-		this.world = options.worldRepository;
 	}
 
 	/**
 	 * Search database.
 	 * @param item {string}
-	 * @returns {Promise}
+	 * @returns {*|promise}
 	 * @private
 	 */
 	async _getItem(item) {
+		const world = new World2();
 		let promises = [];
 
 		try {
+			const worldDatabasePath = await this.ghost.getWorldDatabasePath();
+
+			await world.open(worldDatabasePath);
 			_.each(item.itemCategoryHashes, itemCategoryHash => {
-				promises.push(this.world.getItemCategory(itemCategoryHash));
+				promises.push(world.getItemCategory(itemCategoryHash));
 			});
 
 			const itemCategories = await Promise.all(promises);
@@ -48,6 +66,8 @@ class TwilioController {
 				_.reduce(sortedCategories, (memo, itemCategory) => (memo + itemCategory.shortTitle + ' '), ' ')
 					.trim();
 
+			world.close();
+
 			return [{
 				itemCategory: (item.inventory ? (item.inventory.tierTypeName + ' ') : '') + itemCategory +
 				(filteredCategories.length < 2 ? (' ' + item.itemTypeDisplayName) : ''),
@@ -57,6 +77,7 @@ class TwilioController {
 				itemType: item.itemType
 			}];
 		} catch (err) {
+			world.close();
 			throw err;
 		}
 	}
@@ -98,8 +119,14 @@ class TwilioController {
 	 * @returns {*|promise}
 	 */
 	async _queryItem(itemName) {
+		const world = new World2();
+
 		try {
-			const items = await this.world.getItemByName(itemName.replace(/[\u2018\u2019]/g, '\''));
+			const worldDatabasePath = await this.ghost.getWorldDatabasePath();
+
+			await world.open(worldDatabasePath);
+			const items = await world.getItemByName(itemName.replace(/[\u2018\u2019]/g, '\''));
+			world.close();
 
 			if (items.length > 0) {
 				if (items.length > 1) {
@@ -118,6 +145,7 @@ class TwilioController {
 
 			return [];
 		} catch (err) {
+			world.close();
 			throw err;
 		}
 	}
@@ -182,7 +210,7 @@ class TwilioController {
 				/**
 				 * @ToDo Handle STOP and HELP
 				 */
-				if (message === 'more') {
+				if (new S(message).startsWith('more')) {
 					if (itemHash) {
 						return bitly.getShortUrl('http://db.destinytracker.com/d2/en/items/' + itemHash)
 							.then(function (shortURL) {
@@ -199,14 +227,20 @@ class TwilioController {
 						'Content-Type': 'text/xml'
 					});
 					res.end(twiml.toString());
-				} else if (message === 'xur') {
+				} else if (new S(message).equalsIgnoreCase('xur')) {
 					try {
 						const { bungie: { access_token: accessToken }, membershipId, membershipType } = await this.authentication.authenticate(user);
 						const characters = await this.destiny.getProfile(membershipId, membershipType);
 
 						if (characters && characters.length) {
 							const itemHashes = await this.destiny.getXur(membershipId, membershipType, characters[0].characterId, accessToken);
-							const items = await Promise.all(itemHashes.map(itemHash => this.world.getItemByHash(itemHash)));
+							const worldDatabasePath = await this.ghost.getWorldDatabasePath();
+							const world = new World2();
+
+							await world.open(worldDatabasePath);
+							const items = await Promise.all(itemHashes.map(itemHash => world.getItemByHash(itemHash)));
+							world.close();
+
 							const result = _.reduce(items, (memo, { displayProperties }) =>
 								(memo + displayProperties.name + '\n'), ' ').trim();
 
@@ -219,23 +253,7 @@ class TwilioController {
 							return res.end(twiml.toString());
 						}
 					} catch (err) {
-						if (err.name === 'DestinyError') {
-							twiml.message(attributes, err.message.substr(0, 130));
-							res.writeHead(200, {
-								'Content-Type': 'text/xml'
-							});
-
-							return res.end(twiml.toString());
-						}
-
 						log.error(err);
-
-						twiml.message(attributes, TwilioController._getRandomResponseForNoResults());
-						res.writeHead(200, {
-							'Content-Type': 'text/xml'
-						});
-
-						return res.end(twiml.toString());
 					}
 				} else {
 					if (counter > 25) {
@@ -261,13 +279,16 @@ class TwilioController {
 							}
 							case 1: {
 								res.cookie('itemHash', items[0].itemHash);
-								items[0].itemCategory = items[0].itemCategory.replace(/Weapon/g, '').trim();
+								items[0].itemCategory = new S(items[0].itemCategory).strip('Weapon')
+									.collapseWhitespace().s.trim();
+
+								const template = '{{itemName}} {{itemCategory}}';
 
 								if (user.type === 'landline') {
-									twiml.message(attributes, `${items[0].itemName} ${items[0].itemCategory}`.substr(0, 130));
+									twiml.message(attributes, (new S(template).template(items[0]).s).substr(0, 130));
 								} else {
 									twiml.message(attributes,
-										`${items[0].itemName} ${items[0].itemCategory}`.substr(0, 130)).media(items[0].icon);
+										new S(template).template(items[0]).s).media(items[0].icon);
 								}
 								res.writeHead(200, {
 									'Content-Type': 'text/xml'

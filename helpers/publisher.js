@@ -6,8 +6,7 @@
  * @author Chris Paskvan
  * @requires azure
  */
-const azure = require('azure-sb'),
-	azureCommon = require('azure-common'),
+const azure = require('azure'),
 	{ connectionString, queueName } = require('../settings/serviceBus.json');
 
 /**
@@ -19,7 +18,7 @@ class Publisher {
      * @constructor
      */
     constructor() {
-        const retryOperations = new azureCommon.ExponentialRetryPolicyFilter();
+        const retryOperations = new azure.ExponentialRetryPolicyFilter();
 
         this.serviceBusService = azure.createServiceBusService(connectionString)
             .withFilter(retryOperations);
@@ -42,14 +41,7 @@ class Publisher {
 	    });
     }
 
-	/**
-	 * Put a message on the topic queue.
-	 *
-	 * @param message
-	 * @param serviceBusService
-	 * @returns {Promise}
-	 */
-	static sendTopicMessage(message, serviceBusService) {
+    static sendTopicMessage(message, serviceBusService) {
 	    return new Promise((resolve, reject) => {
 		    serviceBusService.sendTopicMessage(queueName, message, function (err, res) {
 			    if (err) {
@@ -61,10 +53,7 @@ class Publisher {
 	    });
     }
 
-	/**
-	 * Missing Notification Type Error
-	 */
-	static throwIfMissingNotificationType() {
+    static throwIfMissingNotificationType() {
         throw new Error('notification type is required');
     }
 
