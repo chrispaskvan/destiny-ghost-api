@@ -1,4 +1,5 @@
 const log = require('../helpers/log');
+
 /**
  * User Authentication Middleware Class
  */

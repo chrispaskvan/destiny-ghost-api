@@ -1,71 +1,73 @@
 /**
  * A module for accessing the Destiny World database.
- *
- * @module World
- * @summary Destiny World database.
- * @author Chris Paskvan
- * @requires _
- * @requires fs
- * @requires Q
- * @requires S
- * @requires sqlite3
  */
 const _ = require('underscore'),
-    S = require('string'),
-    fs = require('fs'),
-    sqlite3 = require('sqlite3');
+	Database = require('better-sqlite3'),
+	fs = require('fs'),
+	log = require('./log'),
+	path = require('path'),
+	request = require('request'),
+	yauzl = require('yauzl');
 
 /**
  * World Repository
  */
 class World {
-    /**
-     * Get the Destiny class definitions.
-     * @returns {*}
-     * @private
-     */
-    _getClasses(db) {
-        return new Promise((resolve, reject) => {
-            db.serialize(() => {
-                let classes = [];
+	constructor({ directory } = {}) {
+		this.categories = [];
+		this.classes = [];
+		this.items = [];
+		this.grimoireCards = [];
+		this.vendors = [];
 
-                db.each('SELECT json FROM DestinyClassDefinition',
-                    (err, row) => err ? reject(err) : classes.push(JSON.parse(row.json)),
-                    err => err ? reject(err) : resolve(classes));
-            });
-        });
-    }
+		if (directory) {
+			const [databaseFileName] = fs.readdirSync(directory)
+				.map(name => {
+					return {
+						name,
+						time: fs.statSync(directory + '/' + name).mtime.getTime()
+					};
+				})
+				.sort((a, b) => b.time - a.time)
+				.map(file => file.name);
 
-    /**
-     * Close database connection.
-     * @returns {Promise}
-     */
-    close() {
-        if (this.db) {
-            this.db.close();
-        }
+			this.directory = directory;
+			this._bootstrap(databaseFileName);
+		}
+	}
 
-        return Promise.resolve();
-    }
+	_bootstrap(fileName) {
+		const databasePath = fileName ?
+			path.join(this.directory, path.basename(fileName)) : undefined;
+
+		if (databasePath) {
+			const database = new Database(databasePath, {
+				readonly: true,
+				fileMustExist: true
+			});
+
+			const categories = database.prepare('SELECT json FROM DestinyItemCategoryDefinition').all();
+			const classes = database.prepare('SELECT json FROM DestinyClassDefinition').all();
+			const grimoireCards = database.prepare('SELECT * FROM DestinyGrimoireCardDefinition').all();
+			const items = database.prepare('SELECT json FROM DestinyInventoryItemDefinition').all();
+			const vendors = database.prepare('SELECT json FROM DestinyVendorDefinition').all();
+
+			database.close();
+
+			this.categories = categories.map(({ json: category }) => JSON.parse(category));
+			this.classes = classes.map(({ json: classDefinition }) => JSON.parse(classDefinition));
+			this.grimoireCards = grimoireCards.map(({ json: grimoireCard }) => JSON.parse(grimoireCard));
+			this.items = items.map(({ json: item }) => JSON.parse(item));
+			this.vendors = vendors.map(({ json: vendor }) => JSON.parse(vendor));
+		}
+	}
+
     /**
      * Get the class according to the provided hash.
      * @param classHash {string}
      */
     getClassByHash(classHash) {
-        return this._getClasses(this.db)
-            .then(classes => {
-                return classes.find(characterClass => characterClass.classHash === classHash);
-            });
-    }
-
-    /**
-     * Get the class by the type provided.
-     * @param classType {string}
-     * @returns {*}
-     */
-    getClassByType(classType) {
-        return this._getClasses(this.db)
-            .then(classes => classes.find(characterClass => characterClass.classType === classType));
+        return Promise.resolve(this.classes.find(characterClass => characterClass.classHash === classHash));
     }
 
     /**
@@ -74,14 +76,7 @@ class World {
      * @returns {Promise}
      */
     getGrimoireCards(numberOfCards) {
-        return new Promise((resolve, reject) => {
-            this.db.serialize(() => {
-                let cards = [];
-
-                this.db.each(`SELECT * FROM DestinyGrimoireCardDefinition WHERE id IN (SELECT id FROM DestinyGrimoireCardDefinition ORDER BY RANDOM() LIMIT ${numberOfCards})`, (err, row) => err ? reject(err) : cards.push(JSON.parse(row.json)),
-                    err => err ? reject(err) : resolve(cards));
-            });
-        });
+        return Promise.resolve(_.sample(this.grimoireCards, numberOfCards));
     }
 
     /**
@@ -90,32 +85,22 @@ class World {
      * @returns {Promise}
      */
     getItemByName(itemName) {
-        return new Promise((resolve, reject) => {
-            this.db.serialize(() => {
-                const it = new S(itemName).replaceAll('\'', '\'\'').s;
-                let items = [];
+	    return new Promise((resolve, reject) => {
+		    try {
+			    const items = this.items.filter(({ itemName: name = '' }) =>
+				    name.toLowerCase().includes(itemName.toLowerCase()));
 
-                this.db.each(`SELECT json FROM DestinyInventoryItemDefinition WHERE json LIKE \'%"itemName":"${it}%"%'`,
-                    (err, row) => err ? reject(err) : items.push(JSON.parse(row.json)),
-                    (err, rows) => {
-                        if (err) {
-                            reject(err);
-                        } else {
-                            if (rows === 0) {
-                                resolve([]);
-                            } else {
-                                const groups = _.groupBy(items, item => item.itemName);
-                                const keys = Object.keys(groups);
+			    const groups = _.groupBy(items, item => item.itemName);
+			    const keys = Object.keys(groups);
 
-                                resolve(_.map(keys, (key) => {
-                                    return _.min(_.filter(items, (item) => item.itemName === key),
-                                        (item) => item.qualityLevel);
-                                }));
-                            }
-                        }
-                    });
-            });
-        });
+			    resolve(_.map(keys, (key) => {
+				    return _.min(_.filter(items, (item) => item.itemName === key),
+					    (item) => item.qualityLevel);
+			    }));
+		    } catch (err) {
+	    	    reject(err);
+		    }
+	    });
     }
 
     /**
@@ -124,12 +109,15 @@ class World {
      * @returns {*}
      */
     getItemByHash(itemHash) {
-        return new Promise((resolve, reject) => {
-            this.db.serialize(() => {
-                this.db.each(`SELECT json FROM DestinyInventoryItemDefinition WHERE json LIKE '%"itemHash":${itemHash}%' LIMIT 1`,
-                    (err, row) => err ? reject(err) : resolve(JSON.parse(row.json)));
-            });
-        });
+	    return new Promise((resolve, reject) => {
+		    try {
+			    const [item] = this.items.filter(item => item.itemHash === itemHash);
+
+			    resolve(item);
+		    } catch (err) {
+			    reject(err);
+		    }
+	    });
     }
 
     /**
@@ -138,60 +126,73 @@ class World {
      * @returns {Promise}
      */
     getItemCategory(itemCategoryHash) {
-		return new Promise((resolve, reject) => {
-			this.db.serialize(() => {
-				let categories = [];
-
-				this.db.each(`SELECT json FROM DestinyItemCategoryDefinition WHERE id = ${itemCategoryHash}`,
-                    (err, row) =>  err ? reject(err) : categories.push(JSON.parse(row.json)),
-					(err, rows) => {
-                        if (err) {
-                            reject(err);
-                        } else {
-                            if (rows === 0) {
-								reject(new Error('No item category found for hash' +
-									itemCategoryHash));
-							} else {
-								if (rows > 1) {
-									reject(new Error('Hash, ' +
-										itemCategoryHash + ', is not an unique identifier.'));
-                                }
-
-                                resolve(categories[0]);
-                            }
-                        }
-                    });
-            });
-        });
+		return Promise.resolve(this.categories.find(category => category.id === itemCategoryHash));
     }
 
     /**
      * Get vendor's icon.
      * @param vendorHash
-     * @returns {*|promise}
-     */
-    getVendorIcon(vendorHash) {
-        return new Promise((resolve, reject) => {
-            this.db.each(`SELECT json FROM DestinyVendorDefinition WHERE json LIKE '%"vendorHash":${vendorHash}%' ORDER BY id LIMIT 1`,
-                (err, row) => err ? reject(err) :
-                    resolve('https://www.bungie.net' + JSON.parse(row.json).summary.vendorIcon),
-                (err) => err ? reject(err) : resolve());
-        });
-    }
-
-    /**
-     * Open database connection.
-     * @param fileName
      * @returns {Promise}
      */
-    open(fileName) {
-        return new Promise((resolve, reject) => {
-            if (!fs.existsSync(fileName)) {
-                reject(new Error('Database file not found.'));
-            }
-            this.db = new sqlite3.Database(fileName, () => resolve());
-        });
+    getVendorIcon(vendorHash) {
+	    return new Promise((resolve, reject) => {
+		    try {
+			    const [vendor] = this.vendors.filter(vendor => vendor.vendorHash === vendorHash);
+
+			    resolve('https://www.bungie.net' + vendor.summary.vendorIcon);
+		    } catch (err) {
+			    reject(err);
+		    }
+	    });
     }
+
+	/**
+	 * Download and unzip the manifest database.
+	 *
+	 * @param manifest
+	 * @returns {*}
+	 */
+	updateManifest(manifest) {
+		const databaseDirectory = this.directory + '/';
+		const { mobileWorldContentPaths: { en: relativeUrl }} = manifest;
+		const fileName = relativeUrl.substring(relativeUrl.lastIndexOf('/') + 1);
+		const databasePath = databaseDirectory + fileName;
+
+		if (fs.existsSync(databasePath)) {
+			return Promise.resolve(manifest);
+		}
+
+		return new Promise((resolve, reject) => {
+			const file = fs.createWriteStream(databasePath + '.zip');
+			const stream = request('https://www.bungie.net' + relativeUrl, () => {
+				log.info('content downloaded from ' + relativeUrl);
+			}).pipe(file);
+
+			stream.on('finish', () => {
+				yauzl.open(databasePath + '.zip', (err, zipFile) => {
+					if (err) {
+						return reject(err);
+					}
+
+					zipFile.on('entry', entry => {
+						zipFile.openReadStream(entry, (err, readStream) => {
+							if (err) {
+								return reject(err);
+							}
+
+							readStream.on('end', () => {
+								this._bootstrap(fileName);
+							});
+							readStream.pipe(fs.createWriteStream(databaseDirectory + '/' + entry.fileName));
+							fs.unlinkSync(databasePath + '.zip');
+
+							resolve(manifest);
+						});
+					});
+				});
+			});
+		});
+	}
 }
 
 module.exports = World;

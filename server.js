@@ -4,7 +4,7 @@
 require('dotenv').config();
 
 const Routes = require('./routes'),
-	appInsightsConfig = require('./settings/applicationInsights.json'),
+	{ instrumentationKey } = require('./settings/applicationInsights.json'),
 	applicationInsights = require('applicationinsights'),
     bodyParser = require('body-parser'),
     cookieParser = require('cookie-parser'),
@@ -22,11 +22,12 @@ const Routes = require('./routes'),
 const RedisStore = require('connect-redis')(session);
 const app = express();
 const port = process.env.PORT;
+const start = new Date();
 
 /**
  * Application Insights
  */
-applicationInsights.setup(appInsightsConfig.instrumentationKey).start();
+applicationInsights.setup(instrumentationKey).start();
 
 // jscs:ignore requireCapitalizedComments
 // noinspection JSLint
@@ -82,10 +83,32 @@ app.use(log.requestLogger());
 app.use(log.errorLogger());
 
 /**
+ * Check that the database directories exist.
+ */
+const databases = [process.env.DESTINY_DATABASE_DIR, process.env.DESTINY2_DATABASE_DIR];
+
+databases.forEach(database => {
+	const directories = database.split('/');
+
+	directories.forEach((directory, index) => {
+		const path = directories.slice(0, index + 1).join('/');
+
+		if (!fs.existsSync(path)) {
+			fs.mkdirSync(path);
+		}
+	});
+});
+
+/**
  * Routes
  */
 const routes = new Routes(client);
 app.use('/', routes);
+
+/**
+ * Check for the latest manifest definition and database from Bungie.
+ */
+routes.validateManifest();
 
 // jscs:ignore requireCapitalizedComments
 // noinspection JSLint
@@ -102,15 +125,6 @@ app.get('/ping', function (req, res) {
 });
 
 /**
- * Check for the latest manifest definition and database from Bungie.
- */
-const databases = process.env.DATABASE;
-if (!fs.existsSync(databases)) {
-	fs.mkdirSync(databases);
-}
-routes.validateManifest();
-
-/**
  * Server
  */
 const server = http.createServer(app);
@@ -124,7 +138,6 @@ terminus(server, {
 	}
 });
 
-const start = new Date();
 server.listen(port, function init() {
 	// eslint-disable-next-line no-console
     console.log('Running on port ' + port + '.');

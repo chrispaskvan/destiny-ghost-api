@@ -24,8 +24,7 @@ let destiny2Controller;
 let userServiceStub;
 
 beforeEach(() => {
-	const worldRepository = {
-		close: () => Promise.resolve(),
+	const world = {
 		getClassByHash: () => Promise.resolve({
 			classType: 1,
 			displayProperties: {
@@ -39,11 +38,10 @@ beforeEach(() => {
 			hash: 671679327,
 			index: 1,
 			redacted: false
-		}),
-		open: () => Promise.resolve()
+		})
 	};
 
-	destiny2Controller = new Destiny2Controller({ destinyService: destiny2Service, userService, worldRepository });
+	destiny2Controller = new Destiny2Controller({ destinyService: destiny2Service, userService, worldRepository: world });
 });
 
 describe('Destiny2Controller', () => {

@@ -1,14 +1,11 @@
-/**
- * A module for handling Destiny routes..
- */
 const _ = require('underscore'),
-	Ghost = require('../ghost/ghost'),
-	S = require('string'),
 	base64url = require('base64url'),
 	crypto = require('crypto'),
-	fs = require('fs'),
 	log = require('../helpers/log');
 
+/**
+ * Controller class for Destiny routes.
+ */
 class DestinyController {
 	/**
 	 * @constructor
@@ -16,9 +13,6 @@ class DestinyController {
 	 */
 	constructor(options = {}) {
 		this.destiny = options.destinyService;
-		this.ghost = new Ghost({
-			destinyService: options.destinyService
-		});
 		this.users = options.userService;
 		this.world = options.worldRepository;
 	}
@@ -58,9 +52,7 @@ class DestinyController {
 	getCharacters(req, res) {
 		const { session: { displayName, membershipType }} = req;
 
-		this.ghost.getWorldDatabasePath()
-			.then(worldDatabasePath => this.world.open(worldDatabasePath))
-			.then(() => this.users.getUserByDisplayName(displayName, membershipType))
+		this.users.getUserByDisplayName(displayName, membershipType)
 			.then(currentUser => this.destiny.getCharacters(currentUser.membershipId, membershipType))
 			.then(characters => {
 				const characterBases = characters.map(character =>  {
@@ -85,7 +77,6 @@ class DestinyController {
 
 				return Promise.all(promises)
 					.then(characterClasses => {
-						this.world.close();
 						characterBases.forEach((characterBase, index) => {
 							characterBase.className = characterClasses[index].className;
 						});
@@ -95,7 +86,6 @@ class DestinyController {
 			})
 			.catch(err => {
 				log.error(err);
-				this.world.close();
 				res.status(500).json(err);
 			});
 	}
@@ -109,9 +99,7 @@ class DestinyController {
 		const { session: { displayName, membershipType }} = req;
 		let accessToken;
 
-		this.ghost.getWorldDatabasePath()
-			.then(worldDatabasePath => this.world.open(worldDatabasePath))
-			.then(() => this.users.getUserByDisplayName(displayName, membershipType))
+		this.users.getUserByDisplayName(displayName, membershipType)
 			.then(currentUser => {
 				accessToken = currentUser.bungie.access_token;
 
@@ -129,7 +117,6 @@ class DestinyController {
 							itemHashes.forEach(itemHash => promises.push(this.world.getItemByHash(itemHash)));
 							return Promise.all(promises)
 								.then(items => {
-									this.world.close();
 									res.json(items.map(item => item.itemName));
 								});
 						});
@@ -139,7 +126,6 @@ class DestinyController {
 			})
 			.catch(err => {
 				log.error(err);
-				this.world.close();
 				res.status(500).json(err);
 			});
 	}
@@ -153,9 +139,7 @@ class DestinyController {
 		const { session: { displayName, membershipType }} = req;
 		let accessToken;
 
-		this.ghost.getWorldDatabasePath()
-			.then(worldDatabasePath => this.world.open(worldDatabasePath))
-			.then(() => this.users.getUserByDisplayName(displayName, membershipType))
+		this.users.getUserByDisplayName(displayName, membershipType)
 			.then(currentUser => {
 				accessToken = currentUser.bungie.access_token;
 
@@ -173,7 +157,6 @@ class DestinyController {
 							itemHashes.forEach(itemHash => promises.push(this.world.getItemByHash(itemHash)));
 							return Promise.all(promises)
 								.then(items => {
-									this.world.close();
 									res.json(items.map(item => item.itemName));
 								});
 						});
@@ -183,7 +166,6 @@ class DestinyController {
 			})
 			.catch(err => {
 				log.error(err);
-				this.world.close();
 				res.status(500).json(err);
 			});
 	}
@@ -197,9 +179,7 @@ class DestinyController {
 		const { session: { displayName, membershipType }} = req;
 		let accessToken;
 
-		this.ghost.getWorldDatabasePath()
-			.then(worldDatabasePath => this.world.open(worldDatabasePath))
-			.then(() => this.users.getUserByDisplayName(displayName, membershipType))
+		this.users.getUserByDisplayName(displayName, membershipType)
 			.then(currentUser => {
 				accessToken = currentUser.bungie.access_token;
 
@@ -237,7 +217,6 @@ class DestinyController {
 								const warlockArmor = _.filter(items, item => _.contains(item.itemCategoryHashes, 20) &&
 										_.contains(item.itemCategoryHashes, 21));
 
-								this.world.close();
 								res.json({
 									weapons: _.map(weapons,item => item.itemName),
 									armor: {
@@ -251,7 +230,6 @@ class DestinyController {
 			})
 			.catch(err => {
 				log.error(err);
-				this.world.close();
 				res.status(500).json(err);
 			});
 	}
@@ -269,17 +247,25 @@ class DestinyController {
 			return res.status(422).end();
 		}
 
-		this.ghost.getWorldDatabasePath()
-			.then(worldDatabasePath => this.world.open(worldDatabasePath))
-			.then(() => this.world.getGrimoireCards(numberOfCards))
+		this.world.getGrimoireCards(numberOfCards)
 			.then(grimoireCards => {
-				this.world.close();
 				res.status(200).json(grimoireCards)
 			})
 			.catch(err => {
 				log.error(err);
-				this.world.close();
 				res.status(500).json(err);
+			});
+	}
+
+	/**
+	 * Get the current manifest definition from Bungie.
+	 * @param req
+	 * @param res
+	 */
+	getManifest(req, res) {
+		this.destiny.getManifest()
+			.then(manifest => {
+				res.status(200).json(manifest).end();
 			});
 	}
 
@@ -297,39 +283,33 @@ class DestinyController {
 					return res.status(200).json({ itemHashes: [], nextRefreshDate: nextRefreshDate });
 				}
 
-				return this.ghost.getWorldDatabasePath()
-					.then(worldDatabasePath => this.world.open(worldDatabasePath))
-					.then(() => {
-						let promises = [];
+				let promises = [];
 
-						itemHashes.forEach(itemHash => promises.push(this.world.getItemByHash(itemHash)));
+				itemHashes.forEach(itemHash => promises.push(this.world.getItemByHash(itemHash)));
 
-						return Promise.all(promises)
-							.then(items => {
-								const itemPromises = _.map(items, item => {
-									if (item.itemName === 'Exotic Engram' ||
-											item.itemName === 'Legacy Engram') {
-										return this.world.getItemByHash(item.itemHash)
-											.then(function (itemDetail) {
-												return (new S(item.itemName).chompRight('Engram') +
-													itemDetail.itemTypeName);
-											});
-									}
-
-									return Promise.resolve(item.itemName);
-								});
-
-								return Promise.all(itemPromises)
-									.then(items => {
-										this.world.close();
-										res.json(items);
+				return Promise.all(promises)
+					.then(items => {
+						const itemPromises = _.map(items, item => {
+							if (item.itemName === 'Exotic Engram' ||
+									item.itemName === 'Legacy Engram') {
+								return this.world.getItemByHash(item.itemHash)
+									.then(function (itemDetail) {
+										return item.itemName.replace('Engram', '') +
+											itemDetail.itemTypeName;
 									});
+							}
+
+							return Promise.resolve(item.itemName);
+						});
+
+						return Promise.all(itemPromises)
+							.then(items => {
+								res.json(items);
 							});
 					});
 			})
 			.catch(err => {
 				log.error(err);
-				this.world.close();
 				res.status(500).json(err);
 			});
 	}
@@ -338,24 +318,11 @@ class DestinyController {
 	 * Insert or update the Destiny manifest.
 	 */
 	upsertManifest(req, res) {
-		this.destiny.getManifest()
+		return this.destiny.getManifest(true)
 			.then(manifest => {
-				return this.destiny.getManifest(true)
-					.then(latestManifest => {
-						const databasePath = process.env.DATABASE;
-						const { mobileWorldContentPaths: { en: relativeUrl }}  = manifest;
-						const fileName = databasePath + relativeUrl.substring(relativeUrl.lastIndexOf('/') + 1);
-
-						if (!latestManifest || latestManifest.version !== manifest.version ||
-								latestManifest.mobileWorldContentPaths.en !== manifest.mobileWorldContentPaths.en ||
-								!fs.existsSync(fileName)) {
-							this.ghost.updateManifest(manifest)
-								.then(() => {
-									res.status(200).json(manifest);
-								});
-						} else {
-							res.status(200).json(manifest);
-						}
+				this.world.updateManifest(manifest)
+					.then(() => {
+						res.status(200).json(manifest);
 					});
 			})
 			.catch(err => {

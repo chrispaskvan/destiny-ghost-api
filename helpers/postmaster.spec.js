@@ -1,7 +1,6 @@
 /**
  * Postmaster Model Tests
  */
-'use strict';
 const expect = require('chai').expect,
     Postmaster = require('../helpers/postmaster'),
     users = require('../mocks/users.json');

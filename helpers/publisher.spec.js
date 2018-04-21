@@ -1,7 +1,6 @@
 /**
  * Publish Messages
  */
-'use strict';
 const Chance = require('chance'),
     Publisher = require('./publisher'),
     expect = require('chai').expect;
@@ -34,7 +33,7 @@ describe('Message delivery test', () => {
 
         let promises = [];
         users.forEach(user => {
-            promises.push(publisher.sendNotification(user, 'Xur'));
+            promises.push(publisher.sendNotification(user, 'Unknown'));
         });
 
         Promise.all(promises)

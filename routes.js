@@ -10,6 +10,7 @@ const AuthenticationController = require('./authentication/authentication.contro
 	NotificationService = require('./notifications/notification.service'),
 	UserCache = require('./users/user.cache'),
 	UserService = require('./users/user.service'),
+	World = require('./helpers/world'),
 	World2 = require('./helpers/world2'),
 	documents = require('./helpers/documents'),
 	twilio = require('twilio'),
@@ -42,7 +43,12 @@ class Routes {
 		});
 		const authenticationController = new AuthenticationController({ authenticationService });
 
-		const world2 = new World2();
+		const world = new World({
+			directory: process.env.DESTINY_DATABASE_DIR
+		});
+		const world2 = new World2({
+			directory: process.env.DESTINY2_DATABASE_DIR
+		});
 		const destiny2Cache = new Destiny2Cache();
 		const destiny2Service = new Destiny2Service({ cacheService: destiny2Cache });
 		const notificationService = new NotificationService({
@@ -56,7 +62,7 @@ class Routes {
 			authenticationController,
 			destinyService,
 			userService,
-			worldRepository: world2
+			worldRepository: world
 		});
 		routes.use('/destiny', destinyRouter);
 
@@ -69,15 +75,26 @@ class Routes {
 		routes.use('/destiny2', destiny2Router);
 
 		const healthRouter = require('./health/health.routes')({
-			destinyService: destiny2Service,
+			destinyService,
+			destiny2Service,
 			documents,
 			store,
-			worldRepository: world2
+			worldRepository: world,
+			world2Repository: world2
 		});
 		routes.use('/health', healthRouter);
 
+		const notificationRouter = require('./notifications/notification.routes')({
+			authenticationService,
+			destinyService: destiny2Service,
+			notificationService,
+			userService
+		});
+		routes.use('/notifications', notificationRouter);
+
 		const twilioRouter = require('./twilio/twilio.routes')({
 			authenticationController,
+			authenticationService,
 			destinyService: destiny2Service,
 			userService,
 			worldRepository: world2
@@ -86,7 +103,7 @@ class Routes {
 
 		const userRouter = require('./users/user.routes')({
 			authenticationController,
-			destinyService,
+			destiny2Service: destinyService,
 			notificationService,
 			userService,
 			worldRepository: world2

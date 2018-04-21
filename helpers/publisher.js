@@ -6,60 +6,76 @@
  * @author Chris Paskvan
  * @requires azure
  */
-const azure = require('azure'),
-    log = require('./log'),
-    settings = require('../settings/serviceBus.json'),
-    Q = require('q');
+const azure = require('azure-sb'),
+	azureCommon = require('azure-common'),
+	{ connectionString, queueName } = require('../settings/serviceBus.json');
 
-let createTopicPromise;
-let wasTopicCreated;
 /**
- * Publisher of Messages
+ * Message Publisher
  */
 class Publisher {
+
     /**
      * @constructor
      */
     constructor() {
-        const retryOperations = new azure.ExponentialRetryPolicyFilter();
+        const retryOperations = new azureCommon.ExponentialRetryPolicyFilter();
 
-        this.queueName = settings.queueName;
-        this.serviceBusService = azure.createServiceBusService(settings.connectionString)
+        this.serviceBusService = azure.createServiceBusService(connectionString)
             .withFilter(retryOperations);
     }
 
     /**
-     * Create Topic for Messages
-     * @returns {Request|Promise.<T>|*}
+     * Create topic for message.
+     *
+     * @returns {Request|Promise}
      */
-    static createTopic(queueName, serviceBusService) {
-        const createTopicIfNotExists = Q.nbind(serviceBusService.createTopicIfNotExists, serviceBusService);
+    static createTopic(serviceBusService) {
+	    return new Promise((resolve, reject) => {
+	        serviceBusService.createTopicIfNotExists(queueName, function (err) {
+			    if (err) {
+				    return reject(err);
+			    }
 
-        if (wasTopicCreated) {
-            return Promise.resolve(true);
-        }
-
-        if (createTopicPromise) {
-            return createTopicPromise;
-        }
-
-        createTopicPromise = createTopicIfNotExists(queueName);
-        createTopicPromise
-            .then(topicCreated => {
-                wasTopicCreated = !(!topicCreated[0] && topicCreated[1].statusCode !== 409);
-                log.info('topic created', topicCreated);
-            })
-            .then(() => createTopicPromise = undefined);
-
-        return createTopicPromise;
+		        resolve(true);
+		    });
+	    });
     }
 
-    static throwIfMissingNotificationType() {
+	/**
+	 * Put a message on the topic queue.
+	 *
+	 * @param message
+	 * @param serviceBusService
+	 * @returns {Promise}
+	 */
+	static sendTopicMessage(message, serviceBusService) {
+	    return new Promise((resolve, reject) => {
+		    serviceBusService.sendTopicMessage(queueName, message, function (err, res) {
+			    if (err) {
+				    return reject(err);
+			    }
+
+			    resolve(res);
+		    });
+	    });
+    }
+
+	/**
+	 * Missing Notification Type Error
+	 */
+	static throwIfMissingNotificationType() {
         throw new Error('notification type is required');
     }
 
-    sendNotification(user, notificationType = this.constructor.throwIfMissingNotificationType()) {
-        const sendTopicMessage = Q.nbind(this.serviceBusService.sendTopicMessage, this.serviceBusService);
+	/**
+	 * Send notification of a specific type to a user.
+	 *
+	 * @param user
+	 * @param notificationType - required
+	 * @returns {Promise}
+	 */
+	sendNotification(user, notificationType = this.constructor.throwIfMissingNotificationType()) {
         const message = {
             body: JSON.stringify(user),
             customProperties: {
@@ -67,16 +83,14 @@ class Publisher {
             }
         };
 
-        return this.constructor.createTopic(this.queueName, this.serviceBusService)
+        return this.constructor.createTopic(this.serviceBusService)
             .then(success => {
                 if (!success) {
                     return false;
                 }
 
-                return sendTopicMessage(this.queueName, message)
-                    .then((response) => {
-                        return response.isSuccessful;
-                    });
+                return this.constructor.sendTopicMessage(message, this.serviceBusService)
+                    .then(({ isSuccessful = false }) => isSuccessful);
             });
     }
 }

@@ -5,7 +5,6 @@
  * @author Chris Paskvan
  */
 const _ = require('underscore'),
-    Ghost = require('../ghost/ghost'),
 	Postmaster = require('../helpers/postmaster'),
 	jsonpatch = require('rfc6902'),
 	log = require('../helpers/log'),
@@ -19,7 +18,7 @@ const _ = require('underscore'),
 const postmasterHash = '2021251983';
 
 /**
- * Time to Live for Tokens
+ * Time To Live for Tokens
  * @type {number}
  */
 const ttl = 300;
@@ -30,9 +29,6 @@ const ttl = 300;
 class UserController {
 	constructor(options = {}) {
 		this.destiny = options.destinyService;
-		this.ghost = new Ghost({
-			destinyService: options.destinyService
-		});
 		this.notifications = options.notificationService;
 		this.postmaster = new Postmaster();
 		this.users = options.userService;
@@ -337,9 +333,7 @@ class UserController {
 					return res.status(409).end();
 				}
 
-				return this.ghost.getWorldDatabasePath()
-					.then(worldDatabasePath => this.world.open(worldDatabasePath))
-                    .then(() => this.world.getVendorIcon(postmasterHash))
+				return this.world.getVendorIcon(postmasterHash)
                     .then(iconUrl => {
 						let promises = [];
 
@@ -358,12 +352,10 @@ class UserController {
 
 						return this.users.updateUser(user);
                     })
-                    .then(() => res.status(200).end())
-                    .then(() => this.world.close());
+                    .then(() => res.status(200).end());
 			})
 			.catch(err => {
 				log.error(err);
-				this.world.close();
 				res.status(500).json(err);
 			});
 	}
