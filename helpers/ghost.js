@@ -1,5 +1,8 @@
-const EventEmitter = require('events').EventEmitter,
-	fs = require('fs'),
+/**
+ * @class Ghost
+ * @requires path
+ */
+const fs = require('fs'),
 	log = require('./log'),
 	path = require('path'),
 	request = require('request'),
@@ -8,46 +11,31 @@ const EventEmitter = require('events').EventEmitter,
 /**
  * Ghost Class
  */
-class Ghost extends EventEmitter {
+class Ghost {
 	/**
 	 * @constructor
 	 * @param options
-	 * @todo Need to organize Destiny and Destiny2 databases into separate directories.
 	 */
-	constructor() {
-		const [databaseFileName] = fs.readdirSync(process.env.DATABASE)
-			.map(name => {
-				return {
-					name,
-					time: fs.statSync(process.env.DATABASE + name).mtime.getTime()
-				};
-			})
-			.sort((a, b) => b.time - a.time)
-			.map(file => file.name);
-
-		super();
-		this.databaseFileName = databaseFileName;
-	}
-
+	constructor(options = {}) {
+        this.destiny = options.destinyService;
+    }
     /**
      * Get the full path to the database.
-     *
-     * @returns {Promise}
+     * @returns {*|promise}
      */
     getWorldDatabasePath() {
-    	return Promise.resolve(this.databaseFileName ?
-		    path.join(process.env.DATABASE, path.basename(this.databaseFileName)) : undefined);
+        return this.destiny.getManifest()
+            .then(this.updateManifest)
+            .then(manifest => {
+                return manifest ?
+                    path.join(process.env.DATABASE, path.basename(manifest.mobileWorldContentPaths.en))
+                    : undefined;
+            });
     }
 
-	/**
-	 * Download and unzip the manifest database.
-	 *
-	 * @param manifest
-	 * @returns {*}
-	 */
-	updateManifest(manifest) {
+   updateManifest(manifest) {
 		const databasePath = process.env.DATABASE;
-		const { mobileWorldContentPaths: { en: relativeUrl }} = manifest;
+		const { mobileWorldContentPaths: { en: relativeUrl }}  = manifest;
 		const fileName = databasePath + relativeUrl.substring(relativeUrl.lastIndexOf('/') + 1);
 
 		if (fs.existsSync(fileName)) {
@@ -62,22 +50,23 @@ class Ghost extends EventEmitter {
 
 			stream.on('finish', () => {
 				yauzl.open(fileName + '.zip', (err, zipFile) => {
-					if (err) {
-						return reject(err);
-					}
+					if (!err) {
+						zipFile.on('entry', entry => {
+							zipFile.openReadStream(entry, (err, readStream) => {
+								if (!err) {
+									readStream.pipe(fs.createWriteStream(databasePath + entry.fileName));
 
-					zipFile.on('entry', entry => {
-						zipFile.openReadStream(entry, (err, readStream) => {
-							if (err) {
-								return reject(err);
-							}
+									fs.unlink(fileName + '.zip');
 
-							readStream.pipe(fs.createWriteStream(databasePath + entry.fileName));
-							fs.unlink(fileName + '.zip');
-
-							resolve(manifest);
+									resolve(manifest);
+								} else {
+									reject(err);
+								}
+							});
 						});
-					});
+					} else {
+						reject(err);
+					}
 				});
 			});
 		});

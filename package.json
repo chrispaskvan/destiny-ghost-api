@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "DESTINY_DATABASE_DIR=./databases/destiny DESTINY2_DATABASE_DIR=./databases/destiny2 ./node_modules/.bin/mocha --opts .mocharc ./**/*.spec.js",
+    "test": "./node_modules/.bin/mocha --opts .mocharc ./**/*.spec.js",
     "coverage": "rm -fr ./.coverage; istanbul cover _mocha -- --opts .mocharc ./**/*.spec.js",
     "test:watch": "./node_modules/.bin/mocha --opts .mocharc -w ./**/*.spec.js"
   },
@@ -30,10 +30,8 @@
   "dependencies": {
     "@godaddy/terminus": "^2.2.0",
     "applicationinsights": "^1.0.2",
-    "azure-common": "^0.9.20",
-    "azure-sb": "^0.10.6",
+    "azure": "^2.2.1-preview",
     "base64url": "^2.0.0",
-    "better-sqlite3": "^4.1.0",
     "body-parser": "^1.18.2",
     "bunyan": "^1.8.12",
     "bunyan-pretty-colors": "^0.1.7",
@@ -48,14 +46,13 @@
     "is-my-json-valid": "^2.17.2",
     "joi": "^13.1.2",
     "json-schema-defaults": "^0.4.0",
-    "node-cache": "^4.2.0",
     "nodemailer": "^4.6.4",
     "nodemailer-smtp-transport": "^2.0.0",
     "redis": "^2.7.1",
     "request": "^2.85.0",
     "rfc6902": "^2.2.2",
-    "sequelize": "^4.37.6",
     "sqlite3": "^3.1.13",
+    "string": "^3.3.1",
     "twilio": "^3.14.0",
     "underscore": "^1.8.3",
     "yauzl": "^2.9.1"

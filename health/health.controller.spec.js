@@ -1,9 +1,9 @@
-const HealthController = require('../health/health.controller'),
-	chai = require('chai'),
+const chai = require('chai'),
 	expect = require('chai').expect,
 	httpMocks = require('node-mocks-http'),
 	{ Response: manifest } = require('../mocks/manifestResponse.json'),
 	{ Response: manifest2 } = require('../mocks/manifest2Response.json'),
+	proxyquire = require('proxyquire'),
 	request = require('request'),
 	sinon = require('sinon'),
 	sinonChai = require('sinon-chai');
@@ -46,20 +46,26 @@ describe('HealthController', () => {
 	describe('getHealth', () => {
 		describe('when all services are healthy', () => {
 			const world = {
+				close: () => Promise.resolve(),
 				getItemByName: () => Promise.resolve([{
 					itemDescription: 'Red Hand IX'
-				}])
+				}]),
+				open: () => Promise.resolve()
 			};
 			const world2 = {
+				close: () => Promise.resolve(),
 				getItemByName: () => Promise.resolve([{
 					displayProperties: {
 						description: 'The Number'
 					}
-				}])
+				}]),
+				open: () => Promise.resolve()
 			};
 
 			beforeEach(() => {
-				healthController = new HealthController({ destinyService, destiny2Service, documents, store, worldRepository: world, world2Repository: world2 });
+				const HealthController = proxyquire('./health.controller', { 'World': world, 'World2': world2 });
+
+				healthController = new HealthController({ destinyService, destiny2Service, documents, store });
 			});
 
 			it('should return a positive response', (done) => {
@@ -89,11 +95,11 @@ describe('HealthController', () => {
 						twilio: 'All Systems Go',
 						destiny: {
 							manifest: '56578.17.04.12.1251-6',
-							world: 'Red Hand IX'
+							world: 'Protect the borders. Punish the unjust.'
 						},
 						destiny2: {
 							manifest: '61966.18.01.12.0839-8',
-							world: 'The Number'
+							world: 'An army meets, and stands, and falls. Three nobles wage their hopeless war.\nIn shifting madness, evil crawls. One stands above the battle\'s roar.'
 						}
 					});
 
@@ -103,7 +109,6 @@ describe('HealthController', () => {
 				healthController.getHealth(req, res);
 			});
 		});
-
 		describe('when all services are unhealthy', () => {
 			const world = {
 				close: () => Promise.resolve(),
@@ -117,7 +122,9 @@ describe('HealthController', () => {
 			};
 
 			beforeEach(() => {
-				healthController = new HealthController({ destinyService, destiny2Service, documents, store, worldRepository: world, world2Repository: world2 });
+				const HealthController = proxyquire('./health.controller', { 'World': world, 'World2': world2 });
+
+				healthController = new HealthController({ destinyService, destiny2Service, documents, store });
 			});
 
 			it('should return a negative response', (done) => {

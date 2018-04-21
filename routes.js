@@ -43,12 +43,8 @@ class Routes {
 		});
 		const authenticationController = new AuthenticationController({ authenticationService });
 
-		const world = new World({
-			directory: process.env.DESTINY_DATABASE_DIR
-		});
-		const world2 = new World2({
-			directory: process.env.DESTINY2_DATABASE_DIR
-		});
+		const world = new World();
+		const world2 = new World2();
 		const destiny2Cache = new Destiny2Cache();
 		const destiny2Service = new Destiny2Service({ cacheService: destiny2Cache });
 		const notificationService = new NotificationService({
@@ -96,8 +92,7 @@ class Routes {
 			authenticationController,
 			authenticationService,
 			destinyService: destiny2Service,
-			userService,
-			worldRepository: world2
+			userService
 		});
 		routes.use('/twilio', twilioRouter);
 

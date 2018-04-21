@@ -1,112 +1,118 @@
 /**
  * World Model Tests
  */
-const World = require('./world'),
-	expect = require('chai').expect;
+const Ghost = require('./ghost'),
+	World = require('./world'),
+	expect = require('chai').expect,
+	mockManifest = require('../mocks/manifestResponse').Response;
 
-const world = new World({
-	directory: process.env.DESTINY_DATABASE_DIR
-});
+const mockDestinyService = {
+	getManifest: () => Promise.resolve(mockManifest)
+};
+
+const world = new World();
 
 describe('It\'s Bungie\'s 1st world. You\'re just querying it.', () => {
-	it('should return the Hunter character class', (done) => {
-		world.getClassByHash(671679327)
-			.then(characterClass => {
-				const { className } = characterClass;
+	let ghost;
 
-				expect(className).to.equal('Hunter');
-				done();
-			})
-			.catch(err => {
-				done(err);
+	beforeEach(() => {
+		ghost = new Ghost({
+			destinyService: mockDestinyService
+		});
+	});
+
+	it('should return the Hunter character class', (done) => {
+		ghost.getWorldDatabasePath()
+			.then(path => {
+				world.open(path);
+				world.getClassByHash(671679327)
+					.then(characterClass => {
+						const { className } = characterClass;
+
+						world.close();
+
+						expect(className).to.equal('Hunter');
+						done();
+					})
+					.catch(err => {
+						world.close();
+						done(err);
+					});
 			});
 	});
 
 	it('should return the Fusion Rifle category definition', (done) => {
-		world.categories = [
-			{
-				id: 9,
-				shortTitle: 'Fusion Rifle'
-			}
-		];
+		ghost.getWorldDatabasePath()
+			.then(path => {
+				world.open(path);
+				world.getItemCategory(9)
+					.then(itemCategory => {
+						world.close();
 
-		world.getItemCategory(9)
-			.then(itemCategory => {
-				expect(itemCategory.shortTitle).to.equal('Fusion Rifle');
-				done();
-			})
-			.catch(err => {
-				done(err);
+						expect(itemCategory.shortTitle).to.equal('Fusion Rifle');
+						done();
+					})
+					.catch(err => {
+						world.close();
+						done(err);
+					});
 			});
 	});
 
 	it('should return Fatebringer', (done) => {
-		world.items = [
-			{
-				itemName: 'Fatebringer',
-				qualityLevel: 0
-			}
-		];
+		ghost.getWorldDatabasePath()
+			.then(path => {
+				world.open(path);
+				world.getItemByName('Fatebringer')
+					.then(items => {
+						world.close();
 
-		world.getItemByName('Fatebringer')
-			.then(items => {
-				expect(items[0].itemName).to.equal('Fatebringer');
-				done();
-			})
-			.catch(err => {
-				done(err);
+						expect(items[0].itemName).to.equal('Fatebringer');
+						done();
+					})
+					.catch(err => {
+						world.close();
+						done(err);
+					});
 			});
 	});
 
 	it('should return year 2 Hawkmoon', (done) => {
-		world.items = [
-			{
-				instanced: false,
-				itemName: 'Oldest Hawkmoon',
-				qualityLevel: 1
-			},
-			{
-				instanced: false,
-				itemName: 'Older Hawkmoon',
-				qualityLevel: 0
-			},
-			{
-				instanced: true,
-				itemName: 'Hawkmoon',
-				qualityLevel: 0
-			}
-		];
+		ghost.getWorldDatabasePath()
+			.then(path => {
+				world.open(path);
+				world.getItemByName('Hawkmoon')
+					.then(items => {
+						const { itemName: hawkmoon } = items.find(item => item.instanced);
 
-		world.getItemByName('Hawkmoon')
-			.then(items => {
-				const { itemName: hawkmoon } = items.find(item => item.instanced);
+						world.close();
 
-				expect(hawkmoon).to.equal('Hawkmoon');
-				expect(items.length).to.equal(3);
-				done();
-			})
-			.catch(err => {
-				done(err);
+						expect(hawkmoon).to.equal('Hawkmoon');
+						expect(items.length).to.equal(3);
+						done();
+					})
+					.catch(err => {
+						world.close();
+						done(err);
+					});
 			});
 	});
 
 	it('should return the icon of the Agent of Nine', (done) => {
-		world.vendors = [
-			{
-				summary: {
-					vendorIcon: 'someIcon'
-				},
-				vendorHash: '2796397637'
-			}
-		];
+		ghost.getWorldDatabasePath()
+			.then(path => {
+				world.open(path);
+				world.getVendorIcon('2796397637')
+					.then(url => {
+						world.close();
 
-		world.getVendorIcon('2796397637')
-			.then(url => {
-				expect(url).to.exist;
-				done();
-			})
-			.catch(err => {
-				done(err);
+						expect(url).to.exist;
+						done();
+					})
+					.catch(err => {
+						world.close();
+						done(err);
+					});
 			});
 	});
 });
