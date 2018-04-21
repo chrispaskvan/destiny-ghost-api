@@ -4,10 +4,7 @@
  * @module healthController
  * @author Chris Paskvan
  */
-const Ghost = require('../helpers/ghost'),
-	World = require('../helpers/world'),
-	World2 = require('../helpers/world2'),
-	log = require('../helpers/log'),
+const log = require('../helpers/log'),
 	request = require('request');
 
 /**
@@ -30,13 +27,9 @@ class HealthController {
 		this.destinyService = options.destinyService;
 		this.destiny2Service = options.destiny2Service;
 		this.documents = options.documents;
-		this.ghost = new Ghost({
-			destinyService: options.destinyService
-		});
-		this.ghost2 = new Ghost({
-			destinyService: options.destiny2Service
-		});
 		this.store = options.store;
+		this.world = options.worldRepository;
+		this.world2 = options.world2Repository;
 	}
 
 	_deleteKey(key) {
@@ -132,37 +125,23 @@ class HealthController {
 	}
 
 	async _world() {
-		const world = new World();
-
 		try {
-			const worldDatabasePath = await this.ghost.getWorldDatabasePath();
-			await world.open(worldDatabasePath);
+			const [{ itemDescription } = {}] =
+				await this.world.getItemByName('Aegis of the Reef');
 
-			const [item] =
-				await world.getItemByName('Aegis of the Reef');
-			await world.close();
-
-			return item.itemDescription;
+			return itemDescription;
 		} catch (err) {
-			world.close();
 			throw err;
 		}
 	}
 
 	async _world2() {
-		const world2 = new World2();
-
 		try {
-			const worldDatabasePath = await this.ghost2.getWorldDatabasePath();
-			await world2.open(worldDatabasePath);
-
-			const [{ displayProperties: { description = notAvailable }}] =
-				await world2.getItemByName('Jack Queen King 3');
-			await world2.close();
+			const [{ displayProperties: { description = notAvailable } = {}} = {}] =
+				await this.world2.getItemByName('Jack Queen King 3');
 
 			return description;
 		} catch (err) {
-			world2.close();
 			throw err;
 		}
 	}
@@ -189,8 +168,8 @@ class HealthController {
 			documents,
 			store,
 			twilio,
-			destiny: {
-				manifest: manifestVersion,
+ 			destiny: {
+	 			manifest: manifestVersion,
 				world: world
 			},
 			destiny2: {

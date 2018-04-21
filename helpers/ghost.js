@@ -1,4 +1,5 @@
-const fs = require('fs'),
+const EventEmitter = require('events').EventEmitter,
+	fs = require('fs'),
 	log = require('./log'),
 	path = require('path'),
 	request = require('request'),
@@ -7,14 +8,26 @@ const fs = require('fs'),
 /**
  * Ghost Class
  */
-class Ghost {
+class Ghost extends EventEmitter {
 	/**
 	 * @constructor
 	 * @param options
+	 * @todo Need to organize Destiny and Destiny2 databases into separate directories.
 	 */
-	constructor(options = {}) {
-        this.destiny = options.destinyService;
-    }
+	constructor() {
+		const [databaseFileName] = fs.readdirSync(process.env.DATABASE)
+			.map(name => {
+				return {
+					name,
+					time: fs.statSync(process.env.DATABASE + name).mtime.getTime()
+				};
+			})
+			.sort((a, b) => b.time - a.time)
+			.map(file => file.name);
+
+		super();
+		this.databaseFileName = databaseFileName;
+	}
 
     /**
      * Get the full path to the database.
@@ -22,13 +35,8 @@ class Ghost {
      * @returns {Promise}
      */
     getWorldDatabasePath() {
-        return this.destiny.getManifest()
-            .then(this.updateManifest)
-            .then(manifest => {
-                return manifest ?
-                    path.join(process.env.DATABASE, path.basename(manifest.mobileWorldContentPaths.en))
-                    : undefined;
-            });
+    	return Promise.resolve(this.databaseFileName ?
+		    path.join(process.env.DATABASE, path.basename(this.databaseFileName)) : undefined);
     }
 
 	/**
@@ -54,13 +62,13 @@ class Ghost {
 
 			stream.on('finish', () => {
 				yauzl.open(fileName + '.zip', (err, zipFile) => {
-					if (!err) {
+					if (err) {
 						return reject(err);
 					}
 
 					zipFile.on('entry', entry => {
 						zipFile.openReadStream(entry, (err, readStream) => {
-							if (!err) {
+							if (err) {
 								return reject(err);
 							}
 

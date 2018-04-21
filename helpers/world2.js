@@ -11,107 +11,101 @@
  * @requires sqlite3
  */
 const _ = require('underscore'),
-	World = require('./world');
+	Database = require('better-sqlite3'),
+	World = require('./world'),
+	path = require('path');
 
 /**
  * World2 Repository
  */
 class World2 extends World {
-    /**
-     * Get the class according to the provided hash.
-     * @param classHash {string}
-     */
-    getClassByHash(classHash) {
-        return this._getClasses(this.db)
-            .then(classes => {
-                return classes.find(characterClass => characterClass.hash === classHash);
-            });
-    }
+	constructor(options = {}) {
+		super(options);
+
+		this._bootstrap(this.database);
+	}
+
+	_bootstrap(fileName) {
+		const databasePath = fileName ?
+			path.join(this.directory, path.basename(fileName)) : undefined;
+
+		if (databasePath) {
+			const database = new Database(databasePath, {
+				readonly: true,
+				fileMustExist: true
+			});
+
+			const categories = database.prepare('SELECT json FROM DestinyItemCategoryDefinition').all();
+			const classes = database.prepare('SELECT json FROM DestinyClassDefinition').all();
+			const items = database.prepare('SELECT json FROM DestinyInventoryItemDefinition').all();
+			const loreDefinitions = database.prepare('SELECT json FROM DestinyLoreDefinition').all();
+			const vendors = database.prepare('SELECT json FROM DestinyVendorDefinition').all();
+
+			database.close();
+
+			this.categories = categories.map(({ json: category }) => JSON.parse(category));
+			this.classes = classes.map(({ json: classDefinition }) => JSON.parse(classDefinition));
+			this.items = items.map(({ json: item }) => JSON.parse(item));
+			this.loreDefinitions = loreDefinitions.map(({ json: lore }) => JSON.parse(lore));
+			this.vendors = vendors.map(({ json: vendor }) => JSON.parse(vendor));
+		}
+	}
+
+
+	/**
+	 * Get item by the hash provided.
+	 * @param itemHash
+	 * @returns {*}
+	 */
+	getItemByHash(itemHash) {
+		return new Promise((resolve, reject) => {
+			try {
+				const [item] = this.items.filter(item => item.hash === itemHash);
+
+				resolve(item);
+			} catch (err) {
+				reject(err);
+			}
+		});
+	}
 
     /**
      * Look up the item(s) with matching strings in their name(s).
      * @param itemName {string}
      * @returns {Promise}
      */
-    getItemByName(itemName) {
-        return new Promise((resolve, reject) => {
-            this.db.serialize(() => {
-                const it = itemName.replace(/'/g, '\'\'');
-                let items = [];
+    async getItemByName(itemName) {
+	    return new Promise((resolve, reject) => {
+		    try {
+			    const items = this.items.filter(({ displayProperties: { name } = '' }) =>
+				    name.toLowerCase().includes(itemName.toLowerCase()));
 
-                this.db.each(`SELECT json FROM DestinyInventoryItemDefinition WHERE json LIKE '%"name":"${it}%"%'`, (err, row) => err ? reject(err) : items.push(JSON.parse(row.json)),
-                    (err, rows) => {
-                        if (err) {
-                            reject(err);
-                        } else {
-                            if (rows === 0) {
-                                resolve([]);
-                            } else {
-                                const groups = _.groupBy(items, item => item.displayProperties.name);
-                                const keys = Object.keys(groups);
+			    const groups = _.groupBy(items, item => item.displayProperties.name);
+			    const keys = Object.keys(groups);
 
-                                resolve(_.map(keys, (key) => {
-                                    const item = _.min(_.filter(items, (item) => item.displayProperties.name === key),
-                                        (item) => item.quality ? item.quality.qualityLevel : 0);
+			    resolve(_.map(keys, (key) => {
+				    const item = _.min(_.filter(items, (item) => item.displayProperties.name === key),
+					    (item) => item.quality ? item.quality.qualityLevel : 0);
 
-                                    return Object.assign(item, {
-										itemCategory: item.itemTypeAndTierDisplayName,
-										itemName: item.displayProperties.name
-									})
-                                }));
-                            }
-                        }
-                    });
-            });
-        });
+				    return Object.assign(item, {
+					    itemCategory: item.itemTypeAndTierDisplayName,
+					    itemName: item.displayProperties.name
+				    })
+			    }));
+		    } catch (err) {
+			    reject(err);
+		    }
+	    });
     }
 
-    /**
-     * Get item by the hash provided.
-     * @param itemHash
-     * @returns {*}
-     */
-    getItemByHash(itemHash) {
-        return new Promise((resolve, reject) => {
-            this.db.serialize(() => {
-                this.db.each(`SELECT json FROM DestinyInventoryItemDefinition WHERE json LIKE '%"hash":${itemHash}%' LIMIT 1`,
-                    (err, row) => err ? reject(err) : resolve(JSON.parse(row.json)));
-            });
-        });
-    }
-
-    /**
-     * Get the category definition for the provided hash.
-     * @param itemCategoryHash
-     * @returns {Promise}
-     */
-    getItemCategory(itemCategoryHash) {
-        return new Promise((resolve, reject) => {
-			this.db.serialize(() => {
-				let categories = [];
-
-				this.db.each(`SELECT json FROM DestinyItemCategoryDefinition WHERE json LIKE '%"hash":${itemCategoryHash},%' LIMIT 1`,
-					(err, row) =>  err ? reject(err) : categories.push(JSON.parse(row.json)),
-                    (err, rows) => {
-                        if (err) {
-                            reject(err);
-                        } else {
-                            if (rows === 0) {
-                                reject(new Error('No item category found for hash' +
-                                    itemCategoryHash));
-                            } else {
-								if (rows > 1) {
-									reject(new Error('Hash, ' +
-										itemCategoryHash + ', is not an unique identifier.'));
-								}
-
-                                resolve(categories[0]);
-                            }
-                        }
-                    });
-            });
-        });
-    }
+	/**
+	 * Get the category definition for the provided hash.
+	 * @param itemCategoryHash
+	 * @returns {Promise}
+	 */
+	getItemCategory(itemCategoryHash) {
+		return Promise.resolve(this.categories.find(category => category.hash === itemCategoryHash));
+	}
 
 	/**
      * Get the lore by item hash.
@@ -119,12 +113,7 @@ class World2 extends World {
 	 * @returns {Promise}
 	 */
 	getLore(hash) {
-		return new Promise((resolve, reject) => {
-			this.db.serialize(() => {
-				this.db.each(`SELECT json FROM DestinyLoreDefinition WHERE json LIKE \'%"hash":${hash}%' LIMIT 1`,
-					(err, row) => err ? reject(err) : resolve(JSON.parse(row.json)));
-			});
-		});
+		return Promise.resolve(this.loreDefinitions.find(lore => lore.hash === hash));
 	}
 }
 

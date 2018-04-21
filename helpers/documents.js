@@ -99,7 +99,7 @@ class Documents {
 		const documentUrl = `dbs/${databaseId}/colls/${collectionId}/docs/${documentId}`;
 
 		return new Promise((resolve, reject) => {
-			this.client.deleteDocument(documentUrl,  {
+			this.client.deleteDocument(documentUrl, {
 				partitionKey: [partitionKey]
 			}, (err, result) => {
 				if (err) {

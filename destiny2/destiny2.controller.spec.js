@@ -1,9 +1,9 @@
-const chai = require('chai'),
+const Destiny2Controller = require('./destiny2.controller'),
+	chai = require('chai'),
 	chance = require('chance')(),
 	expect = require('chai').expect,
 	httpMocks = require('node-mocks-http'),
 	{ Response: manifest } = require('../mocks/manifest2Response.json'),
-	proxyquire = require('proxyquire'),
 	sinon = require('sinon'),
 	sinonChai = require('sinon-chai');
 
@@ -25,7 +25,6 @@ let userServiceStub;
 
 beforeEach(() => {
 	const world = {
-		close: () => Promise.resolve(),
 		getClassByHash: () => Promise.resolve({
 			classType: 1,
 			displayProperties: {
@@ -39,12 +38,10 @@ beforeEach(() => {
 			hash: 671679327,
 			index: 1,
 			redacted: false
-		}),
-		open: () => Promise.resolve()
+		})
 	};
-	const Destiny2Controller = proxyquire('./destiny2.controller', { 'World2': world });
 
-	destiny2Controller = new Destiny2Controller({ destinyService: destiny2Service, userService });
+	destiny2Controller = new Destiny2Controller({ destinyService: destiny2Service, userService, worldRepository: world });
 });
 
 describe('Destiny2Controller', () => {

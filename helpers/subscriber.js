@@ -7,7 +7,8 @@
  * @requires azure
  * {@link https://docs.microsoft.com/en-us/azure/service-bus-messaging/service-bus-nodejs-how-to-use-topics-subscriptions}
  */
-const azure = require('azure'),
+const azure = require('azure-sb'),
+	azureCommon = require('azure-common'),
     settings = require('../settings/serviceBus.json');
 
 class Subscriber {
@@ -15,7 +16,7 @@ class Subscriber {
      * @constructor
      */
     constructor() {
-        const retryOperations = new azure.ExponentialRetryPolicyFilter();
+        const retryOperations = new azureCommon.ExponentialRetryPolicyFilter();
 
         this.serviceBusService = azure.createServiceBusService(settings.connectionString)
             .withFilter(retryOperations);

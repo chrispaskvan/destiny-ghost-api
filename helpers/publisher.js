@@ -6,7 +6,8 @@
  * @author Chris Paskvan
  * @requires azure
  */
-const azure = require('azure'),
+const azure = require('azure-sb'),
+	azureCommon = require('azure-common'),
 	{ connectionString, queueName } = require('../settings/serviceBus.json');
 
 /**
@@ -18,7 +19,7 @@ class Publisher {
      * @constructor
      */
     constructor() {
-        const retryOperations = new azure.ExponentialRetryPolicyFilter();
+        const retryOperations = new azureCommon.ExponentialRetryPolicyFilter();
 
         this.serviceBusService = azure.createServiceBusService(connectionString)
             .withFilter(retryOperations);
