@@ -22,6 +22,7 @@ class TwilioController {
 	constructor(options = {}) {
 		this.authentication = options.authenticationService;
 		this.destiny = options.destinyService;
+		this.destinyTracker = options.destinyTrackerService;
 		this.users = options.userService;
 		this.world = options.worldRepository;
 	}
@@ -33,32 +34,36 @@ class TwilioController {
 	 * @private
 	 */
 	async _getItem(item) {
-		let promises = [];
+		const {
+			displayProperties: {
+				icon,
+				name
+			} = {},
+			hash,
+			inventory: {
+				tierTypeName = ''
+			} = {},
+			itemCategoryHashes,
+			itemType,
+			itemTypeDisplayName
+		} = item;
+		const promises = itemCategoryHashes.map(itemCategoryHash => this.world.getItemCategory(itemCategoryHash));
+		const itemCategories = await Promise.all(promises);
+		const filteredCategories = itemCategories.filter(({ hash }) => hash > 1);
+		const sortedCategories = _.sortBy(filteredCategories,
+			itemCategory =>	itemCategory.hash);
+		const itemCategory =
+			_.reduce(sortedCategories, (memo, { shortTitle }) => (memo + shortTitle + ' '), ' ')
+				.trim();
 
-		try {
-			_.each(item.itemCategoryHashes, itemCategoryHash => {
-				promises.push(this.world.getItemCategory(itemCategoryHash));
-			});
-
-			const itemCategories = await Promise.all(promises);
-			const filteredCategories = _.filter(itemCategories, itemCategory => itemCategory.hash > 1);
-			const sortedCategories = _.sortBy(filteredCategories,
-				itemCategory =>	itemCategory.hash);
-			const itemCategory =
-				_.reduce(sortedCategories, (memo, itemCategory) => (memo + itemCategory.shortTitle + ' '), ' ')
-					.trim();
-
-			return [{
-				itemCategory: (item.inventory ? (item.inventory.tierTypeName + ' ') : '') + itemCategory +
-				(filteredCategories.length < 2 ? (' ' + item.itemTypeDisplayName) : ''),
-				icon: 'https://www.bungie.net' + item.displayProperties.icon,
-				itemHash: item.hash,
-				itemName: item.displayProperties.name,
-				itemType: item.itemType
-			}];
-		} catch (err) {
-			throw err;
-		}
+		return [{
+			itemCategory: `${tierTypeName} ${itemCategory}` +
+				(filteredCategories.length < 2 ? (' ' + itemTypeDisplayName) : ''),
+			icon: 'https://www.bungie.net' + icon,
+			itemHash: hash,
+			itemName: name,
+			itemType
+		}];
 	}
 
 	/**
@@ -95,31 +100,28 @@ class TwilioController {
 	/**
 	 * Search for an item that matches the name provided.
 	 * @param itemName
-	 * @returns {*|promise}
+	 * @returns {Promise}
 	 */
 	async _queryItem(itemName) {
-		try {
-			const items = await this.world.getItemByName(itemName.replace(/[\u2018\u2019]/g, '\''));
+		const allItems = await this.world.getItemByName(itemName.replace(/[\u2018\u2019]/g, '\''));
+		const items = allItems.filter(({ itemName }) => !itemName.includes('Catalyst'));
 
-			if (items.length > 0) {
-				if (items.length > 1) {
-					const groups = _.groupBy(items, item => item.itemName);
-					const keys = Object.keys(groups);
+		if (items.length > 0) {
+			if (items.length > 1) {
+				const groups = _.groupBy(items, item => item.itemName);
+				const keys = Object.keys(groups);
 
-					if (keys.length === 1) {
-						return await this._getItem(items[0]);
-					}
-
-					return items;
+				if (keys.length === 1) {
+					return await this._getItem(items[0]);
 				}
 
-				return await this._getItem(items[0]);
+				return items;
 			}
 
-			return [];
-		} catch (err) {
-			throw err;
+			return await this._getItem(items[0]);
 		}
+
+		return [];
 	}
 
 	/**
@@ -176,25 +178,59 @@ class TwilioController {
 				res.cookie('isRegistered', true);
 				this.users.addUserMessage(user.displayName, user.membershipType, req.body);
 
-				const itemHash = req.cookies.itemHash;
-				const message = req.body.Body.trim().toLowerCase();
+				const { body: { Body: rawMessage }, cookies: { itemHash }} = req;
+				const message = rawMessage.trim().toLowerCase();
 
 				/**
 				 * @ToDo Handle STOP and HELP
 				 */
-				if (message === 'more') {
-					if (itemHash) {
-						return bitly.getShortUrl('http://db.destinytracker.com/d2/en/items/' + itemHash)
-							.then(function (shortURL) {
-								twiml.message(attributes, 'Destiny Tracker\n' + shortURL);
+				if (['more', 'rank', 'votes'].includes(message)) {
+					if (message === 'more') {
+						if (itemHash) {
+							return bitly.getShortUrl('http://db.destinytracker.com/d2/en/items/' + itemHash)
+								.then(function (shortURL) {
+									twiml.message(attributes, 'Destiny Tracker\n' + shortURL);
+									res.writeHead(200, {
+										'Content-Type': 'text/xml'
+									});
+									res.end(twiml.toString());
+								});
+						}
+
+						twiml.message(attributes, 'More what?');
+					}
+					if (message === 'rank') {
+						if (itemHash) {
+							const rank = await this.destinyTracker.getRank(itemHash);
+
+							if (rank) {
+								const suffixes = ['th', 'st', 'nd', 'rd'];
+								const mod = rank%100;
+
+								twiml.message(attributes, rank + (suffixes[(mod-20)%10]||suffixes[mod]||suffixes[0]) + ' in PVP');
 								res.writeHead(200, {
 									'Content-Type': 'text/xml'
 								});
 								res.end(twiml.toString());
+							}
+						}
+
+						twiml.message(attributes, 'Hm, I didn\'t find a PVP ranking for that item.');
+					}
+					if (message === 'votes') {
+						if (itemHash) {
+							const { upvotes, total } = await this.destinyTracker.getVotes(itemHash);
+
+							twiml.message(attributes, `${upvotes} of ${total} 👍`);
+							res.writeHead(200, {
+								'Content-Type': 'text/xml'
 							});
+							res.end(twiml.toString());
+						}
+
+						twiml.message(attributes, 'Strange. They must still be counting.');
 					}
 
-					twiml.message(attributes, 'More what?');
 					res.writeHead(200, {
 						'Content-Type': 'text/xml'
 					});
