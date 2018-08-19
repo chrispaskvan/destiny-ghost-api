@@ -127,7 +127,7 @@ class HealthController {
 	async _world() {
 		try {
 			const [{ itemDescription } = {}] =
-				await this.world.getItemByName('Aegis of the Reef');
+				await this.world.getItemByName('Doctrine of Passing');
 
 			return itemDescription;
 		} catch (err) {
@@ -138,7 +138,7 @@ class HealthController {
 	async _world2() {
 		try {
 			const [{ displayProperties: { description = notAvailable } = {}} = {}] =
-				await this.world2.getItemByName('Jack Queen King 3');
+				await this.world2.getItemByName('Polaris Lance');
 
 			return description;
 		} catch (err) {
