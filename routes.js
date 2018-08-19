@@ -7,6 +7,7 @@ const AuthenticationController = require('./authentication/authentication.contro
 	Destiny2Service = require('./destiny2/destiny2.service'),
 	DestinyCache = require('./destiny/destiny.cache'),
 	DestinyService = require('./destiny/destiny.service'),
+	DestinyTrackerService = require('./destinytracker/destinytracker.service'),
 	NotificationService = require('./notifications/notification.service'),
 	UserCache = require('./users/user.cache'),
 	UserService = require('./users/user.service'),
@@ -51,6 +52,7 @@ class Routes {
 		});
 		const destiny2Cache = new Destiny2Cache();
 		const destiny2Service = new Destiny2Service({ cacheService: destiny2Cache });
+		const destinyTrackerService = new DestinyTrackerService();
 		const notificationService = new NotificationService({
 			client
 		});
@@ -96,6 +98,7 @@ class Routes {
 			authenticationController,
 			authenticationService,
 			destinyService: destiny2Service,
+			destinyTrackerService,
 			userService,
 			worldRepository: world2
 		});
