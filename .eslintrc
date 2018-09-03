@@ -1,8 +1,9 @@
 {
-  "parserOptions": {
+  "parserOptions":{
     "ecmaVersion": 2017,
-    "sourceType": "module",
-    "ecmaFeatures": {}
+    "ecmaFeatures": {
+      "experimentalObjectRestSpread": true
+    }
   },
   "rules": {
     "comma-dangle": 1,

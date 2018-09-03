@@ -51,6 +51,13 @@ class World2 extends World {
 		}
 	}
 
+	/**
+	 * Get the class according to the provided hash.
+	 * @param classHash {string}
+	 */
+	getClassByHash(classHash) {
+		return Promise.resolve(this.classes.find(characterClass => characterClass.hash === classHash));
+	}
 
 	/**
 	 * Get item by the hash provided.

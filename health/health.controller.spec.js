@@ -107,12 +107,12 @@ describe('HealthController', () => {
 		describe('when all services are unhealthy', () => {
 			const world = {
 				close: () => Promise.resolve(),
-				getItemByName: () => Promise.reject(),
+				getItemByName: () => Promise.reject({}),
 				open: () => Promise.resolve()
 			};
 			const world2 = {
 				close: () => Promise.resolve(),
-				getItemByName: () => Promise.reject(),
+				getItemByName: () => Promise.reject({}),
 				open: () => Promise.resolve()
 			};
 
@@ -124,7 +124,7 @@ describe('HealthController', () => {
 				const req = httpMocks.createRequest();
 
 				destinyServiceStub = sinon.stub(destinyService, 'getManifest').rejects();
-				destinyServiceStub = sinon.stub(destiny2Service, 'getManifest').rejects();
+				destiny2ServiceStub = sinon.stub(destiny2Service, 'getManifest').rejects();
 				documentsStub = sinon.stub(documents, 'getDocuments').rejects();
 				storeDelStub = sinon.stub(store, 'del').yields(undefined, 0);
 				storeGetStub = sinon.stub(store, 'get').yields(undefined, 'Thorn');
