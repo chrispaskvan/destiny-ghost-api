@@ -5,6 +5,7 @@ require('dotenv').config();
 
 const Routes = require('./routes'),
 	{ instrumentationKey } = require('./settings/applicationInsights.json'),
+	{ name } = require('./package.json'),
 	applicationInsights = require('applicationinsights'),
     bodyParser = require('body-parser'),
     cookieParser = require('cookie-parser'),
@@ -28,6 +29,8 @@ const start = new Date();
  * Application Insights
  */
 applicationInsights.setup(instrumentationKey).start();
+const key = applicationInsights.defaultClient.context.keys.cloudRole;
+applicationInsights.defaultClient.context.tags[key] = name;
 
 // jscs:ignore requireCapitalizedComments
 // noinspection JSLint
@@ -41,6 +44,11 @@ app.use(bodyParser.urlencoded({
     extended: true
 }));
 app.use(cookieParser());
+
+/**
+ * Disable X-Powered-By Header
+ */
+app.disable('x-powered-by');
 
 /**
  * Set Access Headers
@@ -130,7 +138,7 @@ app.get('/ping', function (req, res) {
 const server = http.createServer(app);
 terminus(server, {
 	signal: 'SIGINT',
-	onSignal: function () {
+	onSignal: () => {
 		return new Promise((resolve) => {
 			client.quit();
 			resolve();
@@ -142,9 +150,14 @@ server.listen(port, function init() {
 	// eslint-disable-next-line no-console
     console.log('Running on port ' + port + '.');
 
+	let client = applicationInsights.defaultClient;
 	const end = new Date();
 	const duration = end - start;
-	applicationInsights.defaultClient.trackMetric('StartupTime', duration);
+
+	client.trackMetric({
+		name: 'Startup Time',
+		value: duration
+	});
 });
 
 module.exports = app;

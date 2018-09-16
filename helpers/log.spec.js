@@ -8,7 +8,7 @@ describe('Log', () => {
             code: 200
         };
 
-        log.info(responseData);
+        log.info(JSON.stringify(responseData));
 
         const promise = new Promise(() => {
             throw new Error('Where\'s Cade?');

@@ -6,6 +6,7 @@ const Destiny2Service = require('./destiny2.service'),
     mockManifestResponse = require('../mocks/manifestResponse.json'),
 	mockProfileCharactersResponse = require('../mocks/profileCharactersResponse.json'),
     request = require('request'),
+	rp = require('request-promise-native'),
     sinon = require('sinon');
 
 const mockUser = {
@@ -53,14 +54,17 @@ describe('Destiny2Service', () => {
 
     describe('getProfile', () => {
 		beforeEach(() => {
-			this.request = sinon.stub(request, 'get');
+			this.rp = sinon.stub(rp, 'get');
 		});
 
 		it('should return the user\'s list of characters', () => {
 			const { Response: { characters: { data }}} = mockProfileCharactersResponse;
 			const mockCharacters = Object.keys(data).map(character => data[character]);
 
-			this.request.callsArgWith(1, undefined, { statusCode: 200 }, JSON.stringify(mockProfileCharactersResponse));
+			this.rp.resolves({
+				body: JSON.stringify(mockProfileCharactersResponse),
+				statusCode: 200
+			});
 
 			return destiny2Service.getProfile(mockUser.membershipId, mockUser.membershipType)
 				.then(characters => {
@@ -69,7 +73,7 @@ describe('Destiny2Service', () => {
 		});
 
 		afterEach(() => {
-			this.request.restore();
+			this.rp.restore();
 		});
 	});
 });

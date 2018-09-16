@@ -17,6 +17,7 @@ const DestinyError = require('../destiny/destiny.error'),
     { apiKey } = require('../settings/bungie.json'),
 	{ xurHash } = require('./destiny2.constants'),
     request = require('request'),
+	rp = require('request-promise-native'),
     util = require('util');
 
 /**
@@ -132,34 +133,31 @@ class Destiny2Service extends DestinyService {
 	 * @param membershipType
 	 * @returns {Promise}
 	 */
-	getProfile(membershipId, membershipType) {
+	async getProfile(membershipId, membershipType) {
 		const opts = {
 			headers: {
-				'x-api-key': apiKey
+				'x-api-key': apiKey,
+				method: 'GET',
+				time: true
 			},
 			url: util.format('%s/Destiny2/%s/Profile/%s?components=Characters', servicePlatform,
 				membershipType, membershipId)
 		};
-
-		return new Promise((resolve, reject) => {
-			request.get(opts, function (err, res, body) {
-				if (!err && res.statusCode === 200) {
-					const responseBody = JSON.parse(body);
-
-					if (responseBody.ErrorCode === 1) {
-						const { Response: { characters: { data }}} = responseBody;
-						const characters = Object.keys(data).map(character => data[character]);
-
-						resolve(characters);
-					} else {
-						reject(new DestinyError(responseBody.ErrorCode || -1,
-							responseBody.Message || '', responseBody.ErrorStatus || ''));
-					}
-				} else {
-					reject(err);
-				}
-			});
+		const { body, elapsedTime, statusCode } = await rp.get({
+			resolveWithFullResponse: true,
+			...opts
 		});
+		const responseBody = JSON.parse(body);
+
+		if (responseBody.ErrorCode === 1) {
+			const { Response: { characters: { data }}} = responseBody;
+			const characters = Object.keys(data).map(character => data[character]);
+
+			return characters;
+		} else {
+			throw new DestinyError(responseBody.ErrorCode || -1,
+				responseBody.Message || '', responseBody.ErrorStatus || '');
+		}
 	}
 
 	/**
@@ -170,35 +168,31 @@ class Destiny2Service extends DestinyService {
 	 * @param accessToken
 	 * @returns {Promise}
 	 */
-	getXur(membershipId, membershipType, characterId, accessToken) {
+	async getXur(membershipId, membershipType, characterId, accessToken) {
 		const opts = {
 			headers: {
 				authorization: 'Bearer ' + accessToken,
 				'x-api-key': apiKey
 			},
+			time: true,
 			url: util.format('%s/Destiny2/%s/Profile/%s/Character/%s/Vendors/%s?components=402', servicePlatform,
 				membershipType, membershipId, characterId, xurHash)
 		};
-
-		return new Promise((resolve, reject) => {
-			request.get(opts, function (err, res, body) {
-				if (!err && res.statusCode === 200) {
-					const responseBody = JSON.parse(body);
-
-					if (responseBody.ErrorCode === 1) {
-						const { Response: {  sales: { data }}} = responseBody;
-						const itemHashes = Object.entries(data).map(([, value]) => value.itemHash);
-
-						resolve(itemHashes);
-					} else {
-						reject(new DestinyError(responseBody.ErrorCode || -1,
-							responseBody.Message || '', responseBody.ErrorStatus || ''));
-					}
-				} else {
-					reject(err);
-				}
-			});
+		const { body, elapsedTime, statusCode } = await rp({
+			resolveWithFullResponse: true,
+			...opts
 		});
+		const responseBody = JSON.parse(body);
+
+		if (responseBody.ErrorCode === 1) {
+			const { Response: {  sales: { data }}} = responseBody;
+			const itemHashes = Object.entries(data).map(([, value]) => value.itemHash);
+
+			return itemHashes;
+		} else {
+			throw new DestinyError(responseBody.ErrorCode || -1,
+				responseBody.Message || '', responseBody.ErrorStatus || '');
+		}
 	}
 }
 

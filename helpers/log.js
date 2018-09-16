@@ -9,18 +9,13 @@
  * {@link https://github.com/ericelliott/bunyan-request-logger} and
  * outlined in detail at {@link http://chimera.labs.oreilly.com/books/1234000000262/ch07.html#logging-requests}.
  * @requires _
- * @requires bunyan
+ * @requires pino
  * @requires cuid
  */
 const _ = require('underscore'),
-	PrettyStream = require('bunyan-pretty-colors'),
-	bunyan = require('bunyan'),
+	pino = require('pino'),
 	cuid = require('cuid'),
 	{ name } = require('../package.json');
-
-let prettyStdOut = new PrettyStream();
-
-prettyStdOut.pipe(process.stdout);
 
 /**
  * Get long stack traces for the error logger.
@@ -91,20 +86,19 @@ const defaults = {
 	name,
 	streams: [
 		{
-			level: 'info',
-			stream: prettyStdOut
-		},
-		{
 			level: 'error',
 			stream: process.stderr
 		}
 	],
-	serializers: _.extend(bunyan.stdSerializers, serializers)
+	serializers
 };
 
 class Log {
     constructor() {
-        this.logger = bunyan.createLogger(defaults);
+        this.logger =pino({
+	        prettyPrint: { colorize: true },
+	        ...defaults
+        })
     }
 
     info(message, data) {
