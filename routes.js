@@ -90,7 +90,8 @@ class Routes {
 			authenticationService,
 			destinyService: destiny2Service,
 			notificationService,
-			userService
+			userService,
+			worldRepository: world2
 		});
 		routes.use('/notifications', notificationRouter);
 

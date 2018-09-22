@@ -104,7 +104,8 @@ class TwilioController {
 	 */
 	async _queryItem(itemName) {
 		const allItems = await this.world.getItemByName(itemName.replace(/[\u2018\u2019]/g, '\''));
-		const items = allItems.filter(({ itemName }) => !itemName.includes('Catalyst'));
+		const items = allItems.filter(({ itemName, itemType }) => !itemName.includes('Catalyst')
+			&& [2, 3, 4].includes(itemType));
 
 		if (items.length > 0) {
 			if (items.length > 1) {
