@@ -8,17 +8,12 @@
  * managing users and destiny characters, etc. For more information check out
  * the wiki at {@link http://bungienetplatform.wikia.com/wiki/Endpoints} or
  * the Bungie web API platform help page {@link https://www.bungie.net/platform/destiny/help/}.
- * @requires _
- * @requires request
- * @requires util
  */
 const DestinyError = require('../destiny/destiny.error'),
     DestinyService = require('../destiny/destiny.service'),
     { apiKey } = require('../settings/bungie.json'),
 	{ xurHash } = require('./destiny2.constants'),
-    request = require('request'),
-	rp = require('request-promise-native'),
-    util = require('util');
+	axios = require('axios');
 
 /**
  * @constant
@@ -32,94 +27,70 @@ const servicePlatform = 'https://www.bungie.net/Platform';
  */
 class Destiny2Service extends DestinyService {
     /**
-     * @constructor
-     * @param options
-     */
-    constructor(options = {}) {
-        super(options);
-    }
-
-    /**
      * Get the latest Destiny Manifest definition.
      *
      * @returns {Promise}
      * @private
      */
-    _getManifest() {
-        const opts = {
-            headers: {
-                'x-api-key': apiKey
-            },
-            url: util.format('%s/Destiny2/Manifest', servicePlatform)
-        };
+    async _getManifest() {
+	    const { data: responseBody } = await axios({
+		    headers: {
+			    'x-api-key': apiKey
+		    },
+		    method: 'get',
+		    url: `${servicePlatform}/Destiny2/Manifest`
+	    });
 
-        return new Promise((resolve, reject) => {
-            request.get(opts, (err, res, body) => {
-				if (!err && res.statusCode === 200) {
-					const responseBody = JSON.parse(body);
+		if (responseBody.ErrorCode !== 1) {
+			throw new DestinyError(responseBody.ErrorCode || -1,
+				responseBody.Message || '', responseBody.ErrorStatus || '');
+		} else {
+			const { Response: manifest } = responseBody;
 
-					if (responseBody.ErrorCode !== 1) {
-						reject(new DestinyError(responseBody.ErrorCode || -1,
-							responseBody.Message || '', responseBody.ErrorStatus || ''));
-					} else {
-						const { Response: manifest } = responseBody;
+			this.cacheService.setManifest(manifest);
 
-						this.cacheService.setManifest(manifest);
-
-						resolve(manifest);
-					}
-                } else {
-                    reject(err);
-                }
-            });
-        });
+			return manifest;
+		}
     }
 
 	/**
+	 * Get Clan leaderboard.
 	 *
 	 * @param membershipId
 	 * @param membershipType
 	 * @param accessToken
 	 * @returns {Promise}
 	 */
-    getLeaderboard(membershipId, membershipType, accessToken) {
-		const opts = {
+    async getLeaderboard(clanId, membershipId, membershipType, accessToken) {
+		const { data: responseBody } = await axios({
 			headers: {
 				authorization: 'Bearer ' + accessToken,
 				'x-api-key': apiKey
 			},
-			url: util.format('%s/Destiny2/Stats/Leaderboards/%s/%s/2305843009266849896', servicePlatform,
-				membershipType, membershipId)
-		};
-
-		return new Promise((resolve, reject) => {
-			request.get(opts, function (err, res, body) {
-				if (!err && res.statusCode === 200) {
-					const responseBody = JSON.parse(body);
-
-					if (responseBody.ErrorCode === 1) {
-						const { Response: { characters: { data }}} = responseBody;
-						const characters = Object.keys(data).map(character => data[character]);
-
-						resolve(characters);
-					} else {
-						reject(new DestinyError(responseBody.ErrorCode || -1,
-							responseBody.Message || '', responseBody.ErrorStatus || ''));
-					}
-				} else {
-					reject(err);
-				}
-			});
+			method: 'get',
+			url: `${servicePlatform}/Destiny2/Stats/Leaderboards/${membershipType}/${membershipId}/${clanId}`
 		});
+
+		if (responseBody.ErrorCode === 1) {
+			const { Response: { characters: { data }}} = responseBody;
+			const characters = Object.keys(data).map(character => data[character]);
+
+			return characters;
+		} else {
+			throw new DestinyError(responseBody.ErrorCode || -1,
+				responseBody.Message || '', responseBody.ErrorStatus || '');
+		}
 	}
 
     /**
      * Get the cached Destiny Manifest definition if available, otherwise get the latest from Bungie.
+     *
      * @param noCache
      * @returns {Promise}
      */
     async getManifest(noCache) {
         const manifest = await this.cacheService.getManifest();
+
         if (!noCache && manifest) {
             return manifest;
         }
@@ -128,26 +99,72 @@ class Destiny2Service extends DestinyService {
     }
 
 	/**
+	 * Search for the Destiny player.
+	 *
+	 * @param displayName
+	 * @returns {Promise}
+	 */
+	async getPlayer(displayName) {
+		const { data: responseBody } = await axios(`${servicePlatform}/Destiny2/SearchDestinyPlayer/All/${displayName}/`, {
+			headers: {
+				'x-api-key': apiKey,
+				time: true
+			},
+			method: 'get'
+		});
+
+	    if (responseBody.ErrorCode === 1) {
+		    const { Response: [player]} = responseBody;
+
+		    return player;
+	    } else {
+		    throw new DestinyError(responseBody.ErrorCode || -1,
+			    responseBody.Message || '', responseBody.ErrorStatus || '');
+	    }
+    }
+
+	/**
+	 * Get player PVP statistics.
+	 *
+	 * @param membershipId
+	 * @param membershipType
+	 */
+	async getPlayerStats(membershipId, membershipType) {
+		const { data: responseBody } = await axios.get(`${servicePlatform}/Destiny2/${membershipType}/Account/${membershipId}/Stats`, {
+			headers: {
+				'x-api-key': apiKey,
+				time: true
+			},
+			method: 'get'
+		});
+
+		if (responseBody.ErrorCode === 1) {
+			const { Response: { mergedAllCharacters: { results: { allPvP: { allTime }}}}} = responseBody;
+
+			return allTime;
+		} else {
+			throw new DestinyError(responseBody.ErrorCode || -1,
+				responseBody.Message || '', responseBody.ErrorStatus || '');
+		}
+    }
+
+	/**
 	 * Get user profile.
+	 *
 	 * @param membershipId
 	 * @param membershipType
 	 * @returns {Promise}
 	 */
 	async getProfile(membershipId, membershipType) {
-		const opts = {
+		const { data: responseBody } = await axios({
 			headers: {
 				'x-api-key': apiKey,
 				method: 'GET',
 				time: true
 			},
-			url: util.format('%s/Destiny2/%s/Profile/%s?components=Characters', servicePlatform,
-				membershipType, membershipId)
-		};
-		const { body, elapsedTime, statusCode } = await rp.get({
-			resolveWithFullResponse: true,
-			...opts
+			method: 'get',
+			url: `${servicePlatform}/Destiny2/${membershipType}/Profile/${membershipId}?components=Characters`
 		});
-		const responseBody = JSON.parse(body);
 
 		if (responseBody.ErrorCode === 1) {
 			const { Response: { characters: { data }}} = responseBody;
@@ -162,6 +179,7 @@ class Destiny2Service extends DestinyService {
 
 	/**
 	 * Get Xur's inventory.
+	 *
 	 * @param membershipId
 	 * @param membershipType
 	 * @param characterId
@@ -169,20 +187,15 @@ class Destiny2Service extends DestinyService {
 	 * @returns {Promise}
 	 */
 	async getXur(membershipId, membershipType, characterId, accessToken) {
-		const opts = {
+		const { data: responseBody } = await axios({
 			headers: {
 				authorization: 'Bearer ' + accessToken,
 				'x-api-key': apiKey
 			},
+			method: 'get',
 			time: true,
-			url: util.format('%s/Destiny2/%s/Profile/%s/Character/%s/Vendors/%s?components=402', servicePlatform,
-				membershipType, membershipId, characterId, xurHash)
-		};
-		const { body, elapsedTime, statusCode } = await rp({
-			resolveWithFullResponse: true,
-			...opts
+			url: `${servicePlatform}/Destiny2/${membershipType}/Profile/${membershipId}/Character/${characterId}/Vendors/${xurHash}?components=402`
 		});
-		const responseBody = JSON.parse(body);
 
 		if (responseBody.ErrorCode === 1) {
 			const { Response: {  sales: { data }}} = responseBody;

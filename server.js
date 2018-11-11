@@ -28,16 +28,16 @@ const start = new Date();
 /**
  * Application Insights
  */
-applicationInsights.setup(instrumentationKey).start();
-const key = applicationInsights.defaultClient.context.keys.cloudRole;
-applicationInsights.defaultClient.context.tags[key] = name;
+// applicationInsights.setup(instrumentationKey).start();
+// const key = applicationInsights.defaultClient.context.keys.cloudRole;
+// applicationInsights.defaultClient.context.tags[key] = name;
 
 // jscs:ignore requireCapitalizedComments
 // noinspection JSLint
-app.use(function (err, req, res, next) {
-	applicationInsights.defaultClient.trackRequest(req, res);
-	next(err);
-});
+// app.use((err, req, res, next) => {
+// 	applicationInsights.defaultClient.trackRequest(req, res);
+// 	next(err);
+// });
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({
@@ -85,12 +85,6 @@ const ghostSession = session({
 app.use(ghostSession);
 
 /**
- * Request/Response and Error Middleware Loggers
- */
-app.use(log.requestLogger());
-app.use(log.errorLogger());
-
-/**
  * Check that the database directories exist.
  */
 const databases = [process.env.DESTINY_DATABASE_DIR, process.env.DESTINY2_DATABASE_DIR];
@@ -114,6 +108,12 @@ const routes = new Routes(client);
 app.use('/', routes);
 
 /**
+ * Request/Response and Error Middleware Loggers
+ */
+app.use(log.requestLogger());
+app.use(log.errorLogger());
+
+/**
  * Check for the latest manifest definition and database from Bungie.
  */
 routes.validateManifest();
@@ -130,6 +130,10 @@ app.get('/ping', function (req, res) {
     res.json({
         pong: Date.now()
     });
+});
+
+app.use((err, req, res, next) => {
+	res.status(500).json(err);
 });
 
 /**
@@ -150,14 +154,14 @@ server.listen(port, function init() {
 	// eslint-disable-next-line no-console
     console.log('Running on port ' + port + '.');
 
-	let client = applicationInsights.defaultClient;
+	//let client = applicationInsights.defaultClient;
 	const end = new Date();
 	const duration = end - start;
 
-	client.trackMetric({
-		name: 'Startup Time',
-		value: duration
-	});
+	// client.trackMetric({
+	// 	name: 'Startup Time',
+	// 	value: duration
+	// });
 });
 
 module.exports = app;

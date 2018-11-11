@@ -5,22 +5,19 @@
  * @author Chris Paskvan
  */
 const DestinyController = require('../destiny/destiny.controller'),
+	boom = require('boom'),
     log = require('../helpers/log');
 
 /**
  * Destiny Controller Service
  */
 class Destiny2Controller extends DestinyController {
-    constructor(options = {}) {
-        super(options);
-    }
-
 	/**
 	 * Leaderboard
 	 * @param req
 	 * @param res
 	 */
-	getLeaderboard(req, res) {
+	getLeaderboard(req, res, next) {
 		const { session: { displayName, membershipType }} = req;
 
 		this.users.getUserByDisplayName(displayName, membershipType)
@@ -49,6 +46,24 @@ class Destiny2Controller extends DestinyController {
                 res.status(200).json(manifest).end();
             });
     }
+
+	/**
+	 * Search for the Destiny player.
+	 * @param displayName
+	 * @returns {Promise}
+	 */
+	async getPlayer(req, res) {
+		const { params: { displayName }} = req;
+		const { membershipId, membershipType } = await this.destiny.getPlayer(displayName);
+
+		if (!membershipId || !membershipType) {
+			return res.status(401).end();
+		}
+
+		const statistics = await this.destiny.getPlayerStats(membershipId, membershipType);
+
+		res.status(200).json(statistics);
+	}
 
 	/**
 	 * Get characters for the current user.
@@ -99,7 +114,7 @@ class Destiny2Controller extends DestinyController {
 	 * @returns {*|Array}
 	 * @private
 	 */
-	async getXur(req, res) {
+	async getXur(req, res, next) {
 		const { session: { displayName, membershipType }} = req;
 
 		try {
@@ -120,8 +135,11 @@ class Destiny2Controller extends DestinyController {
 
 			res.status(404);
 		} catch (err) {
+			// next(err);
 			log.error(err);
-			res.status(500).json(err);
+			// next(boom.badRequest('missing id'));
+//			res.status(500);//.json(err);
+			next(err);
 		}
 	}
 
