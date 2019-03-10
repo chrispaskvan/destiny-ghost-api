@@ -15,42 +15,52 @@ const routes = function ({ authenticationController, destinyService, notificatio
 
 	userRouter.route('/signUp')
 		.post((req, res, next) => middleware.authenticateUser(req, res, next),
-			(req, res) => userController.signUp(req, res));
+			(req, res, next) => userController.signUp(req, res)
+				.catch(next));
 
 	userRouter.route('/join')
 		.post((req, res, next) => middleware.authenticateUser(req, res, next),
-			(req, res) => userController.join(req, res));
+			(req, res, next) => userController.join(req, res)
+				.catch(next));
 
 	userRouter.route('/signIn/Bungie')
-		.get((req, res) => userController.signIn(req, res));
+		.get((req, res, next) => userController.signIn(req, res)
+			.catch(next));
 
 	userRouter.route('/signOut')
-		.get((req, res) => userController.signOut(req, res));
+		.get((req, res, next) => userController.signOut(req, res)
+			.catch(next));
 
 	userRouter.route('/:emailAddress/emailAddress')
 		.get((req, res, next) => middleware.authenticateUser(req, res, next),
-			(req, res) => userController.getUserByEmailAddress(req, res));
+			(req, res, next) => userController.getUserByEmailAddress(req, res)
+				.catch(next));
 
 	userRouter.route('/:phoneNumber/phoneNumber')
 		.get((req, res, next) => middleware.authenticateUser(req, res, next),
-			(req, res) => userController.getUserByPhoneNumber(req, res));
+			(req, res, next) => userController.getUserByPhoneNumber(req, res)
+				.catch(next));
 
 	userRouter.route('/join')
 		.post((req, res, next) => middleware.authenticateUser(req, res, next),
-			(req, res) => userController.join(req, res));
+			(req, res, next) => userController.join(req, res)
+				.catch(next));
 
 	userRouter.route('/current')
 		.get((req, res, next) => middleware.authenticateUser(req, res, next),
-			(req, res) => userController.getCurrentUser(req, res));
+			(req, res, next) => userController.getCurrentUser(req, res)
+				.catch(next));
 
 	userRouter.route('/')
 		.patch((req, res, next) => middleware.authenticateUser(req, res, next),
-			(req, res) => userController.update(req, res));
+			(req, res, next) => userController.update(req, res)
+				.catch(next));
 
 	userRouter.route('/:id/version/:version')
 		.get((req, res, next) => middleware.authenticateUser(req, res, next),
 			(req, res, next) => roles.administrativeUser(req, res, next),
-			(req, res) => userController.getUserById(req, res));
+			(req, res, next) => userController.getUserById(req, res)
+				.catch(next));
 
 	return userRouter;
 };

@@ -1,5 +1,4 @@
-const mockTwilioCreateMessageResponse = require('../mocks/twilioCreateMessageResponse'),
-    expect = require('chai').expect;
+const mockTwilioCreateMessageResponse = require('../mocks/twilioCreateMessageResponse');
 
 const Notifications = require('./notification.service');
 
@@ -23,7 +22,7 @@ describe('Notifications', function () {
 
         return notificationService.sendMessage('Aegis of the Reef', '+11111111111')
             .then(function (response) {
-                expect(response).to.eql({ sid, dateCreated, status });
+                expect(response).toEqual({ sid, dateCreated, status });
             });
     });
 });

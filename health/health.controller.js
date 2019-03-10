@@ -4,8 +4,7 @@
  * @module healthController
  * @author Chris Paskvan
  */
-const log = require('../helpers/log'),
-	request = require('request');
+const { get } = require('../helpers/request');
 
 /**
  * Not available
@@ -85,31 +84,17 @@ class HealthController {
 			: false : false;
 	}
 
-	async _twilio() {
-		const opts = {
+	static async _twilio() {
+		const options = {
 			url: 'https://gpkpyklzq55q.statuspage.io/api/v2/status.json'
 		};
+		const responseBody = await get(options);
 
-		return new Promise((resolve, reject) => {
-			request.get(opts, (err, res, body) => {
-				if (err) {
-					reject(err);
-				}
-
-				if (res.statusCode !== 200) {
-					reject(res.statusCode);
-				}
-
-				const responseBody = JSON.parse(body);
-
-				resolve(responseBody.status.description);
-			});
-		});
+		return responseBody.status.description;
 	}
 
-	static _unhealthy(err) {
+	static _unhealthy() {
 		failures++;
-		log.error(err);
 	}
 
 	_validateKey(key, value) {
@@ -125,25 +110,17 @@ class HealthController {
 	}
 
 	async _world() {
-		try {
-			const [{ itemDescription } = {}] =
-				await this.world.getItemByName('Doctrine of Passing');
+		const [{ itemDescription } = {}] =
+			await this.world.getItemByName('Doctrine of Passing');
 
-			return itemDescription;
-		} catch (err) {
-			throw err;
-		}
+		return itemDescription;
 	}
 
 	async _world2() {
-		try {
-			const [{ displayProperties: { description = notAvailable } = {}} = {}] =
-				await this.world2.getItemByName('Polaris Lance');
+		const [{ displayProperties: { description = notAvailable } = {}} = {}] =
+			await this.world2.getItemByName('Polaris Lance');
 
-			return description;
-		} catch (err) {
-			throw err;
-		}
+		return description;
 	}
 
 	async getHealth(req, res) {
@@ -157,7 +134,7 @@ class HealthController {
 			.catch(err => HealthController._unhealthy(err)) || notAvailable;
 		const store = await this._store()
 			.catch(err => HealthController._unhealthy(err)) || false;
-		const twilio = await this._twilio()
+		const twilio = await HealthController._twilio()
 			.catch(err => HealthController._unhealthy(err)) || notAvailable;
 		const world = await this._world()
 			.catch(err => HealthController._unhealthy(err)) || notAvailable;

@@ -2,9 +2,9 @@
  * Destiny Tracher Service Tests
  */
 const DestinyTrackerService = require('./destinytracker.service'),
-	expect = require('chai').expect,
-	request = require('request'),
-	sinon = require('sinon');
+	request = require('../helpers/request');
+
+jest.mock('../helpers/request');
 
 let destinyTrackerService;
 
@@ -13,53 +13,49 @@ beforeEach(() => {
 });
 
 describe('DestinyTrackerService', () => {
-	beforeEach(() => {
-		this.request = sinon.stub(request, 'post');
-	});
-
 	describe('getVotes', () => {
-		it('should return the voting record', () => {
+		it('should return the voting record', async () => {
 			const mockVotes = {
 				upvotes: 36,
 				downvotes: 4,
 				total: 40,
 				score: 32
 			};
-			this.request.callsArgWith(1, undefined, { statusCode: 200 }, { votes: mockVotes});
 
-			return destinyTrackerService.getVotes('3628991658')
-				.then(votes => {
-					expect(votes).to.eql(mockVotes);
-				});
+			request.post.mockImplementation(() => Promise.resolve({ votes: mockVotes }));
+
+			const votes = await destinyTrackerService.getVotes('3628991658');
+
+			expect(votes).toEqual(mockVotes);
 		});
 	});
 
 	describe('getRank', () => {
 		describe('when rank is available', () => {
-			it('should return the PVP rank', () => {
-				const rank = 1;
+			it('should return the PVP rank', async () => {
+				const mockRank = 1;
 				const mockRanking = {
 					data: {
 						itemInsights: {
 							insights: {
 								rank: {
-									kills: rank
+									kills: mockRank
 								}
 							}
 						}
 					}
 				};
-				this.request.callsArgWith(1, undefined, { statusCode: 200 }, mockRanking);
 
-				return destinyTrackerService.getRank('3628991658')
-					.then(rank => {
-						expect(rank).to.eql(rank);
-					});
+				request.post.mockImplementation(() => Promise.resolve(mockRanking));
+
+				const rank = await destinyTrackerService.getRank('3628991658');
+
+				expect(rank).toEqual(mockRank);
 			});
 		});
 
 		describe('when rank is not available', () => {
-			it('should return undefined', () => {
+			it('should return undefined', async () => {
 				const mockRanking = {
 					data: {
 						itemInsights: {
@@ -67,17 +63,13 @@ describe('DestinyTrackerService', () => {
 						}
 					}
 				};
-				this.request.callsArgWith(1, undefined, { statusCode: 200 }, mockRanking);
 
-				return destinyTrackerService.getRank('3628991658')
-					.then(rank => {
-						expect(rank).to.be.undefined;
-					});
+				request.post.mockImplementation(() => Promise.resolve(mockRanking));
+
+				const rank = await destinyTrackerService.getRank('3628991658');
+
+				expect(rank).toBeUndefined;
 			});
 		});
-	});
-
-	afterEach(() => {
-		this.request.restore();
 	});
 });

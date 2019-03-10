@@ -3,7 +3,9 @@
  */
 require('dotenv').config();
 
-const Routes = require('./routes'),
+const DestinyError = require('./destiny/destiny.error'),
+	RequestError = require('./helpers/request.error'),
+	Routes = require('./routes'),
 	{ instrumentationKey } = require('./settings/applicationInsights.json'),
 	{ name } = require('./package.json'),
 	applicationInsights = require('applicationinsights'),
@@ -18,7 +20,7 @@ const Routes = require('./routes'),
     redis = require('redis'),
 	redisConfig = require('./settings/redis.json'),
 	sessionConfig = require('./settings/session.' + process.env.NODE_ENV + '.json'),
-	terminus = require('@godaddy/terminus');
+	{ createTerminus } = require('@godaddy/terminus');
 
 const RedisStore = require('connect-redis')(session);
 const app = express();
@@ -102,16 +104,16 @@ databases.forEach(database => {
 });
 
 /**
- * Routes
- */
-const routes = new Routes(client);
-app.use('/', routes);
-
-/**
  * Request/Response and Error Middleware Loggers
  */
 app.use(log.requestLogger());
 app.use(log.errorLogger());
+
+/**
+ * Routes
+ */
+const routes = new Routes(client);
+app.use('/', routes);
 
 /**
  * Check for the latest manifest definition and database from Bungie.
@@ -133,14 +135,38 @@ app.get('/ping', function (req, res) {
 });
 
 app.use((err, req, res, next) => {
-	res.status(500).json(err);
+	const { code, message, status, statusText } = err;
+
+	if (res.status) {
+		if (err instanceof DestinyError) {
+			res.status(500).json({
+				errors: [{
+					code,
+					message,
+					status
+				}]
+			});
+		} else if (err instanceof RequestError) {
+			res.status(500).json({ errors: [{
+					status,
+					statusText
+				}]});
+		} else {
+			res.status(500).json({ errors: [{
+					message
+				}]});
+		}
+	} else {
+		next(err);
+	}
 });
 
 /**
  * Server
  */
 const server = http.createServer(app);
-terminus(server, {
+
+createTerminus(server, {
 	signal: 'SIGINT',
 	onSignal: () => {
 		return new Promise((resolve) => {

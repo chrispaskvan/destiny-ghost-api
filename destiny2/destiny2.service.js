@@ -13,7 +13,8 @@ const DestinyError = require('../destiny/destiny.error'),
     DestinyService = require('../destiny/destiny.service'),
     { apiKey } = require('../settings/bungie.json'),
 	{ xurHash } = require('./destiny2.constants'),
-	axios = require('axios');
+	{ get } = require('../helpers/request');
+
 
 /**
  * @constant
@@ -33,54 +34,25 @@ class Destiny2Service extends DestinyService {
      * @private
      */
     async _getManifest() {
-	    const { data: responseBody } = await axios({
+    	const options = {
 		    headers: {
 			    'x-api-key': apiKey
 		    },
-		    method: 'get',
 		    url: `${servicePlatform}/Destiny2/Manifest`
-	    });
+	    };
+	    const responseBody = await get(options);
 
-		if (responseBody.ErrorCode !== 1) {
-			throw new DestinyError(responseBody.ErrorCode || -1,
-				responseBody.Message || '', responseBody.ErrorStatus || '');
-		} else {
+		if (responseBody.ErrorCode === 1) {
 			const { Response: manifest } = responseBody;
 
 			this.cacheService.setManifest(manifest);
 
 			return manifest;
 		}
+
+	    throw new DestinyError(responseBody.ErrorCode || -1,
+		    responseBody.Message || '', responseBody.ErrorStatus || '');
     }
-
-	/**
-	 * Get Clan leaderboard.
-	 *
-	 * @param membershipId
-	 * @param membershipType
-	 * @param accessToken
-	 * @returns {Promise}
-	 */
-    async getLeaderboard(clanId, membershipId, membershipType, accessToken) {
-		const { data: responseBody } = await axios({
-			headers: {
-				authorization: 'Bearer ' + accessToken,
-				'x-api-key': apiKey
-			},
-			method: 'get',
-			url: `${servicePlatform}/Destiny2/Stats/Leaderboards/${membershipType}/${membershipId}/${clanId}`
-		});
-
-		if (responseBody.ErrorCode === 1) {
-			const { Response: { characters: { data }}} = responseBody;
-			const characters = Object.keys(data).map(character => data[character]);
-
-			return characters;
-		} else {
-			throw new DestinyError(responseBody.ErrorCode || -1,
-				responseBody.Message || '', responseBody.ErrorStatus || '');
-		}
-	}
 
     /**
      * Get the cached Destiny Manifest definition if available, otherwise get the latest from Bungie.
@@ -105,22 +77,22 @@ class Destiny2Service extends DestinyService {
 	 * @returns {Promise}
 	 */
 	async getPlayer(displayName) {
-		const { data: responseBody } = await axios(`${servicePlatform}/Destiny2/SearchDestinyPlayer/All/${displayName}/`, {
+		const options = {
 			headers: {
-				'x-api-key': apiKey,
-				time: true
+				'x-api-key': apiKey
 			},
-			method: 'get'
-		});
+			url: `${servicePlatform}/Destiny2/SearchDestinyPlayer/All/${displayName}/`
+		};
+		const responseBody = await get(options);
 
 	    if (responseBody.ErrorCode === 1) {
 		    const { Response: [player]} = responseBody;
 
 		    return player;
-	    } else {
-		    throw new DestinyError(responseBody.ErrorCode || -1,
-			    responseBody.Message || '', responseBody.ErrorStatus || '');
 	    }
+
+		throw new DestinyError(responseBody.ErrorCode || -1,
+			responseBody.Message || '', responseBody.ErrorStatus || '');
     }
 
 	/**
@@ -130,22 +102,22 @@ class Destiny2Service extends DestinyService {
 	 * @param membershipType
 	 */
 	async getPlayerStats(membershipId, membershipType) {
-		const { data: responseBody } = await axios.get(`${servicePlatform}/Destiny2/${membershipType}/Account/${membershipId}/Stats`, {
+		const options = {
 			headers: {
-				'x-api-key': apiKey,
-				time: true
+				'x-api-key': apiKey
 			},
-			method: 'get'
-		});
+			url: `${servicePlatform}/Destiny2/${membershipType}/Account/${membershipId}/Stats`
+		};
+		const responseBody = await get(options);
 
 		if (responseBody.ErrorCode === 1) {
 			const { Response: { mergedAllCharacters: { results: { allPvP: { allTime }}}}} = responseBody;
 
 			return allTime;
-		} else {
-			throw new DestinyError(responseBody.ErrorCode || -1,
-				responseBody.Message || '', responseBody.ErrorStatus || '');
 		}
+
+		throw new DestinyError(responseBody.ErrorCode || -1,
+			responseBody.Message || '', responseBody.ErrorStatus || '');
     }
 
 	/**
@@ -156,25 +128,23 @@ class Destiny2Service extends DestinyService {
 	 * @returns {Promise}
 	 */
 	async getProfile(membershipId, membershipType) {
-		const { data: responseBody } = await axios({
+		const options = {
 			headers: {
-				'x-api-key': apiKey,
-				method: 'GET',
-				time: true
+				'x-api-key': apiKey
 			},
-			method: 'get',
 			url: `${servicePlatform}/Destiny2/${membershipType}/Profile/${membershipId}?components=Characters`
-		});
+		};
+		const responseBody = await get(options);
 
 		if (responseBody.ErrorCode === 1) {
 			const { Response: { characters: { data }}} = responseBody;
 			const characters = Object.keys(data).map(character => data[character]);
 
 			return characters;
-		} else {
-			throw new DestinyError(responseBody.ErrorCode || -1,
-				responseBody.Message || '', responseBody.ErrorStatus || '');
 		}
+
+		throw new DestinyError(responseBody.ErrorCode || -1,
+			responseBody.Message || '', responseBody.ErrorStatus || '');
 	}
 
 	/**
@@ -187,25 +157,24 @@ class Destiny2Service extends DestinyService {
 	 * @returns {Promise}
 	 */
 	async getXur(membershipId, membershipType, characterId, accessToken) {
-		const { data: responseBody } = await axios({
+		const options = {
 			headers: {
 				authorization: 'Bearer ' + accessToken,
 				'x-api-key': apiKey
 			},
-			method: 'get',
-			time: true,
 			url: `${servicePlatform}/Destiny2/${membershipType}/Profile/${membershipId}/Character/${characterId}/Vendors/${xurHash}?components=402`
-		});
+		};
+		const responseBody = await get(options);
 
 		if (responseBody.ErrorCode === 1) {
-			const { Response: {  sales: { data }}} = responseBody;
+			const { Response: { sales: { data }}} = responseBody;
 			const itemHashes = Object.entries(data).map(([, value]) => value.itemHash);
 
 			return itemHashes;
-		} else {
-			throw new DestinyError(responseBody.ErrorCode || -1,
-				responseBody.Message || '', responseBody.ErrorStatus || '');
 		}
+
+		throw new DestinyError(responseBody.ErrorCode || -1,
+			responseBody.Message || '', responseBody.ErrorStatus || '');
 	}
 }
 

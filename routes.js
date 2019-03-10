@@ -107,7 +107,7 @@ class Routes {
 
 		const userRouter = require('./users/user.routes')({
 			authenticationController,
-			destiny2Service: destinyService,
+			destinyService,
 			notificationService,
 			userService,
 			worldRepository: world2

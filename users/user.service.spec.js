@@ -5,8 +5,9 @@ const _ = require('underscore'),
     UserService = require('./user.service'),
     chance = require('chance')(),
     documentService = require('../helpers/documents'),
-    expect = require('chai').expect,
-    sinon = require('sinon');
+	{ cloneDeep } = require('lodash');
+
+jest.mock('../helpers/documents');
 
 /**
  * Get the phone number format into the Twilio standard.
@@ -19,6 +20,7 @@ function cleanPhoneNumber(phoneNumber) {
 
     return '+1' + cleaned;
 }
+
 /**
  * Mock Anonymous User
  */
@@ -57,8 +59,8 @@ const user = {
  * Mock Cache Service
  */
 const cacheService = {
-    getUser: () => Promise.resolve(),
-	setUser: () => Promise.resolve()
+    getUser: jest.fn(),
+	setUser: jest.fn()
 };
 
 let userService;
@@ -70,15 +72,10 @@ beforeEach(() => {
 describe('UserService', () => {
     let mock;
 
-    beforeEach(() => {
-        mock = sinon.mock(documentService);
-    });
-
     describe('addUserMessage', () => {
-        let stub;
-
         beforeEach(() => {
-            stub = sinon.stub(userService, 'getUserByDisplayName');
+	        mock = documentService.upsertDocument.mockImplementation(() => Promise.resolve());
+	        userService.getUserByDisplayName = jest.fn().mockResolvedValue(user);
         });
 
         describe('when notification type is Xur', () => {
@@ -93,11 +90,10 @@ describe('UserService', () => {
 
                 Object.assign(user1.notifications[0], { messages: [message] });
 
-                stub.resolves(user);
-                mock.expects('upsertDocument').once().withArgs(sinon.match.any, user1).resolves();
-
                 return userService.addUserMessage(displayName, membershipType, message, notificationType)
-                    .then(() => mock.verify());
+                    .then(() => {
+						expect(mock).toBeCalledWith('Users', user1);
+                    });
             });
         });
 
@@ -117,11 +113,10 @@ describe('UserService', () => {
 					messages: [message]
 				});
 
-				stub.resolves(user);
-				mock.expects('upsertDocument').once().withArgs(sinon.match.any, user1).resolves();
-
 				return userService.addUserMessage(displayName, membershipType, message, notificationType)
-					.then(() => mock.verify());
+					.then(() => {
+						expect(mock).toBeCalledWith('Users', user1);
+					});
             });
         });
 
@@ -137,29 +132,26 @@ describe('UserService', () => {
 
 				Object.assign(user1, { messages: [message] });
 
-				stub.resolves(user);
-				mock.expects('upsertDocument').once().withArgs(sinon.match.any, user1).resolves();
-
 				return userService.addUserMessage(displayName, membershipType, message, notificationType)
-					.then(() => mock.verify());
+					.then(() => {
+						expect(mock).toBeCalledWith('Users', user1);
+					});
 			});
 		});
-
-		afterEach(() => stub.restore());
 	});
 
     describe('createAnonymousUser', () => {
-        let stub;
-
-        beforeEach(() => {
-            stub = sinon.stub(userService, 'getUserByDisplayName');
-        });
+	    beforeEach(() => {
+		    mock = documentService.createDocument.mockImplementation(() => Promise.resolve());
+	    });
 
         describe('when anonymous user is invalid', () => {
             it('should reject the anonymous user', () => {
+	            userService.getUserByDisplayName = jest.fn().mockResolvedValue(anonymousUser);
+
                 return userService.createAnonymousUser(_.omit(anonymousUser, 'membershipId'))
                     .catch(err => {
-                        expect(err).to.not.be.undefined;
+                        expect(err).not.toBeUndefined;
                     });
             });
         });
@@ -167,329 +159,302 @@ describe('UserService', () => {
         describe('when anonymous user is valid', () => {
             describe('when the anonymous user exists', () => {
                 it('should reject the anonymous user', () => {
-                    stub.resolves(anonymousUser);
-                    mock.expects('createDocument').never();
+	                userService.getUserByDisplayName = jest.fn().mockResolvedValue(anonymousUser);
 
                     return userService.createAnonymousUser(anonymousUser)
-                        .catch(() => mock.verify());
+                        .catch(() => {
+	                        expect(mock).not.toHaveBeenCalled();
+                        });
                 });
             });
 
             describe('when the anonymous user does not exists', () => {
                 it('should reject the anonymous user', () => {
-                    stub.resolves();
-                    mock.expects('createDocument').once();
+	                userService.getUserByDisplayName = jest.fn().mockResolvedValue();
 
                     return userService.createAnonymousUser(anonymousUser)
                         .then(() => {
-                            mock.verify();
+                        	expect(mock).toHaveBeenCalledTimes(1);
                         });
                 });
             });
         });
-
-        afterEach(() => stub.restore());
     });
 
     describe('createUser', () => {
-        let stub;
-
-        beforeEach(() => {
-            stub = sinon.stub(userService, 'getUserByDisplayName');
+    	beforeEach(() => {
+		    userService.getUserByDisplayName = jest.fn().mockResolvedValue(anonymousUser);
         });
 
         describe('when user is invalid', () => {
             it('should reject the user', () => {
                 return userService.createUser(_.omit(user, 'phoneNumber'))
                     .catch(err => {
-                        expect(err).to.not.be.undefined;
+                        expect(err).not.toBeUndefined;
                     });
             });
         });
         describe('when user is valid', () => {
             // ToDo
         });
-
-        afterEach(() => stub.restore());
     });
 
     describe('getUserByDisplayName', () => {
         describe('when user is cached', () => {
-            let mockCache;
-
             beforeEach(() => {
-                mockCache = sinon.mock(cacheService);
+	            cacheService.getUser = jest.fn().mockResolvedValue(user);
             });
 
             it('should return cached user', () => {
-                mockCache.expects('getUser').once().resolves(user);
-                mock.expects('getDocuments').never();
-
                 return userService.getUserByDisplayName(user.displayName, user.membershipType)
                     .then(user1 => {
-                        expect(user1.displayName).to.equal(user.displayName);
-                        mock.verify();
+	                    expect(cacheService.getUser).toHaveBeenCalled();
+	                    expect(user1.displayName).toEqual(user.displayName);
                     });
             });
-
-            afterEach(() => mockCache.restore());
         });
 
         describe('when display name and membership type are defined', () => {
             it('should return an existing user', () => {
-                mock.expects('getDocuments').once().withArgs(sinon.match.any, sinon.match.any).resolves([user]);
+	            documentService.getDocuments.mockImplementation(() => Promise.resolve([user]));
 
                 return userService.getUserByDisplayName(user.displayName, user.membershipType)
                     .then(user1 => {
-                        expect(user1.displayName).to.equal(user.displayName);
-                        mock.verify();
+                        expect(user1.displayName).toEqual(user.displayName);
                     });
             });
 
             it('should fail when more than one existing user is found', () => {
-                mock.expects('getDocuments').once().resolves([user, user]);
+	            documentService.getDocuments.mockImplementation(() => Promise.resolve([user, user]));
 
                 return userService.getUserByDisplayName(user.displayName, user.membershipType)
                     .catch(err => {
-                        expect(err).to.not.be.undefined;
-                        mock.verify();
+                        expect(err).not.toBeUndefined;
                     });
             });
 
             it('should return undefined is user is not found', () => {
-                mock.expects('getDocuments').once().resolves([]);
+	            documentService.getDocuments.mockImplementation(() => Promise.resolve([]));
 
                 return userService.getUserByDisplayName(user.displayName, user.membershipType)
                     .then(user1 => {
-                        expect(user1).to.be.undefined;
-                        mock.verify();
+                        expect(user1).toBeUndefined;
                     });
             });
 
             it('should fail when display name is empty', () => {
-                mock.expects('getDocuments').never();
-
                 return userService.getUserByDisplayName()
                     .catch(err => {
-                        expect(err).to.not.be.undefined;
-                        mock.verify();
+                        expect(err).not.toBeUndefined;
                     });
             });
 
             it('should fail when membership type is not a number', () => {
-                mock.expects('getDocuments').never();
-
                 return userService.getUserByDisplayName(user.displayName, '')
                     .catch(err => {
-                        expect(err).to.not.be.undefined;
-                        mock.verify();
+                        expect(err).not.toBeUndefined;
                     });
             });
 
             it('should fail when no documents are returned', () => {
-                mock.expects('getDocuments').once().resolves(undefined);
+	            documentService.getDocuments.mockImplementation(() => Promise.resolve(undefined));
 
                 return userService.getUserByDisplayName(user.displayName, user.membershipType)
                     .catch(err => {
-                        expect(err).to.not.be.undefined;
-                        mock.verify();
+	                    expect(err).not.toBeUndefined;
                     });
             });
         });
     });
 
     describe('getUserByEmailAddress', () => {
-        describe('when email address and membership type are defined', () => {
+	    beforeEach(() => {
+		    documentService.getDocuments.mockClear();
+	    });
+
+	    describe('when email address and membership type are defined', () => {
             it('should return an existing user', () => {
-                mock.expects('getDocuments').once().resolves([user]);
+	            const mock = documentService.getDocuments.mockImplementation(() => Promise.resolve([user]));
 
                 return userService.getUserByEmailAddress(user.emailAddress)
                     .then(user1 => {
-                        expect(user1).to.equal(user);
-                        mock.verify();
+                        expect(user1).toEqual(user);
+	                    expect(mock).toHaveBeenCalled();
                     });
             });
 
             it('should fail when more than one existing user is found', () => {
-                mock.expects('getDocuments').once().resolves([user, user]);
+	            const mock = documentService.getDocuments.mockImplementation(() => Promise.resolve([user, user]));
 
                 return userService.getUserByEmailAddress(user.emailAddress)
                     .catch(err => {
-                        expect(err).to.not.be.undefined;
-                        mock.verify();
+	                    expect(err).not.toBeUndefined;
+	                    expect(mock).toHaveBeenCalled();
                     });
             });
 
             it('should fail when no users are found', () => {
-                mock.expects('getDocuments').once().resolves([]);
+	            const mock = documentService.getDocuments.mockImplementation(() => Promise.resolve([]));
 
                 return userService.getUserByEmailAddress(user.emailAddress)
                     .then(user1 => {
-                        expect(user1).to.be.undefined;
-                        mock.verify();
+	                    expect(user1).toBeUndefined;
+	                    expect(mock).toHaveBeenCalled();
                     });
             });
 
             it('should fail when email address is empty', () => {
-                mock.expects('getDocuments').never();
+	            const mock = documentService.getDocuments.mockImplementation();
 
                 return userService.getUserByEmailAddress()
                     .catch(err => {
-                        expect(err).to.not.be.undefined;
-                        mock.verify();
+	                    expect(err).not.toBeUndefined;
+	                    expect(mock).not.toHaveBeenCalled();
                     });
             });
 
             it('should fail when no documents are found', () => {
-                mock.expects('getDocuments').once().resolves(undefined);
+	            const mock = documentService.getDocuments.mockImplementation(() => Promise.resolve());
 
                 return userService.getUserByEmailAddress(user.emailAddress)
                     .catch(err => {
-                        expect(err).to.not.be.undefined;
-                        mock.verify();
+	                    expect(err).not.toBeUndefined;
+	                    expect(mock).toHaveBeenCalled();
                     });
             });
         });
     });
 
 	describe('getUserById', () => {
+		beforeEach(() => {
+			documentService.getDocuments.mockClear();
+		});
+
 		describe('when user id defined', () => {
 			it('should return an existing user', () => {
-				mock.expects('getDocuments').once().resolves([user]);
+				const mock = documentService.getDocuments.mockImplementation(() => Promise.resolve([user]));
 
 				return userService.getUserById(user.id)
 					.then(user1 => {
-						expect(user1).to.equal(user);
-						mock.verify();
+						expect(user1).toEqual(user);
+						expect(mock).toHaveBeenCalled();
 					});
 			});
 
 			it('should fail when more than one existing user is found', () => {
-				mock.expects('getDocuments').once().resolves([user, user]);
+				const mock = documentService.getDocuments.mockImplementation(() => Promise.resolve([user, user]));
 
 				return userService.getUserById(user.id)
 					.catch(err => {
-						expect(err).to.not.be.undefined;
-						mock.verify();
+						expect(err).not.toBeUndefined;
+						expect(mock).toHaveBeenCalled();
 					});
 			});
 
 			it('should fail when no users are found', () => {
-				mock.expects('getDocuments').once().resolves([]);
+				const mock = documentService.getDocuments.mockImplementation(() => Promise.resolve([]));
 
 				return userService.getUserById(user.id)
 					.then(user1 => {
-						expect(user1).to.be.undefined;
-						mock.verify();
+						expect(user1).toBeUndefined;
+						expect(mock).toHaveBeenCalled();
 					});
 			});
 
 			it('should fail when user id is empty', () => {
-				mock.expects('getDocuments').never();
+				const mock = documentService.getDocuments.mockImplementation();
 
 				return userService.getUserById()
 					.catch(err => {
-						expect(err).to.not.be.undefined;
-						mock.verify();
+						expect(err).not.toBeUndefined;
+						expect(mock).not.toHaveBeenCalled();
 					});
 			});
 
 			it('should fail when no documents are found', () => {
-				mock.expects('getDocuments').once().resolves(undefined);
+				const mock = documentService.getDocuments.mockImplementation(() => Promise.resolve());
 
 				return userService.getUserById(user.id)
 					.catch(err => {
-						expect(err).to.not.be.undefined;
-						mock.verify();
+						expect(err).not.toBeUndefined;
+						expect(mock).toHaveBeenCalled();
 					});
 			});
 		});
 	});
 
 	describe('updateUser', () => {
-		let stub;
-
 		beforeEach(() => {
-			stub = sinon.stub(userService, 'getUserByDisplayName');
+			documentService.upsertDocument.mockClear();
 		});
 
 		describe('when user exists', () => {
 			describe('and user update is valid', () => {
 				it('should resolve undefined', () => {
-					const user1 = JSON.parse(JSON.stringify(user));
-					user1.firstName = chance.first();
+					const mock = documentService.upsertDocument.mockImplementation(() => Promise.resolve());
+					const user1 = cloneDeep(user);
 
-					stub.resolves(user);
-					mock.expects('upsertDocument').once().withArgs(sinon.match.any, user1).resolves();
+					user1.firstName = chance.first();
+					userService.getUserByDisplayName = jest.fn().mockResolvedValue(user);
 
 					return userService.updateUser(user1)
-						.then(user1 => {
-							expect(user1).to.be.undefined;
-							mock.verify();
+						.then(user2 => {
+							expect(user2).toBeUndefined;
+							expect(mock).toBeCalledWith(expect.anything(), user1);
 						});
 				});
 			});
 
 			describe('and user update is invalid', () => {
 				it('should fail validation of user schema', () => {
+					const mock = documentService.upsertDocument.mockImplementation(() => Promise.resolve());
 					const user1 = {
 						firstName: chance.first()
 					};
 
-					stub.resolves(user);
-					mock.expects('upsertDocument').never();
+					userService.getUserByDisplayName = jest.fn().mockResolvedValue();
 
 					return userService.updateUser(user1)
 						.catch(err => {
-							expect(err).to.not.be.undefined;
-							mock.verify();
+							expect(err).not.toBeUndefined;
+							expect(mock).not.toHaveBeenCalled();
 						});
 				});
 			});
 		});
-
-		afterEach(() => stub.restore());
 	});
 
 	describe('updateUserBungie', () => {
-		let stub;
-
 		beforeEach(() => {
-			stub = sinon.stub(userService, 'getUserById');
+			documentService.upsertDocument.mockClear();
 		});
 
 		describe('when user id exists', () => {
-			it('should return an existing user', () => {
-				const bungie = {};
-				const user1 = JSON.parse(JSON.stringify(user));
+			it('should return undefined', () => {
+				const mock = documentService.upsertDocument.mockImplementation(() => Promise.resolve());
 
-				Object.assign(user1, { bungie });
-				stub.resolves(user);
-				mock.expects('upsertDocument').once().withArgs(sinon.match.any, user1).resolves(undefined);
+				userService.getUserById = jest.fn().mockResolvedValue(user);
 
-				return userService.updateUserBungie(user.id, bungie)
+				return userService.updateUserBungie(user.id, {})
 					.then(user1 => {
-						expect(user1).to.be.undefined;
-						mock.verify();
+						expect(user1).toBeUndefined;
+						expect(mock).toBeCalledWith(expect.anything(), user);
 					});
 			});
 		});
 
 		describe('when user id does not exists', () => {
 			it('should not modify user document', () => {
-				stub.resolves(undefined);
-				mock.expects('upsertDocument').never();
+				const mock = documentService.upsertDocument.mockImplementation(() => Promise.resolve());
+
+				userService.getUserById = jest.fn().mockResolvedValue();
 
 				return userService.updateUserBungie(user.id)
 					.catch(err => {
-						expect(err).to.not.be.undefined;
-						mock.verify();
+						expect(err).toBeUndefined;
+						expect(mock).not.toHaveBeenCalled();
 					});
 			});
 		});
-
-		afterEach(() => stub.restore());
 	});
-
-    afterEach(() => mock.restore());
 });

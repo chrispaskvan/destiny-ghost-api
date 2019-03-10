@@ -7,7 +7,6 @@
 const _ = require('underscore'),
 	Postmaster = require('../helpers/postmaster'),
 	jsonpatch = require('rfc6902'),
-	log = require('../helpers/log'),
     tokens = require('../helpers/tokens');
 
 /**
@@ -37,6 +36,7 @@ class UserController {
 
 	/**
 	 * Apply JSON patches successively in reverse order.
+	 *
 	 * @param patches {Array}
 	 * @param user {Object}
 	 * @private
@@ -51,17 +51,20 @@ class UserController {
 
 	/**
 	 * Get the phone number format into the Twilio standard.
+	 *
 	 * @param phoneNumber
 	 * @returns {string}
 	 * @private
 	 */
 	static _cleanPhoneNumber(phoneNumber) {
 		const cleaned = phoneNumber.replace(/\D/g, '');
+
 		return '+1' + cleaned;
 	}
 
 	/**
 	 * Get current epoch.
+	 *
 	 * @returns {number}
 	 * @private
 	 */
@@ -71,8 +74,15 @@ class UserController {
 
 	/**
 	 * Hypermedia as the Engine of Application State (HATEOAS)
+	 *
+	 * @param dateRegistered
 	 * @param displayName
+	 * @param emailAddress
+	 * @param firstName
+	 * @param lastName
 	 * @param membershipType
+	 * @param notifications
+	 * @param phoneNumber
 	 * @param profilePicturePath
 	 * @returns {{displayName: *, membershipType: *, links: [null], profilePicturePath: *}}
 	 * @private
@@ -108,6 +118,7 @@ class UserController {
 
 	/**
 	 * Allow only replace operations of mutable fields.
+	 *
 	 * @param patches
 	 * @private
 	 */
@@ -127,6 +138,7 @@ class UserController {
 
 	/**
 	 * Sign the user in by setting the session.
+	 *
 	 * @param req
 	 * @param res
 	 * @param user
@@ -143,29 +155,27 @@ class UserController {
 
 	/**
 	 * Confirm registration request by creating an account if appropriate.
+	 *
 	 * @param req
 	 * @param res
 	 */
-	join(req, res) {
+	async join(req, res) {
 		const { body: user } = req;
 
-		this.users.getUserByEmailAddressToken(user.tokens.emailAddress)
-			.then(registeredUser => {
-				if (!registeredUser ||
-					this.constructor._getEpoch() > (registeredUser.membership.tokens.timeStamp + ttl) ||
-					!_.isEqual(user.tokens.phoneNumber, registeredUser.membership.tokens.code)) {
-					return res.status(498).end();
-				}
+		const registeredUser = await this.users.getUserByEmailAddressToken(user.tokens.emailAddress);
 
-				registeredUser.dateRegistered = new Date().toISOString();
+		if (!registeredUser ||
+			this.constructor._getEpoch() > (registeredUser.membership.tokens.timeStamp + ttl) ||
+			!_.isEqual(user.tokens.phoneNumber, registeredUser.membership.tokens.code)) {
 
-				return this.users.updateUser(registeredUser)
-					.then(() => res.status(200).end());
-			})
-			.catch(err => {
-				log.error(err);
-				res.status(500).json(err);
-			});
+			return res.status(498).end();
+		}
+
+		registeredUser.dateRegistered = new Date().toISOString();
+
+		await this.users.updateUser(registeredUser);
+
+		res.status(200).end();
 	}
 
 	/**
@@ -180,25 +190,21 @@ class UserController {
 			return res.status(401).end();
 		}
 
-		try {
-			const user = await this.users.getUserByDisplayName(displayName, membershipType);
-			if (user) {
-				const { bungie: { access_token: accessToken }} = user;
+		const user = await this.users.getUserByDisplayName(displayName, membershipType);
 
-				const bungieUser = await this.destiny.getCurrentUser(accessToken);
-				if (bungieUser) {
-					return res.status(200)
-						.json(this.constructor._getUserResponse(user));
-				}
+		if (user) {
+			const { bungie: { access_token: accessToken }} = user;
 
-				return res.status(401).end();
+			const bungieUser = await this.destiny.getCurrentUser(accessToken);
+			if (bungieUser) {
+				return res.status(200)
+					.json(this.constructor._getUserResponse(user));
 			}
 
 			return res.status(401).end();
-		} catch (err) {
-			log.error(err);
-			res.status(500).json(err);
 		}
+
+		return res.status(401).end();
 	}
 
 	/**
@@ -206,25 +212,20 @@ class UserController {
 	 * @param req
 	 * @param res
 	 */
-	getUserByEmailAddress(req, res) {
+	async getUserByEmailAddress(req, res) {
 		const { params: { emailAddress }} = req;
 
 		if (!emailAddress) {
 			return res.status(409).send('email address not found');
 		}
 
-		this.users.getUserByEmailAddress(emailAddress)
-			.then(user => {
-				if (user) {
-					return res.status(204).end();
-				}
+		const user = await this.users.getUserByEmailAddress(emailAddress);
 
-				return res.status(404).end();
-			})
-			.catch(err => {
-				log.error(err);
-				res.status(500).json(err);
-			});
+		if (user) {
+			return res.status(204).end();
+		}
+
+		return res.status(404).end();
 	}
 
 	/**
@@ -232,7 +233,7 @@ class UserController {
 	 * @param req
 	 * @param res
 	 */
-	getUserById(req, res) {
+	async getUserById(req, res) {
 		const { params: { id, version: _version }} = req;
 
 		if (!id) {
@@ -244,30 +245,25 @@ class UserController {
 			version = 0;
 		}
 
-		this.users.getUserById(id)
-			.then(user => {
-				if (user) {
-					if (version) {
-						const patches = _.filter(user.patches, patch => patch.version >= version) || [];
+		const user = await this.users.getUserById(id);
 
-						if (patches.length > 0) {
-							return res.status(200).json(this.constructor._applyPatches(_.chain(patches)
-								.sortBy(patch => -1 * patch.version)
-								.value(), user));
-						}
+		if (user) {
+			if (version) {
+				const patches = _.filter(user.patches, patch => patch.version >= version) || [];
 
-						return res.status(404).end();
-					}
-
-					return res.status(200).json(user);
+				if (patches.length > 0) {
+					return res.status(200).json(this.constructor._applyPatches(_.chain(patches)
+						.sortBy(patch => -1 * patch.version)
+						.value(), user));
 				}
 
 				return res.status(404).end();
-			})
-			.catch(err => {
-				log.error(err);
-				res.status(500).json(err);
-			});
+			}
+
+			return res.status(200).json(user);
+		}
+
+		return res.status(404).end();
 	}
 
 	/**
@@ -275,25 +271,20 @@ class UserController {
 	 * @param req
 	 * @param res
 	 */
-	getUserByPhoneNumber(req, res) {
+	async getUserByPhoneNumber(req, res) {
 		const { params: { phoneNumber }} = req;
 
 		if (!phoneNumber) {
 			return res.status(409).send('phone number not found');
 		}
 
-		this.users.getUserByPhoneNumber(phoneNumber)
-			.then(user => {
-				if (user) {
-					return res.status(204).end();
-				}
+		const user = await this.users.getUserByPhoneNumber(phoneNumber);
 
-				return res.status(404).end();
-			})
-			.catch(err => {
-				log.error(err);
-				res.status(500).json(err);
-			});
+		if (user) {
+			return res.status(204).end();
+		}
+
+		return res.status(404).end();
 	}
 
 	/**
@@ -309,6 +300,7 @@ class UserController {
 		}
 
 		let bungieUser = await this.users.getUserByDisplayName(displayName, membershipType);
+
 		user.phoneNumber = this.constructor._cleanPhoneNumber(user.phoneNumber);
 		Object.assign(user, bungieUser, {
 			membership: {
@@ -325,39 +317,33 @@ class UserController {
 			this.users.getUserByPhoneNumber(user.phoneNumber)
 		];
 
-		return Promise.all(promises)
-			.then(users => {
-				const registeredUsers = users.filter(user => user && user.dateRegistered);
+		const users = await Promise.all(promises);
+		const registeredUsers = users.filter(user => user && user.dateRegistered);
 
-				if (registeredUsers.length) {
-					return res.status(409).end();
-				}
+		if (registeredUsers.length) {
+			return res.status(409).end();
+		}
 
-				return this.world.getVendorIcon(postmasterHash)
-                    .then(iconUrl => {
-						let promises = [];
+		return this.world.getVendorIcon(postmasterHash)
+            .then(iconUrl => {
+				let promises = [];
 
-						promises.push(this.notifications.sendMessage('Enter ' +
-							user.membership.tokens.code + ' to verify your phone number.',
-							user.phoneNumber, user.type === 'mobile' ? iconUrl : ''));
-						promises.push(this.postmaster.register(user, iconUrl, '/register'));
+				promises.push(this.notifications.sendMessage('Enter ' +
+					user.membership.tokens.code + ' to verify your phone number.',
+					user.phoneNumber, user.type === 'mobile' ? iconUrl : ''));
+				promises.push(this.postmaster.register(user, iconUrl, '/register'));
 
-						return Promise.all(promises);
-					})
-					.then(result => {
-						const [message, postMark] = result;
-
-						user.membership.message = message;
-						user.membership.postmark = postMark;
-
-						return this.users.updateUser(user);
-                    })
-                    .then(() => res.status(200).end());
+				return Promise.all(promises);
 			})
-			.catch(err => {
-				log.error(err);
-				res.status(500).json(err);
-			});
+			.then(result => {
+				const [message, postMark] = result;
+
+				user.membership.message = message;
+				user.membership.postmark = postMark;
+
+				return this.users.updateUser(user);
+            })
+            .then(() => res.status(200).end());
 	}
 
 	/**
@@ -366,7 +352,7 @@ class UserController {
 	 * @param res
 	 */
 	async signIn(req, res) {
-		const {
+		let {
 			query: { code, state: queryState },
 			session: { displayName, state: sessionState }
 		} = req;
@@ -379,36 +365,38 @@ class UserController {
 			return res.sendStatus(403);
 		}
 
-		try {
-			const bungieUser = await this.destiny.getAccessTokenFromCode(code);
-			const { access_token: accessToken } = bungieUser;
-			let user = { bungie: bungieUser };
+		const bungie = await this.destiny.getAccessTokenFromCode(code);
+		const { access_token: accessToken } = bungie;
+		const currentUser = await this.destiny.getCurrentUser(accessToken);
 
-			const currentUser = await this.destiny.getCurrentUser(accessToken);
-			if (!currentUser) {
-				return res.status(451).end(); // ToDo: Document
-			}
-			if (!currentUser.membershipId) {
-				return res.status(404).end();
-			}
-
-			const { displayName, membershipId, membershipType, profilePicturePath } = currentUser;
-			Object.assign(user, { displayName, membershipId, membershipType, profilePicturePath });
-
-			const destinyGhostUser = await this.users.getUserByMembershipId(user.membershipId);
-			if (!destinyGhostUser) {
-				return this.users.createAnonymousUser(user)
-					.then(() => this.constructor._signIn(req, res, user));
-			}
-
-			Object.assign(destinyGhostUser,  user);
-
-			return (destinyGhostUser.dateRegistered ? this.users.updateUser(destinyGhostUser) : this.users.updateAnonymousUser(destinyGhostUser))
-				.then(() => this.constructor._signIn(req, res, user));
-		} catch (err) {
-			log.error(err);
-			return res.status(401).json(err);
+		if (!currentUser) {
+			return res.status(451).end(); // ToDo: Document
 		}
+		if (!currentUser.membershipId) {
+			return res.status(404).end();
+		}
+
+		({ displayName } = currentUser);
+
+		const { membershipId, membershipType, profilePicturePath } = currentUser;
+		const user = {
+			bungie,
+			displayName,
+			membershipId,
+			membershipType,
+			profilePicturePath
+		};
+		const destinyGhostUser = await this.users.getUserByMembershipId(user.membershipId);
+
+		if (!destinyGhostUser) {
+			return this.users.createAnonymousUser(user)
+				.then(() => this.constructor._signIn(req, res, user));
+		}
+
+		Object.assign(destinyGhostUser, user);
+
+		return (destinyGhostUser.dateRegistered ? this.users.updateUser(destinyGhostUser) : this.users.updateAnonymousUser(destinyGhostUser))
+			.then(() => this.constructor._signIn(req, res, user));
 	}
 
 	/**
@@ -428,39 +416,33 @@ class UserController {
 	 * @param res
 	 * @returns {*}
 	 */
-	update(req, res) {
+	async update(req, res) {
 		const { body: patches, session: { displayName, membershipType }} = req;
+		const user = await this.users.getUserByDisplayName(displayName, membershipType, true);
 
-		this.users.getUserByDisplayName(displayName, membershipType, true)
-			.then(user => {
-				if (!user) {
-					return res.status(404).send('user not found');
-				}
+		if (!user) {
+			return res.status(404).send('user not found');
+		}
 
-				const _user = JSON.parse(JSON.stringify(user));
-				jsonpatch.applyPatch(user, this.constructor._scrubOperations(patches));
+		const userCopy = JSON.parse(JSON.stringify(user));
 
-				const patch = jsonpatch.createPatch(user, _user);
-				const version = user.version || 1;
-				user.version = version + 1;
+		jsonpatch.applyPatch(user, this.constructor._scrubOperations(patches));
 
-				if (!user.patches) {
-					user.patches = [];
-				}
-				user.patches.push({
-					patch,
-					version
-				});
+		const patch = jsonpatch.createPatch(user, userCopy);
+		const version = user.version || 1;
 
-				return this.users.updateUser(user)
-					.then(() => {
-						res.json(user)
-					});
-			})
-			.catch(err => {
-				log.error(err);
-				res.status(500).json(err);
-			});
+		user.version = version + 1;
+		if (!user.patches) {
+			user.patches = [];
+		}
+		user.patches.push({
+			patch,
+			version
+		});
+
+		await this.users.updateUser(user);
+
+		res.json(user)
 	}
 }
 

@@ -38,37 +38,43 @@ const routes = ({ authenticationController, destiny2Service, userService, worldR
     destiny2Router.route('/leaderboard')
 		.get(cors(corsConfig),
 			(req, res, next) => middleware.authenticateUser(req, res, next),
-			(req, res, next) => destiny2Controller.getLeaderboard(req, res, next));
+			(req, res, next) => destiny2Controller.getLeaderboard(req, res)
+				.catch(next));
 
     destiny2Router.route('/manifest')
-        .get((req, res, next) => destiny2Controller.getManifest(req, res, next));
+        .get((req, res, next) => destiny2Controller.getManifest(req, res)
+	        .catch(next));
 
     destiny2Router.route('/manifest')
-        .post((req, res, next) => destiny2Controller.upsertManifest(req, res, next));
+        .post((req, res, next) => destiny2Controller.upsertManifest(req, res)
+	        .catch(next));
 
 	destiny2Router.route('/player/:displayName')
-		.get((req, res, next) => destiny2Controller.getPlayer(req, res, next));
+		.get((req, res, next) => destiny2Controller.getPlayer(req, res)
+			.catch(next));
 
 	destiny2Router.route('/profile')
 		.get(cors(corsConfig),
 			(req, res, next) => middleware.authenticateUser(req, res, next),
-			(req, res, next) => destiny2Controller.getProfile(req, res, next));
+			(req, res, next) => destiny2Controller.getProfile(req, res)
+				.catch(next));
 
 	destiny2Router.route('/xur')
 		.get(cors(corsConfig),
 			(req, res, next) => middleware.authenticateUser(req, res, next),
-			(req, res, next) => destiny2Controller.getXur(req, res, next));
+			(req, res, next) => destiny2Controller.getXur(req, res)
+				.catch(next));
 
 	/**
 	 * Validate the existence and the freshness of the Bungie database.
 	 */
-	destiny2Router.validateManifest = (next) => {
+	destiny2Router.validateManifest = () => {
 		const req = httpMocks.createRequest();
 		const res = httpMocks.createResponse({
 			eventEmitter: require('events').EventEmitter
 		});
 
-		destiny2Controller.upsertManifest(req, res, next);
+		destiny2Controller.upsertManifest(req, res);
 
 		res.on('end', () => {
 			log.info('destiny 2 validateManifest returned a response status code of ' + res.statusCode);

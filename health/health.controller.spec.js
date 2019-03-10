@@ -1,37 +1,27 @@
 const HealthController = require('../health/health.controller'),
-	chai = require('chai'),
-	expect = require('chai').expect,
 	httpMocks = require('node-mocks-http'),
 	{ Response: manifest } = require('../mocks/manifestResponse.json'),
 	{ Response: manifest2 } = require('../mocks/manifest2Response.json'),
-	request = require('request'),
-	sinon = require('sinon'),
-	sinonChai = require('sinon-chai');
+	request = require('../helpers/request');
 
-chai.use(sinonChai);
+jest.mock('../helpers/request');
 
 const destinyService = {
-	getManifest: () => {}
+	getManifest: jest.fn()
 };
 const destiny2Service = {
-	getManifest: () => {}
+	getManifest: jest.fn()
 };
 const documents = {
-	getDocuments: () => {}
+	getDocuments: jest.fn()
 };
 const store = {
-	del: () => {},
-	get: () => {},
-	set: () => {}
+	del: jest.fn(),
+	get: jest.fn(),
+	set: jest.fn()
 };
 
-let destinyServiceStub;
-let destiny2ServiceStub;
-let documentsStub;
 let healthController;
-let storeDelStub;
-let storeGetStub;
-let storeSetStub;
 
 describe('HealthController', () => {
 	let res;
@@ -40,7 +30,6 @@ describe('HealthController', () => {
 		res = httpMocks.createResponse({
 			eventEmitter: require('events').EventEmitter
 		});
-		this.request = sinon.stub(request, 'get');
 	});
 
 	describe('getHealth', () => {
@@ -59,31 +48,31 @@ describe('HealthController', () => {
 			};
 
 			beforeEach(() => {
+				request.get.mockImplementation(() => Promise.resolve({
+					status: {
+						description: 'All Systems Go'
+					}
+				}));
+
 				healthController = new HealthController({ destinyService, destiny2Service, documents, store, worldRepository: world, world2Repository: world2 });
 			});
 
 			it('should return a positive response', (done) => {
 				const req = httpMocks.createRequest();
 
-				destinyServiceStub = sinon.stub(destinyService, 'getManifest').resolves(manifest);
-				destiny2ServiceStub = sinon.stub(destiny2Service, 'getManifest').resolves(manifest2);
-				documentsStub = sinon.stub(documents, 'getDocuments').resolves([2]);
-				storeDelStub = sinon.stub(store, 'del').yields(undefined, 1);
-				storeGetStub = sinon.stub(store, 'get').yields(undefined, 'Thorn');
-				storeSetStub = sinon.stub(store, 'set').yields(undefined, 'OK');
-
-				this.request.callsArgWith(1, undefined, { statusCode: 200 }, JSON.stringify({
-					status: {
-						description: 'All Systems Go'
-					}
-				}));
+				destinyService.getManifest = jest.fn().mockResolvedValue(manifest);
+				destiny2Service.getManifest = jest.fn().mockResolvedValue(manifest2);
+				documents.getDocuments = jest.fn().mockResolvedValue([2]);
+				store.del = jest.fn().mockImplementation((key, callback) => callback(undefined, 1));
+				store.get = jest.fn().mockImplementation((key, callback) => callback(undefined, 'Thorn'));
+				store.set = jest.fn().mockImplementation((key, value, callback) => callback(undefined, 'OK'));
 
 				res.on('end', () => {
-					expect(res.statusCode).to.equal(200);
+					expect(res.statusCode).toEqual(200);
 
 					const body = JSON.parse(res._getData());
 
-					expect(body).to.deep.equal({
+					expect(body).toEqual({
 						documents: 2,
 						store: true,
 						twilio: 'All Systems Go',
@@ -117,25 +106,28 @@ describe('HealthController', () => {
 			};
 
 			beforeEach(() => {
+				request.get.mockImplementation(() => Promise.rejects({
+					statusCode: 400
+				}));
+
 				healthController = new HealthController({ destinyService, destiny2Service, documents, store, worldRepository: world, world2Repository: world2 });
 			});
 
 			it('should return a negative response', (done) => {
 				const req = httpMocks.createRequest();
 
-				destinyServiceStub = sinon.stub(destinyService, 'getManifest').rejects();
-				destiny2ServiceStub = sinon.stub(destiny2Service, 'getManifest').rejects();
-				documentsStub = sinon.stub(documents, 'getDocuments').rejects();
-				storeDelStub = sinon.stub(store, 'del').yields(undefined, 0);
-				storeGetStub = sinon.stub(store, 'get').yields(undefined, 'Thorn');
-				storeSetStub = sinon.stub(store, 'set').yields(undefined, 'OK');
-				this.request.callsArgWith(1, undefined, { statusCode: 400 });
+				destinyService.getManifest = jest.fn().mockRejectedValue(new Error());
+				destiny2Service.getManifest = jest.fn().mockRejectedValue(new Error());
+				documents.getDocuments = jest.fn().mockRejectedValue(new Error());
+				store.del = jest.fn().mockImplementation((key, callback) => callback(undefined, 0));
+				store.get = jest.fn().mockImplementation((key, callback) => callback(undefined, 'Thorn'));
+				store.set = jest.fn().mockImplementation((key, value, callback) => callback(undefined, 'OK'));
 
 				res.on('end', () => {
-					expect(res.statusCode).to.equal(503);
+					expect(res.statusCode).toEqual(503);
 
 					const body = JSON.parse(res._getData());
-					expect(body).to.deep.equal({
+					expect(body).toEqual({
 						documents: -1,
 						store: false,
 						twilio: 'N/A',
@@ -156,15 +148,4 @@ describe('HealthController', () => {
 			});
 		});
 	});
-
-	afterEach(() => {
-		destinyServiceStub.restore();
-		destiny2ServiceStub.restore();
-		documentsStub.restore();
-		storeDelStub.restore();
-		storeGetStub.restore();
-		storeSetStub.restore();
-
-		this.request.restore();
-	})
 });
