@@ -2,78 +2,53 @@
  * Destiny Service Tests
  */
 const Destiny2Service = require('./destiny2.service'),
-    expect = require('chai').expect,
     mockManifestResponse = require('../mocks/manifestResponse.json'),
 	mockProfileCharactersResponse = require('../mocks/profileCharactersResponse.json'),
-    request = require('request'),
-	rp = require('request-promise-native'),
-    sinon = require('sinon');
+	request = require('../helpers/request');
+
+jest.mock('../helpers/request');
 
 const mockUser = {
 	membershipId: '11',
 	membershipType: 2
 };
 
+const cacheService = {
+	getManifest: jest.fn(),
+	setManifest: jest.fn()
+};
+
 let destiny2Service;
 
 beforeEach(() => {
-    const cacheService = {
-        getManifest: () => {},
-        getVendor: () => {},
-        setManifest: () => {},
-        setVendor: () => {}
-    };
-
-    sinon.stub(cacheService, 'getVendor').resolves();
-    sinon.stub(cacheService, 'getManifest').resolves();
-
     destiny2Service = new Destiny2Service({ cacheService });
 });
 
 describe('Destiny2Service', () => {
     describe('getManifest', () => {
-        beforeEach(() => {
-            this.request = sinon.stub(request, 'get');
-        });
+	    beforeEach(async () => {
+		    request.get.mockImplementation(() => Promise.resolve(mockManifestResponse));
+	    });
 
-        it('should return the latest manifest', () => {
+        it('should return the latest manifest', async () => {
             const { Response: mockManifest } = mockManifestResponse;
+            const manifest = await destiny2Service.getManifest();
 
-            this.request.callsArgWith(1, undefined, { statusCode: 200 }, JSON.stringify(mockManifestResponse));
-
-            return destiny2Service.getManifest()
-                .then(manifest => {
-                    expect(manifest).to.eql(mockManifest);
-                });
-        });
-
-        afterEach(() => {
-            this.request.restore();
+            expect(manifest).toEqual(mockManifest);
         });
     });
 
     describe('getProfile', () => {
-		beforeEach(() => {
-			this.rp = sinon.stub(rp, 'get');
-		});
+	    beforeEach(async () => {
+		    request.get.mockImplementation(() => Promise.resolve(mockProfileCharactersResponse));
+	    });
 
-		it('should return the user\'s list of characters', () => {
+	    it('should return the user\'s list of characters', async () => {
 			const { Response: { characters: { data }}} = mockProfileCharactersResponse;
 			const mockCharacters = Object.keys(data).map(character => data[character]);
+			const characters = await destiny2Service.getProfile(mockUser.membershipId, mockUser.membershipType);
 
-			this.rp.resolves({
-				body: JSON.stringify(mockProfileCharactersResponse),
-				statusCode: 200
-			});
-
-			return destiny2Service.getProfile(mockUser.membershipId, mockUser.membershipType)
-				.then(characters => {
-					expect(characters).to.eql(mockCharacters);
-				});
-		});
-
-		afterEach(() => {
-			this.rp.restore();
+			expect(characters).toEqual(mockCharacters);
 		});
 	});
 });

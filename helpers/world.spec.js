@@ -1,12 +1,13 @@
 /**
  * World Model Tests
  */
-const World = require('./world'),
-	expect = require('chai').expect;
+const World = require('./world');
 
 const world = new World({
 	directory: process.env.DESTINY_DATABASE_DIR
 });
+
+console.log(process.env.DESTINY_DATABASE_DIR);
 
 describe('It\'s Bungie\'s 1st world. You\'re just querying it.', () => {
 	it('should return the Hunter character class', (done) => {
@@ -14,7 +15,7 @@ describe('It\'s Bungie\'s 1st world. You\'re just querying it.', () => {
 			.then(characterClass => {
 				const { className } = characterClass;
 
-				expect(className).to.equal('Hunter');
+				expect(className).toEqual('Hunter');
 				done();
 			})
 			.catch(err => {
@@ -32,7 +33,7 @@ describe('It\'s Bungie\'s 1st world. You\'re just querying it.', () => {
 
 		world.getItemCategory(9)
 			.then(itemCategory => {
-				expect(itemCategory.shortTitle).to.equal('Fusion Rifle');
+				expect(itemCategory.shortTitle).toEqual('Fusion Rifle');
 				done();
 			})
 			.catch(err => {
@@ -50,7 +51,7 @@ describe('It\'s Bungie\'s 1st world. You\'re just querying it.', () => {
 
 		world.getItemByName('Fatebringer')
 			.then(items => {
-				expect(items[0].itemName).to.equal('Fatebringer');
+				expect(items[0].itemName).toEqual('Fatebringer');
 				done();
 			})
 			.catch(err => {
@@ -81,8 +82,8 @@ describe('It\'s Bungie\'s 1st world. You\'re just querying it.', () => {
 			.then(items => {
 				const { itemName: hawkmoon } = items.find(item => item.instanced);
 
-				expect(hawkmoon).to.equal('Hawkmoon');
-				expect(items.length).to.equal(3);
+				expect(hawkmoon).toEqual('Hawkmoon');
+				expect(items.length).toEqual(3);
 				done();
 			})
 			.catch(err => {
@@ -102,7 +103,7 @@ describe('It\'s Bungie\'s 1st world. You\'re just querying it.', () => {
 
 		world.getVendorIcon('2796397637')
 			.then(url => {
-				expect(url).to.exist;
+				expect(url).not.toBeUndefined;
 				done();
 			})
 			.catch(err => {

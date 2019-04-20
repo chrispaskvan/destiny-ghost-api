@@ -1,6 +1,5 @@
 const Publisher = require('../helpers/publisher'),
 	Subscriber = require('../helpers/subscriber'),
-	log = require('../helpers/log'),
 	notificationHeaders = require('../settings/notificationHeaders.json'),
 	notificationTypes = require('../notifications/notification.types');
 
@@ -38,7 +37,6 @@ class NotificationController {
 				}
 			} catch (err) {
 				await this.notifications.sendMessage('Xur has closed shop. He\'ll return Friday.', phoneNumber);
-				log.error(err);
 			}
 		}
 	}
@@ -61,10 +59,6 @@ class NotificationController {
 				.then(users => {
 					users.forEach(user => this.publisher.sendNotification(user, subscription));
 					res.status(200).end();
-				})
-				.catch(err => {
-					log.error(err);
-					res.status(500).json(err);
 				});
 		} else {
 			res.status(404).json('That subscription is not recognized.');

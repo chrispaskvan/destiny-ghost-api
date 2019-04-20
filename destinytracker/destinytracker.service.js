@@ -6,7 +6,7 @@
  * @author Chris Paskvan
  * @requires request
  */
-const request = require('request');
+const { post } = require('../helpers/request');
 
 /**
  * @constant
@@ -25,28 +25,19 @@ class DestinyTrackerService {
 	 * @param itemHash {string}
 	 * @returns {Promise}
 	 */
-	getVotes(itemHash) {
-		const opts = {
-			body: { referenceId: itemHash },
+	async getVotes(itemHash) {
+		const options = {
+			data: {
+				referenceId: itemHash
+			},
 			headers: {
 				'Content-Type': 'application/json'
 			},
-			json: true,
-			method: 'POST',
 			url: `${servicePlatform}/external/reviews`
 		};
+		const { votes } = await post(options);
 
-		return new Promise((resolve, reject) => {
-			request.post(opts, function (err, res, body) {
-				if (!err && res.statusCode === 200) {
-					const { votes } = body;
-
-					resolve(votes);
-				} else {
-					reject(err);
-				}
-			});
-		});
+		return votes;
 	}
 
 	/**
@@ -55,7 +46,7 @@ class DestinyTrackerService {
 	 * @param itemHash {string}
 	 * @returns {Promise<Object>}
 	 */
-	getRank(itemHash) {
+	async getRank(itemHash) {
 		const insightsQuery = {
 			query: 'query Item($hash: Hash!, $modes: [Int]) { itemInsights: item(hash: $hash) { insights(modes: $modes) { rank { kills }}}}',
 			variables: {
@@ -64,32 +55,21 @@ class DestinyTrackerService {
 			},
 			operationName: 'Item'
 		};
-		const opts = {
-			body: insightsQuery,
+		const options = {
+			data: insightsQuery,
 			headers: {
 				'Content-Type': 'application/json'
 			},
-			json: true,
-			method: 'POST',
 			url: `${servicePlatform}/graphql`
 		};
+		const { data: { itemInsights: { insights}} } = await post(options);
+		let kills;
 
-		return new Promise((resolve, reject) => {
-			request.post(opts, function (err, res, body) {
-				if (!err && res.statusCode === 200) {
-					const { data: { itemInsights: { insights}} } = body;
-					let kills;
+		if (insights) {
+			({ rank: { kills }} = insights);
+		}
 
-					if (insights) {
-						({ rank: { kills }} = insights);
-					}
-
-					resolve(kills);
-				} else {
-					reject(err);
-				}
-			});
-		});
+		return kills;
 	}
 }
 

@@ -31,7 +31,8 @@ const routes = ({ destinyService, destiny2Service, documents, store, worldReposi
 	 * Routes
 	 */
 	healthRouter.route('/')
-		.get((req, res) => healthController.getHealth(req, res));
+		.get((req, res, next) => healthController.getHealth(req, res)
+			.catch(next));
 
 	return healthRouter;
 };

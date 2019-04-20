@@ -1,13 +1,20 @@
+const Joi = require('joi');
+const validate = require('../helpers/validate');
+
 /**
  * User Authentication Controller Class
  */
 class AuthenticationController {
     /**
      * @constructor
-     * @param authenticationService
+     * @param options
      */
-    constructor({ authenticationService }) {
-        this.authentication = authenticationService;
+    constructor(options) {
+	    validate(options, {
+		    authenticationService: Joi.object().required()
+	    });
+
+	    this.authentication = options.authenticationService;
     }
 
     /**

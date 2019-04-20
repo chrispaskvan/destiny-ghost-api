@@ -20,16 +20,21 @@ class RoleMiddleware {
 	 * @returns {Promise.<void>}
 	 */
 	async administrativeUser(req, res, next) {
-		const user = await this.authentication.authenticate(req);
-		if (user) {
-			if (administrators.find(administrator =>
+		try {
+			const user = await this.authentication.authenticate(req);
+
+			if (user) {
+				if (administrators.find(administrator =>
 					administrator.displayName === user.displayName && administrator.membershipType === user.membershipType)) {
-				next();
+					next();
+				} else {
+					res.status(401).end();
+				}
 			} else {
 				res.status(401).end();
 			}
-		} else {
-			res.status(401).end();
+		} catch (err) {
+			next(err);
 		}
 	}
 }

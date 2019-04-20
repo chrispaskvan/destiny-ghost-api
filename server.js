@@ -3,7 +3,9 @@
  */
 require('dotenv').config();
 
-const Routes = require('./routes'),
+const DestinyError = require('./destiny/destiny.error'),
+	RequestError = require('./helpers/request.error'),
+	Routes = require('./routes'),
 	{ instrumentationKey } = require('./settings/applicationInsights.json'),
 	{ name } = require('./package.json'),
 	applicationInsights = require('applicationinsights'),
@@ -18,7 +20,7 @@ const Routes = require('./routes'),
     redis = require('redis'),
 	redisConfig = require('./settings/redis.json'),
 	sessionConfig = require('./settings/session.' + process.env.NODE_ENV + '.json'),
-	terminus = require('@godaddy/terminus');
+	{ createTerminus } = require('@godaddy/terminus');
 
 const RedisStore = require('connect-redis')(session);
 const app = express();
@@ -28,16 +30,16 @@ const start = new Date();
 /**
  * Application Insights
  */
-applicationInsights.setup(instrumentationKey).start();
-const key = applicationInsights.defaultClient.context.keys.cloudRole;
-applicationInsights.defaultClient.context.tags[key] = name;
+// applicationInsights.setup(instrumentationKey).start();
+// const key = applicationInsights.defaultClient.context.keys.cloudRole;
+// applicationInsights.defaultClient.context.tags[key] = name;
 
 // jscs:ignore requireCapitalizedComments
 // noinspection JSLint
-app.use(function (err, req, res, next) {
-	applicationInsights.defaultClient.trackRequest(req, res);
-	next(err);
-});
+// app.use((err, req, res, next) => {
+// 	applicationInsights.defaultClient.trackRequest(req, res);
+// 	next(err);
+// });
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({
@@ -85,12 +87,6 @@ const ghostSession = session({
 app.use(ghostSession);
 
 /**
- * Request/Response and Error Middleware Loggers
- */
-app.use(log.requestLogger());
-app.use(log.errorLogger());
-
-/**
  * Check that the database directories exist.
  */
 const databases = [process.env.DESTINY_DATABASE_DIR, process.env.DESTINY2_DATABASE_DIR];
@@ -106,6 +102,12 @@ databases.forEach(database => {
 		}
 	});
 });
+
+/**
+ * Request/Response and Error Middleware Loggers
+ */
+app.use(log.requestLogger());
+app.use(log.errorLogger());
 
 /**
  * Routes
@@ -132,11 +134,39 @@ app.get('/ping', function (req, res) {
     });
 });
 
+app.use((err, req, res, next) => {
+	const { code, message, status, statusText } = err;
+
+	if (res.status) {
+		if (err instanceof DestinyError) {
+			res.status(500).json({
+				errors: [{
+					code,
+					message,
+					status
+				}]
+			});
+		} else if (err instanceof RequestError) {
+			res.status(500).json({ errors: [{
+					status,
+					statusText
+				}]});
+		} else {
+			res.status(500).json({ errors: [{
+					message
+				}]});
+		}
+	} else {
+		next(err);
+	}
+});
+
 /**
  * Server
  */
 const server = http.createServer(app);
-terminus(server, {
+
+createTerminus(server, {
 	signal: 'SIGINT',
 	onSignal: () => {
 		return new Promise((resolve) => {
@@ -150,14 +180,14 @@ server.listen(port, function init() {
 	// eslint-disable-next-line no-console
     console.log('Running on port ' + port + '.');
 
-	let client = applicationInsights.defaultClient;
+	//let client = applicationInsights.defaultClient;
 	const end = new Date();
 	const duration = end - start;
 
-	client.trackMetric({
-		name: 'Startup Time',
-		value: duration
-	});
+	// client.trackMetric({
+	// 	name: 'Startup Time',
+	// 	value: duration
+	// });
 });
 
 module.exports = app;

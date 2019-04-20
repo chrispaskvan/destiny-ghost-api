@@ -15,13 +15,16 @@ const routes = ({ authenticationController, authenticationService, destinyServic
 
     twilioRouter.route('/destiny/r')
 		.post((req, res, next) => middleware.authenticateUser(req, res, next),
-			(req, res) => twilioController.request(req, res));
+			(req, res, next) => twilioController.request(req, res)
+				.catch(next));
 
     twilioRouter.route('/destiny/s')
-        .post((req, res) => twilioController.statusCallback(req, res));
+        .post((req, res, next) => twilioController.statusCallback(req, res)
+	        .catch(next));
 
     twilioRouter.route('/destiny/f')
-        .post((req, res) => twilioController.fallback(req, res));
+        .post((req, res, next) => twilioController.fallback(req, res)
+	        .catch(next));
 
     return twilioRouter;
 };

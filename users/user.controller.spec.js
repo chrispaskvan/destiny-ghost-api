@@ -1,26 +1,19 @@
 const UserController = require('./user.controller'),
-	chai = require('chai'),
 	chance = require('chance')(),
-	expect = require('chai').expect,
-	httpMocks = require('node-mocks-http'),
-	sinon = require('sinon'),
-	sinonChai = require('sinon-chai');
+	httpMocks = require('node-mocks-http');
 
-chai.use(sinonChai);
-
-const destinyService = {
-	getCurrentUser: () => {}
-};
 const displayName = chance.name();
 const membershipType = chance.integer({ min: 1, max: 2 });
+
+const destinyService = {
+	getCurrentUser: jest.fn()
+};
 const userService = {
-	getUserByDisplayName: () => {},
-	updateUser: () => {}
+	getUserByDisplayName: jest.fn(),
+	updateUser: jest.fn()
 };
 
-let destinyServiceStub;
 let userController;
-let userServiceStub;
 
 beforeEach(() => {
 	userController = new UserController({ destinyService, userService });
@@ -44,7 +37,7 @@ describe('UserController', () => {
 					}
 				});
 
-				destinyServiceStub = sinon.stub(destinyService, 'getCurrentUser').resolves({
+				destinyService.getCurrentUser.mockImplementation(() => Promise.reoslve({
 					displayName: 'l',
 					membershipType: 2,
 					links: [
@@ -53,17 +46,17 @@ describe('UserController', () => {
 							href: '/destiny/characters'
 						}
 					]
-				});
-				userServiceStub = sinon.stub(userService, 'getUserByDisplayName').resolves({
+				}));
+				userService.getUserByDisplayName.mockImplementation(() => Promise.resolve({
 					bungie: {
 						accessToken: {
 							value: '11'
 						}
 					}
-				});
+				}));
 
 				res.on('end', () => {
-					expect(res.statusCode).to.equal(401);
+					expect(res.statusCode).toEqual(401);
 					done();
 				});
 
@@ -79,7 +72,7 @@ describe('UserController', () => {
 					}
 				});
 
-				destinyServiceStub = sinon.stub(destinyService, 'getCurrentUser').resolves({
+				destinyService.getCurrentUser.mockImplementation(() => Promise.resolve({
 					displayName: 'l',
 					membershipType: 2,
 					links: [
@@ -88,17 +81,17 @@ describe('UserController', () => {
 							href: '/destiny/characters'
 						}
 					]
-				});
-				userServiceStub = sinon.stub(userService, 'getUserByDisplayName').resolves({
+				}));
+				userService.getUserByDisplayName.mockImplementation(() => Promise.resolve({
 					bungie: {
 						accessToken: {
 							value: '11'
 						}
 					}
-				});
+				}));
 
 				res.on('end', () => {
-					expect(res.statusCode).to.equal(401);
+					expect(res.statusCode).toEqual(401);
 					done();
 				});
 
@@ -116,7 +109,7 @@ describe('UserController', () => {
 						}
 					});
 
-					destinyServiceStub = sinon.stub(destinyService, 'getCurrentUser').resolves({
+					destinyService.getCurrentUser.mockImplementation(() => Promise.resolve({
 						displayName: 'l',
 						membershipType: 2,
 						links: [
@@ -125,17 +118,17 @@ describe('UserController', () => {
 								href: '/destiny/characters'
 							}
 						]
-					});
-					userServiceStub = sinon.stub(userService, 'getUserByDisplayName').resolves({
+					}));
+					userService.getUserByDisplayName.mockImplementation(() => Promise.resolve({
 						bungie: {
 							accessToken: {
 								value: '11'
 							}
 						}
-					});
+					}));
 
 					res.on('end', () => {
-						expect(res.statusCode).to.equal(200);
+						expect(res.statusCode).toEqual(200);
 						done();
 					});
 
@@ -152,17 +145,17 @@ describe('UserController', () => {
 						}
 					});
 
-					destinyServiceStub = sinon.stub(destinyService, 'getCurrentUser').resolves();
-					userServiceStub = sinon.stub(userService, 'getUserByDisplayName').resolves({
+					destinyService.getCurrentUser.mockImplementation(() => Promise.resolve());
+					userService.getUserByDisplayName.mockImplementation(() => Promise.resolve({
 						bungie: {
 							accessToken: {
 								value: '11'
 							}
 						}
-					});
+					}));
 
 					res.on('end', () => {
-						expect(res.statusCode).to.equal(401);
+						expect(res.statusCode).toEqual(401);
 						done();
 					});
 
@@ -179,7 +172,7 @@ describe('UserController', () => {
 						}
 					});
 
-					destinyServiceStub = sinon.stub(destinyService, 'getCurrentUser').resolves({
+					destinyService.getCurrentUser.mockImplementation(() => Promise.resolve({
 						displayName: 'l',
 						membershipType: 2,
 						links: [
@@ -188,11 +181,11 @@ describe('UserController', () => {
 								href: '/destiny/characters'
 							}
 						]
-					});
-					userServiceStub = sinon.stub(userService, 'getUserByDisplayName').resolves();
+					}));
+					userService.getUserByDisplayName.mockImplementation(() => Promise.resolve());
 
 					res.on('end', () => {
-						expect(res.statusCode).to.equal(401);
+						expect(res.statusCode).toEqual(401);
 						done();
 					});
 
@@ -200,11 +193,6 @@ describe('UserController', () => {
 				});
 			});
 		});
-
-		afterEach(() => {
-			destinyServiceStub.restore();
-			userServiceStub.restore();
-		})
 	});
 
 	describe('update', () => {
@@ -214,10 +202,10 @@ describe('UserController', () => {
 					session: {}
 				});
 
-				userServiceStub = sinon.stub(userService, 'getUserByDisplayName').resolves();
+				userService.getUserByDisplayName.mockImplementation(() => Promise.resolve());
 
 				res.on('end', () => {
-					expect(res.statusCode).to.equal(404);
+					expect(res.statusCode).toEqual(404);
 					done();
 				});
 
@@ -228,7 +216,6 @@ describe('UserController', () => {
 		describe('when user is defined', () => {
 			it('should patch the user', (done) => {
 				const firstName = '11';
-				const mock = sinon.mock(userService);
 				const req = httpMocks.createRequest({
 					body: [
 						{
@@ -247,40 +234,35 @@ describe('UserController', () => {
 					firstName: '08',
 					membershipType
 				};
+				const mock = userService.updateUser;
 
-				userServiceStub = sinon.stub(userService, 'getUserByDisplayName').resolves(user);
-				mock.expects('updateUser').once().withArgs({
-					displayName,
-					firstName,
-					membershipType,
-					version: 2,
-					patches: [
-						{
-							patch: [
-								{
-									op: 'replace',
-									path: '/firstName',
-									value: '08'
-								}
-							],
-							version: 1
-						}
-					]
-				}).resolves();
+				userService.getUserByDisplayName.mockImplementation(() => Promise.resolve(user));
 
 				res.on('end', () => {
-					expect(res.statusCode).to.equal(200);
-					mock.verify();
-					mock.restore();
+					expect(res.statusCode).toEqual(200);
+					expect(mock).toHaveBeenCalledWith({
+						displayName,
+						firstName,
+						membershipType,
+						version: 2,
+						patches: [
+							{
+								patch: [
+									{
+										op: 'replace',
+										path: '/firstName',
+										value: '08'
+									}
+								],
+								version: 1
+							}
+						]
+					});
 					done();
 				});
 
 				userController.update(req, res);
 			});
 		});
-
-		afterEach(() => {
-			userServiceStub.restore();
-		})
 	});
 });
