@@ -1,5 +1,5 @@
-const redis = require('redis'),
-    redisConfig = require('../settings/redis.json');
+const redis = require('redis');
+const redisConfig = require('../settings/redis.json');
 
 /**
  *  User Cache Class
@@ -11,7 +11,7 @@ class UserCache {
     constructor() {
         this.client = redis.createClient(redisConfig.port, redisConfig.host, {
             auth_pass: redisConfig.key, // jscs:ignore requireCamelCaseOrUpperCaseIdentifiers
-            ttl: 3300
+            ttl: 3300,
         });
     }
 
@@ -29,9 +29,9 @@ class UserCache {
      * @returns {Promise}
      * @private
      */
-    _deleteCache(key) {
+    deleteCache(key) {
         return new Promise((resolve, reject) => {
-            this.client.del(key, function (err, res) {
+            this.client.del(key, (err, res) => {
                 if (err) {
                     reject(err);
                 } else {
@@ -47,22 +47,24 @@ class UserCache {
      * @returns {Promise}
      */
     deleteUser({ displayName, membershipType, phoneNumber }) {
-        let promise1, promise2;
+        let promise1;
+        let promise2;
 
         if (phoneNumber) {
-            promise1 = this._deleteCache(this.constructor.getCacheKey(phoneNumber));
+            promise1 = this.deleteCache(this.constructor.getCacheKey(phoneNumber));
         } else {
-            promise1 = new Promise.resolve();
+            promise1 = new Promise.resolve(); // eslint-disable-line new-cap
         }
 
         if (displayName && membershipType) {
-            promise2 = this._deleteCache(this.constructor.getCacheKey(displayName, membershipType));
+            promise2 = this.deleteCache(this.constructor.getCacheKey(displayName, membershipType));
         } else {
-            promise2 = new Promise.resolve();
+            promise2 = new Promise.resolve(); // eslint-disable-line new-cap
         }
         return Promise.all([promise1, promise2]);
     }
 
+    // ToDo
     destroy() {
         this.client.quit();
     }
@@ -73,14 +75,14 @@ class UserCache {
      * @returns {Promise}
      * @private
      */
-    _getCache(key) {
+    getCache(key) {
         return new Promise((resolve, reject) => {
-            this.client.get(key, function (err, res) {
+            this.client.get(key, (err, res) => {
                 if (err) {
                     return reject(err);
                 }
 
-                resolve(res ? JSON.parse(res) : undefined);
+                return resolve(res ? JSON.parse(res) : undefined);
             });
         });
     }
@@ -93,9 +95,9 @@ class UserCache {
     async getUser(...teeth) {
         const key = this.constructor.getCacheKey(...teeth);
 
-        const user = await this._getCache(key);
+        const user = await this.getCache(key);
         if (user) {
-            const {displayName, membershipId, membershipType} = user;
+            const { displayName, membershipId, membershipType } = user;
 
             if (!membershipId && displayName && membershipType) {
                 return this.getUser(displayName, membershipType);
@@ -124,7 +126,7 @@ class UserCache {
         }
 
         const promise1 = new Promise((resolve, reject) => {
-            this.client.set(key, JSON.stringify(user), function (err, res) {
+            this.client.set(key, JSON.stringify(user), (err, res) => {
                 if (err) {
                     reject(err);
                 } else {
@@ -137,13 +139,14 @@ class UserCache {
 
         if (phoneNumber) {
             promise2 = new Promise((resolve, reject) => {
-                this.client.set(phoneNumber, JSON.stringify({ displayName, membershipType }), function (err, res) {
-                    if (err) {
-                        reject(err);
-                    } else {
-                        resolve(res);
-                    }
-                });
+                this.client.set(phoneNumber,
+                    JSON.stringify({ displayName, membershipType }), (err, res) => {
+                        if (err) {
+                            reject(err);
+                        } else {
+                            resolve(res);
+                        }
+                    });
             });
         } else {
             promise2 = Promise.resolve();

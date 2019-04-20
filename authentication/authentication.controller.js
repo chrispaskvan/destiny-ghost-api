@@ -23,8 +23,12 @@ class AuthenticationController {
      * @returns {Promise.<*>}
      */
     async authenticate(req) {
-        const { session: { displayName, membershipType }, body: { From: phoneNumber }} = req;
-        const user = await this.authentication.authenticate({ displayName, membershipType, phoneNumber });
+        const { session: { displayName, membershipType }, body: { From: phoneNumber } } = req;
+        const user = await this.authentication.authenticate({
+            displayName,
+            membershipType,
+            phoneNumber,
+        });
 
         if (user) {
             if (!displayName) {
