@@ -9,12 +9,11 @@
  * the wiki at {@link http://bungienetplatform.wikia.com/wiki/Endpoints} or
  * the Bungie web API platform help page {@link https://www.bungie.net/platform/destiny/help/}.
  */
-const DestinyError = require('../destiny/destiny.error'),
-    DestinyService = require('../destiny/destiny.service'),
-    { apiKey } = require('../settings/bungie.json'),
-	{ xurHash } = require('./destiny2.constants'),
-	{ get } = require('../helpers/request');
-
+const DestinyError = require('../destiny/destiny.error');
+const DestinyService = require('../destiny/destiny.service');
+const { apiKey } = require('../settings/bungie.json');
+const { xurHash } = require('./destiny2.constants');
+const { get } = require('../helpers/request');
 
 /**
  * @constant
@@ -33,29 +32,30 @@ class Destiny2Service extends DestinyService {
      * @returns {Promise}
      * @private
      */
-    async _getManifest() {
-    	const options = {
-		    headers: {
-			    'x-api-key': apiKey
-		    },
-		    url: `${servicePlatform}/Destiny2/Manifest`
-	    };
-	    const responseBody = await get(options);
+    async getManifestFromBungie() {
+        const options = {
+            headers: {
+                'x-api-key': apiKey,
+            },
+            url: `${servicePlatform}/Destiny2/Manifest`,
+        };
+        const responseBody = await get(options);
 
-		if (responseBody.ErrorCode === 1) {
-			const { Response: manifest } = responseBody;
+        if (responseBody.ErrorCode === 1) {
+            const { Response: manifest } = responseBody;
 
-			this.cacheService.setManifest(manifest);
+            this.cacheService.setManifest(manifest);
 
-			return manifest;
-		}
+            return manifest;
+        }
 
-	    throw new DestinyError(responseBody.ErrorCode || -1,
-		    responseBody.Message || '', responseBody.ErrorStatus || '');
+        throw new DestinyError(responseBody.ErrorCode || -1,
+            responseBody.Message || '', responseBody.ErrorStatus || '');
     }
 
     /**
-     * Get the cached Destiny Manifest definition if available, otherwise get the latest from Bungie.
+     * Get the cached Destiny Manifest definition if available,
+     *   otherwise get the latest from Bungie.
      *
      * @param noCache
      * @returns {Promise}
@@ -67,115 +67,125 @@ class Destiny2Service extends DestinyService {
             return manifest;
         }
 
-        return this._getManifest();
+        return this.getManifestFromBungie();
     }
 
-	/**
-	 * Search for the Destiny player.
-	 *
-	 * @param displayName
-	 * @returns {Promise}
-	 */
-	async getPlayer(displayName) {
-		const options = {
-			headers: {
-				'x-api-key': apiKey
-			},
-			url: `${servicePlatform}/Destiny2/SearchDestinyPlayer/All/${displayName}/`
-		};
-		const responseBody = await get(options);
+    /**
+     * Search for the Destiny player.
+     *
+     * @param displayName
+     * @returns {Promise}
+     */
+    async getPlayer(displayName) {
+        const options = {
+            headers: {
+                'x-api-key': apiKey,
+            },
+            url: `${servicePlatform}/Destiny2/SearchDestinyPlayer/All/${displayName}/`,
+        };
+        const responseBody = await get(options);
 
-	    if (responseBody.ErrorCode === 1) {
-		    const { Response: [player]} = responseBody;
+        if (responseBody.ErrorCode === 1) {
+            const { Response: [player] } = responseBody;
 
-		    return player;
-	    }
+            return player;
+        }
 
-		throw new DestinyError(responseBody.ErrorCode || -1,
-			responseBody.Message || '', responseBody.ErrorStatus || '');
+        throw new DestinyError(responseBody.ErrorCode || -1,
+            responseBody.Message || '', responseBody.ErrorStatus || '');
     }
 
-	/**
-	 * Get player PVP statistics.
-	 *
-	 * @param membershipId
-	 * @param membershipType
-	 */
-	async getPlayerStats(membershipId, membershipType) {
-		const options = {
-			headers: {
-				'x-api-key': apiKey
-			},
-			url: `${servicePlatform}/Destiny2/${membershipType}/Account/${membershipId}/Stats`
-		};
-		const responseBody = await get(options);
+    /**
+     * Get player PVP statistics.
+     *
+     * @param membershipId
+     * @param membershipType
+     */
+    async getPlayerStats(membershipId, membershipType) {
+        const options = {
+            headers: {
+                'x-api-key': apiKey,
+            },
+            url: `${servicePlatform}/Destiny2/${membershipType}/Account/${membershipId}/Stats`,
+        };
+        const responseBody = await get(options);
 
-		if (responseBody.ErrorCode === 1) {
-			const { Response: { mergedAllCharacters: { results: { allPvP: { allTime }}}}} = responseBody;
+        if (responseBody.ErrorCode === 1) {
+            const {
+                Response: {
+                    mergedAllCharacters: {
+                        results: {
+                            allPvP: {
+                                allTime,
+                            },
+                        },
+                    },
+                },
+            } = responseBody;
 
-			return allTime;
-		}
+            return allTime;
+        }
 
-		throw new DestinyError(responseBody.ErrorCode || -1,
-			responseBody.Message || '', responseBody.ErrorStatus || '');
+        throw new DestinyError(responseBody.ErrorCode || -1,
+            responseBody.Message || '', responseBody.ErrorStatus || '');
     }
 
-	/**
-	 * Get user profile.
-	 *
-	 * @param membershipId
-	 * @param membershipType
-	 * @returns {Promise}
-	 */
-	async getProfile(membershipId, membershipType) {
-		const options = {
-			headers: {
-				'x-api-key': apiKey
-			},
-			url: `${servicePlatform}/Destiny2/${membershipType}/Profile/${membershipId}?components=Characters`
-		};
-		const responseBody = await get(options);
+    /**
+     * Get user profile.
+     *
+     * @param membershipId
+     * @param membershipType
+     * @returns {Promise}
+     */
+    async getProfile(membershipId, membershipType) {
+        const options = {
+            headers: {
+                'x-api-key': apiKey,
+            },
+            url: `${servicePlatform}/Destiny2/${membershipType}/Profile/${membershipId}?components=Characters`,
+        };
+        const responseBody = await get(options);
 
-		if (responseBody.ErrorCode === 1) {
-			const { Response: { characters: { data }}} = responseBody;
-			const characters = Object.keys(data).map(character => data[character]);
+        if (responseBody.ErrorCode === 1) {
+            const { Response: { characters: { data } } } = responseBody;
+            const characters = Object.keys(data).map(character => data[character]);
 
-			return characters;
-		}
+            return characters;
+        }
 
-		throw new DestinyError(responseBody.ErrorCode || -1,
-			responseBody.Message || '', responseBody.ErrorStatus || '');
-	}
+        throw new DestinyError(responseBody.ErrorCode || -1,
+            responseBody.Message || '', responseBody.ErrorStatus || '');
+    }
 
-	/**
-	 * Get Xur's inventory.
-	 *
-	 * @param membershipId
-	 * @param membershipType
-	 * @param characterId
-	 * @param accessToken
-	 * @returns {Promise}
-	 */
-	async getXur(membershipId, membershipType, characterId, accessToken) {
-		const options = {
-			headers: {
-				authorization: 'Bearer ' + accessToken,
-				'x-api-key': apiKey
-			},
-			url: `${servicePlatform}/Destiny2/${membershipType}/Profile/${membershipId}/Character/${characterId}/Vendors/${xurHash}?components=402`
-		};
-		const responseBody = await get(options);
+    /**
+     * Get Xur's inventory.
+     *
+     * @param membershipId
+     * @param membershipType
+     * @param characterId
+     * @param accessToken
+     * @returns {Promise}
+     */
+    async getXur(membershipId, membershipType, characterId, accessToken) {
+        const options = {
+            headers: {
+                authorization: `Bearer ${accessToken}`,
+                'x-api-key': apiKey,
+            },
+            url: `${servicePlatform}/Destiny2/${membershipType}/Profile/${membershipId}/Character/${characterId}/Vendors/${xurHash}?components=402`,
+        };
+        const responseBody = await get(options);
 
-		if (responseBody.ErrorCode === 1) {
-			const { Response: { sales: { data }}} = responseBody;
-			const itemHashes = Object.entries(data).map(([, value]) => value.itemHash);
+        if (responseBody.ErrorCode === 1) {
+            const { Response: { sales: { data } } } = responseBody;
+            const itemHashes = Object.entries(data).map(([, value]) => value.itemHash);
 
-			return itemHashes;
-		}
+            return itemHashes;
+        }
 
-		throw new DestinyError(responseBody.ErrorCode || -1,
-			responseBody.Message || '', responseBody.ErrorStatus || '');
-	}
+        throw new DestinyError(responseBody.ErrorCode || -1,
+            responseBody.Message || '', responseBody.ErrorStatus || '');
+    }
 }
 
 module.exports = Destiny2Service;

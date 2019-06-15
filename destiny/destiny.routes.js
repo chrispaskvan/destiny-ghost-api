@@ -29,7 +29,7 @@ const routes = ({ authenticationController, destinyService, userService, worldRe
 	 * Authentication controller when needed.
 	 * @type {AuthenticationMiddleware}
 	 */
-	const middleware = new AuthenticationMiddleWare({ authenticationController })
+	const middleware = new AuthenticationMiddleWare({ authenticationController });
 
     /**
      * Routes

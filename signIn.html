@@ -5,7 +5,6 @@
     <script src="//ajax.aspnetcdn.com/ajax/jquery/jquery-2.1.4.min.js"></script>
     <script src="//cdnjs.cloudflare.com/ajax/libs/knockout/3.3.0/knockout-min.js"></script>
     <script src="//cdnjs.cloudflare.com/ajax/libs/URI.js/1.18.9/URI.min.js"></script>
-</head>
 <body>
     <div id="anonymous1" style="display: none;">
         <div>
@@ -32,7 +31,7 @@
                 self.welcomeMessage = ko.pureComputed(function () {
                     return 'Welcome ' + user.displayName;
                 });
-                self.signOut = function () {
+                UserController.signOut = function () {
                     jQuery.ajax({
                         contentType: 'application/json; charset=utf-8',
                         type: 'GET',

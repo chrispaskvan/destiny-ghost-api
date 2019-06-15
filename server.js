@@ -4,23 +4,23 @@
 require('dotenv').config();
 
 const DestinyError = require('./destiny/destiny.error'),
-	RequestError = require('./helpers/request.error'),
-	Routes = require('./routes'),
-	{ instrumentationKey } = require('./settings/applicationInsights.json'),
-	{ name } = require('./package.json'),
-	applicationInsights = require('applicationinsights'),
+    RequestError = require('./helpers/request.error'),
+    Routes = require('./routes'),
+    { instrumentationKey } = require('./settings/applicationInsights.json'),
+    { name } = require('./package.json'),
+    applicationInsights = require('applicationinsights'),
     bodyParser = require('body-parser'),
     cookieParser = require('cookie-parser'),
     express = require('express'),
-	fs = require('fs'),
-	http = require('http'),
-	log = require('./helpers/log'),
-	path = require('path'),
+    fs = require('fs'),
+    http = require('http'),
+    log = require('./helpers/log'),
+    path = require('path'),
     session = require('express-session'),
     redis = require('redis'),
-	redisConfig = require('./settings/redis.json'),
-	sessionConfig = require('./settings/session.' + process.env.NODE_ENV + '.json'),
-	{ createTerminus } = require('@godaddy/terminus');
+    redisConfig = require('./settings/redis.json'),
+    sessionConfig = require('./settings/session.' + process.env.NODE_ENV + '.json'),
+    { createTerminus } = require('@godaddy/terminus');
 
 const RedisStore = require('connect-redis')(session);
 const app = express();
@@ -72,17 +72,17 @@ const client = redis.createClient(redisConfig.port, redisConfig.host, {
  * Attach Session
  */
 const ghostSession = session({
-	cookie: {
-		domain: sessionConfig.cookie.domain,
-		secure: false
-	},
-	name: sessionConfig.cookie.name,
-	resave: false,
-	saveUninitialized: true,
-	secret: sessionConfig.secret,
-	store: new RedisStore({
-		client: client
-	})
+    cookie: {
+        domain: sessionConfig.cookie.domain,
+        secure: false
+    },
+    name: sessionConfig.cookie.name,
+    resave: false,
+    saveUninitialized: true,
+    secret: sessionConfig.secret,
+    store: new RedisStore({
+        client
+    })
 });
 app.use(ghostSession);
 
@@ -92,15 +92,15 @@ app.use(ghostSession);
 const databases = [process.env.DESTINY_DATABASE_DIR, process.env.DESTINY2_DATABASE_DIR];
 
 databases.forEach(database => {
-	const directories = database.split('/');
+    const directories = database.split('/');
 
-	directories.forEach((directory, index) => {
-		const path = directories.slice(0, index + 1).join('/');
+    directories.forEach((directory, index) => {
+        const path = directories.slice(0, index + 1).join('/');
 
-		if (!fs.existsSync(path)) {
-			fs.mkdirSync(path);
-		}
-	});
+        if (!fs.existsSync(path)) {
+            fs.mkdirSync(path);
+        }
+    });
 });
 
 /**
@@ -135,30 +135,30 @@ app.get('/ping', function (req, res) {
 });
 
 app.use((err, req, res, next) => {
-	const { code, message, status, statusText } = err;
+    const { code, message, status, statusText } = err;
 
-	if (res.status) {
-		if (err instanceof DestinyError) {
-			res.status(500).json({
-				errors: [{
-					code,
-					message,
-					status
-				}]
-			});
-		} else if (err instanceof RequestError) {
-			res.status(500).json({ errors: [{
-					status,
-					statusText
-				}]});
-		} else {
-			res.status(500).json({ errors: [{
-					message
-				}]});
-		}
-	} else {
-		next(err);
-	}
+    if (res.status) {
+        if (err instanceof DestinyError) {
+            res.status(500).json({
+                errors: [{
+                    code,
+                    message,
+                    status
+                }]
+            });
+        } else if (err instanceof RequestError) {
+            res.status(500).json({ errors: [{
+                    status,
+                    statusText
+                }]});
+        } else {
+            res.status(500).json({ errors: [{
+                    message
+                }]});
+        }
+    } else {
+        next(err);
+    }
 });
 
 /**
@@ -167,27 +167,27 @@ app.use((err, req, res, next) => {
 const server = http.createServer(app);
 
 createTerminus(server, {
-	signal: 'SIGINT',
-	onSignal: () => {
-		return new Promise((resolve) => {
-			client.quit();
-			resolve();
-		});
-	}
+    signal: 'SIGINT',
+    onSignal: () => {
+        return new Promise((resolve) => {
+            client.quit();
+            resolve();
+        });
+    }
 });
 
 server.listen(port, function init() {
-	// eslint-disable-next-line no-console
+    // eslint-disable-next-line no-console
     console.log('Running on port ' + port + '.');
 
-	//let client = applicationInsights.defaultClient;
-	const end = new Date();
-	const duration = end - start;
+    //let client = applicationInsights.defaultClient;
+    const end = new Date();
+    const duration = end - start;
 
-	// client.trackMetric({
-	// 	name: 'Startup Time',
-	// 	value: duration
-	// });
+    // client.trackMetric({
+    // 	name: 'Startup Time',
+    // 	value: duration
+    // });
 });
 
 module.exports = app;
