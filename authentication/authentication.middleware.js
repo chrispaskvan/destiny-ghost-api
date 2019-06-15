@@ -10,11 +10,11 @@ class AuthenticationMiddleware {
      * @param options
      */
     constructor(options) {
-	    validate(options, {
-		    authenticationController: Joi.object().required()
-	    });
+        validate(options, {
+            authenticationController: Joi.object().required(),
+        });
 
-	    this.authentication = options.authenticationController;
+        this.authentication = options.authenticationController;
     }
 
     /**

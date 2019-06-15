@@ -13,7 +13,7 @@ class AuthenticationService {
         validate(options, {
             cacheService: Joi.object().required(),
             destinyService: Joi.object().required(),
-            userService: Joi.object().required()
+            userService: Joi.object().required(),
         });
 
         this.cacheService = options.cacheService;
@@ -33,43 +33,39 @@ class AuthenticationService {
             return Promise.resolve();
         }
 
-        const user = await (phoneNumber ?
-	        this.userService.getUserByPhoneNumber(phoneNumber) :
-	        this.userService.getUserByDisplayName(displayName, membershipType));
+        const user = await (phoneNumber
+            ? this.userService.getUserByPhoneNumber(phoneNumber)
+            : this.userService.getUserByDisplayName(displayName, membershipType));
 
-        return this._validate(user);
+        return this.validateUser(user);
     }
 
     /**
      * Validate user access token with Bungie.
      * @param user
      * @returns {Promise}
-	 * @private
-	 */
-	_validate(user = {}) {
-        const { bungie: { access_token: accessToken, refresh_token: refreshToken } = {}} = user;
+     * @private
+     */
+    validateUser(user = {}) {
+        const { bungie: { access_token: accessToken, refresh_token: refreshToken } = {} } = user;
 
         if (!accessToken) {
-	        return Promise.resolve();
+            return Promise.resolve();
         }
 
         return this.destinyService.getCurrentUser(accessToken)
-            .then(() => {
-                return this.cacheService.setUser(user)
-                    .then(() => user);
-            })
-            .catch(() => {
-                return this.destinyService.getAccessTokenFromRefreshToken(refreshToken)
-                    .then(bungie => {
-                        user.bungie = bungie;
+            .then(() => this.cacheService.setUser(user)
+                .then(() => user))
+            .catch(() => this.destinyService.getAccessTokenFromRefreshToken(refreshToken)
+                .then(bungie => {
+                    user.bungie = bungie; // eslint-disable-line no-param-reassign
 
-                        return Promise.all([
-                            this.cacheService.setUser(user),
-                            this.userService.updateUserBungie(user.id, bungie)
-                        ])
-                            .then(() => user);
-                    });
-            });
+                    return Promise.all([
+                        this.cacheService.setUser(user),
+                        this.userService.updateUserBungie(user.id, bungie),
+                    ])
+                        .then(() => user);
+                }));
     }
 }
 

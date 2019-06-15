@@ -1,66 +1,66 @@
 /**
  * A module for accessing the Destiny World database.
  */
-const _ = require('underscore'),
-	Database = require('better-sqlite3'),
-	fs = require('fs'),
-	log = require('./log'),
-	path = require('path'),
-	request = require('request'),
-	yauzl = require('yauzl');
+const _ = require('underscore');
+const Database = require('better-sqlite3');
+const fs = require('fs');
+const log = require('./log');
+const path = require('path');
+const request = require('request');
+const yauzl = require('yauzl');
 
 /**
  * World Repository
  */
 class World {
-	constructor({ directory } = {}) {
-		this.categories = [];
-		this.classes = [];
-		this.items = [];
-		this.grimoireCards = [];
-		this.vendors = [];
+    constructor({ directory } = {}) {
+        this.categories = [];
+        this.classes = [];
+        this.items = [];
+        this.grimoireCards = [];
+        this.vendors = [];
 
-		if (directory) {
-			const [databaseFileName] = fs.readdirSync(directory)
-				.map(name => {
-					return {
-						name,
-						time: fs.statSync(directory + '/' + name).mtime.getTime()
-					};
-				})
-				.sort((a, b) => b.time - a.time)
-				.map(file => file.name);
+        if (directory) {
+            const [databaseFileName] = fs.readdirSync(directory)
+                .map(name => {
+                    return {
+                        name,
+                        time: fs.statSync(`${directory}/${name}`).mtime.getTime(),
+                    };
+                })
+                .sort((a, b) => b.time - a.time)
+                .map(file => file.name);
 
-			this.directory = directory;
-			this._bootstrap(databaseFileName);
-		}
-	}
+            this.directory = directory;
+            this._bootstrap(databaseFileName);
+        }
+    }
 
-	_bootstrap(fileName) {
-		const databasePath = fileName ?
-			path.join(this.directory, path.basename(fileName)) : undefined;
+    _bootstrap(fileName) {
+        const databasePath = fileName ?
+            path.join(this.directory, path.basename(fileName)) : undefined;
 
-		if (databasePath) {
-			const database = new Database(databasePath, {
-				readonly: true,
-				fileMustExist: true
-			});
+        if (databasePath) {
+            const database = new Database(databasePath, {
+                readonly: true,
+                fileMustExist: true
+            });
 
-			const categories = database.prepare('SELECT json FROM DestinyItemCategoryDefinition').all();
-			const classes = database.prepare('SELECT json FROM DestinyClassDefinition').all();
-			const grimoireCards = database.prepare('SELECT * FROM DestinyGrimoireCardDefinition').all();
-			const items = database.prepare('SELECT json FROM DestinyInventoryItemDefinition').all();
-			const vendors = database.prepare('SELECT json FROM DestinyVendorDefinition').all();
+            const categories = database.prepare('SELECT json FROM DestinyItemCategoryDefinition').all();
+            const classes = database.prepare('SELECT json FROM DestinyClassDefinition').all();
+            const grimoireCards = database.prepare('SELECT * FROM DestinyGrimoireCardDefinition').all();
+            const items = database.prepare('SELECT json FROM DestinyInventoryItemDefinition').all();
+            const vendors = database.prepare('SELECT json FROM DestinyVendorDefinition').all();
 
-			database.close();
+            database.close();
 
-			this.categories = categories.map(({ json: category }) => JSON.parse(category));
-			this.classes = classes.map(({ json: classDefinition }) => JSON.parse(classDefinition));
-			this.grimoireCards = grimoireCards.map(({ json: grimoireCard }) => JSON.parse(grimoireCard));
-			this.items = items.map(({ json: item }) => JSON.parse(item));
-			this.vendors = vendors.map(({ json: vendor }) => JSON.parse(vendor));
-		}
-	}
+            this.categories = categories.map(({ json: category }) => JSON.parse(category));
+            this.classes = classes.map(({ json: classDefinition }) => JSON.parse(classDefinition));
+            this.grimoireCards = grimoireCards.map(({ json: grimoireCard }) => JSON.parse(grimoireCard));
+            this.items = items.map(({ json: item }) => JSON.parse(item));
+            this.vendors = vendors.map(({ json: vendor }) => JSON.parse(vendor));
+        }
+    }
 
     /**
      * Get the class according to the provided hash.
@@ -85,22 +85,22 @@ class World {
      * @returns {Promise}
      */
     getItemByName(itemName) {
-	    return new Promise((resolve, reject) => {
-		    try {
-			    const items = this.items.filter(({ itemName: name = '' }) =>
-				    name.toLowerCase().includes(itemName.toLowerCase()));
+        return new Promise((resolve, reject) => {
+            try {
+                const items = this.items.filter(({ itemName: name = '' }) =>
+                    name.toLowerCase().includes(itemName.toLowerCase()));
 
-			    const groups = _.groupBy(items, item => item.itemName);
-			    const keys = Object.keys(groups);
+                const groups = _.groupBy(items, item => item.itemName);
+                const keys = Object.keys(groups);
 
-			    resolve(_.map(keys, (key) => {
-				    return _.min(_.filter(items, (item) => item.itemName === key),
-					    (item) => item.qualityLevel);
-			    }));
-		    } catch (err) {
-	    	    reject(err);
-		    }
-	    });
+                resolve(_.map(keys, (key) => {
+                    return _.min(_.filter(items, (item) => item.itemName === key),
+                        (item) => item.qualityLevel);
+                }));
+            } catch (err) {
+                reject(err);
+            }
+        });
     }
 
     /**
@@ -109,15 +109,15 @@ class World {
      * @returns {*}
      */
     getItemByHash(itemHash) {
-	    return new Promise((resolve, reject) => {
-		    try {
-			    const [item] = this.items.filter(item => item.itemHash === itemHash);
+        return new Promise((resolve, reject) => {
+            try {
+                const [item] = this.items.filter(item => item.itemHash === itemHash);
 
-			    resolve(item);
-		    } catch (err) {
-			    reject(err);
-		    }
-	    });
+                resolve(item);
+            } catch (err) {
+                reject(err);
+            }
+        });
     }
 
     /**
@@ -126,7 +126,7 @@ class World {
      * @returns {Promise}
      */
     getItemCategory(itemCategoryHash) {
-		return Promise.resolve(this.categories.find(category => category.id === itemCategoryHash));
+        return Promise.resolve(this.categories.find(category => category.id === itemCategoryHash));
     }
 
     /**
@@ -135,64 +135,64 @@ class World {
      * @returns {Promise}
      */
     getVendorIcon(vendorHash) {
-	    return new Promise((resolve, reject) => {
-		    try {
-			    const [vendor] = this.vendors.filter(vendor => vendor.vendorHash === vendorHash);
+        return new Promise((resolve, reject) => {
+            try {
+                const [vendor] = this.vendors.filter(vendor => vendor.vendorHash === vendorHash);
 
-			    resolve('https://www.bungie.net' + vendor.summary.vendorIcon);
-		    } catch (err) {
-			    reject(err);
-		    }
-	    });
+                resolve('https://www.bungie.net' + vendor.summary.vendorIcon);
+            } catch (err) {
+                reject(err);
+            }
+        });
     }
 
-	/**
-	 * Download and unzip the manifest database.
-	 *
-	 * @param manifest
-	 * @returns {*}
-	 */
-	updateManifest(manifest) {
-		const databaseDirectory = this.directory + '/';
-		const { mobileWorldContentPaths: { en: relativeUrl }} = manifest;
-		const fileName = relativeUrl.substring(relativeUrl.lastIndexOf('/') + 1);
-		const databasePath = databaseDirectory + fileName;
+    /**
+     * Download and unzip the manifest database.
+     *
+     * @param manifest
+     * @returns {*}
+     */
+    updateManifest(manifest) {
+        const databaseDirectory = this.directory + '/';
+        const { mobileWorldContentPaths: { en: relativeUrl }} = manifest;
+        const fileName = relativeUrl.substring(relativeUrl.lastIndexOf('/') + 1);
+        const databasePath = databaseDirectory + fileName;
 
-		if (fs.existsSync(databasePath)) {
-			return Promise.resolve(manifest);
-		}
+        if (fs.existsSync(databasePath)) {
+            return Promise.resolve(manifest);
+        }
 
-		return new Promise((resolve, reject) => {
-			const file = fs.createWriteStream(databasePath + '.zip');
-			const stream = request('https://www.bungie.net' + relativeUrl, () => {
-				log.info('content downloaded from ' + relativeUrl);
-			}).pipe(file);
+        return new Promise((resolve, reject) => {
+            const file = fs.createWriteStream(databasePath + '.zip');
+            const stream = request('https://www.bungie.net' + relativeUrl, () => {
+                log.info('content downloaded from ' + relativeUrl);
+            }).pipe(file);
 
-			stream.on('finish', () => {
-				yauzl.open(databasePath + '.zip', (err, zipFile) => {
-					if (err) {
-						return reject(err);
-					}
+            stream.on('finish', () => {
+                yauzl.open(databasePath + '.zip', (err, zipFile) => {
+                    if (err) {
+                        return reject(err);
+                    }
 
-					zipFile.on('entry', entry => {
-						zipFile.openReadStream(entry, (err, readStream) => {
-							if (err) {
-								return reject(err);
-							}
+                    zipFile.on('entry', entry => {
+                        zipFile.openReadStream(entry, (err, readStream) => {
+                            if (err) {
+                                return reject(err);
+                            }
 
-							readStream.on('end', () => {
-								this._bootstrap(fileName);
-							});
-							readStream.pipe(fs.createWriteStream(databaseDirectory + '/' + entry.fileName));
-							fs.unlinkSync(databasePath + '.zip');
+                            readStream.on('end', () => {
+                                this._bootstrap(fileName);
+                            });
+                            readStream.pipe(fs.createWriteStream(databaseDirectory + '/' + entry.fileName));
+                            fs.unlinkSync(databasePath + '.zip');
 
-							resolve(manifest);
-						});
-					});
-				});
-			});
-		});
-	}
+                            resolve(manifest);
+                        });
+                    });
+                });
+            });
+        });
+    }
 }
 
 module.exports = World;

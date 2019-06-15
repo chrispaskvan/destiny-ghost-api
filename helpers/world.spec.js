@@ -7,8 +7,6 @@ const world = new World({
 	directory: process.env.DESTINY_DATABASE_DIR
 });
 
-console.log(process.env.DESTINY_DATABASE_DIR);
-
 describe('It\'s Bungie\'s 1st world. You\'re just querying it.', () => {
 	it('should return the Hunter character class', (done) => {
 		world.getClassByHash(671679327)

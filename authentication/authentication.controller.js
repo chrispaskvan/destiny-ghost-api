@@ -10,11 +10,11 @@ class AuthenticationController {
      * @param options
      */
     constructor(options) {
-	    validate(options, {
-		    authenticationService: Joi.object().required()
-	    });
+        validate(options, {
+            authenticationService: Joi.object().required(),
+        });
 
-	    this.authentication = options.authenticationService;
+        this.authentication = options.authenticationService;
     }
 
     /**

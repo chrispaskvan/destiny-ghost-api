@@ -1,5 +1,6 @@
 const _ = require('underscore');
 const Joi = require('joi');
+const validate = require('../helpers/validate');
 const defaults = require('json-schema-defaults');
 const validator = require('is-my-json-valid');
 const QueryBuilder = require('../helpers/queryBuilder');
@@ -179,7 +180,13 @@ class UserService {
     /**
      * @constructor
      */
-    constructor(options = {}) {
+    constructor(options) {
+        validate(options, {
+            cacheService: Joi.object().required(),
+            documentService: Joi.object().required(),
+            client: Joi.object().required(),
+        });
+
         this.cacheService = options.cacheService;
         this.documents = options.documentService;
 
@@ -201,7 +208,6 @@ class UserService {
         let notification;
         let messages = [];
 
-
         if (notificationKey) {
             notification = user.notifications.find(
                 notification1 => notification1.type === notificationType,
@@ -216,11 +222,13 @@ class UserService {
             } else if (!notification.messages) {
                 notification.messages = [];
             }
+
             ({ messages } = notification);
         } else {
             if (!user.messages) {
                 user.messages = [];
             }
+
             ({ messages } = user);
         }
 
