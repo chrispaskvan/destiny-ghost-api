@@ -29,7 +29,7 @@ class UserCache {
      * @returns {Promise}
      * @private
      */
-    deleteCache(key) {
+    _deleteCache(key) {
         return new Promise((resolve, reject) => {
             this.client.del(key, (err, res) => {
                 if (err) {
@@ -51,13 +51,13 @@ class UserCache {
         let promise2;
 
         if (phoneNumber) {
-            promise1 = this.deleteCache(this.constructor.getCacheKey(phoneNumber));
+            promise1 = this._deleteCache(this.constructor.getCacheKey(phoneNumber)); // eslint-disable-line no-underscore-dangle, max-len
         } else {
             promise1 = Promise.resolve(); // eslint-disable-line new-cap
         }
 
         if (displayName && membershipType) {
-            promise2 = this.deleteCache(this.constructor.getCacheKey(displayName, membershipType));
+            promise2 = this._deleteCache(this.constructor.getCacheKey(displayName, membershipType)); // eslint-disable-line no-underscore-dangle, max-len
         } else {
             promise2 = Promise.resolve(); // eslint-disable-line new-cap
         }
@@ -76,7 +76,7 @@ class UserCache {
      * @returns {Promise}
      * @private
      */
-    getCache(key) {
+    _getCache(key) {
         return new Promise((resolve, reject) => {
             this.client.get(key, (err, res) => {
                 if (err) {
@@ -96,7 +96,7 @@ class UserCache {
     async getUser(...teeth) {
         const key = this.constructor.getCacheKey(...teeth);
 
-        const user = await this.getCache(key);
+        const user = await this._getCache(key); // eslint-disable-line no-underscore-dangle
         if (user) {
             const { displayName, membershipId, membershipType } = user;
 

@@ -51,7 +51,7 @@ class TwilioController {
         const promises = itemCategoryHashes.map(itemCategoryHash => this.world
             .getItemCategory(itemCategoryHash));
         const itemCategories = await Promise.all(promises);
-        const filteredCategories = itemCategories.filter(({ hash }) => hash > 1);
+        const filteredCategories = itemCategories.filter(({ hash1 }) => hash1 > 1);
         const sortedCategories = _.sortBy(filteredCategories,
             itemCategory => itemCategory.hash);
         const itemCategory = _.reduce(sortedCategories, (memo, { shortTitle }) => (`${memo + shortTitle} `), ' ')
@@ -105,7 +105,7 @@ class TwilioController {
      */
     async _queryItem(itemName) {
         const allItems = await this.world.getItemByName(itemName.replace(/[\u2018\u2019]/g, '\''));
-        const items = allItems.filter(({ itemName, itemType }) => !itemName.includes('Catalyst')
+        const items = allItems.filter(({ itemType }) => !itemName.includes('Catalyst')
             && [2, 3, 4].includes(itemType));
 
         if (items.length > 0) {
@@ -114,13 +114,13 @@ class TwilioController {
                 const keys = Object.keys(groups);
 
                 if (keys.length === 1) {
-                    return this._getItem(items[0]);
+                    return this._getItem(items[0]); // eslint-disable-line no-underscore-dangle
                 }
 
                 return items;
             }
 
-            return await this._getItem(items[0]);
+            return this._getItem(items[0]); // eslint-disable-line no-underscore-dangle
         }
 
         return [];
@@ -131,13 +131,13 @@ class TwilioController {
      * @param req
      * @param res
      */
-    async fallback(req, res) {
+    static async fallback(req, res) {
         const header = req.headers['x-twilio-signature'];
         const twiml = new MessagingResponse();
 
         // eslint-disable-next-line max-len
         if (twilio.validateRequest(authToken, header, process.env.DOMAIN + req.originalUrl, req.body)) {
-            twiml.message(attributes, TwilioController._getRandomResponseForAnError());
+            twiml.message(attributes, TwilioController._getRandomResponseForAnError()); // eslint-disable-line no-underscore-dangle, max-len
             res.writeHead(200, {
                 'Content-Type': 'text/xml',
             });
@@ -243,7 +243,9 @@ class TwilioController {
                 });
 
                 return res.end(twiml.toString());
-            } else if (message === 'xur') {
+            }
+
+            if (message === 'xur') {
                 try {
                     const {
                         bungie: {
@@ -281,7 +283,7 @@ class TwilioController {
 
                     log.error(err);
 
-                    twiml.message(attributes, TwilioController._getRandomResponseForNoResults());
+                    twiml.message(attributes, TwilioController._getRandomResponseForNoResults()); // eslint-disable-line no-underscore-dangle, max-len
                     res.writeHead(200, {
                         'Content-Type': 'text/xml',
                     });
@@ -297,13 +299,13 @@ class TwilioController {
                 return res.end(twiml.toString());
             } else {
                 const searchTerm = req.body.Body.trim().toLowerCase();
-                const items = await this._queryItem(searchTerm);
+                const items = await this._queryItem(searchTerm); // eslint-disable-line no-underscore-dangle, max-len
 
                 counter += 1;
                 res.cookie('counter', counter);
                 switch (items.length) {
                 case 0: {
-                    twiml.message(attributes, TwilioController._getRandomResponseForNoResults());
+                    twiml.message(attributes, TwilioController._getRandomResponseForNoResults()); // eslint-disable-line no-underscore-dangle, max-len
                     res.writeHead(200, {
                         'Content-Type': 'text/xml',
                     });
