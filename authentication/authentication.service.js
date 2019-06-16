@@ -37,7 +37,7 @@ class AuthenticationService {
             ? this.userService.getUserByPhoneNumber(phoneNumber)
             : this.userService.getUserByDisplayName(displayName, membershipType));
 
-        return this.validateUser(user);
+        return this._validateUser(user); // eslint-disable-line no-underscore-dangle
     }
 
     /**
@@ -46,7 +46,7 @@ class AuthenticationService {
      * @returns {Promise}
      * @private
      */
-    validateUser(user = {}) {
+    _validateUser(user = {}) {
         const { bungie: { access_token: accessToken, refresh_token: refreshToken } = {} } = user;
 
         if (!accessToken) {
