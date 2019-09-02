@@ -5,158 +5,164 @@
  * @summary Helper class for interfacing with DocumentDB.
  * @author Chris Paskvan
  */
-const DocumentClient = require('documentdb').DocumentClient,
-    { authenticationKey, databaseId, host } = require('../settings/documents.json'),
-    util = require('util');
+const { DocumentClient } = require('documentdb');
+const util = require('util');
+const { authenticationKey, databaseId, host } = require('../settings/documents.json');
 
 class Documents {
     constructor() {
-		/**
-		 * Initialize Client
-		 * @type {*|DocumentClient}
-		 */
-		this.client = new DocumentClient(host, {
-			masterKey: authenticationKey
-		});
-		/**
-		 * Local Cache
-		 * @type {object}
-		 */
-		this.map = Object.create(null);
+        /**
+         * Initialize Client
+         * @type {*|DocumentClient}
+         */
+        this.client = new DocumentClient(host, {
+            masterKey: authenticationKey,
+        });
+        /**
+         * Local Cache
+         * @type {object}
+         */
+        this.map = Object.create(null);
     }
 
-	/**
+    /**
      * Get collection by Id.
-	 *
-	 * @param collectionId
-	 * @returns {Promise}
-	 * @private
-	 */
-	_getCollection(collectionId) {
-		return new Promise((resolve, reject) => {
-			function getCurrentCollection(err, collection) {
-				if (err) {
-					reject(err);
-				}
+     *
+     * @param collectionId
+     * @returns {Promise}
+     * @private
+     */
+    _getCollection(collectionId) {
+        return new Promise((resolve, reject) => {
+            function getCurrentCollection(err, collection) {
+                if (err) {
+                    reject(err);
+                }
 
-				this.map[collectionId] = collection;
+                this.map[collectionId] = collection;
 
-				resolve(collection);
-			}
+                resolve(collection);
+            }
 
-			function getCurrentDatabase(err, database) {
-				if (err) {
-					reject(err);
-				}
-				if (database) {
-					this.client.queryCollections(database._self,
-						util.format('SELECT * FROM collections c WHERE c.id = "%s"', collectionId))
-							.current(getCurrentCollection.bind(this));
-				} else {
-					resolve();
-				}
-			}
+            function getCurrentDatabase(err, database) {
+                if (err) {
+                    reject(err);
+                }
+                if (database) {
+                    this.client.queryCollections(database._self, // eslint-disable-line no-underscore-dangle, max-len
+                        util.format('SELECT * FROM collections c WHERE c.id = "%s"', collectionId))
+                        .current(getCurrentCollection.bind(this));
+                } else {
+                    resolve();
+                }
+            }
 
-			if (this.map[collectionId]) {
-				return resolve(this.map[collectionId]);
-			}
+            if (this.map[collectionId]) {
+                return resolve(this.map[collectionId]);
+            }
 
-			this.client.queryDatabases(util.format('SELECT * FROM root r WHERE r.id = "%s"', databaseId))
-				.current(getCurrentDatabase.bind(this));
-		});
-	}
+            return this.client.queryDatabases(util.format('SELECT * FROM root r WHERE r.id = "%s"', databaseId))
+                .current(getCurrentDatabase.bind(this));
+        });
+    }
 
-	/**
-	 * Create a document.
-	 *
-	 * @param collectionId
-	 * @param document
-	 * @returns {Promise}
-	 */
-	createDocument(collectionId, document) {
-		return new Promise((resolve, reject) => {
-			this._getCollection(collectionId)
-				.then(collection => {
-					if (!collection) {
-						reject(new Error(`Collection ${collectionId} not found`));
-					}
+    /**
+     * Create a document.
+     *
+     * @param collectionId
+     * @param document
+     * @returns {Promise}
+     */
+    createDocument(collectionId, document) {
+        return new Promise((resolve, reject) => {
+            this._getCollection(collectionId) // eslint-disable-line no-underscore-dangle
+                .then(collection => {
+                    if (!collection) {
+                        reject(new Error(`Collection ${collectionId} not found`));
+                    }
 
-					this.client.createDocument(collection._self, document,
-						(err, document) => err ? reject(err) : resolve(document.id));
-				});
-		});
-	}
+                    this.client.createDocument(collection._self, document, // eslint-disable-line no-underscore-dangle, max-len
+                        (err, document1) => (err ? reject(err) : resolve(document1.id)));
+                });
+        });
+    }
 
-	/**
-	 * Delete document by Id.
-	 *
-	 * @param collectionId
-	 * @param documentId
-	 * @param partitionKey
-	 * @returns {Promise}
-	 */
-	deleteDocumentById(collectionId, documentId, partitionKey) {
-		const documentUrl = `dbs/${databaseId}/colls/${collectionId}/docs/${documentId}`;
+    /**
+     * Delete document by Id.
+     *
+     * @param collectionId
+     * @param documentId
+     * @param partitionKey
+     * @returns {Promise}
+     */
+    deleteDocumentById(collectionId, documentId, partitionKey) {
+        const documentUrl = `dbs/${databaseId}/colls/${collectionId}/docs/${documentId}`;
 
-		return new Promise((resolve, reject) => {
-			this.client.deleteDocument(documentUrl, {
-				partitionKey: [partitionKey]
-			}, (err, result) => {
-				if (err) {
-					reject(err);
-				}
+        return new Promise((resolve, reject) => {
+            this.client.deleteDocument(documentUrl, {
+                partitionKey: [partitionKey],
+            }, (err, result) => {
+                if (err) {
+                    reject(err);
+                }
 
-				resolve(result);
-			});
-		});
-	}
+                resolve(result);
+            });
+        });
+    }
 
-	/**
-	 * Get documents from a query.
-	 * @param collectionId
-	 * @param query
-	 * @param options
-	 * @returns {Promise}
-	 */
-	getDocuments(collectionId, query, options) {
-		return new Promise((resolve, reject) => {
-			function getDocuments(err, results) {
-				if (err) {
-					reject(err);
-				}
+    /**
+     * Get documents from a query.
+     * @param collectionId
+     * @param query
+     * @param options
+     * @returns {Promise}
+     */
+    getDocuments(collectionId, query, options) {
+        return new Promise((resolve, reject) => {
+            function getDocuments(err, results) {
+                if (err) {
+                    reject(err);
+                }
 
-				resolve(results);
-			}
+                resolve(results);
+            }
 
-			this._getCollection(collectionId)
-				.then(collection => {
-					if (!collection) {
-						reject(new Error(`Collection ${collectionId} not found`));
-					}
+            this._getCollection(collectionId) // eslint-disable-line no-underscore-dangle
+                .then(collection => {
+                    if (!collection) {
+                        reject(new Error(`Collection ${collectionId} not found`));
+                    }
 
-					this.client.queryDocuments(collection._self, query, options).toArray(getDocuments);
-				});
-		});
-	}
+                    this.client.queryDocuments(collection._self, query, options).toArray(getDocuments); // eslint-disable-line no-underscore-dangle, max-len
+                });
+        });
+    }
 
-	/**
-	 * Insert if new or update an existing document.
-	 * @param collectionId
-	 * @param document
-	 * @returns {Promise}
-	 */
-	upsertDocument(collectionId, document) {
-		return new Promise((resolve, reject) => {
-			this._getCollection(collectionId)
-				.then(collection => {
-					if (!collection) {
-						reject(new Error(`Collection ${collectionId} not found`));
-					}
+    /**
+     * Insert if new or update an existing document.
+     * @param collectionId
+     * @param document
+     * @returns {Promise}
+     */
+    upsertDocument(collectionId, document) {
+        return new Promise((resolve, reject) => {
+            this._getCollection(collectionId) // eslint-disable-line no-underscore-dangle
+                .then(collection => {
+                    if (!collection) {
+                        reject(new Error(`Collection ${collectionId} not found`));
+                    }
 
-					this.client.upsertDocument(collection._self, document, err => err ? reject(err) : resolve());
-				});
-		});
-	}
+                    const options = {
+                        accessCondition: {
+                            type: 'IfMatch',
+                            condition: document._etag, // eslint-disable-line no-underscore-dangle
+                        },
+                    };
+                    this.client.upsertDocument(collection._self, document, options, err => (err ? reject(err) : resolve())); // eslint-disable-line no-underscore-dangle, max-len
+                });
+        });
+    }
 }
 
 module.exports = new Documents();

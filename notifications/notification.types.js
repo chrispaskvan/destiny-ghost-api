@@ -6,7 +6,7 @@ const notificationTypes = {
     Foundry: 'Orders',
     Gunsmith: 'Banshee-44',
     IronBanner: 'Lord Saladin',
-    Xur: 'Xur'
+    Xur: 'Xur',
 };
 
 module.exports = notificationTypes;

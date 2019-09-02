@@ -2,8 +2,7 @@
  * Publish Messages
  */
 const Chance = require('chance'),
-    Publisher = require('./publisher'),
-    expect = require('chai').expect;
+    Publisher = require('./publisher');
 
 const chance = new Chance();
 const publisher = new Publisher();
@@ -38,7 +37,7 @@ describe('Message delivery test', () => {
 
         Promise.all(promises)
             .then(function (response) {
-                expect(response.every(b => b === true)).to.be.true;
+                expect(response.every(b => b === true)).toBeTruthy();
                 done();
             });
     });

@@ -1,8 +1,7 @@
 /**
  * QueryBuilder Tests
  */
-const expect = require('chai').expect,
-    QueryBuilder = require('./queryBuilder');
+const QueryBuilder = require('./queryBuilder');
 
 describe('QueryBuilder', () => {
     it('should select all fields from root where userName matches criteria', () => {
@@ -14,8 +13,8 @@ describe('QueryBuilder', () => {
         queryBuilder.where('membershipType', 1);
         query = queryBuilder.getQuery();
 
-        expect(query.query).to.equal(sql);
-        expect(query.parameters).to.deep.equal([
+        expect(query.query).toEqual(sql);
+        expect(query.parameters).toEqual([
             {
                 name: '@userName',
                 value: 'userName1'
@@ -36,8 +35,8 @@ describe('QueryBuilder', () => {
             .where('userName', 'userName1');
         query = queryBuilder.getQuery();
 
-        expect(query.query).to.equal(sql);
-        expect(query.parameters).to.deep.equal([
+        expect(query.query).toEqual(sql);
+        expect(query.parameters).toEqual([
             {
                 name: '@userName',
                 value: 'userName1'
@@ -59,8 +58,8 @@ describe('QueryBuilder', () => {
             .where('enabled', true);
         query = queryBuilder.getQuery();
 
-        expect(query.query).to.equal(sql);
-        expect(query.parameters).to.deep.equal([
+        expect(query.query).toEqual(sql);
+        expect(query.parameters).toEqual([
             {
                 name: '@type',
                 value: 'Xur'

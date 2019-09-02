@@ -1,4 +1,5 @@
-const log = require('../helpers/log');
+const Joi = require('@hapi/joi');
+const validate = require('../helpers/validate');
 
 /**
  * User Authentication Middleware Class
@@ -6,10 +7,14 @@ const log = require('../helpers/log');
 class AuthenticationMiddleware {
     /**
      * @constructor
-     * @param authenticationController
+     * @param options
      */
-    constructor({ authenticationController }) {
-        this.authentication = authenticationController;
+    constructor(options) {
+        validate(options, {
+            authenticationController: Joi.object().required(),
+        });
+
+        this.authentication = options.authenticationController;
     }
 
     /**
@@ -22,14 +27,14 @@ class AuthenticationMiddleware {
     async authenticateUser(req, res, next) {
         try {
             const user = await this.authentication.authenticate(req);
+
             if (user) {
                 next();
             } else {
                 res.status(401).end();
             }
         } catch (err) {
-            log.error(err);
-            next();
+            next(err);
         }
     }
 }

@@ -1,6 +1,6 @@
-const NodeCache = require('node-cache'),
-    redis = require('redis'),
-    { host, key, port } = require('../settings/redis.json');
+const NodeCache = require('node-cache');
+const redis = require('redis');
+const { host, key, port } = require('../settings/redis.json');
 
 /**
  * Cache key for the latest Destiny Manifest cached.
@@ -17,10 +17,6 @@ class DestinyCache {
      */
     constructor() {
         this.cache = new NodeCache({ stdTTL: 3600, checkperiod: 0, useClones: true });
-        this.client = redis.createClient(port, host, {
-            auth_pass: key, // jscs:ignore requireCamelCaseOrUpperCaseIdentifiers
-            ttl: 3300
-        });
     }
 
     /**
@@ -37,13 +33,13 @@ class DestinyCache {
      */
     getManifest() {
         return new Promise((resolve, reject) => {
-	        this.cache.get(this.constructor.manifestKey, (err, manifest) => {
-		        if (err) {
-			        reject(err);
-		        } else {
-			        resolve(manifest);
-		        }
-	        });
+            this.cache.get(this.constructor.manifestKey, (err, manifest) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(manifest);
+                }
+            });
         });
     }
 
@@ -54,8 +50,8 @@ class DestinyCache {
      */
     getVendor(vendorHash) {
         return new Promise((resolve, reject) => {
-            this.client.get(vendorHash,
-                (err, res) => err ? reject(err) : resolve(res ? JSON.parse(res) : undefined));
+            this.cache.get(vendorHash,
+                (err, res) => (err ? reject(err) : resolve(res ? JSON.parse(res) : undefined)));
         });
     }
 
@@ -66,15 +62,15 @@ class DestinyCache {
      */
     setManifest(manifest) {
         if (manifest && typeof manifest === 'object') {
-	        return new Promise((resolve, reject) => {
-		        this.cache.set(this.constructor.manifestKey, manifest, (err, success) => {
-			        if (err) {
-				        reject(err);
-			        } else {
-			            resolve(success);
-			        }
-		        });
-	        });
+            return new Promise((resolve, reject) => {
+                this.cache.set(this.constructor.manifestKey, manifest, (err, success) => {
+                    if (err) {
+                        reject(err);
+                    } else {
+                        resolve(success);
+                    }
+                });
+            });
         }
 
         return Promise.reject(new Error('vendorHash number is required.'));
@@ -93,7 +89,8 @@ class DestinyCache {
         }
 
         return new Promise((resolve, reject) => {
-            this.client.set(vendorHash, JSON.stringify(vendor), (err, res) => err ? reject(err) : resolve(res));
+            this.cache.set(vendorHash,
+                JSON.stringify(vendor), (err, res) => (err ? reject(err) : resolve(res)));
         });
     }
 }

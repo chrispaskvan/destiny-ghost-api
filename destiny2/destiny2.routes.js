@@ -38,23 +38,32 @@ const routes = ({ authenticationController, destiny2Service, userService, worldR
     destiny2Router.route('/leaderboard')
 		.get(cors(corsConfig),
 			(req, res, next) => middleware.authenticateUser(req, res, next),
-			(req, res) => destiny2Controller.getLeaderboard(req, res));
+			(req, res, next) => destiny2Controller.getLeaderboard(req, res)
+				.catch(next));
 
     destiny2Router.route('/manifest')
-        .get((req, res) => destiny2Controller.getManifest(req, res));
+        .get((req, res, next) => destiny2Controller.getManifest(req, res)
+	        .catch(next));
 
     destiny2Router.route('/manifest')
-        .post((req, res) => destiny2Controller.upsertManifest(req, res));
+        .post((req, res, next) => destiny2Controller.upsertManifest(req, res)
+	        .catch(next));
 
-    destiny2Router.route('/profile')
+	destiny2Router.route('/player/:displayName')
+		.get((req, res, next) => destiny2Controller.getPlayer(req, res)
+			.catch(next));
+
+	destiny2Router.route('/profile')
 		.get(cors(corsConfig),
 			(req, res, next) => middleware.authenticateUser(req, res, next),
-			(req, res) => destiny2Controller.getProfile(req, res));
+			(req, res, next) => destiny2Controller.getProfile(req, res)
+				.catch(next));
 
 	destiny2Router.route('/xur')
 		.get(cors(corsConfig),
 			(req, res, next) => middleware.authenticateUser(req, res, next),
-			(req, res) => destiny2Controller.getXur(req, res));
+			(req, res, next) => destiny2Controller.getXur(req, res)
+				.catch(next));
 
 	/**
 	 * Validate the existence and the freshness of the Bungie database.

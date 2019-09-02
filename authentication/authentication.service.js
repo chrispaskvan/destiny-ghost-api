@@ -1,3 +1,6 @@
+const Joi = require('@hapi/joi');
+const validate = require('../helpers/validate');
+
 /**
  * User Authentication Service Class
  */
@@ -6,7 +9,13 @@ class AuthenticationService {
      * @constructor
      * @param options
      */
-    constructor(options = {}) {
+    constructor(options) {
+        validate(options, {
+            cacheService: Joi.object().required(),
+            destinyService: Joi.object().required(),
+            userService: Joi.object().required(),
+        });
+
         this.cacheService = options.cacheService;
         this.destinyService = options.destinyService;
         this.userService = options.userService;
@@ -17,63 +26,46 @@ class AuthenticationService {
      * @param {Object} options
      * @returns {Promise}
      */
-    authenticate(options = {}) {
+    async authenticate(options = {}) {
         const { displayName, membershipType, phoneNumber } = options;
 
         if (!(displayName && membershipType) && !phoneNumber) {
             return Promise.resolve();
         }
 
-        let promise = phoneNumber ?
-            this.userService.getUserByPhoneNumber(phoneNumber) :
-            this.userService.getUserByDisplayName(displayName, membershipType);
+        const user = await (phoneNumber
+            ? this.userService.getUserByPhoneNumber(phoneNumber)
+            : this.userService.getUserByDisplayName(displayName, membershipType));
 
-        return promise
-            .then(user => this._validate(user));
+        return this._validateUser(user); // eslint-disable-line no-underscore-dangle
     }
 
     /**
      * Validate user access token with Bungie.
      * @param user
      * @returns {Promise}
-	 * @private
-	 */
-	_validate(user) {
-        if (!user) {
-	        return Promise.resolve();
-        }
-
-        const { bungie: { access_token: accessToken, refresh_token: refreshToken } = {}} = user;
+     * @private
+     */
+    _validateUser(user = {}) {
+        const { bungie: { access_token: accessToken, refresh_token: refreshToken } = {} } = user;
 
         if (!accessToken) {
-	        return Promise.resolve();
+            return Promise.resolve();
         }
 
         return this.destinyService.getCurrentUser(accessToken)
-            .then(() => {
-                if (user) {
-                    return this.cacheService.setUser(user)
+            .then(() => this.cacheService.setUser(user)
+                .then(() => user))
+            .catch(() => this.destinyService.getAccessTokenFromRefreshToken(refreshToken)
+                .then(bungie => {
+                    user.bungie = bungie; // eslint-disable-line no-param-reassign
+
+                    return Promise.all([
+                        this.cacheService.setUser(user),
+                        this.userService.updateUserBungie(user.id, bungie),
+                    ])
                         .then(() => user);
-                }
-
-	            return Promise.resolve();
-            })
-            .catch(() => {
-                return this.destinyService.getAccessTokenFromRefreshToken(refreshToken)
-                    .then(bungie => {
-                        if (bungie) {
-                            user.bungie = bungie;
-
-                            return Promise.all([
-                                this.cacheService.setUser(user),
-                                this.userService.updateUserBungie(user.id, bungie)
-                            ])
-                                .then(() => user);
-                        }
-
-	                    return Promise.resolve();
-                    });
-            });
+                }));
     }
 }
 

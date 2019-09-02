@@ -8,16 +8,15 @@
  * managing users and destiny characters, etc. For more information check out
  * the wiki at {@link http://bungienetplatform.wikia.com/wiki/Endpoints} or
  * the Bungie web API platform help page {@link https://www.bungie.net/platform/destiny/help/}.
- * @requires _
- * @requires request
- * @requires util
  */
 const _ = require('underscore'),
     DestinyError = require('./destiny.error'),
-	{ apiKey, authorizationUrl, clientId, clientSecret } = require('../settings/bungie.json'),
+    {
+        apiKey, authorizationUrl, clientId, clientSecret,
+    } = require('../settings/bungie.json'),
     { gunSmithHash, lordSaladinHash, xurHash } = require('./destiny.constants'),
-    request = require('request'),
-    util = require('util');
+    { get, post } = require('../helpers/request'),
+    qs = require('qs');
 
 /**
  * Available Membership Types
@@ -27,7 +26,7 @@ const _ = require('underscore'),
  */
 const membershipTypes = {
     TigerXbox: 1,
-    TigerPsn: 2
+    TigerPsn: 2,
 };
 
 /**
@@ -42,584 +41,476 @@ const servicePlatform = 'https://www.bungie.net/platform';
  */
 class DestinyService {
     /**
-     * @constructor
-     * @param cacheService
-     */
+	 * @constructor
+	 * @param options
+	 */
     constructor(options = {}) {
         this.cacheService = options.cacheService;
     }
 
     /**
      * Get Bungie access token from code.
+     *
      * @param code
      * @returns {Promise}
      */
-    getAccessTokenFromCode(code) {
-        const opts = {
-			body: util.format('client_id=%s&client_secret=%s&grant_type=authorization_code&code=%s',
-				clientId, clientSecret, code),
-			headers: {
-				'Content-Type': 'application/x-www-form-urlencoded',
-				'x-api-key': apiKey
-			},
-			url: util.format('%s/app/oauth/token/', servicePlatform)
-		};
+    async getAccessTokenFromCode(code) {
+	    const data = {
+		    client_id: clientId,
+		    client_secret: clientSecret,
+		    grant_type: 'authorization_code',
+		    code,
+	    };
+	    const options = {
+		    data: qs.stringify(data),
+		    headers: {
+			    'Content-Type': 'application/x-www-form-urlencoded',
+			    'x-api-key': apiKey,
+		    },
+		    url: `${servicePlatform}/app/oauth/token/`,
+	    };
 
-        return new Promise((resolve, reject) => {
-            request.post(opts, function (err, res, body) {
-                if (!err && res.statusCode === 200) {
-                    const responseBody = JSON.parse(body);
-
-                    resolve(responseBody);
-                } else {
-                    reject(err);
-                }
-            });
-        });
+	    return post(options);
     }
 
     /**
      * Refresh access token with Bungie.
+     *
      * @param refreshToken
      */
     getAccessTokenFromRefreshToken(refreshToken) {
-        const opts = {
-			body: util.format('client_id=%s&client_secret=%s&grant_type=refresh_token&refresh_token=%s',
-				clientId, clientSecret, refreshToken),
-			headers: {
-				'Content-Type': 'application/x-www-form-urlencoded',
-				'x-api-key': apiKey
-			},
-			url: util.format('%s/app/oauth/token/', servicePlatform)
-		};
+        const data = {
+	        client_id: clientId,
+            client_secret: clientSecret,
+            grant_type: 'refresh_token',
+            refresh_token: refreshToken,
+        };
+        const options = {
+	        data: qs.stringify(data),
+	        headers: {
+		        'Content-Type': 'application/x-www-form-urlencoded',
+		        'x-api-key': apiKey,
+	        },
+	        url: `${servicePlatform}/app/oauth/token/`,
+        };
 
-        return new Promise((resolve, reject) => {
-            request.post(opts, function (err, res, body) {
-                if (!err && res.statusCode === 200) {
-                    const responseBody = JSON.parse(body);
-
-                    resolve(responseBody);
-                } else {
-                    reject(err);
-                }
-            });
-        });
+        return post(options);
     }
 
     /**
      * Get Bungie App authorization URL.
+     *
      * @param state
      * @returns {Promise}
      */
     getAuthorizationUrl(state) {
-        return Promise.resolve(util.format('%s?client_id=%s&response_type=code&state=%s', authorizationUrl, clientId, state));
+        return Promise.resolve(`${authorizationUrl}?client_id=${clientId}&response_type=code&state=${state}`);
     }
 
     /**
      * Get Activity of a character.
+     *
      * @param characterId
      * @param membershipId
      * @param accessToken
      * @returns {Promise}
      */
-    getActivity(characterId, membershipId, accessToken) {
-        const opts = {
-            headers: {
-                authorization: 'Bearer ' + accessToken,
-                'x-api-key': apiKey
-            },
-            url: util.format('%s/Destiny/2/Account/%s/Character/%s/Activities/',
-                servicePlatform, membershipId, characterId)
+    async getActivity(accessToken, characterId, membershipId, membershipType) {
+        const options = {
+	        headers: {
+		        authorization: `Bearer ${accessToken}`,
+		        'x-api-key': apiKey,
+	        },
+	        url: `${servicePlatform}/Destiny/${membershipType}/Account/${membershipId}/Character/${characterId}/Activities/`,
         };
+        const responseBody = await get(options);
 
-        return new Promise((resolve, reject) => {
-            request.get(opts, function (err, res, body) {
-                if (!err && res.statusCode === 200) {
-                    const responseBody = JSON.parse(body);
+        if (responseBody.ErrorCode === 1) {
+            const character = JSON.parse(body).Response;
 
-                    if (responseBody.ErrorCode === 1) {
-                        const character = JSON.parse(body).Response;
+            return character;
+        }
 
-                        resolve(character);
-                    } else {
-                        reject(new DestinyError(responseBody.ErrorCode || -1,
-                            responseBody.Message || '', responseBody.ErrorStatus || ''));
-                    }
-                } else {
-                    reject(err);
-                }
-            });
-        });
+        throw new DestinyError(responseBody.ErrorCode || -1,
+            responseBody.Message || '', responseBody.ErrorStatus || '');
     }
 
     /**
      * Get details of a character.
+     *
      * @param membershipId
      * @param characterId
      * @param accessToken
      * @returns {Promise}
      */
-    getCharacter(membershipId, characterId, accessToken) {
-        const opts = {
-            headers: {
-                authorization: 'Bearer ' + accessToken,
-                'x-api-key': apiKey
-            },
-            url: util.format('%s/Destiny/2/Account/%s/Character/%s/Complete/',
-                servicePlatform, membershipId, characterId)
+    async getCharacter(accessToken, characterId, membershipId, membershipType) {
+        const options = {
+	        headers: {
+		        authorization: `Bearer ${accessToken}`,
+		        'x-api-key': apiKey,
+	        },
+	        url: `${servicePlatform}/Destiny/${membershipType}/Account/${membershipId}/Character/${characterId}/Complete/`,
         };
+	    const responseBody = await get(options);
 
-        return new Promise((resolve, reject) => {
-            request.get(opts, function (err, res, body) {
-                if (!err && res.statusCode === 200) {
-                    const responseBody = JSON.parse(body);
+        if (responseBody.ErrorCode === 1) {
+            const { Response: { data: { character } } } = responseBody;
 
-                    if (responseBody.ErrorCode === 1) {
-                        const character = responseBody.Response.data;
+            return character;
+        }
 
-                        resolve(character);
-                    } else {
-                        reject(new DestinyError(responseBody.ErrorCode || -1,
-                            responseBody.Message || '', responseBody.ErrorStatus || ''));
-                    }
-                } else if (!err && res.statusCode === 99) {
-                    reject(new DestinyError(res.statusCode, res.Message));
-                } else {
-                    reject(err);
-                }
-            });
-        });
+        throw new DestinyError(responseBody.ErrorCode || -1,
+            responseBody.Message || '', responseBody.ErrorStatus || '');
     }
 
     /**
      * Get a list of the member's characters.
+     *
      * @param membershipId
      * @param membershipType
      * @returns {Promise}
      */
-    getCharacters(membershipId, membershipType) {
-        const opts = {
-            headers: {
-                'x-api-key': apiKey
-            },
-            url: util.format('%s/Destiny/%s/Account/%s/Summary/', servicePlatform,
-                membershipType, membershipId)
-        };
+    async getCharacters(membershipId, membershipType) {
+	    const options = {
+		    headers: {
+			    'x-api-key': apiKey,
+		    },
+		    url: `${servicePlatform}/Destiny/${membershipType}/Account/${membershipId}/Summary/`,
+	    };
+        const responseBody = await get(options);
 
-        return new Promise((resolve, reject) => {
-            request.get(opts, function (err, res, body) {
-                if (!err && res.statusCode === 200) {
-                    const responseBody = JSON.parse(body);
+        if (responseBody.ErrorCode === 1) {
+            const { Response: { data: { characters } } } = responseBody;
 
-                    if (responseBody.ErrorCode === 1) {
-                        resolve(responseBody.Response.data.characters);
-                    } else {
-                        reject(new DestinyError(responseBody.ErrorCode || -1,
-                            responseBody.Message || '', responseBody.ErrorStatus || ''));
-                    }
-                } else {
-                    reject(err);
-                }
-            });
-        });
+            return characters;
+        }
+
+        throw new DestinyError(responseBody.ErrorCode || -1,
+            responseBody.Message || '', responseBody.ErrorStatus || '');
     }
 
     /**
      * Get the Bungie member number from the user's display name.
+     *
      * @param displayName
      * @param membershipType
      * @returns {Promise}
      */
-    getMembershipIdFromDisplayName(displayName, membershipType) {
-        const opts = {
-            headers: {
-                'x-api-key': apiKey
-            },
-            url: util.format('%s/Destiny/%s/Stats/GetMembershipIdByDisplayName/%s/',
-                servicePlatform, membershipType, encodeURIComponent(displayName))
+    async getMembershipIdFromDisplayName(displayName, membershipType) {
+        const encodedDisplayName = encodeURIComponent(displayName);
+        const options = {
+	        headers: {
+		        'x-api-key': apiKey,
+	        },
+	        url: `${servicePlatform}/Destiny/${membershipType}/Stats/GetMembershipIdByDisplayName/${encodedDisplayName}/`,
         };
+	    const { Response: membershipId } = await get(options);
 
-        return new Promise((resolve, reject) => {
-            request.get(opts, function (err, res, body) {
-                if (!err && res.statusCode === 200) {
-                    resolve(JSON.parse(body).Response);
-                } else {
-                    reject(err);
-                }
-            });
-        });
+	    return membershipId;
     }
 
     /**
      * Get the current user based on the Bungie access token.
+     *
      * @param accessToken
      * @returns {Promise}
      */
-    getCurrentUser(accessToken) {
-        const opts = {
-            headers: {
-                authorization: 'Bearer ' + accessToken,
-                'x-api-key': apiKey
-            },
-            url: util.format('%s/User/GetBungieNetUser/', servicePlatform)
+    async getCurrentUser(accessToken) {
+        const options = {
+	        headers: {
+		        authorization: `Bearer ${accessToken}`,
+		        'x-api-key': apiKey,
+	        },
+	        url: `${servicePlatform}/User/GetBungieNetUser/`,
         };
+	    const responseBody = await get(options);
+	    const { Response: user, ErrorCode: errorCode } = responseBody;
 
-        return new Promise((resolve, reject) => {
-            request.get(opts, (err, res, body) => {
-                if (!err && res.statusCode === 200) {
-                    const responseBody = JSON.parse(body);
+        if (user === undefined || errorCode !== 1) {
+            const { Message: message, Status: status } = responseBody;
 
-                    if (responseBody.Reponse !== undefined || responseBody.ErrorCode !== 1) {
-                        reject(new DestinyError(responseBody.ErrorCode, responseBody.Message, responseBody.Status));
-                    } else {
-                        const user = responseBody.Response;
-                        const gamerTag = user.psnId || user.gamerTag;
+            throw new DestinyError(errorCode, message, status);
+        } else {
+            const {
+                email, gamerTag, psnId, user: { profilePicturePath } = {},
+            } = user;
+            const displayName = psnId || gamerTag;
 
-                        if (!gamerTag) {
-                            // ToDo: User may be legitimate w/o gamer tag
-                            reject(new Error('Gamer tag not found.'));
-                        }
+            if (!displayName) {
+                throw new Error('Gamer tag not found.');
+            }
 
-                        const membershipType = user.psnId ? membershipTypes.TigerPsn : membershipTypes.TigerXbox;
+            const membershipType = psnId ? membershipTypes.TigerPsn : membershipTypes.TigerXbox;
+            const membershipId = await this.getMembershipIdFromDisplayName(displayName, membershipType);
 
-                        return this.getMembershipIdFromDisplayName(gamerTag, membershipType)
-                            .then(membershipId => {
-                                if (user) {
-                                    resolve({
-                                        displayName: user.psnId,
-                                        email: user.email,
-                                        membershipId: membershipId,
-                                        membershipType: membershipType,
-                                        profilePicturePath: user.user.profilePicturePath
-                                    });
-                                }
+            if (!membershipId) {
+	            throw new Error(`membershipId is undefined for the displayName ${displayName} and membershipType ${membershipType}.`);
+            }
 
-                                reject(
-                                    new Error('membershipId undefined for the following gamerTag and membershipType: ' +
-                                        gamerTag + ',' + membershipType));
-                            });
-                    }
-                } else {
-                    reject(err);
-                }
-            });
-        });
+            return {
+                displayName,
+                email,
+                membershipId,
+                membershipType,
+                profilePicturePath,
+            };
+        }
     }
 
     /**
      * Get available field test weapons from the Gun Smith.
+     *
      * @param characterId
+     * @param membershipType
      * @param accessToken
      * @returns {Promise}
      */
-    getFieldTestWeapons(characterId, accessToken) {
-        return this.cacheService.getVendor(gunSmithHash)
-            .then(vendor => {
-                const now = (new Date()).toISOString();
-                const { nextRefreshDate } = vendor || {};
+    async getFieldTestWeapons(characterId, membershipType, accessToken) {
+        const vendor = await this.cacheService.getVendor(gunSmithHash);
+        const now = (new Date()).toISOString();
+        const { nextRefreshDate } = vendor || {};
 
-                if (vendor && nextRefreshDate > now) {
-                    return vendor;
-                } else {
-                    return new Promise((resolve, reject) => {
-                        const opts = {
-                            headers: {
-                                authorization: 'Bearer ' + accessToken,
-                                'x-api-key': apiKey
-                            },
-                            url: util.format('%s/Destiny/2/MyAccount/Character/%s/Vendor/%s/',
-                                servicePlatform, characterId, gunSmithHash)
-                        };
+        if (vendor && nextRefreshDate > now) {
+            return vendor;
+        }
 
-                        request.get(opts, (error, res, body) => {
-                            if (!error && res.statusCode === 200) {
-                                const responseBody = JSON.parse(body);
+        const options = {
+            headers: {
+                authorization: `Bearer ${accessToken}`,
+                'x-api-key': apiKey,
+            },
+            url: `${servicePlatform}/Destiny/${membershipType}/MyAccount/Character/${characterId}/Vendor/${gunSmithHash}/`,
+        };
+        const responseBody = await get(options);
 
-                                if (responseBody.ErrorCode === 1) {
-                                    const { Response: { data }} = responseBody;
+        if (responseBody.ErrorCode === 1) {
+            const { Response: { data } } = responseBody;
 
-                                    if (data) {
-                                        const { vendorHash, nextRefreshDate, saleItemCategories } = data;
-                                        const fieldTestWeapons = saleItemCategories
-                                            .find(saleItemCategory => saleItemCategory.categoryTitle === 'Field Test Weapons');
-                                        const itemHashes = fieldTestWeapons.saleItems.map((saleItem) => {
-                                            const { item: { itemHash }} = saleItem;
+            if (data) {
+                const { vendorHash, nextRefreshDate, saleItemCategories } = data;
+                const fieldTestWeapons = saleItemCategories
+                    .find(saleItemCategory => saleItemCategory.categoryTitle === 'Field Test Weapons');
+                const itemHashes = fieldTestWeapons.saleItems.map(saleItem => {
+                    const { item: { itemHash } } = saleItem;
 
-                                            return itemHash;
-                                        });
+                    return itemHash;
+                });
+                const vendor = {
+                    vendorHash,
+                    nextRefreshDate,
+                    itemHashes,
+                };
 
-                                        const vendor = {
-                                            vendorHash,
-                                            nextRefreshDate,
-                                            itemHashes
-                                        };
+                this.cacheService.setVendor(vendor);
 
-                                        this.cacheService.setVendor(vendor);
-                                        resolve(vendor);
-                                    } else {
-                                        resolve([]);
-                                    }
-                                } else {
-                                    reject(new DestinyError(responseBody.ErrorCode,
-                                        responseBody.Message, responseBody.Status));
-                                }
-                            } else {
-                                reject(error);
-                            }
-                        });
-                    });
-                }
-            });
+                return vendor;
+            }
+
+            return [];
+        }
+
+        throw new DestinyError(responseBody.ErrorCode,
+            responseBody.Message, responseBody.Status);
     }
 
     /**
      * Get available Foundry Orders from the Gun Smith.
+     *
      * @param characterId
      * @param accessToken
      * @returns {Promise}
      */
-    getFoundryOrders(characterId, accessToken) {
-        return this.cacheService.getVendor(gunSmithHash)
-            .then(vendor => {
-                const now = (new Date()).toISOString();
-                const { nextRefreshDate } = vendor || {};
+    async getFoundryOrders(characterId, accessToken, membershipType) {
+        const vendor = await this.cacheService.getVendor(gunSmithHash);
+        const now = (new Date()).toISOString();
+        const { nextRefreshDate } = vendor || {};
 
-                if (vendor && nextRefreshDate > now) {
-                    return vendor;
-                } else {
-                    const opts = {
-                        headers: {
-                            authorization: 'Bearer ' + accessToken,
-                            'x-api-key': apiKey
-                        },
-                        url: util.format('%s/Destiny/2/MyAccount/Character/%s/Vendor/%s/',
-                            servicePlatform, characterId, gunSmithHash)
-                    };
+        if (vendor && nextRefreshDate > now) {
+            return vendor;
+        }
 
-                    return new Promise((resolve, reject) => {
-                        request.get(opts, (error, res, body) => {
-                            if (!error && res.statusCode === 200) {
-                                const responseBody = JSON.parse(body);
+        const options = {
+	        headers: {
+		        authorization: `Bearer ${accessToken}`,
+		        'x-api-key': apiKey,
+	        },
+	        url: `${servicePlatform}/Destiny/${membershipType}/MyAccount/Character/${characterId}/Vendor/${gunSmithHash}/`,
+        };
+        const responseBody = await get(options);
 
-                                if (responseBody.ErrorCode === 1) {
-                                    const {Response: {data}} = responseBody;
+        if (responseBody.ErrorCode === 1) {
+            const { Response: { data } } = responseBody;
 
-                                    if (data) {
-                                        const { vendorHash, nextRefreshDate, saleItemCategories } = data;
-                                        const foundryOrdersCategory = saleItemCategories
-                                            .find(saleItemCategory => saleItemCategory.categoryTitle === 'Foundry Orders');
-                                        const foundryOrders = (typeof foundryOrdersCategory === 'object') ?
-                                            foundryOrdersCategory.saleItems : [];
-                                        const itemHashes = foundryOrders.map(saleItem => {
-                                            const { item: { itemHash }} = saleItem;
+            if (data) {
+                const { vendorHash, nextRefreshDate, saleItemCategories } = data;
+                const foundryOrdersCategory = saleItemCategories
+                    .find(saleItemCategory => saleItemCategory.categoryTitle === 'Foundry Orders');
+                const foundryOrders = (typeof foundryOrdersCategory === 'object')
+                    ? foundryOrdersCategory.saleItems : [];
+                const itemHashes = foundryOrders.map(saleItem => {
+                    const { item: { itemHash } } = saleItem;
 
-                                            return itemHash;
-                                        });
+                    return itemHash;
+                });
 
-                                        const vendor = {
-                                            vendorHash,
-                                            nextRefreshDate,
-                                            itemHashes
-                                        };
+                const vendor = {
+                    vendorHash,
+                    nextRefreshDate,
+                    itemHashes,
+                };
 
-                                        this.cacheService.setVendor(vendor);
-                                        resolve(vendor);
-                                    } else {
-                                        resolve([]);
-                                    }
-                                } else {
-                                    reject(new DestinyError(responseBody.ErrorCode,
-                                        responseBody.Message, responseBody.Status));
-                                }
-                            } else {
-                                reject(error);
-                            }
-                        });
-                    });
-                }
-            });
+                this.cacheService.setVendor(vendor);
+
+                return vendor;
+            }
+
+	        return [];
+        }
+
+	    throw new DestinyError(responseBody.ErrorCode,
+		    responseBody.Message, responseBody.Status);
     }
 
     /**
      * Get character's inventory.
+     *
      * @param characterId
      * @param membershipId
      * @param accessToken
      * @returns {Promise}
      */
-    getInventory(characterId, membershipId, accessToken) {
-        const opts = {
-            headers: {
-                authorization: 'Bearer ' + accessToken,
-                'x-api-key': apiKey
-            },
-            url: util.format('%s/Destiny/2/Account/%s/Character/%s/Inventory/',
-                servicePlatform, membershipId, characterId)
-        };
+    async getInventory(characterId, membershipId, membershipType, accessToken) {
+	    const options = {
+		    headers: {
+			    authorization: `Bearer ${accessToken}`,
+			    'x-api-key': apiKey,
+		    },
+		    url: `${servicePlatform}/Destiny/${membershipType}/Account/${membershipId}/Character/${characterId}/Inventory/`,
+	    };
+        const responseBody = await get(options);
 
-        return new Promise((resolve, reject) => {
-            request.get(opts, function (err, res, body) {
-                if (!err && res.statusCode === 200) {
-                    const responseBody = JSON.parse(body);
+        if (responseBody.ErrorCode === 1) {
+            const character = responseBody.Response.data;
 
-                    if (responseBody.ErrorCode !== 1) {
-                        reject(new DestinyError(responseBody.ErrorCode || -1,
-                            responseBody.Message || '', responseBody.ErrorStatus || ''));
-                    } else {
-                        const character = responseBody.Response.data;
+            return character;
+        }
 
-                        resolve(character);
-                    }
-                } else {
-                    reject(err);
-                }
-            });
-        });
+	    throw new DestinyError(responseBody.ErrorCode || -1,
+		    responseBody.Message || '', responseBody.ErrorStatus || '');
     }
 
     /**
      * Get available Iron Banner Event rewards from Lord Saladin.
      * @param characterId
      * @param accessToken
-     * @returns {Promise}
+     * @returns {Array}
      */
-    getIronBannerEventRewards(characterId, accessToken) {
-        const opts = {
-            headers: {
-                authorization: 'Bearer ' + accessToken,
-                'x-api-key': apiKey
-            },
-            url: util.format('%s/Destiny/2/MyAccount/Character/%s/Vendor/%s/',
-                servicePlatform, characterId, lordSaladinHash)
-        };
+    async getIronBannerEventRewards(characterId, membershipType, accessToken) {
+	    const options = {
+		    headers: {
+			    authorization: `Bearer ${accessToken}`,
+			    'x-api-key': apiKey,
+		    },
+		    url: `${servicePlatform}/Destiny/${membershipType}/MyAccount/Character/${characterId}/Vendor/${lordSaladinHash}/`,
+	    };
+        const responseBody = await get(options);
 
-        return new Promise((resolve, reject) => {
-            request.get(opts, function (err, res, body) {
-                if (!err && res.statusCode === 200) {
-                    const responseBody = JSON.parse(body);
+        if (responseBody.ErrorCode === 1627) {
+            return [];
+        }
+        if (responseBody.ErrorCode === 1) {
+            const data = responseBody.Response.data;
 
-                    if (responseBody.ErrorCode === 1627) {
-                        resolve([]);
-                    } else if (responseBody.ErrorCode !== 1) {
-                        reject(new DestinyError(responseBody.ErrorCode ||
-                            -1, responseBody.Message || '',
-                            responseBody.ErrorStatus || ''));
-                    } else {
-                        const data = responseBody.Response.data;
+            if (data) {
+                const saleItemCategories = data.saleItemCategories;
+                const eventRewards = _.find(saleItemCategories, saleItemCategory => saleItemCategory.categoryTitle === 'Event Rewards');
 
-                        if (data) {
-                            const saleItemCategories = data.saleItemCategories;
-                            const eventRewards = _.find(saleItemCategories, function (saleItemCategory) {
-                                return saleItemCategory.categoryTitle === 'Event Rewards';
-                            });
+                this.cacheService.set('getIronBannerEventRewards', eventRewards.saleItems);
 
-                            this.cacheService.set('getIronBannerEventRewards', eventRewards.saleItems);
-                            resolve(eventRewards.saleItems);
-                        } else {
-                            resolve([]);
-                        }
-                    }
-                }
-            });
-        });
+                return eventRewards.saleItems;
+            }
+
+	        return [];
+        }
+
+	    throw new DestinyError(responseBody.ErrorCode
+		    || -1, responseBody.Message || '',
+		    responseBody.ErrorStatus || '');
     }
 
     /**
      * Get item from hash.
+     *
      * @param itemHash
      * @param accessToken
      * @returns {Promise}
      */
-    getItem(itemHash, accessToken) {
-        const opts = {
-            headers: {
-                authorization: 'Bearer ' + accessToken,
-                'x-api-key': apiKey
-            },
-            url: util.format('%s/Destiny/Manifest/2/%s/', servicePlatform, itemHash)
+    async getItem(itemHash, accessToken) {
+        const options = {
+	        headers: {
+		        authorization: `Bearer ${accessToken}`,
+		        'x-api-key': apiKey,
+	        },
+	        url: `${servicePlatform}/Destiny/Manifest/2/${itemHash}/`,
         };
+	    const responseBody = await get(options);
 
-        return new Promise((resolve, reject) => {
-            request.get(opts, function (err, res, body) {
-                if (!err && res.statusCode === 200) {
-                    const responseBody = JSON.parse(body);
+        if (responseBody.ErrorCode === 1) {
+            return responseBody;
+        }
 
-                    if (responseBody.ErrorCode !== 1) {
-                        reject(new DestinyError(responseBody.ErrorCode || -1,
-                            responseBody.Message || '', responseBody.ErrorStatus || ''));
-                    } else {
-                        resolve(responseBody);
-                    }
-                } else {
-                    reject(err);
-                }
-            });
-        });
+	    throw new DestinyError(responseBody.ErrorCode || -1,
+		    responseBody.Message || '', responseBody.ErrorStatus || '');
     }
 
     /**
      * Get the lastest Destiny Manifest definition.
+     *
      * @param noCache
      * @returns {Promise}
      */
-    getManifest(noCache) {
-        return this.cacheService.getManifest()
-            .then(manifest => {
-                if (!noCache && manifest) {
-                    return manifest;
-                } else {
-                    const opts = {
-                        headers: {
-                            'x-api-key': apiKey
-                        },
-                        url: util.format('%s/Destiny/Manifest', servicePlatform)
-                    };
+    async getManifest(noCache) {
+        let manifest = await this.cacheService.getManifest();
 
-                    return new Promise((resolve, reject) => {
-                        request.get(opts, (err, res, body) => {
-                            if (!err && res.statusCode === 200) {
-                                const manifest = JSON.parse(body).Response;
+        if (!noCache && manifest) {
+            return manifest;
+        }
 
-                                this.cacheService.setManifest(manifest);
+        const options = {
+	        headers: {
+		        'x-api-key': apiKey,
+	        },
+	        url: `${servicePlatform}/Destiny/Manifest`,
+        };
+        const responseBody = await get(options);
 
-                                resolve(manifest);
-                            } else {
-                                reject(err);
-                            }
-                        });
-                    });
-                }
-            });
+        ({ Response: manifest } = responseBody);
+
+        this.cacheService.setManifest(manifest);
+
+        return manifest;
     }
 
     /**
      * Get character progression.
+     *
      * @param characterId
      * @param membershipId
      * @param accessToken
      * @returns {Promise}
      */
-    getProgression(characterId, membershipId, accessToken) {
-        const opts = {
-            headers: {
-                authorization: 'Bearer ' + accessToken,
-                'x-api-key': apiKey
-            },
-            url: util.format('%s/Destiny/2/Account/%s/Character/%s/Progression/',
-                servicePlatform, membershipId, characterId)
+    async getProgression(characterId, membershipId, membershipType, accessToken) {
+        const options = {
+	        headers: {
+		        authorization: `Bearer ${accessToken}`,
+		        'x-api-key': apiKey,
+	        },
+	        url: `${servicePlatform}/Destiny/${membershipType}/Account/${membershipId}/Character/${characterId}/Progression/`,
         };
+	    const responseBody = await get(options);
+        const { Response: character } = responseBody;
 
-        return new Promise((resolve, reject) => {
-            request.get(opts, function (err, res, body) {
-                if (!err && res.statusCode === 200) {
-                    const character = JSON.parse(body).Response;
-
-                    resolve(character);
-                } else {
-                    reject(err);
-                }
-            });
-        });
+        return character;
     }
 
     /**
@@ -628,35 +519,25 @@ class DestinyService {
      * @param accessToken
      * @returns {Promise}
      */
-    getVendorSummaries(characterId, accessToken) {
-        const opts = {
-            headers: {
-                authorization: 'Bearer ' + accessToken,
-                'x-api-key': apiKey
-            },
-            url: util.format('%s/Destiny/2/MyAccount/Character/%s/Vendors/Summaries/',
-                servicePlatform, characterId)
-        };
+    async getVendorSummaries(characterId, membershipType, accessToken) {
+	    const options = {
+		    headers: {
+			    authorization: `Bearer ${accessToken}`,
+			    'x-api-key': apiKey,
+		    },
+		    url: `${servicePlatform}/Destiny/${membershipType}/MyAccount/Character/${characterId}/Vendors/Summaries/`,
+	    };
+        const responseBody = await get(options);
 
-        return new Promise((resolve, reject) => {
-            request.get(opts, function (err, res, body) {
-                if (!err && res.statusCode === 200) {
-                    const responseBody = JSON.parse(body);
+        if (responseBody.ErrorCode === 1) {
+            const { Response: { data } } = responseBody;
 
-                    if (responseBody.ErrorCode !== 1) {
-                        reject(new DestinyError(responseBody.ErrorCode ||
-                            -1, responseBody.Message || '',
-                            responseBody.ErrorStatus || ''));
-                    } else {
-                        const data = responseBody.Response.data;
+            return data ? resolve(data.vendors) : [];
+        }
 
-                        return data ? resolve(data.vendors) : resolve([]);
-                    }
-                } else {
-                    reject(err);
-                }
-            });
-        });
+	    throw new DestinyError(responseBody.ErrorCode
+		    || -1, responseBody.Message || '',
+		    responseBody.ErrorStatus || '');
     }
 
     /**
@@ -666,105 +547,84 @@ class DestinyService {
      * @param accessToken
      * @returns {Promise}
      */
-    getWeapons(characterId, membershipId, accessToken) {
-        const opts = {
-            headers: {
-                authorization: 'Bearer ' + accessToken,
-                'x-api-key': apiKey
-            },
-            url: util.format('%s/Destiny/stats/uniqueweapons/2/%s/%s/',
-                servicePlatform, membershipId, characterId)
-        };
+    async getWeapons(characterId, membershipId, membershipType, accessToken) {
+	    const options = {
+		    headers: {
+			    authorization: `Bearer ${accessToken}`,
+			    'x-api-key': apiKey,
+		    },
+		    url: '${servicePlatform}/Destiny/stats/uniqueweapons/${membershipType}/${membershipId}/${characterId}/',
+	    };
+        const responseBody = await get(options);
+        const { Response: { data: { weapons } } } = responseBody;
 
-        return new Promise((resolve, reject) => {
-            request.get(opts, function (err, res, body) {
-                if (!err && res.statusCode === 200) {
-                    const {Response: {data: {weapons}}} = body;
+        return weapons.sort((a, b) => {
+            if (a.values.uniqueWeaponKillsPrecisionKills.basic.value
+                < b.values.uniqueWeaponKillsPrecisionKills.basic.value) {
+                return -1;
+            }
+            if (a.values.uniqueWeaponKillsPrecisionKills.basic.value
+                > b.values.uniqueWeaponKillsPrecisionKills.basic.value) {
+                return 1;
+            }
 
-                    resolve(weapons.sort(function (a, b) {
-                        if (a.values.uniqueWeaponKillsPrecisionKills.basic.value <
-                            b.values.uniqueWeaponKillsPrecisionKills.basic.value) {
-
-                            return -1;
-                        }
-                        if (a.values.uniqueWeaponKillsPrecisionKills.basic.value >
-                            b.values.uniqueWeaponKillsPrecisionKills.basic.value) {
-
-                            return 1;
-                        }
-
-                        return 0;
-                    }));
-                } else {
-                    reject(err);
-                }
-            });
+            return 0;
         });
     }
 
-	/**
+    /**
      * Get the exotic gear and weapons available for sale from Xur.
-	 * @returns {Promise}
-	 */
-	getXur() {
-        return this.cacheService.getVendor(xurHash)
-            .then(vendor => {
-                const now = (new Date()).toISOString();
-                const { nextRefreshDate } = vendor || {};
+     * @returns {Promise}
+     */
+    async getXur() {
+        const now = (new Date()).toISOString();
+        let vendor = await this.cacheService.getVendor(xurHash);
+        let { nextRefreshDate } = vendor || {};
 
-                if (vendor && nextRefreshDate > now) {
-                    return vendor;
-                } else {
-                    const opts = {
-                        headers: {
-                            'x-api-key': apiKey
-                        },
-                        url: util.format('%s/Destiny/Advisors/Xur/', servicePlatform)
-                    };
+        if (vendor && nextRefreshDate > now) {
+            return vendor;
+        }
 
-                    return new Promise((resolve, reject) => {
-                        request.get(opts, (err, res, body) => {
-                            if (!err && res.statusCode === 200) {
-                                const responseBody = JSON.parse(body);
+        const options = {
+            headers: {
+                'x-api-key': apiKey,
+            },
+            method: 'get',
+            url: `${servicePlatform}/Destiny/Advisors/Xur/`,
+        };
+        const responseBody = await get(options);
 
-                                if (responseBody.ErrorCode === 1627) {
-                                    resolve([]);
-                                } else if (responseBody.ErrorCode !== 1) {
-                                    reject(new DestinyError(responseBody.ErrorCode ||
-                                        -1, responseBody.Message || '',
-                                        responseBody.ErrorStatus || ''));
-                                } else {
-                                    const { Response: { data }} = responseBody;
+        if (responseBody.ErrorCode === 1627) {
+            return [];
+        }
+        if (responseBody.ErrorCode === 1) {
+            const { Response: { data } } = responseBody;
 
-                                    if (data) {
-                                        const { vendorHash, nextRefreshDate, saleItemCategories } = data;
-                                        const exotics = saleItemCategories.find((saleItemCategory) => {
-                                            return saleItemCategory.categoryTitle === 'Exotic Gear';
-                                        });
-                                        const itemHashes = exotics.saleItems.map((saleItem) => {
-                                            const { item: { itemHash }} = saleItem;
+            if (data) {
+                const { vendorHash, saleItemCategories } = data;
+                ({ nextRefreshDate } = data);
+                const exotics = saleItemCategories.find(saleItemCategory => saleItemCategory.categoryTitle === 'Exotic Gear');
+                const itemHashes = exotics.saleItems.map(saleItem => {
+                    const { item: { itemHash } } = saleItem;
 
-                                            return itemHash;
-                                        });
-                                        const vendor = {
-                                            vendorHash,
-                                            nextRefreshDate,
-                                            itemHashes
-                                        };
+                    return itemHash;
+                });
+                vendor = {
+                    vendorHash,
+                    nextRefreshDate,
+                    itemHashes,
+                };
 
-                                        this.cacheService.setVendor(vendor);
-                                        resolve(vendor);
-                                    } else {
-                                        resolve([]);
-                                    }
-                                }
-                            } else {
-                                reject(err);
-                            }
-                        });
-                    });
-                }
-            });
+                this.cacheService.setVendor(vendor);
+
+                return vendor;
+            }
+
+            return [];
+        }
+
+        throw new DestinyError(responseBody.ErrorCode || -1, responseBody.Message || '',
+            responseBody.ErrorStatus || '');
     }
 }
 

@@ -26,5 +26,5 @@ const xurHash = '2796397637';
 module.exports = {
     gunSmithHash,
     lordSaladinHash,
-    xurHash
+    xurHash,
 };

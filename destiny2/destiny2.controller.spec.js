@@ -1,13 +1,7 @@
 const Destiny2Controller = require('./destiny2.controller'),
-	chai = require('chai'),
 	chance = require('chance')(),
-	expect = require('chai').expect,
 	httpMocks = require('node-mocks-http'),
-	{ Response: manifest } = require('../mocks/manifest2Response.json'),
-	sinon = require('sinon'),
-	sinonChai = require('sinon-chai');
-
-chai.use(sinonChai);
+	{ Response: manifest } = require('../mocks/manifest2Response.json');
 
 const destiny2Service = {
 	getManifest: () => Promise.resolve(manifest),
@@ -16,16 +10,14 @@ const destiny2Service = {
 const displayName = chance.name();
 const membershipType = chance.integer({ min: 1, max: 2 });
 const userService = {
-	getUserByDisplayName: () => Promise.resolve()
+	getUserByDisplayName: jest.fn(() => Promise.resolve())
 };
 
-let destiny2ServiceStub;
 let destiny2Controller;
-let userServiceStub;
 
 beforeEach(() => {
 	const world = {
-		getClassByHash: () => Promise.resolve({
+		getClassByHash: jest.fn(() => Promise.resolve({
 			classType: 1,
 			displayProperties: {
 				name: 'Hunter',
@@ -38,7 +30,7 @@ beforeEach(() => {
 			hash: 671679327,
 			index: 1,
 			redacted: false
-		})
+		}))
 	};
 
 	destiny2Controller = new Destiny2Controller({ destinyService: destiny2Service, userService, worldRepository: world });
@@ -64,7 +56,7 @@ describe('Destiny2Controller', () => {
 						}
 					});
 
-					destiny2ServiceStub = sinon.stub(destiny2Service, 'getProfile').resolves([
+					destiny2Service.getProfile = jest.fn().mockResolvedValue([
 						{
 							characterId: '1111111111111111111',
 							classHash: 671679327,
@@ -77,8 +69,7 @@ describe('Destiny2Controller', () => {
 							]
 						}
 					]);
-
-					userServiceStub = sinon.stub(userService, 'getUserByDisplayName').resolves({
+					userService.getUserByDisplayName = jest.fn().mockResolvedValue({
 						membershipId: '1'
 					});
 
@@ -86,8 +77,8 @@ describe('Destiny2Controller', () => {
 						const data = JSON.parse(res._getData());
 
 						try {
-							expect(res.statusCode).to.equal(200);
-							expect(data[0].className).to.equal('Hunter');
+							expect(res.statusCode).toEqual(200);
+							expect(data[0].className).toEqual('Hunter');
 							done();
 						} catch (err) {
 							done(err);
@@ -99,9 +90,4 @@ describe('Destiny2Controller', () => {
 			});
 		});
 	});
-
-	afterEach(() => {
-		destiny2ServiceStub.restore();
-		userServiceStub.restore();
-	})
 });

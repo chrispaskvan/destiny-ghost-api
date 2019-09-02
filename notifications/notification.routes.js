@@ -3,7 +3,12 @@ const NotificationController = require('./notification.controller'),
 
 /**
  * Notification Routes
+ *
+ * @param authenticationService
+ * @param destinyService
+ * @param notificationService
  * @param userService
+ * @param worldRepository
  * @returns {*}
  */
 const routes = ({ authenticationService, destinyService, notificationService, userService, worldRepository }) => {
@@ -19,10 +24,12 @@ const routes = ({ authenticationService, destinyService, notificationService, us
 	 * Routes
 	 */
 	notificationRouter.route('/:subscription')
-		.post((req, res) => notificationController.create(req, res));
+		.post((req, res, next) => notificationController.create(req, res)
+			.catch(next));
 
 	notificationRouter.route('/:subscription/:phoneNumber')
-		.post((req, res) => notificationController.create(req, res));
+		.post((req, res, next) => notificationController.create(req, res)
+			.catch(next));
 
 	return notificationRouter;
 };

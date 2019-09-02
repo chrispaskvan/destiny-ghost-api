@@ -1,8 +1,7 @@
 /**
  * Document Tests
  */
-const documentService = require('./documents'),
-    expect = require('chai').expect;
+const documentService = require('./documents');
 
 describe('Documents', () => {
 	const collectionId = 'Users';
@@ -14,7 +13,7 @@ describe('Documents', () => {
 
 				return documentService.deleteDocumentById(collectionId, documentId)
 					.then(res => {
-						expect(res).to.be.undefined;
+						expect(res).not.toBeUndefined;
 					});
 			});
 		});
@@ -25,7 +24,7 @@ describe('Documents', () => {
 
 				return documentService.deleteDocumentById(collectionId, documentId)
 					.catch(err => {
-						expect(err).to.not.be.undefined;
+						expect(err).not.toBeUndefined;
 					});
 			});
 		});
@@ -41,10 +40,11 @@ describe('Documents', () => {
                 query: 'SELECT * FROM u'
             };
 
+	        jest.setTimeout(20000);
             return documentService.getDocuments(collectionId, query, options)
                 .then(documents => {
-                    expect(documents).to.not.be.undefined;
-                    expect(documents.length).to.be.above(0);
+                    expect(documents).not.toBeUndefined;
+                    expect(documents.length).toBeGreaterThan(0);
                 });
         });
     });

@@ -1,170 +1,164 @@
-const HealthController = require('../health/health.controller'),
-	chai = require('chai'),
-	expect = require('chai').expect,
-	httpMocks = require('node-mocks-http'),
-	{ Response: manifest } = require('../mocks/manifestResponse.json'),
-	{ Response: manifest2 } = require('../mocks/manifest2Response.json'),
-	request = require('request'),
-	sinon = require('sinon'),
-	sinonChai = require('sinon-chai');
+const { EventEmitter } = require('events');
+const httpMocks = require('node-mocks-http');
+const request = require('../helpers/request');
+const HealthController = require('../health/health.controller');
+const { Response: manifest } = require('../mocks/manifestResponse.json');
+const { Response: manifest2 } = require('../mocks/manifest2Response.json');
 
-chai.use(sinonChai);
+jest.mock('../helpers/request');
 
 const destinyService = {
-	getManifest: () => {}
+    getManifest: jest.fn(),
 };
 const destiny2Service = {
-	getManifest: () => {}
+    getManifest: jest.fn(),
 };
 const documents = {
-	getDocuments: () => {}
+    getDocuments: jest.fn(),
 };
 const store = {
-	del: () => {},
-	get: () => {},
-	set: () => {}
+    del: jest.fn(),
+    get: jest.fn(),
+    set: jest.fn(),
 };
 
-let destinyServiceStub;
-let destiny2ServiceStub;
-let documentsStub;
 let healthController;
-let storeDelStub;
-let storeGetStub;
-let storeSetStub;
 
 describe('HealthController', () => {
-	let res;
+    let res;
 
-	beforeEach(() => {
-		res = httpMocks.createResponse({
-			eventEmitter: require('events').EventEmitter
-		});
-		this.request = sinon.stub(request, 'get');
-	});
+    beforeEach(() => {
+        res = httpMocks.createResponse({
+            eventEmitter: EventEmitter,
+        });
+    });
 
-	describe('getHealth', () => {
-		describe('when all services are healthy', () => {
-			const world = {
-				getItemByName: () => Promise.resolve([{
-					itemDescription: 'Red Hand IX'
-				}])
-			};
-			const world2 = {
-				getItemByName: () => Promise.resolve([{
-					displayProperties: {
-						description: 'The Number'
-					}
-				}])
-			};
+    describe('getHealth', () => {
+        describe('when all services are healthy', () => {
+            const world = {
+                getItemByName: () => Promise.resolve([{
+                    itemDescription: 'Red Hand IX',
+                }]),
+            };
+            const world2 = {
+                getItemByName: () => Promise.resolve([{
+                    displayProperties: {
+                        description: 'The Number',
+                    },
+                }]),
+            };
 
-			beforeEach(() => {
-				healthController = new HealthController({ destinyService, destiny2Service, documents, store, worldRepository: world, world2Repository: world2 });
-			});
+            beforeEach(() => {
+                request.get.mockImplementation(() => Promise.resolve({
+                    status: {
+                        description: 'All Systems Go',
+                    },
+                }));
 
-			it('should return a positive response', (done) => {
-				const req = httpMocks.createRequest();
+                healthController = new HealthController({
+                    destinyService,
+                    destiny2Service,
+                    documents,
+                    store,
+                    worldRepository: world,
+                    world2Repository: world2,
+                });
+            });
 
-				destinyServiceStub = sinon.stub(destinyService, 'getManifest').resolves(manifest);
-				destiny2ServiceStub = sinon.stub(destiny2Service, 'getManifest').resolves(manifest2);
-				documentsStub = sinon.stub(documents, 'getDocuments').resolves([2]);
-				storeDelStub = sinon.stub(store, 'del').yields(undefined, 1);
-				storeGetStub = sinon.stub(store, 'get').yields(undefined, 'Thorn');
-				storeSetStub = sinon.stub(store, 'set').yields(undefined, 'OK');
+            it('should return a positive response', done => {
+                const req = httpMocks.createRequest();
 
-				this.request.callsArgWith(1, undefined, { statusCode: 200 }, JSON.stringify({
-					status: {
-						description: 'All Systems Go'
-					}
-				}));
+                destinyService.getManifest = jest.fn().mockResolvedValue(manifest);
+                destiny2Service.getManifest = jest.fn().mockResolvedValue(manifest2);
+                documents.getDocuments = jest.fn().mockResolvedValue([2]);
+                store.del = jest.fn().mockImplementation((key, callback) => callback(undefined, 1));
+                store.get = jest.fn().mockImplementation((key, callback) => callback(undefined, 'Thorn'));
+                store.set = jest.fn().mockImplementation((key, value, callback) => callback(undefined, 'OK'));
 
-				res.on('end', () => {
-					expect(res.statusCode).to.equal(200);
+                res.on('end', () => {
+                    expect(res.statusCode).toEqual(200);
 
-					const body = JSON.parse(res._getData());
+                    const body = JSON.parse(res._getData()); // eslint-disable-line max-len, no-underscore-dangle
 
-					expect(body).to.deep.equal({
-						documents: 2,
-						store: true,
-						twilio: 'All Systems Go',
-						destiny: {
-							manifest: '56578.17.04.12.1251-6',
-							world: 'Red Hand IX'
-						},
-						destiny2: {
-							manifest: '61966.18.01.12.0839-8',
-							world: 'The Number'
-						}
-					});
+                    expect(body).toEqual({
+                        documents: 2,
+                        twilio: 'All Systems Go',
+                        destiny: {
+                            manifest: '56578.17.04.12.1251-6',
+                            world: 'Red Hand IX',
+                        },
+                        destiny2: {
+                            manifest: '61966.18.01.12.0839-8',
+                            world: 'The Number',
+                        },
+                    });
 
-					done();
-				});
+                    done();
+                });
 
-				healthController.getHealth(req, res);
-			});
-		});
+                healthController.getHealth(req, res);
+            });
+        });
 
-		describe('when all services are unhealthy', () => {
-			const world = {
-				close: () => Promise.resolve(),
-				getItemByName: () => Promise.reject(),
-				open: () => Promise.resolve()
-			};
-			const world2 = {
-				close: () => Promise.resolve(),
-				getItemByName: () => Promise.reject(),
-				open: () => Promise.resolve()
-			};
+        describe('when all services are unhealthy', () => {
+            const world = {
+                close: () => Promise.resolve(),
+                getItemByName: () => Promise.reject(new Error()),
+                open: () => Promise.resolve(),
+            };
+            const world2 = {
+                close: () => Promise.resolve(),
+                getItemByName: () => Promise.reject(new Error()),
+                open: () => Promise.resolve(),
+            };
 
-			beforeEach(() => {
-				healthController = new HealthController({ destinyService, destiny2Service, documents, store, worldRepository: world, world2Repository: world2 });
-			});
+            beforeEach(() => {
+                request.get.mockImplementation(() => Promise.rejects({
+                    statusCode: 400,
+                }));
 
-			it('should return a negative response', (done) => {
-				const req = httpMocks.createRequest();
+                healthController = new HealthController({
+                    destinyService,
+                    destiny2Service,
+                    documents,
+                    store,
+                    worldRepository: world,
+                    world2Repository: world2,
+                });
+            });
 
-				destinyServiceStub = sinon.stub(destinyService, 'getManifest').rejects();
-				destinyServiceStub = sinon.stub(destiny2Service, 'getManifest').rejects();
-				documentsStub = sinon.stub(documents, 'getDocuments').rejects();
-				storeDelStub = sinon.stub(store, 'del').yields(undefined, 0);
-				storeGetStub = sinon.stub(store, 'get').yields(undefined, 'Thorn');
-				storeSetStub = sinon.stub(store, 'set').yields(undefined, 'OK');
-				this.request.callsArgWith(1, undefined, { statusCode: 400 });
+            it('should return a negative response', done => {
+                const req = httpMocks.createRequest();
 
-				res.on('end', () => {
-					expect(res.statusCode).to.equal(503);
+                destinyService.getManifest = jest.fn().mockRejectedValue(new Error());
+                destiny2Service.getManifest = jest.fn().mockRejectedValue(new Error());
+                documents.getDocuments = jest.fn().mockRejectedValue(new Error());
+                store.del = jest.fn().mockImplementation((key, callback) => callback(undefined, 0));
+                store.get = jest.fn().mockImplementation((key, callback) => callback(undefined, 'Thorn'));
+                store.set = jest.fn().mockImplementation((key, value, callback) => callback(undefined, 'OK'));
 
-					const body = JSON.parse(res._getData());
-					expect(body).to.deep.equal({
-						documents: -1,
-						store: false,
-						twilio: 'N/A',
-						destiny: {
-							manifest: 'N/A',
-							world: 'N/A'
-						},
-						destiny2: {
-							manifest: 'N/A',
-							world: 'N/A'
-						}
-					});
+                res.on('end', () => {
+                    expect(res.statusCode).toEqual(503);
 
-					done();
-				});
+                    const body = JSON.parse(res._getData()); // eslint-disable-line max-len, no-underscore-dangle
+                    expect(body).toEqual({
+                        documents: -1,
+                        twilio: 'N/A',
+                        destiny: {
+                            manifest: 'N/A',
+                            world: 'N/A',
+                        },
+                        destiny2: {
+                            manifest: 'N/A',
+                            world: 'N/A',
+                        },
+                    });
 
-				healthController.getHealth(req, res);
-			});
-		});
-	});
+                    done();
+                });
 
-	afterEach(() => {
-		destinyServiceStub.restore();
-		destiny2ServiceStub.restore();
-		documentsStub.restore();
-		storeDelStub.restore();
-		storeGetStub.restore();
-		storeSetStub.restore();
-
-		this.request.restore();
-	})
+                healthController.getHealth(req, res);
+            });
+        });
+    });
 });

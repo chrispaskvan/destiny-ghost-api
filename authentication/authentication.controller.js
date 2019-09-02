@@ -1,13 +1,20 @@
+const Joi = require('@hapi/joi');
+const validate = require('../helpers/validate');
+
 /**
  * User Authentication Controller Class
  */
 class AuthenticationController {
     /**
      * @constructor
-     * @param authenticationService
+     * @param options
      */
-    constructor({ authenticationService }) {
-        this.authentication = authenticationService;
+    constructor(options) {
+        validate(options, {
+            authenticationService: Joi.object().required(),
+        });
+
+        this.authentication = options.authenticationService;
     }
 
     /**
@@ -16,8 +23,12 @@ class AuthenticationController {
      * @returns {Promise.<*>}
      */
     async authenticate(req) {
-        const { session: { displayName, membershipType }, body: { From: phoneNumber }} = req;
-        const user = await this.authentication.authenticate({ displayName, membershipType, phoneNumber });
+        const { session: { displayName, membershipType }, body: { From: phoneNumber } } = req;
+        const user = await this.authentication.authenticate({
+            displayName,
+            membershipType,
+            phoneNumber,
+        });
 
         if (user) {
             if (!displayName) {
