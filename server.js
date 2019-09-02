@@ -136,7 +136,7 @@ routes.validateManifest();
 // jscs:ignore requireCapitalizedComments
 // noinspection JSLint
 app.get('/', (req, res) => {
-    if (!req.secure) {
+    if (process.env.NODE_ENV === 'development' && !req.secure) {
         res.redirect(301, `https://api2.destiny-ghost.com${req.url}`);
 
         return;
