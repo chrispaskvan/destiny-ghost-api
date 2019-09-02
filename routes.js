@@ -15,10 +15,10 @@ const AuthenticationController = require('./authentication/authentication.contro
     World2 = require('./helpers/world2'),
     documents = require('./helpers/documents'),
     twilio = require('twilio'),
-    { accountSid, authToken } = require('./settings/twilio.' + process.env.NODE_ENV + '.json');
+    { accountSid, authToken } = require(`./settings/twilio.${process.env.NODE_ENV}.json`);
 
 class Routes {
-    constructor(store) {
+    constructor() {
         const routes = require('express').Router();
 
         /**
@@ -26,35 +26,35 @@ class Routes {
          */
         const destinyCache = new DestinyCache();
         const destinyService = new DestinyService({
-            cacheService: destinyCache
+            cacheService: destinyCache,
         });
 
-        const client = twilio(accountSid, authToken);
+        const messageClient = twilio(accountSid, authToken);
         const userCache = new UserCache();
         const userService = new UserService({
             cacheService: userCache,
-            client,
-            documentService: documents
+            client: messageClient,
+            documentService: documents,
         });
 
         const authenticationService = new AuthenticationService({
             cacheService: userCache,
             destinyService,
-            userService
+            userService,
         });
         const authenticationController = new AuthenticationController({ authenticationService });
 
         const world = new World({
-            directory: process.env.DESTINY_DATABASE_DIR
+            directory: process.env.DESTINY_DATABASE_DIR,
         });
         const world2 = new World2({
-            directory: process.env.DESTINY2_DATABASE_DIR
+            directory: process.env.DESTINY2_DATABASE_DIR,
         });
         const destiny2Cache = new Destiny2Cache();
         const destiny2Service = new Destiny2Service({ cacheService: destiny2Cache });
         const destinyTrackerService = new DestinyTrackerService();
         const notificationService = new NotificationService({
-            client
+            client: messageClient,
         });
 
         /**
@@ -64,7 +64,7 @@ class Routes {
             authenticationController,
             destinyService,
             userService,
-            worldRepository: world
+            worldRepository: world,
         });
         routes.use('/destiny', destinyRouter);
 
@@ -72,7 +72,7 @@ class Routes {
             authenticationController,
             destiny2Service,
             userService,
-            worldRepository: world2
+            worldRepository: world2,
         });
         routes.use('/destiny2', destiny2Router);
 
@@ -80,9 +80,8 @@ class Routes {
             destinyService,
             destiny2Service,
             documents,
-            store,
             worldRepository: world,
-            world2Repository: world2
+            world2Repository: world2,
         });
         routes.use('/health', healthRouter);
 
@@ -91,7 +90,7 @@ class Routes {
             destinyService: destiny2Service,
             notificationService,
             userService,
-            worldRepository: world2
+            worldRepository: world2,
         });
         routes.use('/notifications', notificationRouter);
 
@@ -101,7 +100,7 @@ class Routes {
             destinyService: destiny2Service,
             destinyTrackerService,
             userService,
-            worldRepository: world2
+            worldRepository: world2,
         });
         routes.use('/twilio', twilioRouter);
 
@@ -110,7 +109,7 @@ class Routes {
             destinyService,
             notificationService,
             userService,
-            worldRepository: world2
+            worldRepository: world2,
         });
         routes.use('/users', userRouter);
 

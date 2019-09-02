@@ -26,21 +26,8 @@ class HealthController {
         this.destinyService = options.destinyService;
         this.destiny2Service = options.destiny2Service;
         this.documents = options.documents;
-        this.store = options.store;
         this.world = options.worldRepository;
         this.world2 = options.world2Repository;
-    }
-
-    _deleteKey(key) {
-        return new Promise((resolve, reject) => {
-            this.store.del(key, (err, res) => {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve(res === 1);
-                }
-            });
-        });
     }
 
     async _getDestinyManifestVersion() {
@@ -64,33 +51,6 @@ class HealthController {
         return documents[0];
     }
 
-    _setKey(key, value) {
-        return new Promise((resolve, reject) => {
-            this.store.set(key, value, (err, res) => {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve(res === 'OK');
-                }
-            });
-        });
-    }
-
-    async _isStoreHealthy() {
-        const key = 'Dredgen Yorn';
-        const value = 'Thorn';
-
-        const success = await this._setKey(key, value); // eslint-disable-line no-underscore-dangle
-
-        if (success) {
-            if (await this._validateKey(key, value)) { // eslint-disable-line no-underscore-dangle
-                return this._deleteKey(key); // eslint-disable-line no-underscore-dangle
-            }
-        }
-
-        return false;
-    }
-
     static async _twilio() {
         const options = {
             url: 'https://gpkpyklzq55q.statuspage.io/api/v2/status.json',
@@ -102,18 +62,6 @@ class HealthController {
 
     static _unhealthy() {
         failures += 1;
-    }
-
-    _validateKey(key, value) {
-        return new Promise((resolve, reject) => {
-            this.store.get(key, (err, res) => {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve(res === value);
-                }
-            });
-        });
     }
 
     async _getWorldItem() {
@@ -138,8 +86,6 @@ class HealthController {
             .catch(err => HealthController._unhealthy(err)) || notAvailable;
         const manifest2Version = await this._getDestiny2ManifestVersion()
             .catch(err => HealthController._unhealthy(err)) || notAvailable;
-        const store = await this._isStoreHealthy()
-            .catch(err => HealthController._unhealthy(err)) || false;
         const twilio = await HealthController._twilio()
             .catch(err => HealthController._unhealthy(err)) || notAvailable;
         const world = await this._getWorldItem()
@@ -149,7 +95,6 @@ class HealthController {
 
         res.status(failures ? 503 : 200).json({
             documents,
-            store,
             twilio,
             destiny: {
                 manifest: manifestVersion,

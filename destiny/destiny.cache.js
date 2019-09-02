@@ -17,10 +17,6 @@ class DestinyCache {
      */
     constructor() {
         this.cache = new NodeCache({ stdTTL: 3600, checkperiod: 0, useClones: true });
-        this.client = redis.createClient(port, host, {
-            auth_pass: key,
-            ttl: 3300,
-        });
     }
 
     /**
@@ -54,7 +50,7 @@ class DestinyCache {
      */
     getVendor(vendorHash) {
         return new Promise((resolve, reject) => {
-            this.client.get(vendorHash,
+            this.cache.get(vendorHash,
                 (err, res) => (err ? reject(err) : resolve(res ? JSON.parse(res) : undefined)));
         });
     }
@@ -93,7 +89,7 @@ class DestinyCache {
         }
 
         return new Promise((resolve, reject) => {
-            this.client.set(vendorHash,
+            this.cache.set(vendorHash,
                 JSON.stringify(vendor), (err, res) => (err ? reject(err) : resolve(res)));
         });
     }

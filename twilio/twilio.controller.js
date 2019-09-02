@@ -158,14 +158,19 @@ class TwilioController {
     async request(req, res) {
         const header = req.headers['x-twilio-signature'];
         const twiml = new MessagingResponse();
+        const {
+            body,
+            cookies = {},
+            originalUrl,
+        } = req;
 
         // eslint-disable-next-line max-len
-        if (twilio.validateRequest(authToken, header, process.env.DOMAIN + req.originalUrl, req.body)) {
-            let counter = parseInt(req.cookies.counter, 10) || 0;
-            const user = await this.users.getUserByPhoneNumber(req.body.From);
+        if (twilio.validateRequest(authToken, header, process.env.DOMAIN + originalUrl, body)) {
+            let counter = parseInt(cookies.counter, 10) || 0;
+            const user = await this.users.getUserByPhoneNumber(body.From);
 
             if (!user || !user.dateRegistered) {
-                if (!req.cookies.isRegistered) {
+                if (!cookies.isRegistered) {
                     twiml.message(`Register your phone at ${process.env.WEBSITE}/register`);
                     res.writeHead(200, {
                         'Content-Type': 'text/xml',
@@ -179,9 +184,10 @@ class TwilioController {
             }
 
             res.cookie('isRegistered', true);
-            this.users.addUserMessage(user.displayName, user.membershipType, req.body);
+            await this.users.addUserMessage(user.displayName, user.membershipType, body);
 
-            const { body: { Body: rawMessage }, cookies: { itemHash } } = req;
+            const { Body: rawMessage } = body;
+            const { itemHash } = cookies;
             const message = rawMessage.trim().toLowerCase();
 
             /**
@@ -298,7 +304,7 @@ class TwilioController {
 
                 return res.end(twiml.toString());
             } else {
-                const searchTerm = req.body.Body.trim().toLowerCase();
+                const searchTerm = body.Body.trim().toLowerCase();
                 const items = await this._queryItem(searchTerm); // eslint-disable-line no-underscore-dangle, max-len
 
                 counter += 1;

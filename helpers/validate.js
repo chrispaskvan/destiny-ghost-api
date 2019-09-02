@@ -1,4 +1,4 @@
-const Joi = require('joi');
+const Joi = require('@hapi/joi');
 
 /**
  * Validate a value against a Joi schema.
@@ -10,13 +10,13 @@ const Joi = require('joi');
  * @throws {Error} value(s) that violate schema
  */
 module.exports = (value, schema, options = {}) => {
-	const finalOptions = {
-		abortEarly: false,
-		...options
-	};
-	const result = Joi.validate(value, schema, finalOptions);
+    const finalOptions = {
+        abortEarly: false,
+        ...options,
+    };
+    const result = Joi.validate(value, schema, finalOptions);
 
-	if (result.error) {
-		throw result.error;
-	}
+    if (result.error) {
+        throw result.error;
+    }
 };

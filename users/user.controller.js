@@ -412,7 +412,7 @@ class UserController {
      * @param req
      * @param res
      */
-    static signOut(req, res) {
+    async signOut(req, res) {
         req.session.destroy();
         res.status(401).end();
     }
