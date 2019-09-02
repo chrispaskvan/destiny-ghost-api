@@ -31,7 +31,7 @@
                 self.welcomeMessage = ko.pureComputed(function () {
                     return 'Welcome ' + user.displayName;
                 });
-                UserController.signOut = function () {
+                self.signOut = function () {
                     jQuery.ajax({
                         contentType: 'application/json; charset=utf-8',
                         type: 'GET',

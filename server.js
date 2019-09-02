@@ -3,29 +3,26 @@
  */
 require('dotenv').config();
 
-const DestinyError = require('./destiny/destiny.error'),
-    RequestError = require('./helpers/request.error'),
-    Routes = require('./routes'),
-    { instrumentationKey } = require('./settings/applicationInsights.json'),
-    { name } = require('./package.json'),
-    applicationInsights = require('applicationinsights'),
-    bodyParser = require('body-parser'),
-    cookieParser = require('cookie-parser'),
-    express = require('express'),
-    fs = require('fs'),
-    http = require('http'),
-    log = require('./helpers/log'),
-    path = require('path'),
-    session = require('express-session'),
-    redis = require('redis'),
-    redisConfig = require('./settings/redis.json'),
-    sessionConfig = require('./settings/session.' + process.env.NODE_ENV + '.json'),
-    { createTerminus } = require('@godaddy/terminus');
+const express = require('express');
+const fs = require('fs');
+const http = require('http');
+const https = require('https');
+const path = require('path');
+const session = require('express-session');
 
-const RedisStore = require('connect-redis')(session);
+const DestinyError = require('./destiny/destiny.error');
+const RequestError = require('./helpers/request.error');
+const Routes = require('./routes');
+const { instrumentationKey } = require('./settings/applicationInsights.json');
+const { name } = require('./package.json');
+const applicationInsights = require('applicationinsights');
+const bodyParser = require('body-parser');
+const { store } = require('./helpers/session-store');
+const log = require('./helpers/log');
+const sessionConfig = require(`./settings/session.json`);
+
 const app = express();
 const port = process.env.PORT;
-const start = new Date();
 
 /**
  * Application Insights
@@ -43,9 +40,8 @@ const start = new Date();
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({
-    extended: true
+    extended: true,
 }));
-app.use(cookieParser());
 
 /**
  * Disable X-Powered-By Header
@@ -55,17 +51,11 @@ app.disable('x-powered-by');
 /**
  * Set Access Headers
  */
-app.use(function (req, res, next) {
+app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, PATCH, DELETE');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Credentials', true);
     next();
-});
-
-/**
- * Redis Client
- */
-const client = redis.createClient(redisConfig.port, redisConfig.host, {
-    auth_pass: redisConfig.key // jscs:ignore requireCamelCaseOrUpperCaseIdentifiers
 });
 
 /**
@@ -74,17 +64,40 @@ const client = redis.createClient(redisConfig.port, redisConfig.host, {
 const ghostSession = session({
     cookie: {
         domain: sessionConfig.cookie.domain,
-        secure: false
+        httpOnly: true,
+        maxAge: sessionConfig.cookie.maxAge,
+        secure: sessionConfig.cookie.secure,
     },
     name: sessionConfig.cookie.name,
     resave: false,
     saveUninitialized: true,
     secret: sessionConfig.secret,
-    store: new RedisStore({
-        client
-    })
+    store,
 });
-app.use(ghostSession);
+
+app.use((req, res, next) => {
+    let numberOfRetries = 3;
+
+    function lookupSession(err) {
+        if (err) {
+            return next(err);
+        }
+
+        numberOfRetries -= 1;
+
+        if (req.session !== undefined) {
+            return next();
+        }
+
+        if (numberOfRetries < 0) {
+            return next(new Error('Failed to look up session.'));
+        }
+
+        return ghostSession(req, res, lookupSession);
+    }
+
+    lookupSession();
+});
 
 /**
  * Check that the database directories exist.
@@ -112,7 +125,7 @@ app.use(log.errorLogger());
 /**
  * Routes
  */
-const routes = new Routes(client);
+const routes = new Routes();
 app.use('/', routes);
 
 /**
@@ -122,20 +135,28 @@ routes.validateManifest();
 
 // jscs:ignore requireCapitalizedComments
 // noinspection JSLint
-app.get('/', function (req, res) {
-    res.sendFile(path.join(__dirname + '/signIn.html'));
+app.get('/', (req, res) => {
+    if (!req.secure) {
+        res.redirect(301, `https://api2.destiny-ghost.com${req.url}`);
+
+        return;
+    }
+
+    res.sendFile(path.join(`${__dirname}/signIn.html`));
 });
 
 // jscs:ignore requireCapitalizedComments
 // noinspection JSLint
-app.get('/ping', function (req, res) {
+app.get('/ping', (req, res) => {
     res.json({
-        pong: Date.now()
+        pong: Date.now(),
     });
 });
 
 app.use((err, req, res, next) => {
-    const { code, message, status, statusText } = err;
+    const {
+        code, message, status, statusText,
+    } = err;
 
     if (res.status) {
         if (err instanceof DestinyError) {
@@ -143,18 +164,22 @@ app.use((err, req, res, next) => {
                 errors: [{
                     code,
                     message,
-                    status
-                }]
+                    status,
+                }],
             });
         } else if (err instanceof RequestError) {
-            res.status(500).json({ errors: [{
+            res.status(500).json({
+                errors: [{
                     status,
-                    statusText
-                }]});
+                    statusText,
+                }],
+            });
         } else {
-            res.status(500).json({ errors: [{
-                    message
-                }]});
+            res.status(500).json({
+                errors: [{
+                    message,
+                }],
+            });
         }
     } else {
         next(err);
@@ -162,32 +187,20 @@ app.use((err, req, res, next) => {
 });
 
 /**
- * Server
+ * Server(s)
  */
-const server = http.createServer(app);
+if (process.env.NODE_ENV === 'development') {
+    const httpsOptions = {
+        key: fs.readFileSync('./security/_wildcard.destiny-ghost.com-key.pem'),
+        cert: fs.readFileSync('./security/_wildcard.destiny-ghost.com.pem'),
+    };
+    const server = https.createServer(httpsOptions, app);
+    server.listen(443,
+        () => console.log('HTTPS server listening on port 443.'));
+}
 
-createTerminus(server, {
-    signal: 'SIGINT',
-    onSignal: () => {
-        return new Promise((resolve) => {
-            client.quit();
-            resolve();
-        });
-    }
-});
-
-server.listen(port, function init() {
-    // eslint-disable-next-line no-console
-    console.log('Running on port ' + port + '.');
-
-    //let client = applicationInsights.defaultClient;
-    const end = new Date();
-    const duration = end - start;
-
-    // client.trackMetric({
-    // 	name: 'Startup Time',
-    // 	value: duration
-    // });
-});
+const insecureServer = http.createServer(app);
+insecureServer.listen(port,
+    () => console.log(`HTTP server listening on port ${port}`));
 
 module.exports = app;

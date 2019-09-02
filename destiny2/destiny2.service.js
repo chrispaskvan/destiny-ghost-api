@@ -167,6 +167,12 @@ class Destiny2Service extends DestinyService {
      * @returns {Promise}
      */
     async getXur(membershipId, membershipType, characterId, accessToken) {
+        let vendor = await this.cacheService.getVendor(xurHash);
+
+        if (vendor) {
+            return vendor;
+        }
+
         const options = {
             headers: {
                 authorization: `Bearer ${accessToken}`,
@@ -179,6 +185,13 @@ class Destiny2Service extends DestinyService {
         if (responseBody.ErrorCode === 1) {
             const { Response: { sales: { data } } } = responseBody;
             const itemHashes = Object.entries(data).map(([, value]) => value.itemHash);
+
+            vendor = {
+                vendorHash: xurHash,
+                itemHashes,
+            };
+
+            this.cacheService.setVendor(vendor);
 
             return itemHashes;
         }

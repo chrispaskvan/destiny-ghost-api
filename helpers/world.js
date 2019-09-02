@@ -4,10 +4,10 @@
 const _ = require('underscore');
 const Database = require('better-sqlite3');
 const fs = require('fs');
-const log = require('./log');
 const path = require('path');
 const request = require('request');
 const yauzl = require('yauzl');
+const log = require('./log');
 
 /**
  * World Repository
@@ -22,28 +22,29 @@ class World {
 
         if (directory) {
             const [databaseFileName] = fs.readdirSync(directory)
-                .map(name => {
-                    return {
-                        name,
-                        time: fs.statSync(`${directory}/${name}`).mtime.getTime(),
-                    };
-                })
+                .map(name => ({
+                    name,
+                    time: fs.statSync(`${directory}/${name}`).mtime.getTime(),
+                }))
                 .sort((a, b) => b.time - a.time)
                 .map(file => file.name);
 
             this.directory = directory;
-            this._bootstrap(databaseFileName);
+            this.bootstrap(databaseFileName);
         }
     }
 
-    _bootstrap(fileName) {
-        const databasePath = fileName ?
-            path.join(this.directory, path.basename(fileName)) : undefined;
+    /**
+     * @private
+     */
+    bootstrap(fileName) {
+        const databasePath = fileName
+            ? path.join(this.directory, path.basename(fileName)) : undefined;
 
         if (databasePath) {
             const database = new Database(databasePath, {
                 readonly: true,
-                fileMustExist: true
+                fileMustExist: true,
             });
 
             const categories = database.prepare('SELECT json FROM DestinyItemCategoryDefinition').all();
@@ -56,7 +57,7 @@ class World {
 
             this.categories = categories.map(({ json: category }) => JSON.parse(category));
             this.classes = classes.map(({ json: classDefinition }) => JSON.parse(classDefinition));
-            this.grimoireCards = grimoireCards.map(({ json: grimoireCard }) => JSON.parse(grimoireCard));
+            this.grimoireCards = grimoireCards.map(({ json: grimoireCard }) => JSON.parse(grimoireCard)); // eslint-disable-line max-len
             this.items = items.map(({ json: item }) => JSON.parse(item));
             this.vendors = vendors.map(({ json: vendor }) => JSON.parse(vendor));
         }
@@ -67,7 +68,7 @@ class World {
      * @param classHash {string}
      */
     getClassByHash(classHash) {
-        return Promise.resolve(this.classes.find(characterClass => characterClass.classHash === classHash));
+        return Promise.resolve(this.classes.find(characterClass => characterClass.classHash === classHash)); // eslint-disable-line max-len
     }
 
     /**
@@ -87,16 +88,13 @@ class World {
     getItemByName(itemName) {
         return new Promise((resolve, reject) => {
             try {
-                const items = this.items.filter(({ itemName: name = '' }) =>
-                    name.toLowerCase().includes(itemName.toLowerCase()));
+                const items = this.items.filter(({ itemName: name = '' }) => name.toLowerCase().includes(itemName.toLowerCase()));
 
                 const groups = _.groupBy(items, item => item.itemName);
                 const keys = Object.keys(groups);
 
-                resolve(_.map(keys, (key) => {
-                    return _.min(_.filter(items, (item) => item.itemName === key),
-                        (item) => item.qualityLevel);
-                }));
+                resolve(_.map(keys, key => _.min(_.filter(items, item => item.itemName === key),
+                    item => item.qualityLevel)));
             } catch (err) {
                 reject(err);
             }
@@ -111,7 +109,7 @@ class World {
     getItemByHash(itemHash) {
         return new Promise((resolve, reject) => {
             try {
-                const [item] = this.items.filter(item => item.itemHash === itemHash);
+                const [item] = this.items.filter(item1 => item1.itemHash === itemHash);
 
                 resolve(item);
             } catch (err) {
@@ -137,9 +135,9 @@ class World {
     getVendorIcon(vendorHash) {
         return new Promise((resolve, reject) => {
             try {
-                const [vendor] = this.vendors.filter(vendor => vendor.vendorHash === vendorHash);
+                const [vendor] = this.vendors.filter(vendor1 => vendor1.vendorHash === vendorHash);
 
-                resolve('https://www.bungie.net' + vendor.summary.vendorIcon);
+                resolve(`https://www.bungie.net${vendor.summary.vendorIcon}`);
             } catch (err) {
                 reject(err);
             }
@@ -153,40 +151,40 @@ class World {
      * @returns {*}
      */
     updateManifest(manifest) {
-        const databaseDirectory = this.directory + '/';
-        const { mobileWorldContentPaths: { en: relativeUrl }} = manifest;
+        const { directory: databaseDirectory } = this;
+        const { mobileWorldContentPaths: { en: relativeUrl } } = manifest;
         const fileName = relativeUrl.substring(relativeUrl.lastIndexOf('/') + 1);
-        const databasePath = databaseDirectory + fileName;
+        const databasePath = `${databaseDirectory}/${fileName}`;
 
         if (fs.existsSync(databasePath)) {
             return Promise.resolve(manifest);
         }
 
         return new Promise((resolve, reject) => {
-            const file = fs.createWriteStream(databasePath + '.zip');
-            const stream = request('https://www.bungie.net' + relativeUrl, () => {
-                log.info('content downloaded from ' + relativeUrl);
+            const file = fs.createWriteStream(`${databasePath}.zip`);
+            const stream = request(`https://www.bungie.net${relativeUrl}`, () => {
+                log.info(`content downloaded from ${relativeUrl}`);
             }).pipe(file);
 
             stream.on('finish', () => {
-                yauzl.open(databasePath + '.zip', (err, zipFile) => {
+                yauzl.open(`${databasePath}.zip`, (err, zipFile) => {
                     if (err) {
                         return reject(err);
                     }
 
-                    zipFile.on('entry', entry => {
-                        zipFile.openReadStream(entry, (err, readStream) => {
+                    return zipFile.on('entry', entry => {
+                        zipFile.openReadStream(entry, (err1, readStream) => {
                             if (err) {
                                 return reject(err);
                             }
 
                             readStream.on('end', () => {
-                                this._bootstrap(fileName);
+                                this.bootstrap(fileName);
                             });
-                            readStream.pipe(fs.createWriteStream(databaseDirectory + '/' + entry.fileName));
-                            fs.unlinkSync(databasePath + '.zip');
+                            readStream.pipe(fs.createWriteStream(`${databaseDirectory}/${entry.fileName}`));
+                            fs.unlinkSync(`${databasePath}.zip`);
 
-                            resolve(manifest);
+                            return resolve(manifest);
                         });
                     });
                 });

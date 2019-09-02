@@ -6,5 +6,6 @@
 appInsights-node/
 databases/
 logs/
+security/
 settings/
 node_modules/

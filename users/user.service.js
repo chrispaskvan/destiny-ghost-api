@@ -1,10 +1,10 @@
 const _ = require('underscore');
-const Joi = require('joi');
-const validate = require('../helpers/validate');
+const Joi = require('@hapi/joi');
 const defaults = require('json-schema-defaults');
 const validator = require('is-my-json-valid');
 const QueryBuilder = require('../helpers/queryBuilder');
 const notificationTypes = require('../notifications/notification.types');
+const validate = require('../helpers/validate');
 
 /**
  * Users Table Name
@@ -381,7 +381,7 @@ class UserService {
      * @param membershipType
      * @returns {Promise}
      */
-    async getUserByDisplayName(displayName, membershipType, noCache) {
+    async getUserByDisplayName(displayName, membershipType, noCache = false) {
         const qb = new QueryBuilder();
         const schema = Joi.object().keys({
             displayName: Joi.string().required(),
@@ -594,10 +594,10 @@ class UserService {
      * @returns {Promise}
      */
     async updateAnonymousUser(anonymousUser) {
-        const validate = validator(anonymousUserSchema);
+        const validateUser = validator(anonymousUserSchema);
 
-        if (!validate(anonymousUser)) {
-            return Promise.reject(new Error(JSON.stringify(validate.errors)));
+        if (!validateUser(anonymousUser)) {
+            return Promise.reject(new Error(JSON.stringify(validateUser.errors)));
         }
 
         const user = await this.getUserByDisplayName(anonymousUser.displayName, anonymousUser.membershipType); // eslint-disable-line max-len
@@ -616,10 +616,10 @@ class UserService {
      * @returns {Promise}
      */
     async updateUser(user) {
-        const validate = validator(userSchema);
+        const validateUser = validator(userSchema);
 
-        if (!validate(user)) {
-            return Promise.reject(Error(JSON.stringify(validate.errors)));
+        if (!validateUser(user)) {
+            return Promise.reject(Error(JSON.stringify(validateUser.errors)));
         }
 
         const userDocument = await this.getUserByDisplayName(user.displayName, user.membershipType);

@@ -11,7 +11,9 @@ class UserCache {
     constructor() {
         this.client = redis.createClient(redisConfig.port, redisConfig.host, {
             auth_pass: redisConfig.key, // jscs:ignore requireCamelCaseOrUpperCaseIdentifiers
-            ttl: 3300,
+            tls: {
+                servername: redisConfig.host,
+            },
         });
     }
 

@@ -33,7 +33,7 @@ const routes = ({
             .catch(next));
 
     userRouter.route('/signOut')
-        .get((req, res, next) => UserController.signOut(req, res)
+        .get((req, res, next) => userController.signOut(req, res)
             .catch(next));
 
     userRouter.route('/:emailAddress/emailAddress')
