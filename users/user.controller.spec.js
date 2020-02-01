@@ -38,7 +38,7 @@ describe('UserController', () => {
                     },
                 });
 
-                destinyService.getCurrentUser.mockImplementation(() => Promise.reoslve({
+                destinyService.getCurrentUser.mockImplementation(() => Promise.resolve({
                     displayName: 'l',
                     membershipType: 2,
                     links: [

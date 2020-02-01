@@ -23,7 +23,6 @@ function isNormalInteger(number) {
  * @returns {string}
  */
 class Tokens {
-
     /**
      * Get a 16-bit Random String
      * @returns {string}
@@ -41,10 +40,10 @@ class Tokens {
         const chars = '1234567890';
         let cursor = 0;
 
-        length = isNormalInteger(length) ? length : 6;
+        length = isNormalInteger(length) ? length : 6; // eslint-disable-line no-param-reassign
 
-        let result = new Array(length);
-        let randomBytes = crypto.randomBytes(length);
+        const result = new Array(length);
+        const randomBytes = crypto.randomBytes(length);
 
         for (let index = 0; index < length; index += 1) {
             cursor += randomBytes[index];

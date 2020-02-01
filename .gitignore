@@ -1,11 +1,9 @@
 # Created by .ignore support plugin (hsz.mobi)
+.DS_Store
 .coverage/
 .env
 .idea/
-.nyc_output
-appInsights-node/
 databases/
-logs/
 security/
 settings/
 node_modules/

@@ -236,7 +236,14 @@ class UserService {
         messages.push(message);
 
         return this.documents.upsertDocument(collectionId, user)
-            .then(() => undefined);
+            .then(() => undefined)
+            .catch(err => {
+                const { code } = err;
+
+                if (code !== 412) { // PreconditionFailed
+                    throw err;
+                }
+            });
     }
 
     /**
@@ -404,12 +411,14 @@ class UserService {
         if (!noCache && user) {
             return user;
         }
+
         const documents = await this.documents.getDocuments(collectionId, qb.getQuery());
         if (documents) {
             if (documents.length > 1) {
                 throw new Error(`more than 1 document found for displayName ${
                     displayName} and membershipType ${membershipType}`);
             }
+            await this.cacheService.setUser(documents[0]);
 
             return documents[0];
         }
@@ -553,6 +562,7 @@ class UserService {
             if (documents.length > 1) {
                 throw new Error(`more than 1 document found for phoneNumber ${phoneNumber}`);
             }
+            this.cacheService.setUser(documents[0]);
 
             return documents[0];
         }

@@ -29,7 +29,7 @@ class Destiny2Controller extends DestinyController {
      * @param res
      */
     async getPlayer(req, res) {
-        const { params: { displayName }} = req;
+        const { params: { displayName } } = req;
         const { membershipId, membershipType } = await this.destiny.getPlayer(displayName);
 
         if (!membershipId || !membershipType) {
@@ -38,7 +38,7 @@ class Destiny2Controller extends DestinyController {
 
         const statistics = await this.destiny.getPlayerStats(membershipId, membershipType);
 
-        res.status(200).json(statistics);
+        return res.status(200).json(statistics);
     }
 
     /**
@@ -47,34 +47,40 @@ class Destiny2Controller extends DestinyController {
      * @private
      */
     async getProfile(req, res) {
-        const { session: { displayName, membershipType }} = req;
+        const { session: { displayName, membershipType } } = req;
         const currentUser = await this.users.getUserByDisplayName(displayName, membershipType);
         const characters = await this.destiny.getProfile(currentUser.membershipId, membershipType);
         const promises = [];
-        const characterBases = characters.map(character => {
-            promises.push(this.world.getClassByHash(character.classHash));
+        const characterBases = characters.map(({
+            characterId,
+            classHash,
+            emblemBackgroundPath,
+            emblemPath,
+            light,
+        }) => {
+            promises.push(this.world.getClassByHash(classHash));
 
             return {
-                characterId: character.characterId,
-                classHash: character.classHash,
-                emblem: character.emblemPath,
-                backgroundPath: character.emblemBackgroundPath,
-                powerLevel: character.light,
+                characterId,
+                classHash,
+                emblem: emblemPath,
+                backgroundPath: emblemBackgroundPath,
+                powerLevel: light,
                 links: [
                     {
                         rel: 'Character',
-                        href: '/characters/' + character.characterId
-                    }
-                ]
-            }
+                        href: `/characters/${characterId}`,
+                    },
+                ],
+            };
         });
         const characterClasses = await Promise.all(promises);
 
         characterBases.forEach((characterBase, index) => {
-            characterBase.className = characterClasses[index].displayProperties.name;
+            characterBase.className = characterClasses[index].displayProperties.name; // eslint-disable-line max-len, no-param-reassign
         });
 
-        res.status(200).json(characterBases);
+        return res.status(200).json(characterBases);
     }
 
     /**
@@ -84,24 +90,28 @@ class Destiny2Controller extends DestinyController {
      * @private
      */
     async getXur(req, res) {
-        const { session: { displayName, membershipType }} = req;
+        const { session: { displayName, membershipType } } = req;
         const currentUser = await this.users.getUserByDisplayName(displayName, membershipType);
         const { bungie: { access_token: accessToken }, membershipId } = currentUser;
         const characters = await this.destiny.getProfile(membershipId, membershipType);
 
         if (characters && characters.length) {
-            const itemHashes = await this.destiny.getXur(membershipId, membershipType, characters[0].characterId, accessToken);
+            const itemHashes = await this.destiny.getXur(
+                membershipId, membershipType, characters[0].characterId, accessToken,
+            );
 
             if (!itemHashes.length) {
                 return res.status(200).json(itemHashes);
             }
 
-            const items = await Promise.all(itemHashes.map(itemHash => this.world.getItemByHash(itemHash)));
+            const items = await Promise.all(
+                itemHashes.map(itemHash => this.world.getItemByHash(itemHash)),
+            );
 
             return res.status(200).json(items);
         }
 
-        res.status(404);
+        return res.status(404);
     }
 
     /**
@@ -115,7 +125,7 @@ class Destiny2Controller extends DestinyController {
 
         await this.world.updateManifest(manifest);
 
-        res.status(200).json(manifest);
+        return res.status(200).json(manifest);
     }
 }
 

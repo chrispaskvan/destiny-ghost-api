@@ -1,7 +1,7 @@
 const session = require('express-session');
 const MemorySession = require('memorystore');
 
-const sessionConfig = require(`../settings/session.json`); // eslint-disable-line import/no-dynamic-require
+const { session: sessionConfig } = require('../helpers/config');
 
 /**
  * Cache Store Client

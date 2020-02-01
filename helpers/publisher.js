@@ -6,15 +6,14 @@
  * @author Chris Paskvan
  * @requires azure
  */
-const azure = require('azure-sb'),
-	azureCommon = require('azure-common'),
-	{ connectionString, queueName } = require('../settings/serviceBus.json');
+const azure = require('azure-sb');
+const azureCommon = require('azure-common');
+const { serviceBus: { connectionString, queueName } } = require('../helpers/config');
 
 /**
  * Message Publisher
  */
 class Publisher {
-
     /**
      * @constructor
      */
@@ -31,67 +30,68 @@ class Publisher {
      * @returns {Request|Promise}
      */
     static createTopic(serviceBusService) {
-	    return new Promise((resolve, reject) => {
-	        serviceBusService.createTopicIfNotExists(queueName, function (err) {
-			    if (err) {
-				    return reject(err);
-			    }
+        return new Promise((resolve, reject) => {
+            serviceBusService.createTopicIfNotExists(queueName, err => {
+                if (err) {
+                    return reject(err);
+                }
 
-		        resolve(true);
-		    });
-	    });
+                return resolve(true);
+            });
+        });
     }
 
-	/**
-	 * Put a message on the topic queue.
-	 *
-	 * @param message
-	 * @param serviceBusService
-	 * @returns {Promise}
-	 */
-	static sendTopicMessage(message, serviceBusService) {
-	    return new Promise((resolve, reject) => {
-		    serviceBusService.sendTopicMessage(queueName, message, function (err, res) {
-			    if (err) {
-				    return reject(err);
-			    }
+    /**
+     * Put a message on the topic queue.
+     *
+     * @param message
+     * @param serviceBusService
+     * @returns {Promise}
+     */
+    static sendTopicMessage(message, serviceBusService) {
+        return new Promise((resolve, reject) => {
+            serviceBusService.sendTopicMessage(queueName, message, (err, res) => {
+                if (err) {
+                    return reject(err);
+                }
 
-			    resolve(res);
-		    });
-	    });
+                return resolve(res);
+            });
+        });
     }
 
-	/**
-	 * Missing Notification Type Error
-	 */
-	static throwIfMissingNotificationType() {
+    /**
+     * Missing Notification Type Error
+     */
+    static throwIfMissingNotificationType() {
         throw new Error('notification type is required');
     }
 
-	/**
-	 * Send notification of a specific type to a user.
-	 *
-	 * @param user
-	 * @param notificationType - required
-	 * @returns {Promise}
-	 */
-	sendNotification(user, notificationType = this.constructor.throwIfMissingNotificationType()) {
+    /**
+     * Send notification of a specific type to a user.
+     *
+     * @param user
+     * @param notificationType - required
+     * @returns {Promise}
+     */
+    async sendNotification(user,
+        notificationType = this.constructor.throwIfMissingNotificationType()) {
         const message = {
             body: JSON.stringify(user),
             customProperties: {
-                notificationType
-            }
+                notificationType,
+            },
         };
+        const success = await this.constructor.createTopic(this.serviceBusService);
 
-        return this.constructor.createTopic(this.serviceBusService)
-            .then(success => {
-                if (!success) {
-                    return false;
-                }
+        if (!success) {
+            return false;
+        }
 
-                return this.constructor.sendTopicMessage(message, this.serviceBusService)
-                    .then(({ isSuccessful = false }) => isSuccessful);
-            });
+        const { isSuccessful = false } = await this.constructor.sendTopicMessage(message,
+            this.serviceBusService);
+
+        return isSuccessful;
     }
 }
 

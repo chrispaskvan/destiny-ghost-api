@@ -12,92 +12,92 @@
  * @requires pino
  * @requires cuid
  */
-const _ = require('underscore'),
-	pino = require('pino'),
-	cuid = require('cuid'),
-	{ name } = require('../package.json');
+const _ = require('underscore');
+const pino = require('pino');
+const cuid = require('cuid');
+const { name } = require('../package.json');
 
 /**
  * Get long stack traces for the error logger.
  * @param  {error} err - Error object
  * @return {string} Stack trace
  */
-function _getFullStack(err) {
-	let stack = err.stack || err.toString();
+function getFullStack(err) {
+    let stack = err.stack || err.toString();
 
-	if (err.cause && typeof (err.cause) === 'function') {
-		let cause = err.cause();
+    if (err.cause && typeof (err.cause) === 'function') {
+        const cause = err.cause();
 
-		if (cause) {
-			stack += '\n' + _getFullStack(cause);
-		}
-	}
+        if (cause) {
+            stack += `\n${getFullStack(cause)}`;
+        }
+    }
 
-	return stack;
+    return stack;
 }
 
 const serializers = {
-	req: function reqSerializer(req) {
-		if (!req || !req.connection) {
-			return req;
-		}
+    req: function reqSerializer(req) {
+        if (!req || !req.connection) {
+            return req;
+        }
 
-		return {
-			url: req.url,
-			method: req.method,
-			protocol: req.protocol,
-			requestId: req.requestId,
-			/** Check for a proxy server. */
-			ip: req.headers['x-forwarded-for'] || req.connection.remoteAddress,
-			headers: req.headers,
-			body: _.omit(req.body, 'password')
-		};
-	},
-	res: function resSerializer(res) {
-		if (!res) {
-			return res;
-		}
+        return {
+            url: req.url,
+            method: req.method,
+            protocol: req.protocol,
+            requestId: req.requestId,
+            /** Check for a proxy server. */
+            ip: req.headers['x-forwarded-for'] || req.connection.remoteAddress,
+            headers: req.headers,
+            body: _.omit(req.body, 'password')
+        };
+    },
+    res: function resSerializer(res) {
+        if (!res) {
+            return res;
+        }
 
-		return {
-			statusCode: res.statusCode,
-			headers: res._header,
-			body: res._json || res._end,
-			requestId: res.requestId,
-			responseTime: res.responseTime
-		};
-	},
-	err: function errSerializer(err) {
-		if (!err || !err.stack) {
-			return err;
-		}
+        return {
+            statusCode: res.statusCode,
+            headers: res._header,
+            body: res._json || res._end,
+            requestId: res.requestId,
+            responseTime: res.responseTime
+        };
+    },
+    err: function errSerializer(err) {
+        if (!err || !err.stack) {
+            return err;
+        }
 
-		return {
-			message: err.message,
-			name: err.name,
-			stack: _getFullStack(err),
-			code: err.code,
-			signal: err.signal,
-			requestId: err.requestId
-		};
-	}
+        return {
+            message: err.message,
+            name: err.name,
+            stack: getFullStack(err),
+            code: err.code,
+            signal: err.signal,
+            requestId: err.requestId
+        };
+    }
 };
 
 const defaults = {
-	name,
-	streams: [
-		{
-			level: 'error',
-			stream: process.stderr
-		}
-	],
-	serializers
+    name,
+    streams: [
+        {
+            level: 'error',
+            stream: process.stderr
+        }
+    ],
+    serializers
 };
 
 class Log {
     constructor() {
         this.logger =pino({
-	        prettyPrint: { colorize: true },
-	        ...defaults
+            prettyPrint: { colorize: true },
+            ...defaults
         })
     }
 
@@ -109,55 +109,55 @@ class Log {
         this.logger.error({ err });
     }
 
-	requestLogger() {
-		return (req, res, next) => {
-			const startTime = new Date();
+    requestLogger() {
+        return (req, res, next) => {
+            const startTime = new Date();
 
-			/**
-			 * Add a unique identifier to the request.
-			 */
-			req.requestId = cuid();
-			this.logger.info({ req });
+            /**
+             * Add a unique identifier to the request.
+             */
+            req.requestId = cuid();
+            this.logger.info({ req });
 
-			/**
-			 * Make sure responses get logged too.
-			 */
-			const logResponse = () => {
-				res.responseTime = new Date() - startTime;
-				res.requestId = req.requestId;
-				this.logger.info({ res });
+            /**
+             * Make sure responses get logged too.
+             */
+            const logResponse = () => {
+                res.responseTime = new Date() - startTime;
+                res.requestId = req.requestId;
+                this.logger.info({ res });
 
-				res.removeListener('finish', logResponse);
-				res.setMaxListeners(res.getMaxListeners() - 1);
-			};
+                res.removeListener('finish', logResponse);
+                res.setMaxListeners(res.getMaxListeners() - 1);
+            };
 
-			res.setMaxListeners(res.getMaxListeners() + 1);
-			res.on('finish', logResponse);
+            res.setMaxListeners(res.getMaxListeners() + 1);
+            res.on('finish', logResponse);
 
-			next();
-		}
-	}
+            next();
+        }
+    }
 
-	errorLogger() {
-		return (err, req, res, next) => {
-			const status = err.status || (res && res.status);
+    errorLogger() {
+        return (err, req, res, next) => {
+            const status = err.status || (res && res.status);
 
-			/**
-			 * Add a requestId to track the original request.
-			 */
-			err.requestId = req && req.requestId;
-			/**
-			 * Omit stack from the 4xx range.
-			 */
-			if (status >= 400 && status <= 499) {
-				delete err.stack;
-			}
+            /**
+             * Add a requestId to track the original request.
+             */
+            err.requestId = req && req.requestId;
+            /**
+             * Omit stack from the 4xx range.
+             */
+            if (status >= 400 && status <= 499) {
+                delete err.stack;
+            }
 
-			this.logger.error({ err });
+            this.logger.error({ err });
 
-			next(err);
-		};
-	}
+            next(err);
+        };
+    }
 }
 
 module.exports = new Log();

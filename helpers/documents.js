@@ -7,7 +7,7 @@
  */
 const { DocumentClient } = require('documentdb');
 const util = require('util');
-const { authenticationKey, databaseId, host } = require('../settings/documents.json');
+const { documents: { authenticationKey, databaseId, host } } = require('../helpers/config');
 
 class Documents {
     constructor() {

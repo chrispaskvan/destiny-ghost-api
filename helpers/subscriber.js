@@ -9,7 +9,7 @@
  */
 const azure = require('azure-sb');
 const azureCommon = require('azure-common');
-const settings = require('../settings/serviceBus.json');
+const { serviceBus: settings } = require('../helpers/config');
 
 class Subscriber {
     /**

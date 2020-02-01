@@ -1,21 +1,21 @@
 /**
  * Destiny Service Tests
  */
-const Destiny2Service = require('./destiny2.service'),
-    mockManifestResponse = require('../mocks/manifestResponse.json'),
-	mockProfileCharactersResponse = require('../mocks/profileCharactersResponse.json'),
-	request = require('../helpers/request');
+const Destiny2Service = require('./destiny2.service');
+const mockManifestResponse = require('../mocks/manifestResponse.json');
+const mockProfileCharactersResponse = require('../mocks/profileCharactersResponse.json');
+const request = require('../helpers/request');
 
 jest.mock('../helpers/request');
 
 const mockUser = {
-	membershipId: '11',
-	membershipType: 2
+    membershipId: '11',
+    membershipType: 2,
 };
 
 const cacheService = {
-	getManifest: jest.fn(),
-	setManifest: jest.fn()
+    getManifest: jest.fn(),
+    setManifest: jest.fn(),
 };
 
 let destiny2Service;
@@ -26,9 +26,9 @@ beforeEach(() => {
 
 describe('Destiny2Service', () => {
     describe('getManifest', () => {
-	    beforeEach(async () => {
-		    request.get.mockImplementation(() => Promise.resolve(mockManifestResponse));
-	    });
+        beforeEach(async () => {
+            request.get.mockImplementation(() => Promise.resolve(mockManifestResponse));
+        });
 
         it('should return the latest manifest', async () => {
             const { Response: mockManifest } = mockManifestResponse;
@@ -39,16 +39,17 @@ describe('Destiny2Service', () => {
     });
 
     describe('getProfile', () => {
-	    beforeEach(async () => {
-		    request.get.mockImplementation(() => Promise.resolve(mockProfileCharactersResponse));
-	    });
+        beforeEach(async () => {
+            request.get.mockImplementation(() => Promise.resolve(mockProfileCharactersResponse));
+        });
 
-	    it('should return the user\'s list of characters', async () => {
-			const { Response: { characters: { data }}} = mockProfileCharactersResponse;
-			const mockCharacters = Object.keys(data).map(character => data[character]);
-			const characters = await destiny2Service.getProfile(mockUser.membershipId, mockUser.membershipType);
+        it('should return the user\'s list of characters', async () => {
+            const { Response: { characters: { data } } } = mockProfileCharactersResponse;
+            const mockCharacters = Object.keys(data).map(character => data[character]);
+            const characters = await destiny2Service
+                .getProfile(mockUser.membershipId, mockUser.membershipType);
 
-			expect(characters).toEqual(mockCharacters);
-		});
-	});
+            expect(characters).toEqual(mockCharacters);
+        });
+    });
 });

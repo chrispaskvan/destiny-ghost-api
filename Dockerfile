@@ -14,7 +14,7 @@ EXPOSE 1100
 ARG DATABASE=./databases/
 ENV DATABASE=$DATABASE
 
-ARG DOMAIN=https://api2.destiny-ghost.com
+ARG DOMAIN=http://api.destiny-ghost.com:1100
 ENV DOMAIN=$DOMAIN
 
 ARG NODE_ENV=production

@@ -1,69 +1,83 @@
-const Publisher = require('../helpers/publisher'),
-	Subscriber = require('../helpers/subscriber'),
-	notificationHeaders = require('../settings/notificationHeaders.json'),
-	notificationTypes = require('../notifications/notification.types');
+const Publisher = require('../helpers/publisher');
+const Subscriber = require('../helpers/subscriber');
+const { notificationHeaders } = require('../helpers/config');
+const notificationTypes = require('../notifications/notification.types');
 
 /**
  * Controller class for Notification routes.
  */
 class NotificationController {
-	constructor(options = {}) {
-		const subscriber = new Subscriber();
+    constructor(options = {}) {
+        const subscriber = new Subscriber();
 
-		this.publisher = new Publisher();
-		this.authentication = options.authenticationService;
-		this.destiny = options.destinyService;
-		this.notifications = options.notificationService;
-		this.users = options.userService;
-		this.world = options.worldRepository;
+        this.publisher = new Publisher();
+        this.authentication = options.authenticationService;
+        this.destiny = options.destinyService;
+        this.notifications = options.notificationService;
+        this.users = options.userService;
+        this.world = options.worldRepository;
 
-		subscriber.listen(this._send.bind(this));
-	}
+        subscriber.listen(this.send.bind(this));
+    }
 
-	async _send(user, notificationType) {
-		const { membershipId, membershipType, phoneNumber } = user;
+    /**
+     * @private
+     * @param user
+     * @param notificationType
+     * @returns {Promise<void>}
+     * @private
+     */
+    async send(user, notificationType) {
+        try {
+            const { membershipId, membershipType, phoneNumber } = user;
 
-		if (notificationType === notificationTypes.Xur) {
-			try {
-				const { bungie: { access_token: accessToken }} = await this.authentication.authenticate(user);
-				const characters = await this.destiny.getProfile(membershipId, membershipType);
+            if (notificationType === notificationTypes.Xur) {
+                try {
+                    const { bungie: { access_token: accessToken } } = await this.authentication.authenticate(user); // eslint-disable-line max-len
+                    const characters = await this.destiny.getProfile(membershipId, membershipType);
 
-				if (characters && characters.length) {
-					const itemHashes = await this.destiny.getXur(membershipId, membershipType, characters[0].characterId, accessToken);
-					const items = await Promise.all(itemHashes.map(itemHash => this.world.getItemByHash(itemHash)));
+                    if (characters && characters.length) {
+                        const itemHashes = await this.destiny.getXur(membershipId,
+                            membershipType, characters[0].characterId, accessToken);
+                        const items = await Promise.all(itemHashes
+                            .map(itemHash => this.world.getItemByHash(itemHash)));
+                        const message = items.map(({ displayProperties: { name } }) => name).join('\n');
+                        await this.notifications.sendMessage(message, phoneNumber);
+                    }
+                } catch (err) {
+                    await this.notifications.sendMessage('Xur has closed shop. He\'ll return Friday.', phoneNumber);
+                }
+            }
+        } catch (err) {
+            console.log(err); // ToDo
+        }
+    }
 
-					const message = items.map(({ displayProperties: { name }}) => name).join('\n');
-					await this.notifications.sendMessage(message, phoneNumber);
-				}
-			} catch (err) {
-				await this.notifications.sendMessage('Xur has closed shop. He\'ll return Friday.', phoneNumber);
-			}
-		}
-	}
+    async create(req, res) {
+        const { headers, params: { subscription } } = req;
+        const headerNames = Object.keys(notificationHeaders);
 
-	create(req, res) {
-		const { headers, params: { subscription }} = req;
+        for (const headerName of headerNames) { // eslint-disable-line no-restricted-syntax
+            if (headers[headerName] !== notificationHeaders[headerName]) {
+                res.writeHead(403);
+                res.end();
 
-		for (const headerName in notificationHeaders) {
-			if (notificationHeaders.hasOwnProperty(headerName)) {
-				if (headers[headerName] !== notificationHeaders[headerName]) {
-					res.writeHead(403);
-					res.end();
-					return;
-				}
-			}
-		}
+                return;
+            }
+        }
 
-		if (notificationTypes[subscription]) {
-			this.users.getSubscribedUsers(subscription)
-				.then(users => {
-					users.forEach(user => this.publisher.sendNotification(user, subscription));
-					res.status(200).end();
-				});
-		} else {
-			res.status(404).json('That subscription is not recognized.');
-		}
-	}
+        if (notificationTypes[subscription]) {
+            const users = await this.users.getSubscribedUsers(subscription);
+
+            // eslint-disable-next-line max-len
+            await Promise.all(users.map(user => this.publisher.sendNotification(user, subscription)));
+            res.status(200).end();
+
+            return;
+        }
+
+        res.status(404).json('That subscription is not recognized.');
+    }
 }
 
 module.exports = NotificationController;

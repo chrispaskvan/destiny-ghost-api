@@ -4,7 +4,7 @@ const AuthenticationMiddleWare = require('../authentication/authentication.middl
 const RoleMiddleware = require('./role.middleware');
 const UserController = require('./user.controller');
 
-const corsConfig = require(`../settings/cors.${process.env.NODE_ENV}.json`); // eslint-disable-line import/no-dynamic-require
+const { cors: corsConfig } = require('../helpers/config');
 
 const routes = ({
     authenticationController, destinyService, notificationService, userService, worldRepository,

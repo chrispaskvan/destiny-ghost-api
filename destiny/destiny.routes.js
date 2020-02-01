@@ -1,12 +1,13 @@
 /**
  * Created by chris on 9/25/15.
  */
-const DestinyController = require('../destiny/destiny.controller'),
-    AuthenticationMiddleWare = require('../authentication/authentication.middleware'),
-    cors = require('cors'),
-    express = require('express'),
-    httpMocks = require('node-mocks-http'),
-    log = require('../helpers/log');
+const { EventEmitter } = require('events');
+const cors = require('cors');
+const express = require('express');
+const httpMocks = require('node-mocks-http');
+const log = require('../helpers/log');
+const DestinyController = require('../destiny/destiny.controller');
+const AuthenticationMiddleWare = require('../authentication/authentication.middleware');
 
 /**
  * Destiny Routes
@@ -16,14 +17,23 @@ const DestinyController = require('../destiny/destiny.controller'),
  * @param worldRepository
  * @returns {*}
  */
-const routes = ({ authenticationController, destinyService, userService, worldRepository }) => {
+const routes = ({
+    authenticationController,
+    destinyService,
+    userService,
+    worldRepository,
+}) => {
     const destinyRouter = express.Router();
 
     /**
      * Set up routes and initialize the controller.
      * @type {DestinyController}
      */
-    const destinyController = new DestinyController({ destinyService, userService, worldRepository });
+    const destinyController = new DestinyController({
+        destinyService,
+        userService,
+        worldRepository,
+    });
 
     /**
      * Authentication controller when needed.
@@ -84,7 +94,7 @@ const routes = ({ authenticationController, destinyService, userService, worldRe
     destinyRouter.validateManifest = () => {
         const req = httpMocks.createRequest();
         const res = httpMocks.createResponse({
-            eventEmitter: require('events').EventEmitter
+            eventEmitter: EventEmitter,
         });
 
         destinyController.upsertManifest(req, res);

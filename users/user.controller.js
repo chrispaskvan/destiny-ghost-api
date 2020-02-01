@@ -412,6 +412,7 @@ class UserController {
      * @param req
      * @param res
      */
+    // eslint-disable-next-line class-methods-use-this
     async signOut(req, res) {
         req.session.destroy();
         res.status(401).end();
