@@ -1,5 +1,5 @@
 const redis = require('redis');
-const redisConfig = require('../settings/redis.json');
+const { redis: redisConfig } = require('../helpers/config');
 
 /**
  *  User Cache Class

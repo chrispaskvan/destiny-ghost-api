@@ -11,7 +11,7 @@
  */
 const DestinyError = require('../destiny/destiny.error');
 const DestinyService = require('../destiny/destiny.service');
-const { apiKey } = require('../settings/bungie.json');
+const { bungie: { apiKey } } = require('../helpers/config');
 const { xurHash } = require('./destiny2.constants');
 const { get } = require('../helpers/request');
 
@@ -32,7 +32,7 @@ class Destiny2Service extends DestinyService {
      * @returns {Promise}
      * @private
      */
-    async _getManifestFromBungie() {
+    async getManifestFromBungie() {
         const options = {
             headers: {
                 'x-api-key': apiKey,
@@ -67,7 +67,7 @@ class Destiny2Service extends DestinyService {
             return manifest;
         }
 
-        return this._getManifestFromBungie(); // eslint-disable-line no-underscore-dangle
+        return this.getManifestFromBungie(); // eslint-disable-line no-underscore-dangle
     }
 
     /**
@@ -76,7 +76,7 @@ class Destiny2Service extends DestinyService {
      * @param displayName
      * @returns {Promise}
      */
-    async getPlayer(displayName) {
+    async getPlayer(displayName) { // eslint-disable-line class-methods-use-this
         const options = {
             headers: {
                 'x-api-key': apiKey,
@@ -101,7 +101,7 @@ class Destiny2Service extends DestinyService {
      * @param membershipId
      * @param membershipType
      */
-    async getPlayerStats(membershipId, membershipType) {
+    async getPlayerStats(membershipId, membershipType) { // eslint-disable-line class-methods-use-this, max-len
         const options = {
             headers: {
                 'x-api-key': apiKey,
@@ -137,7 +137,7 @@ class Destiny2Service extends DestinyService {
      * @param membershipType
      * @returns {Promise}
      */
-    async getProfile(membershipId, membershipType) {
+    async getProfile(membershipId, membershipType) { // eslint-disable-line class-methods-use-this
         const options = {
             headers: {
                 'x-api-key': apiKey,
@@ -167,7 +167,7 @@ class Destiny2Service extends DestinyService {
      * @returns {Promise}
      */
     async getXur(membershipId, membershipType, characterId, accessToken) {
-        let vendor = await this.cacheService.getVendor(xurHash);
+        const vendor = await this.cacheService.getVendor(xurHash);
 
         if (vendor) {
             return vendor;
@@ -186,12 +186,7 @@ class Destiny2Service extends DestinyService {
             const { Response: { sales: { data } } } = responseBody;
             const itemHashes = Object.entries(data).map(([, value]) => value.itemHash);
 
-            vendor = {
-                vendorHash: xurHash,
-                itemHashes,
-            };
-
-            this.cacheService.setVendor(vendor);
+            this.cacheService.setVendor(xurHash, itemHashes);
 
             return itemHashes;
         }

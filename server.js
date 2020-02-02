@@ -13,13 +13,14 @@ const session = require('express-session');
 const DestinyError = require('./destiny/destiny.error');
 const RequestError = require('./helpers/request.error');
 const Routes = require('./routes');
-const { instrumentationKey } = require('./settings/applicationInsights.json');
+const { applicationInsights: { instrumentationKey } } = require('./helpers/config');
 const { name } = require('./package.json');
 const applicationInsights = require('applicationinsights');
 const bodyParser = require('body-parser');
+const cookieParser = require('cookie-parser');
 const { store } = require('./helpers/session-store');
 const log = require('./helpers/log');
-const sessionConfig = require(`./settings/session.json`);
+const { session: sessionConfig } = require('./helpers/config');
 
 const app = express();
 const port = process.env.PORT;
@@ -42,6 +43,7 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({
     extended: true,
 }));
+app.use(cookieParser());
 
 /**
  * Disable X-Powered-By Header
@@ -63,10 +65,10 @@ app.use((req, res, next) => {
  */
 const ghostSession = session({
     cookie: {
-        domain: sessionConfig.cookie.domain,
+        domain: process.env.DOMAIN,
         httpOnly: true,
         maxAge: sessionConfig.cookie.maxAge,
-        secure: sessionConfig.cookie.secure,
+        secure: false,
     },
     name: sessionConfig.cookie.name,
     resave: false,
@@ -108,10 +110,10 @@ databases.forEach(database => {
     const directories = database.split('/');
 
     directories.forEach((directory, index) => {
-        const path = directories.slice(0, index + 1).join('/');
+        const directoryPath = directories.slice(0, index + 1).join('/');
 
-        if (!fs.existsSync(path)) {
-            fs.mkdirSync(path);
+        if (!fs.existsSync(directoryPath)) {
+            fs.mkdirSync(directoryPath);
         }
     });
 });
@@ -136,7 +138,7 @@ routes.validateManifest();
 // jscs:ignore requireCapitalizedComments
 // noinspection JSLint
 app.get('/', (req, res) => {
-    if (!req.secure) {
+    if (process.env.NODE_ENV === 'development' && !req.secure) {
         res.redirect(301, `https://api2.destiny-ghost.com${req.url}`);
 
         return;

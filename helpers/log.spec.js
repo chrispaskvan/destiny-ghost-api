@@ -1,11 +1,11 @@
 const log = require('./log');
 
 describe('Log', () => {
-    it('Should write to log', function (done) {
+    it('Should write to log', done => {
         const responseData = {
             messageId: '1',
             wasSuccessful: true,
-            code: 200
+            code: 200,
         };
 
         log.info(JSON.stringify(responseData));

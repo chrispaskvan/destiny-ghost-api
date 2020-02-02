@@ -1,9 +1,9 @@
-const EventEmitter = require('events').EventEmitter,
-    fs = require('fs'),
-    log = require('./log'),
-    path = require('path'),
-    request = require('request'),
-    yauzl = require('yauzl');
+const { EventEmitter } = require('events');
+const fs = require('fs');
+const path = require('path');
+const request = require('request');
+const yauzl = require('yauzl');
+const log = require('./log');
 
 /**
  * Ghost Class
@@ -16,12 +16,10 @@ class Ghost extends EventEmitter {
      */
     constructor() {
         const [databaseFileName] = fs.readdirSync(process.env.DATABASE)
-            .map(name => {
-                return {
-                    name,
-                    time: fs.statSync(process.env.DATABASE + name).mtime.getTime()
-                };
-            })
+            .map(name => ({
+                name,
+                time: fs.statSync(process.env.DATABASE + name).mtime.getTime(),
+            }))
             .sort((a, b) => b.time - a.time)
             .map(file => file.name);
 
@@ -35,8 +33,8 @@ class Ghost extends EventEmitter {
      * @returns {Promise}
      */
     getWorldDatabasePath() {
-        return Promise.resolve(this.databaseFileName ?
-            path.join(process.env.DATABASE, path.basename(this.databaseFileName)) : undefined);
+        return Promise.resolve(this.databaseFileName
+            ? path.join(process.env.DATABASE, path.basename(this.databaseFileName)) : undefined);
     }
 
     /**
@@ -45,9 +43,9 @@ class Ghost extends EventEmitter {
      * @param manifest
      * @returns {*}
      */
-    updateManifest(manifest) {
+    updateManifest(manifest) { // eslint-disable-line class-methods-use-this
         const databasePath = process.env.DATABASE;
-        const { mobileWorldContentPaths: { en: relativeUrl }} = manifest;
+        const { mobileWorldContentPaths: { en: relativeUrl } } = manifest;
         const fileName = databasePath + relativeUrl.substring(relativeUrl.lastIndexOf('/') + 1);
 
         if (fs.existsSync(fileName)) {
@@ -55,27 +53,27 @@ class Ghost extends EventEmitter {
         }
 
         return new Promise((resolve, reject) => {
-            const file = fs.createWriteStream(fileName + '.zip');
-            const stream = request('https://www.bungie.net' + relativeUrl, () => {
-                log.info('content downloaded from ' + relativeUrl);
+            const file = fs.createWriteStream(`${fileName}.zip`);
+            const stream = request(`https://www.bungie.net${relativeUrl}`, () => {
+                log.info(`content downloaded from ${relativeUrl}`);
             }).pipe(file);
 
             stream.on('finish', () => {
-                yauzl.open(fileName + '.zip', (err, zipFile) => {
-                    if (err) {
-                        return reject(err);
+                yauzl.open(`${fileName}.zip`, (err1, zipFile) => { // eslint-disable-line consistent-return
+                    if (err1) {
+                        return reject(err1);
                     }
 
                     zipFile.on('entry', entry => {
-                        zipFile.openReadStream(entry, (err, readStream) => {
-                            if (err) {
-                                return reject(err);
+                        zipFile.openReadStream(entry, (err2, readStream) => {
+                            if (err2) {
+                                return reject(err2);
                             }
 
                             readStream.pipe(fs.createWriteStream(databasePath + entry.fileName));
-                            fs.unlink(fileName + '.zip');
+                            fs.unlink(`${fileName}.zip`);
 
-                            resolve(manifest);
+                            return resolve(manifest);
                         });
                     });
                 });

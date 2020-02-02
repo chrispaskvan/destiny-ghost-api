@@ -8,7 +8,6 @@
 Dockerfile
 README.md
 databases
-logs
 mocks
 node_modules
 references.txt

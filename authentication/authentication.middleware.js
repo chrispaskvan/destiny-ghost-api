@@ -32,6 +32,7 @@ class AuthenticationMiddleware {
                 next();
             } else {
                 res.status(401).end();
+                //next(new Error('user not found'));
             }
         } catch (err) {
             next(err);

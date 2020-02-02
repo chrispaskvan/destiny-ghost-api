@@ -1,6 +1,4 @@
 const NodeCache = require('node-cache');
-const redis = require('redis');
-const { host, key, port } = require('../settings/redis.json');
 
 /**
  * Cache key for the latest Destiny Manifest cached.
@@ -78,18 +76,17 @@ class DestinyCache {
 
     /**
      * Set the vendor cache.
+     * @param hash
      * @param vendor
      * @returns {Promise}
      */
-    setVendor(vendor) {
-        const { vendorHash } = vendor;
-
-        if (typeof vendorHash !== 'number') {
+    setVendor(hash, vendor) {
+        if (typeof hash !== 'number') {
             return Promise.reject(new Error('vendorHash number is required.'));
         }
 
         return new Promise((resolve, reject) => {
-            this.cache.set(vendorHash,
+            this.cache.set(hash,
                 JSON.stringify(vendor), (err, res) => (err ? reject(err) : resolve(res)));
         });
     }

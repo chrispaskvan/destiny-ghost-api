@@ -37,35 +37,38 @@ class AuthenticationService {
             ? this.userService.getUserByPhoneNumber(phoneNumber)
             : this.userService.getUserByDisplayName(displayName, membershipType));
 
-        return this._validateUser(user); // eslint-disable-line no-underscore-dangle
+        return this.validateUser(user); // eslint-disable-line no-underscore-dangle
     }
 
     /**
      * Validate user access token with Bungie.
+     * @private
      * @param user
      * @returns {Promise}
      * @private
      */
-    _validateUser(user = {}) {
+    // eslint-disable-next-line max-len
+    async validateUser(user = {}) {
         const { bungie: { access_token: accessToken, refresh_token: refreshToken } = {} } = user;
-
         if (!accessToken) {
             return Promise.resolve();
         }
 
-        return this.destinyService.getCurrentUser(accessToken)
-            .then(() => this.cacheService.setUser(user)
-                .then(() => user))
-            .catch(() => this.destinyService.getAccessTokenFromRefreshToken(refreshToken)
-                .then(bungie => {
-                    user.bungie = bungie; // eslint-disable-line no-param-reassign
+        try {
+            user = await this.destinyService.getCurrentUser(accessToken); // eslint-disable-line max-len, no-param-reassign
+        } catch (err) {
+            const bungie = await this.destinyService.getAccessTokenFromRefreshToken(refreshToken);
 
-                    return Promise.all([
-                        this.cacheService.setUser(user),
-                        this.userService.updateUserBungie(user.id, bungie),
-                    ])
-                        .then(() => user);
-                }));
+            user.bungie = bungie; // eslint-disable-line no-param-reassign
+            await Promise.all([
+                this.cacheService.setUser(user),
+                this.userService.updateUserBungie(user.id, bungie),
+            ]);
+
+            return user;
+        }
+
+        return { bungie: { access_token: accessToken, refresh_token: refreshToken }, ...user };
     }
 }
 

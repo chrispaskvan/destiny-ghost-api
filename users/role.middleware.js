@@ -1,4 +1,4 @@
-const administrators = require('../settings/administrators.json');
+const { administrators } = require('../helpers/config');
 
 /**
  * User Authentication Middleware Class

@@ -13,7 +13,7 @@
  * @requires util
  */
 const util = require('util');
-const settings = require('../settings/bitly.json');
+const { bitly: settings } = require('../helpers/config');
 const { get } = require('../helpers/request');
 
 /**

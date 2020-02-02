@@ -1,6 +1,6 @@
-const _ = require('underscore'),
-    base64url = require('base64url'),
-    crypto = require('crypto');
+const _ = require('underscore');
+const base64url = require('base64url');
+const crypto = require('crypto');
 
 /**
  * Controller class for Destiny routes.
@@ -22,7 +22,7 @@ class DestinyController {
      * @returns {*}
      * @private
      */
-    static _getRandomState() {
+    static getRandomState() {
         return base64url(crypto.randomBytes(11));
     }
 
@@ -33,7 +33,7 @@ class DestinyController {
      * @param res
      */
     async getAuthorizationUrl(req, res) {
-        const state = this.constructor._getRandomState();
+        const state = this.constructor.getRandomState();
 
         req.session.state = state;
 
@@ -49,7 +49,7 @@ class DestinyController {
      * @private
      */
     async getCharacters(req, res) {
-        const { session: { displayName, membershipType }} = req;
+        const { session: { displayName, membershipType } } = req;
         const { membershipId } = await this.users.getUserByDisplayName(displayName, membershipType);
         const characters = await this.destiny.getCharacters(membershipId, membershipType);
         const characterBases = characters.map(character => {
@@ -64,16 +64,16 @@ class DestinyController {
                 links: [
                     {
                         rel: 'Character',
-                        href: '/characters/' + characterBase.characterId
-                    }
-                ]
+                        href: `/characters/${characterBase.characterId}`,
+                    },
+                ],
             };
         });
-        const characterClasses = await Promise.all(characterBases.map(characterBase =>
-            this.world.getClassByHash(characterBase.classHash)));
+        const characterClasses = await Promise.all(characterBases
+            .map(characterBase => this.world.getClassByHash(characterBase.classHash)));
 
         characterBases.forEach((characterBase, index) => {
-            characterBase.className = characterClasses[index].className;
+            characterBase.className = characterClasses[index].className; // eslint-disable-line max-len, no-param-reassign
         });
 
         res.json(characterBases);
@@ -86,16 +86,18 @@ class DestinyController {
      * @param res
      */
     async getFieldTestWeapons(req, res) {
-        const { session: { displayName, membershipType }} = req;
-        const { bungie: { access_token: accessToken }, membershipId } = await this.users.getUserByDisplayName(displayName, membershipType);
+        const { session: { displayName, membershipType } } = req;
+        const { bungie: { access_token: accessToken }, membershipId } = await this
+            .users.getUserByDisplayName(displayName, membershipType);
         const characters = await this.destiny.getCharacters(membershipId, membershipType);
 
         if (characters && characters.length > 0) {
-            const { characterBase: { characterId }} = characters[0];
-            const vendor = await this.destiny.getFieldTestWeapons(characterId, membershipType, accessToken);
+            const { characterBase: { characterId } } = characters[0];
+            const vendor = await this
+                .destiny.getFieldTestWeapons(characterId, membershipType, accessToken);
             const { itemHashes } = vendor;
             const items = await Promise.all(
-                itemHashes.map(itemHash => this.world.getItemByHash(itemHash))
+                itemHashes.map(itemHash => this.world.getItemByHash(itemHash)),
             );
 
             res.json(items.map(item => item.itemName));
@@ -111,15 +113,17 @@ class DestinyController {
      * @param res
      */
     async getFoundryOrders(req, res) {
-        const { session: { displayName, membershipType }} = req;
-        const { bungie: { access_token: accessToken }, membershipId } = await this.users.getUserByDisplayName(displayName, membershipType);
+        const { session: { displayName, membershipType } } = req;
+        const { bungie: { access_token: accessToken }, membershipId } = await this
+            .users.getUserByDisplayName(displayName, membershipType);
         const characters = await this.destiny.getCharacters(membershipId, membershipType);
 
         if (characters && characters.length > 0) {
-            const { characterBase: { characterId }} = characters[0];
+            const { characterBase: { characterId } } = characters[0];
             const vendor = await this.destiny.getFoundryOrders(characterId, accessToken);
             const { itemHashes } = vendor;
-            const items = await Promise.all(itemHashes.map(itemHash => this.world.getItemByHash(itemHash)));
+            const items = await Promise.all(itemHashes.map(itemHash => this
+                .world.getItemByHash(itemHash)));
 
             res.json(items.map(item => item.itemName));
         }
@@ -134,28 +138,32 @@ class DestinyController {
      * @param res
      */
     async getIronBannerEventRewards(req, res) {
-        const { session: { displayName, membershipType }} = req;
-        const { bungie: { access_token: accessToken }, membershipId } = await this.users.getUserByDisplayName(displayName, membershipType);
+        const { session: { displayName, membershipType } } = req;
+        const { bungie: { access_token: accessToken }, membershipId } = await this
+            .users.getUserByDisplayName(displayName, membershipType);
         const characters = await this.destiny.getCharacters(membershipId, membershipType);
-        const characterItems = await Promise.all(characters.map(character => this.destiny.getIronBannerEventRewards(character.characterBase.characterId, membershipType, accessToken)));
+        const characterItems = await Promise.all(characters
+            .map(({ characterBase: { characterId } }) => this
+                .destiny.getIronBannerEventRewards(characterId, membershipType, accessToken)));
         const rewards = _.flatten(characterItems);
-        const itemHashes = _.uniq(rewards.map(({ item = {}}) => item.itemHash));
-        const items = await Promise.all(itemHashes.map(itemHash => this.world.getItemByHash(itemHash)));
+        const itemHashes = _.uniq(rewards.map(({ item = {} }) => item.itemHash));
+        const items = await Promise.all(itemHashes.map(itemHash => this
+            .world.getItemByHash(itemHash)));
         const weapons = _.filter(items, item => _.contains(item.itemCategoryHashes, 1));
-        const hunterArmor = _.filter(items, item => _.contains(item.itemCategoryHashes, 20) &&
-            _.contains(item.itemCategoryHashes, 23));
-        const titanArmor = _.filter(items, item => _.contains(item.itemCategoryHashes, 20) &&
-            _.contains(item.itemCategoryHashes, 22));
-        const warlockArmor = _.filter(items, item => _.contains(item.itemCategoryHashes, 20) &&
-            _.contains(item.itemCategoryHashes, 21));
+        const hunterArmor = _.filter(items, item => _.contains(item.itemCategoryHashes, 20)
+            && _.contains(item.itemCategoryHashes, 23));
+        const titanArmor = _.filter(items, item => _.contains(item.itemCategoryHashes, 20)
+            && _.contains(item.itemCategoryHashes, 22));
+        const warlockArmor = _.filter(items, item => _.contains(item.itemCategoryHashes, 20)
+            && _.contains(item.itemCategoryHashes, 21));
 
         res.json({
-            weapons: _.map(weapons,item => item.itemName),
+            weapons: _.map(weapons, item => item.itemName),
             armor: {
                 hunter: _.map(hunterArmor, item => item.itemName),
                 titan: _.map(titanArmor, item => item.itemName),
-                warlock: _.map(warlockArmor, item => item.itemName)
-            }
+                warlock: _.map(warlockArmor, item => item.itemName),
+            },
         });
     }
 
@@ -169,13 +177,13 @@ class DestinyController {
     async getGrimoireCards(req, res) {
         const numberOfCards = parseInt(req.params.numberOfCards, 10);
 
-        if (isNaN(numberOfCards)) {
+        if (Number.isNaN(numberOfCards)) {
             return res.status(422).end();
         }
 
         const grimoireCards = await this.world.getGrimoireCards(numberOfCards);
 
-        res.status(200).json(grimoireCards);
+        return res.status(200).json(grimoireCards);
     }
 
     /**
@@ -185,7 +193,7 @@ class DestinyController {
      * @param res
      */
     async getManifest(req, res) {
-        const manifest = await this.destiny.getManifest()
+        const manifest = await this.destiny.getManifest();
 
         res.status(200).json(manifest);
     }
@@ -200,25 +208,24 @@ class DestinyController {
         const { itemHashes, nextRefreshDate } = vendor;
 
         if (itemHashes === undefined || itemHashes.length === 0) {
-            return res.status(200).json({ itemHashes: [], nextRefreshDate: nextRefreshDate });
+            return res.status(200).json({ itemHashes: [], nextRefreshDate });
         }
 
-        const allItems = await Promise.all(itemHashes.map(itemHash => this.world.getItemByHash(itemHash)));
+        const allItems = await Promise.all(itemHashes.map(itemHash => this
+            .world.getItemByHash(itemHash)));
         const itemPromises = _.map(allItems, item => {
-            if (item.itemName === 'Exotic Engram' ||
-                item.itemName === 'Legacy Engram') {
+            if (item.itemName === 'Exotic Engram'
+                || item.itemName === 'Legacy Engram') {
                 return this.world.getItemByHash(item.itemHash)
-                    .then(function (itemDetail) {
-                        return item.itemName.replace('Engram', '') +
-                            itemDetail.itemTypeName;
-                    });
+                    .then(itemDetail => item.itemName.replace('Engram', '')
+                            + itemDetail.itemTypeName);
             }
 
             return Promise.resolve(item.itemName);
         });
         const items = await Promise.all(itemPromises);
 
-        res.json(items);
+        return res.json(items);
     }
 
     /**

@@ -1,7 +1,7 @@
 const RedisSession = require('connect-redis');
 const redis = require('redis');
 const session = require('express-session');
-const redisConfig = require('../settings/redis.json');
+const { redis: redisConfig } = require('../helpers/config');
 
 /**
  * Cache Store and Client

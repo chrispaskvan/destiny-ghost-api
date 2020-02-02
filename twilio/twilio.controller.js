@@ -10,7 +10,7 @@ const { twiml: { MessagingResponse } } = require('twilio');
 const bitly = require('../helpers/bitly');
 const log = require('../helpers/log');
 
-const { attributes, authToken } = require(`../settings/twilio.${process.env.NODE_ENV}.json`); // eslint-disable-line import/no-dynamic-require
+const { twilio: { attributes, authToken } } = require('../helpers/config');
 
 /**
  * Twilio Controller
@@ -136,7 +136,7 @@ class TwilioController {
         const twiml = new MessagingResponse();
 
         // eslint-disable-next-line max-len
-        if (twilio.validateRequest(authToken, header, process.env.DOMAIN + req.originalUrl, req.body)) {
+        if (twilio.validateRequest(authToken, header, `${process.env.PROTOCOL}://${process.env.DOMAIN}${req.originalUrl}`, req.body)) {
             twiml.message(attributes, TwilioController._getRandomResponseForAnError()); // eslint-disable-line no-underscore-dangle, max-len
             res.writeHead(200, {
                 'Content-Type': 'text/xml',
@@ -165,7 +165,7 @@ class TwilioController {
         } = req;
 
         // eslint-disable-next-line max-len
-        if (twilio.validateRequest(authToken, header, process.env.DOMAIN + originalUrl, body)) {
+        if (twilio.validateRequest(authToken, header, `${process.env.PROTOCOL}://${process.env.DOMAIN}${originalUrl}`, body)) {
             let counter = parseInt(cookies.counter, 10) || 0;
             const user = await this.users.getUserByPhoneNumber(body.From);
 
@@ -364,14 +364,18 @@ class TwilioController {
     async statusCallback(req, res) {
         const header = req.headers['x-twilio-signature'];
         const twiml = new MessagingResponse();
+        const {
+            body,
+            originalUrl,
+        } = req;
 
         // eslint-disable-next-line max-len
-        if (twilio.validateRequest(authToken, header, process.env.DOMAIN + req.originalUrl, req.body)) {
-            this.users.getUserByPhoneNumber(req.body.To)
+        if (twilio.validateRequest(authToken, header, `${process.env.PROTOCOL}://${process.env.DOMAIN}${originalUrl}`, body)) {
+            this.users.getUserByPhoneNumber(body.To)
                 .then(user => {
                     if (user) {
                         // eslint-disable-next-line max-len
-                        this.users.addUserMessage(user.displayName, user.membershipType, req.body);
+                        this.users.addUserMessage(user.displayName, user.membershipType, body);
                     }
                 });
             log.info(JSON.stringify(req.body));

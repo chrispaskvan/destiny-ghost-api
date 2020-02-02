@@ -1,5 +1,5 @@
-const NotificationController = require('./notification.controller'),
-	express = require('express');
+const express = require('express');
+const NotificationController = require('./notification.controller');
 
 /**
  * Notification Routes
@@ -11,27 +11,39 @@ const NotificationController = require('./notification.controller'),
  * @param worldRepository
  * @returns {*}
  */
-const routes = ({ authenticationService, destinyService, notificationService, userService, worldRepository }) => {
-	const notificationRouter = express.Router();
+const routes = ({
+    authenticationService,
+    destinyService,
+    notificationService,
+    userService,
+    worldRepository,
+}) => {
+    const notificationRouter = express.Router();
 
-	/**
-	 * Set up routes and initialize the controller.
-	 * @type {NotificationController}
-	 */
-	const notificationController = new NotificationController({ authenticationService, destinyService, notificationService, userService, worldRepository });
+    /**
+     * Set up routes and initialize the controller.
+     * @type {NotificationController}
+     */
+    const notificationController = new NotificationController({
+        authenticationService,
+        destinyService,
+        notificationService,
+        userService,
+        worldRepository,
+    });
 
-	/**
-	 * Routes
-	 */
-	notificationRouter.route('/:subscription')
-		.post((req, res, next) => notificationController.create(req, res)
-			.catch(next));
+    /**
+     * Routes
+     */
+    notificationRouter.route('/:subscription')
+        .post((req, res, next) => notificationController.create(req, res)
+            .catch(next));
 
-	notificationRouter.route('/:subscription/:phoneNumber')
-		.post((req, res, next) => notificationController.create(req, res)
-			.catch(next));
+    notificationRouter.route('/:subscription/:phoneNumber')
+        .post((req, res, next) => notificationController.create(req, res)
+            .catch(next));
 
-	return notificationRouter;
+    return notificationRouter;
 };
 
 module.exports = routes;

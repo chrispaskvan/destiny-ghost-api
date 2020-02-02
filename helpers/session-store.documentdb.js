@@ -1,8 +1,6 @@
 const DocumentDBSession = require('documentdb-session');
 const session = require('express-session');
-const cosmosConfig = require('../settings/documents.json');
-
-const sessionConfig = require(`../settings/session.json`); // eslint-disable-line import/no-dynamic-require
+const { documents: cosmosConfig, session: sessionConfig } = require('../helpers/config');
 
 /**
  * Cache Store Client
