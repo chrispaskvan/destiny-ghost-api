@@ -8,3 +8,6 @@ This project is a work in progress. I eventually intend to release an app for re
 ## Disclaimer
 
 This project is not affiliated with, maintained, authorized, endorsed, or sponsored by Bungie.
+
+## References
+https://bungie-net.github.io/

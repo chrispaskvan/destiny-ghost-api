@@ -125,6 +125,23 @@ class World2 extends World {
     getLore(hash) {
         return Promise.resolve(this.loreDefinitions.find(lore => lore.hash === hash));
     }
+
+    /**
+     * Get vendor's icon.
+     * @param vendorHash
+     * @returns {Promise}
+     */
+    getVendorIcon(vendorHash) {
+        return new Promise((resolve, reject) => {
+            try {
+                const [vendor] = this.vendors.filter(vendor1 => vendor1.hash === vendorHash);
+
+                resolve(`https://www.bungie.net${vendor.displayProperties.icon}`);
+            } catch (err) {
+                reject(err);
+            }
+        });
+    }
 }
 
 module.exports = World2;

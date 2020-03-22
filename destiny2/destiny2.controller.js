@@ -113,20 +113,6 @@ class Destiny2Controller extends DestinyController {
 
         return res.status(404);
     }
-
-    /**
-     * Fetch the latest and greatest manifest if needed.
-     *
-     * @param req
-     * @param res
-     */
-    async upsertManifest(req, res) {
-        const manifest = await this.destiny.getManifest(true);
-
-        await this.world.updateManifest(manifest);
-
-        return res.status(200).json(manifest);
-    }
 }
 
 module.exports = Destiny2Controller;

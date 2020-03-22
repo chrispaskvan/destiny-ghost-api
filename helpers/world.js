@@ -14,11 +14,7 @@ const log = require('./log');
  */
 class World {
     constructor({ directory } = {}) {
-        this.categories = [];
-        this.classes = [];
-        this.items = [];
         this.grimoireCards = [];
-        this.vendors = [];
 
         if (directory) {
             const [databaseFileName] = fs.readdirSync(directory)
@@ -47,28 +43,12 @@ class World {
                 fileMustExist: true,
             });
 
-            const categories = database.prepare('SELECT json FROM DestinyItemCategoryDefinition').all();
-            const classes = database.prepare('SELECT json FROM DestinyClassDefinition').all();
             const grimoireCards = database.prepare('SELECT * FROM DestinyGrimoireCardDefinition').all();
-            const items = database.prepare('SELECT json FROM DestinyInventoryItemDefinition').all();
-            const vendors = database.prepare('SELECT json FROM DestinyVendorDefinition').all();
 
             database.close();
 
-            this.categories = categories.map(({ json: category }) => JSON.parse(category));
-            this.classes = classes.map(({ json: classDefinition }) => JSON.parse(classDefinition));
             this.grimoireCards = grimoireCards.map(({ json: grimoireCard }) => JSON.parse(grimoireCard)); // eslint-disable-line max-len
-            this.items = items.map(({ json: item }) => JSON.parse(item));
-            this.vendors = vendors.map(({ json: vendor }) => JSON.parse(vendor));
         }
-    }
-
-    /**
-     * Get the class according to the provided hash.
-     * @param classHash {string}
-     */
-    getClassByHash(classHash) {
-        return Promise.resolve(this.classes.find(characterClass => characterClass.classHash === classHash)); // eslint-disable-line max-len
     }
 
     /**
@@ -78,70 +58,6 @@ class World {
      */
     getGrimoireCards(numberOfCards) {
         return Promise.resolve(_.sample(this.grimoireCards, numberOfCards));
-    }
-
-    /**
-     * Look up the item(s) with matching strings in their name(s).
-     * @param itemName {string}
-     * @returns {Promise}
-     */
-    getItemByName(itemName) {
-        return new Promise((resolve, reject) => {
-            try {
-                const items = this.items.filter(({ itemName: name = '' }) => name.toLowerCase().includes(itemName.toLowerCase()));
-
-                const groups = _.groupBy(items, item => item.itemName);
-                const keys = Object.keys(groups);
-
-                resolve(_.map(keys, key => _.min(_.filter(items, item => item.itemName === key),
-                    item => item.qualityLevel)));
-            } catch (err) {
-                reject(err);
-            }
-        });
-    }
-
-    /**
-     * Get item by the hash provided.
-     * @param itemHash
-     * @returns {*}
-     */
-    getItemByHash(itemHash) {
-        return new Promise((resolve, reject) => {
-            try {
-                const [item] = this.items.filter(item1 => item1.itemHash === itemHash);
-
-                resolve(item);
-            } catch (err) {
-                reject(err);
-            }
-        });
-    }
-
-    /**
-     * Get the category definition for the provided hash.
-     * @param itemCategoryHash
-     * @returns {Promise}
-     */
-    getItemCategory(itemCategoryHash) {
-        return Promise.resolve(this.categories.find(category => category.id === itemCategoryHash));
-    }
-
-    /**
-     * Get vendor's icon.
-     * @param vendorHash
-     * @returns {Promise}
-     */
-    getVendorIcon(vendorHash) {
-        return new Promise((resolve, reject) => {
-            try {
-                const [vendor] = this.vendors.filter(vendor1 => vendor1.vendorHash === vendorHash);
-
-                resolve(`https://www.bungie.net${vendor.summary.vendorIcon}`);
-            } catch (err) {
-                reject(err);
-            }
-        });
     }
 
     /**

@@ -7,6 +7,8 @@
 # Application Insights
 # Use an ORM
 # Extrapolate Request and Response from Coontrollers
+# Rate Limits/Denial of Service Attacks
+# Swagger
 
 1) Get User by display name or phone number
 2) Get number messages received

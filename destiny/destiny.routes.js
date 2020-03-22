@@ -1,11 +1,8 @@
 /**
  * Created by chris on 9/25/15.
  */
-const { EventEmitter } = require('events');
 const cors = require('cors');
 const express = require('express');
-const httpMocks = require('node-mocks-http');
-const log = require('../helpers/log');
 const DestinyController = require('../destiny/destiny.controller');
 const AuthenticationMiddleWare = require('../authentication/authentication.middleware');
 
@@ -57,24 +54,10 @@ const routes = ({
         .get((req, res, next) => destinyController.getCurrentUser(req, res)
             .catch(next));
 
-    destinyRouter.route('/fieldTestWeapons/')
-        .get((req, res, next) => middleware.authenticateUser(req, res, next),
-            (req, res, next) => destinyController.getFieldTestWeapons(req, res)
-                .catch(next));
-
-    destinyRouter.route('/foundryOrders/')
-        .get((req, res, next) => middleware.authenticateUser(req, res, next),
-            (req, res, next) => destinyController.getFoundryOrders(req, res)
-                .catch(next));
-
     destinyRouter.route('/grimoireCards/:numberOfCards')
         .get(cors(),
             (req, res, next) => destinyController.getGrimoireCards(req, res)
                 .catch(next));
-
-    destinyRouter.route('/ironBannerEventRewards/')
-        .get((req, res, next) => destinyController.getIronBannerEventRewards(req, res)
-            .catch(next));
 
     destinyRouter.route('/manifest')
         .get((req, res, next) => destinyController.getManifest(req, res)
@@ -83,26 +66,6 @@ const routes = ({
     destinyRouter.route('/manifest')
         .post((req, res, next) => destinyController.upsertManifest(req, res)
             .catch(next));
-
-    destinyRouter.route('/xur/')
-        .get((req, res, next) => destinyController.getXur(req, res)
-            .catch(next));
-
-    /**
-     * Validate the existence and the freshness of the Bungie database.
-     */
-    destinyRouter.validateManifest = () => {
-        const req = httpMocks.createRequest();
-        const res = httpMocks.createResponse({
-            eventEmitter: EventEmitter,
-        });
-
-        destinyController.upsertManifest(req, res);
-
-        res.on('end', () => {
-            log.info(`destiny validateManifest responded with a status code of ${res.statusCode}`);
-        });
-    };
 
     return destinyRouter;
 };
