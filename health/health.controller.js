@@ -65,9 +65,9 @@ class HealthController {
     }
 
     async _getWorldItem() {
-        const [{ itemDescription } = {}] = await this.world.getItemByName('Doctrine of Passing');
+        const [{ cardDescription } = {}] = await this.world.getGrimoireCards(1);
 
-        return itemDescription;
+        return cardDescription;
     }
 
     async _getWorld2Item() {
