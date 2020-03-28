@@ -1,5 +1,10 @@
 class Manifests {
-    constructor({ destinyService, destiny2Service, worldRepository, world2Repository }) {
+    constructor({
+        destinyService,
+        destiny2Service,
+        worldRepository,
+        world2Repository,
+    }) {
         this.destinyService = destinyService;
         this.destiny2Service = destiny2Service;
         this.worldRepository = worldRepository;
@@ -14,7 +19,7 @@ class Manifests {
      * @param world
      * @returns {Promise<void>}
      */
-    async upsertManifest(destiny, world) {
+    static async upsertManifest(destiny, world) {
         const manifest = await destiny.getManifest(true);
 
         await world.updateManifest(manifest);
@@ -28,8 +33,8 @@ class Manifests {
      */
     async upsertManifests() {
         await Promise.all([
-            this.upsertManifest(this.destinyService, this.worldRepository),
-            this.upsertManifest(this.destiny2Service, this.world2Repository)
+            this.constructor.upsertManifest(this.destinyService, this.worldRepository),
+            this.constructor.upsertManifest(this.destiny2Service, this.world2Repository),
         ]);
     }
 }

@@ -9,7 +9,6 @@
  * the wiki at {@link http://bungienetplatform.wikia.com/wiki/Endpoints} or
  * the Bungie web API platform help page {@link https://www.bungie.net/platform/destiny/help/}.
  */
-const _ = require('underscore');
 const qs = require('qs');
 const DestinyError = require('./destiny.error');
 const {
@@ -17,7 +16,6 @@ const {
         apiKey, authorizationUrl, clientId, clientSecret,
     },
 } = require('../helpers/config');
-const { gunSmithHash, lordSaladinHash, xurHash } = require('./destiny.constants');
 const { get, post } = require('../helpers/request');
 
 /**

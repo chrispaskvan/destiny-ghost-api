@@ -5,7 +5,9 @@ const DestinyError = require('../destiny/destiny.error');
 const RequestError = require('../helpers/request.error');
 const { manifests, routes } = require('./routes')();
 const expressLoader = require('./express');
+const httpLog = require('../helpers/httpLog');
 const log = require('../helpers/log');
+
 
 const loaders = {
     init: async ({ app }) => {
@@ -31,14 +33,14 @@ const loaders = {
         /**
          * Request/Response and Error Middleware Loggers
          */
-        app.use(log.requestLogger());
-        app.use(log.errorLogger());
+        app.use(httpLog);
 
         /**
          * Routes
          */
         app.use('/', routes);
 
+        // noinspection ES6MissingAwait
         /**
          * Check for the latest manifest definition and database from Bungie.
          */
@@ -65,6 +67,8 @@ const loaders = {
                 code, message, status, statusText,
             } = err;
 
+            log.error(err);
+            // noinspection JSUnresolvedVariable
             if (res.status) {
                 if (err instanceof DestinyError) {
                     res.status(500).json({
@@ -92,7 +96,7 @@ const loaders = {
                 next(err);
             }
         });
-    }
+    },
 };
 
 module.exports = loaders;
