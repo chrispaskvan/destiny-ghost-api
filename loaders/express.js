@@ -5,7 +5,7 @@ const session = require('express-session');
 const { store } = require('../helpers/session-store');
 const { session: sessionConfig } = require('../helpers/config');
 
-module.exports = (app) => {
+module.exports = app => {
     app.use(bodyParser.json());
     app.use(bodyParser.urlencoded({
         extended: true,

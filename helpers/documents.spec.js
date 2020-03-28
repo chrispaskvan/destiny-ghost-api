@@ -7,6 +7,7 @@ describe('Documents', () => {
     const collectionId = 'Users';
 
     describe('deleteDocumentById', () => {
+        // eslint-disable-next-line jest/no-disabled-tests
         describe.skip('when document exists', () => {
             it('should delete document', () => {
                 const documentId = '1';

@@ -7,7 +7,8 @@
     "start": "node server",
     "test": "NODE_ENV=test DESTINY_DATABASE_DIR=./databases/destiny DESTINY2_DATABASE_DIR=./databases/destiny2 ./node_modules/.bin/jest --config ./jest.config.js",
     "coverage": "npm run test -- --coverage",
-    "test:watch": "npm run test -- --watchAll"
+    "test:watch": "npm run test -- --watchAll",
+    "pretest": "eslint --ignore-path .gitignore ."
   },
   "author": "Chris Paskvan",
   "license": "MIT",
@@ -44,7 +45,6 @@
     "documentdb-session": "^1.0.1",
     "dotenv": "^6.2.0",
     "express": "^4.16.4",
-    "express-pino-logger": "^4.0.0",
     "express-session": "^1.15.6",
     "is-my-json-valid": "^2.19.0",
     "json-schema-defaults": "^0.4.0",
@@ -55,6 +55,7 @@
     "nodemailer": "^5.1.1",
     "nodemailer-smtp-transport": "^2.7.4",
     "pino": "^5.11.1",
+    "pino-http": "^4.4.0",
     "qs": "^6.8.0",
     "redis": "^2.8.0",
     "request": "^2.88.0",

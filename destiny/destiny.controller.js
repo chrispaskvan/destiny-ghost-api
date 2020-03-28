@@ -1,4 +1,3 @@
-const _ = require('underscore');
 const base64url = require('base64url');
 const crypto = require('crypto');
 

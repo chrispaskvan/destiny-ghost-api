@@ -70,11 +70,11 @@ module.exports = () => {
      * Routes
      */
     const destinyRouter = DestinyRouter({
-            authenticationController,
-            destinyService,
-            userService,
-            worldRepository: world,
-        });
+        authenticationController,
+        destinyService,
+        userService,
+        worldRepository: world,
+    });
     routes.use('/destiny', destinyRouter);
 
     const destiny2Router = Destiny2Router({
@@ -130,7 +130,7 @@ module.exports = () => {
         destinyService,
         destiny2Service,
         worldRepository: world,
-        world2Repository: world2
+        world2Repository: world2,
     });
 
     return { manifests, routes };
