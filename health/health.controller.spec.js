@@ -36,8 +36,8 @@ describe('HealthController', () => {
     describe('getHealth', () => {
         describe('when all services are healthy', () => {
             const world = {
-                getItemByName: () => Promise.resolve([{
-                    itemDescription: 'Red Hand IX',
+                getGrimoireCards: () => Promise.resolve([{
+                    cardDescription: 'Red Hand IX',
                 }]),
             };
             const world2 = {

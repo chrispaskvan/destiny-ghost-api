@@ -2,6 +2,8 @@
  * Route Definitions
  */
 const express = require('express');
+const swaggerJsdoc = require('swagger-jsdoc');
+const swaggerUi = require('swagger-ui-express');
 const twilio = require('twilio');
 
 const AuthenticationController = require('../authentication/authentication.controller');
@@ -29,6 +31,43 @@ const UserRouter = require('../users/user.routes');
 
 module.exports = () => {
     const routes = express.Router();
+
+    /**
+     * Swagger
+     */
+    const options = {
+        swaggerDefinition: {
+            openapi: '3.0.0',
+            info: {
+                title: 'Destiny-Ghost API',
+                version: '2.2.1',
+                description:
+                    'A Node Express application for receiving SMS/MMS Notifications around changes to the vendor wares in Bungie\'s Destiny and make ad-hoc queries in the database.',
+                license: {
+                    name: 'MIT',
+                    url: 'https://choosealicense.com/licenses/mit',
+                },
+            },
+            servers: [
+                {
+                    url: 'https://api2.destiny-ghost.com',
+                },
+                {
+                    url: 'https://api.destiny-ghost.com',
+                },
+            ],
+        },
+        apis: ['../**/*.routes.js'],
+    };
+    const specs = swaggerJsdoc(options);
+
+    routes.use('/docs', swaggerUi.serve);
+    routes.get(
+        '/docs',
+        swaggerUi.setup(specs, {
+            explorer: false,
+        }),
+    );
 
     /**
      * Dependencies

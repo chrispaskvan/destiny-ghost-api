@@ -53,7 +53,7 @@ const loaders = {
                 return;
             }
 
-            res.sendFile(path.join(`${__dirname}/signIn.html`));
+            res.sendFile(path.join(`${__dirname}/../signIn.html`));
         });
 
         app.get('/ping', (req, res) => {

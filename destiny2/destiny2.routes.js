@@ -49,6 +49,21 @@ const routes = ({
             (req, res, next) => destiny2Controller.getLeaderboard(req, res)
                 .catch(next));
 
+    /**
+     * @swagger
+     * path:
+     *  /destiny2/manifest/:
+     *    get:
+     *      security: []
+     *      summary: Get details about the latest and greatest Destiny manifest definition.
+     *      tags:
+     *        - Destiny 2
+     *      produces:
+     *        - application/json
+     *      responses:
+     *        200:
+     *          description: Destiny Manifest definition
+     */
     destiny2Router.route('/manifest')
         .get((req, res, next) => destiny2Controller.getManifest(req, res)
             .catch(next));
@@ -67,6 +82,21 @@ const routes = ({
             (req, res, next) => destiny2Controller.getProfile(req, res)
                 .catch(next));
 
+    /**
+     * @swagger
+     * path:
+     *  /destiny2/xur/:
+     *    get:
+     *      security: []
+     *      summary: Get Xur's inventory if available.
+     *      tags:
+     *        - Destiny 2
+     *      produces:
+     *        - application/json
+     *      responses:
+     *        200:
+     *          description: Xur's inventory
+     */
     destiny2Router.route('/xur')
         .get(cors(corsConfig),
             (req, res, next) => middleware.authenticateUser(req, res, next),
