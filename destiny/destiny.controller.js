@@ -78,6 +78,22 @@ class DestinyController {
     }
 
     /**
+     * Get the current user from Bungie.
+     *
+     * @param req
+     * @param res
+     * @returns {Promise<void>}
+     */
+    async getCurrentUser(req, res) {
+        const { session: { displayName, membershipType } } = req;
+        const currentUser = await this.users.getUserByDisplayName(displayName, membershipType);
+        const { bungie: { access_token: accessToken } } = currentUser;
+        const bungieUser = await this.destiny.getCurrentUser(accessToken);
+
+        res.json(bungieUser);
+    }
+
+    /**
      * Get a random selection of Grimoire Cards.
      *
      * @param req

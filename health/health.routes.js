@@ -36,7 +36,7 @@ const routes = ({
      * path:
      *  /health/:
      *    get:
-     *      summary: Get a short summary of the health status of the Destiny Ghost API and its dependencies.
+     *      summary: Get a summary of the status of the Destiny Ghost API and its dependencies.
      *      tags:
      *        - Health
      *      produces:
