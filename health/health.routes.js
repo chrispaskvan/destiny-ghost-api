@@ -32,7 +32,18 @@ const routes = ({
     });
 
     /**
-     * Routes
+     * @swagger
+     * path:
+     *  /health/:
+     *    get:
+     *      summary: Get a short summary of the health status of the Destiny Ghost API and its dependencies.
+     *      tags:
+     *        - Health
+     *      produces:
+     *        - application/json
+     *      responses:
+     *        200:
+     *          description: Status reports of underlying dependencies.
      */
     healthRouter.route('/')
         .get((req, res, next) => healthController.getHealth(req, res)

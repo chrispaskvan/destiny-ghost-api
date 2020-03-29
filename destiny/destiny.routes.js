@@ -8,6 +8,7 @@ const AuthenticationMiddleWare = require('../authentication/authentication.middl
 
 /**
  * Destiny Routes
+ *
  * @param authenticationController
  * @param destinyService
  * @param userService
@@ -38,9 +39,6 @@ const routes = ({
      */
     const middleware = new AuthenticationMiddleWare({ authenticationController });
 
-    /**
-     * Routes
-     */
     destinyRouter.route('/signIn/')
         .get(cors(), (req, res, next) => destinyController.getAuthorizationUrl(req, res)
             .catch(next));
@@ -50,6 +48,20 @@ const routes = ({
             (req, res, next) => destinyController.getCharacters(req, res)
                 .catch(next));
 
+    /**
+     * @swagger
+     * path:
+     *  /destiny/currentUser/:
+     *    get:
+     *      summary: Get the currently authenticated user.
+     *      tags:
+     *        - Destiny
+     *      produces:
+     *        - application/json
+     *      responses:
+     *        200:
+     *          description: Destiny Manifest definition
+     */
     destinyRouter.route('/currentUser/')
         .get((req, res, next) => destinyController.getCurrentUser(req, res)
             .catch(next));
@@ -59,6 +71,21 @@ const routes = ({
             (req, res, next) => destinyController.getGrimoireCards(req, res)
                 .catch(next));
 
+    /**
+     * @swagger
+     * path:
+     *  /destiny/manifest/:
+     *    get:
+     *      security: []
+     *      summary: Get details about the latest and greatest Destiny manifest definition.
+     *      tags:
+     *        - Destiny
+     *      produces:
+     *        - application/json
+     *      responses:
+     *        200:
+     *          description: Destiny Manifest definition
+     */
     destinyRouter.route('/manifest')
         .get((req, res, next) => destinyController.getManifest(req, res)
             .catch(next));
