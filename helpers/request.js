@@ -1,5 +1,5 @@
 const axios = require('axios');
-const RequestError = require('../helpers/request.error');
+const RequestError = require('./request.error');
 
 async function request(options) {
     try {

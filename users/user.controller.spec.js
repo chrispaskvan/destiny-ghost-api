@@ -31,7 +31,7 @@ describe('UserController', () => {
 
     describe('getCurrentUser', () => {
         describe('when session displayName is undefined', () => {
-            it('should not return a user', done => {
+            it('should not return a user', () => new Promise(done => {
                 const req = httpMocks.createRequest({
                     session: {
                         displayName,
@@ -62,11 +62,11 @@ describe('UserController', () => {
                 });
 
                 userController.getCurrentUser(req, res);
-            });
+            }));
         });
 
         describe('when session membershipType is undefined', () => {
-            it('should not return a user', done => {
+            it('should not return a user', () => new Promise(done => {
                 const req = httpMocks.createRequest({
                     session: {
                         membershipType,
@@ -97,12 +97,12 @@ describe('UserController', () => {
                 });
 
                 userController.getCurrentUser(req, res);
-            });
+            }));
         });
 
         describe('when session displayName and membershipType are defined', () => {
             describe('when user and destiny services return a user', () => {
-                it('should return the current user', done => {
+                it('should return the current user', () => new Promise(done => {
                     const req = httpMocks.createRequest({
                         session: {
                             displayName,
@@ -134,11 +134,11 @@ describe('UserController', () => {
                     });
 
                     userController.getCurrentUser(req, res);
-                });
+                }));
             });
 
             describe('when destiny service returns undefined', () => {
-                it('should not return a user', done => {
+                it('should not return a user', () => new Promise(done => {
                     const req = httpMocks.createRequest({
                         session: {
                             displayName,
@@ -161,11 +161,11 @@ describe('UserController', () => {
                     });
 
                     userController.getCurrentUser(req, res);
-                });
+                }));
             });
 
             describe('when user service returns undefined', () => {
-                it('should not return a user', done => {
+                it('should not return a user', () => new Promise(done => {
                     const req = httpMocks.createRequest({
                         session: {
                             displayName,
@@ -191,14 +191,14 @@ describe('UserController', () => {
                     });
 
                     userController.getCurrentUser(req, res);
-                });
+                }));
             });
         });
     });
 
     describe('update', () => {
         describe('when user is undefined', () => {
-            it('should not return a user', done => {
+            it('should not return a user', () => new Promise(done => {
                 const req = httpMocks.createRequest({
                     session: {},
                 });
@@ -211,11 +211,11 @@ describe('UserController', () => {
                 });
 
                 userController.update(req, res);
-            });
+            }));
         });
 
         describe('when user is defined', () => {
-            it('should patch the user', done => {
+            it('should patch the user', () => new Promise(done => {
                 const firstName = '11';
                 const req = httpMocks.createRequest({
                     body: [
@@ -263,7 +263,7 @@ describe('UserController', () => {
                 });
 
                 userController.update(req, res);
-            });
+            }));
         });
     });
 });

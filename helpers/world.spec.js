@@ -8,7 +8,7 @@ const world = new World({
 });
 
 describe('It\'s Bungie\'s 1st world. You\'re just querying it.', () => {
-    it('should return 2 random Grimoire Cards', done => {
+    it('should return 2 random Grimoire Cards', () => new Promise(done => {
         const count = 2;
 
         world.getGrimoireCards(count)
@@ -22,5 +22,5 @@ describe('It\'s Bungie\'s 1st world. You\'re just querying it.', () => {
             .catch(err => {
                 done(err);
             });
-    });
+    }));
 });

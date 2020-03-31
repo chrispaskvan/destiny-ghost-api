@@ -14,7 +14,7 @@ module.exports = (value, schema, options = {}) => {
         abortEarly: false,
         ...options,
     };
-    const result = Joi.validate(value, schema, finalOptions);
+    const result = Joi.attempt(value, Joi.object(schema), finalOptions);
 
     if (result.error) {
         throw result.error;

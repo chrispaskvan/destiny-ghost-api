@@ -34,7 +34,7 @@ class TwilioController {
      * @returns {Promise}
      * @private
      */
-    async _getItem(item) {
+    async getItem(item) {
         const {
             displayProperties: {
                 icon,
@@ -72,7 +72,7 @@ class TwilioController {
      * @returns {string}
      * @private
      */
-    static _getRandomResponseForAnError() {
+    static getRandomResponseForAnError() {
         const responses = [
             'Sorry. I lost your message in the Ascendant realm. Blame Oryx.',
             'Skolas escaped the Prison of Elders again. He must be responsible for this mishap.',
@@ -88,7 +88,7 @@ class TwilioController {
      * @returns {string}
      * @private
      */
-    static _getRandomResponseForNoResults() {
+    static getRandomResponseForNoResults() {
         const responses = [
             'Are you sure that\'s how it\'s spelled?',
             'Does it look like a Gjallarhorn?',
@@ -103,7 +103,7 @@ class TwilioController {
      * @param itemName
      * @returns {Promise}
      */
-    async _queryItem(itemName) {
+    async queryItem(itemName) {
         const allItems = await this.world.getItemByName(itemName.replace(/[\u2018\u2019]/g, '\''));
         const items = allItems.filter(({ itemType }) => !itemName.includes('Catalyst')
             && [2, 3, 4].includes(itemType));
@@ -114,13 +114,13 @@ class TwilioController {
                 const keys = Object.keys(groups);
 
                 if (keys.length === 1) {
-                    return this._getItem(items[0]); // eslint-disable-line no-underscore-dangle
+                    return this.getItem(items[0]);
                 }
 
                 return items;
             }
 
-            return this._getItem(items[0]); // eslint-disable-line no-underscore-dangle
+            return this.getItem(items[0]);
         }
 
         return [];
@@ -137,7 +137,7 @@ class TwilioController {
 
         // eslint-disable-next-line max-len
         if (twilio.validateRequest(authToken, header, `${process.env.PROTOCOL}://${process.env.DOMAIN}${req.originalUrl}`, req.body)) {
-            twiml.message(attributes, TwilioController._getRandomResponseForAnError()); // eslint-disable-line no-underscore-dangle, max-len
+            twiml.message(attributes, TwilioController.getRandomResponseForAnError());
             res.writeHead(200, {
                 'Content-Type': 'text/xml',
             });
@@ -289,7 +289,7 @@ class TwilioController {
 
                     log.error(err);
 
-                    twiml.message(attributes, TwilioController._getRandomResponseForNoResults()); // eslint-disable-line no-underscore-dangle, max-len
+                    twiml.message(attributes, TwilioController.getRandomResponseForNoResults());
                     res.writeHead(200, {
                         'Content-Type': 'text/xml',
                     });
@@ -305,13 +305,13 @@ class TwilioController {
                 return res.end(twiml.toString());
             } else {
                 const searchTerm = body.Body.trim().toLowerCase();
-                const items = await this._queryItem(searchTerm); // eslint-disable-line no-underscore-dangle, max-len
+                const items = await this.queryItem(searchTerm);
 
                 counter += 1;
                 res.cookie('counter', counter);
                 switch (items.length) {
                 case 0: {
-                    twiml.message(attributes, TwilioController._getRandomResponseForNoResults()); // eslint-disable-line no-underscore-dangle, max-len
+                    twiml.message(attributes, TwilioController.getRandomResponseForNoResults());
                     res.writeHead(200, {
                         'Content-Type': 'text/xml',
                     });

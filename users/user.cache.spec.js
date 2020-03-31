@@ -5,7 +5,7 @@ const mockUser = require('../mocks/users.json')[0];
 describe('UserCache', () => {
     let cacheService;
 
-    describe('_deleteCache', () => {
+    describe('deleteCache', () => {
         const cacheKey = 'key';
 
         describe('when client del operation succeeds', () => {
@@ -25,7 +25,7 @@ describe('UserCache', () => {
             });
 
             it('resolves', async () => {
-                const res = await cacheService._deleteCache(cacheKey); // eslint-disable-line no-underscore-dangle, max-len
+                const res = await cacheService.deleteCache(cacheKey);
 
                 expect(res).toEqual(clientResponse);
             });
@@ -47,8 +47,8 @@ describe('UserCache', () => {
                 cacheService = new UserCache();
             });
 
-            it('resolves', () => cacheService._deleteCache(cacheKey) // eslint-disable-line no-underscore-dangle
-                .then(res => expect(res).toBeUndefined)
+            it('resolves', () => cacheService.deleteCache(cacheKey)
+                .then(res => expect(res).toBeUndefined())
                 .catch(err => {
                     expect(err).toEqual(errMessage);
                 }));
@@ -111,7 +111,7 @@ describe('UserCache', () => {
         });
     });
 
-    describe('_getCache', () => {
+    describe('getCache', () => {
         const cacheKey = 'key';
 
         describe('when client get operation succeeds', () => {
@@ -127,7 +127,7 @@ describe('UserCache', () => {
 
                     cacheService = new UserCache();
 
-                    const res = await cacheService._getCache(cacheKey); // eslint-disable-line no-underscore-dangle, max-len
+                    const res = await cacheService.getCache(cacheKey);
 
                     expect(res).toEqual(mockUser);
                 });
@@ -145,10 +145,9 @@ describe('UserCache', () => {
 
                     cacheService = new UserCache();
 
-                    const res = await cacheService._getCache(cacheKey); // eslint-disable-line no-underscore-dangle, max-len
+                    const res = await cacheService.getCache(cacheKey);
 
-                    // eslint-disable-next-line no-unused-expressions, jest/valid-expect
-                    expect(res).toBeUndefined;
+                    expect(res).toBeUndefined();
                 });
             });
         });
@@ -167,8 +166,8 @@ describe('UserCache', () => {
 
                 cacheService = new UserCache();
 
-                return cacheService._getCache(cacheKey) // eslint-disable-line no-underscore-dangle
-                    .then(res => expect(res).toBeUndefined)
+                return cacheService.getCache(cacheKey)
+                    .then(res => expect(res).toBeUndefined())
                     .catch(err => {
                         expect(err).toEqual(errMessage);
                     });
@@ -195,13 +194,13 @@ describe('UserCache', () => {
         describe('when cached user is found', () => {
             describe('when membershipId is found', () => {
                 it('returns user', async () => {
-                    jest.spyOn(cacheService, '_getCache')
+                    jest.spyOn(cacheService, 'getCache')
                         .mockResolvedValueOnce(mockUser);
 
                     const user = await cacheService.getUser();
 
                     expect(user).toEqual(mockUser);
-                    expect(cacheService._getCache).toHaveBeenCalledTimes(1); // eslint-disable-line no-underscore-dangle, max-len
+                    expect(cacheService.getCache).toHaveBeenCalledTimes(1);
                 });
             });
 
@@ -209,27 +208,26 @@ describe('UserCache', () => {
                 it('returns user', async () => {
                     const { membershipId, ...mockUser1 } = mockUser;
 
-                    jest.spyOn(cacheService, '_getCache')
+                    jest.spyOn(cacheService, 'getCache')
                         .mockResolvedValueOnce(mockUser1)
                         .mockResolvedValueOnce(mockUser);
 
                     const user = await cacheService.getUser();
 
                     expect(user).toEqual(mockUser);
-                    expect(cacheService._getCache).toHaveBeenCalledTimes(2); // eslint-disable-line no-underscore-dangle, max-len
+                    expect(cacheService.getCache).toHaveBeenCalledTimes(2);
                 });
             });
         });
 
         describe('when cached user is not found', () => {
             it('return undefined', async () => {
-                cacheService._getCache = jest.fn() // eslint-disable-line no-underscore-dangle
+                cacheService.getCache = jest.fn()
                     .mockImplementation(() => Promise.resolve());
 
                 const user = await cacheService.getUser();
 
-                // eslint-disable-next-line no-unused-expressions, jest/valid-expect
-                expect(user).toBeUndefined;
+                expect(user).toBeUndefined();
             });
         });
     });
@@ -304,7 +302,7 @@ describe('UserCache', () => {
                 cacheService = new UserCache();
 
                 return cacheService.setUser(mockUser)
-                    .then(res => expect(res).toBeUndefined)
+                    .then(res => expect(res).toBeUndefined())
                     .catch(err => {
                         expect(err).toEqual(errMessage);
                     });

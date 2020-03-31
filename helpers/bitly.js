@@ -13,8 +13,8 @@
  * @requires util
  */
 const util = require('util');
-const { bitly: settings } = require('../helpers/config');
-const { get } = require('../helpers/request');
+const { bitly: settings } = require('./config');
+const { get } = require('./request');
 
 /**
  * @param {string} bitylSettingsFullPath - Full path to the JSON Bitly settings file.

@@ -8,7 +8,7 @@ const chance = new Chance();
 const publisher = new Publisher();
 
 describe('Message delivery test', () => {
-    it('Should return true for success', done => {
+    it('Should return true for success', () => new Promise(done => {
         const numberOfUsers = 2;
         const phoneNumber = chance.phone({
             country: 'us',
@@ -40,5 +40,5 @@ describe('Message delivery test', () => {
                 expect(response.every(b => b === true)).toBeTruthy();
                 done();
             });
-    });
+    }));
 });

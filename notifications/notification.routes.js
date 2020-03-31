@@ -32,9 +32,6 @@ const routes = ({
         worldRepository,
     });
 
-    /**
-     * Routes
-     */
     notificationRouter.route('/:subscription')
         .post((req, res, next) => notificationController.create(req, res)
             .catch(next));

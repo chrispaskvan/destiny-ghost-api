@@ -54,7 +54,7 @@ describe('Destiny2Controller', () => {
     describe('getProfile', () => {
         describe('when session displayName and membershipType are defined', () => {
             describe('when user and destiny services return a user', () => {
-                it('should return user profile', done => {
+                it('should return user profile', () => new Promise(done => {
                     const req = httpMocks.createRequest({
                         session: {
                             displayName,
@@ -92,7 +92,7 @@ describe('Destiny2Controller', () => {
                     });
 
                     destiny2Controller.getProfile(req, res);
-                });
+                }));
             });
         });
     });

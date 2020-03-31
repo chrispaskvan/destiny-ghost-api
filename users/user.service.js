@@ -390,12 +390,12 @@ class UserService {
      */
     async getUserByDisplayName(displayName, membershipType, noCache = false) {
         const qb = new QueryBuilder();
-        const schema = Joi.object().keys({
+        const schema = {
             displayName: Joi.string().required(),
             membershipType: Joi.number().required(),
             noCache: Joi.boolean().optional(),
-        });
-        const { error } = Joi.validate({ displayName, membershipType, noCache },
+        };
+        const error = validate({ displayName, membershipType, noCache },
             schema, { abortEarly: false });
 
         if (error) {

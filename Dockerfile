@@ -4,8 +4,9 @@ RUN mkdir -p /usr/src/destiny-ghost-api
 WORKDIR /usr/src/destiny-ghost-api
 
 COPY package.json /usr/src/destiny-ghost-api/
+COPY package-lock.json /usr/src/destiny-ghost-api/
 
-RUN npm install
+RUN npm ci
 
 COPY . /usr/src/destiny-ghost-api
 
