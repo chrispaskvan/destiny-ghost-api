@@ -67,7 +67,7 @@ class Destiny2Service extends DestinyService {
             return manifest;
         }
 
-        return this.getManifestFromBungie(); // eslint-disable-line no-underscore-dangle
+        return this.getManifestFromBungie();
     }
 
     /**

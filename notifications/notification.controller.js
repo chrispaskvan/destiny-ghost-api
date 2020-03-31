@@ -1,7 +1,7 @@
 const Publisher = require('../helpers/publisher');
 const Subscriber = require('../helpers/subscriber');
 const { notificationHeaders } = require('../helpers/config');
-const notificationTypes = require('../notifications/notification.types');
+const notificationTypes = require('./notification.types');
 const log = require('../helpers/log');
 
 /**

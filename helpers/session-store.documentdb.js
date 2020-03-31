@@ -1,6 +1,6 @@
 const DocumentDBSession = require('documentdb-session');
 const session = require('express-session');
-const { documents: cosmosConfig, session: sessionConfig } = require('../helpers/config');
+const { documents: cosmosConfig, session: sessionConfig } = require('./config');
 
 /**
  * Cache Store Client

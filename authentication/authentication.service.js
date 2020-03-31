@@ -37,7 +37,7 @@ class AuthenticationService {
             ? this.userService.getUserByPhoneNumber(phoneNumber)
             : this.userService.getUserByDisplayName(displayName, membershipType));
 
-        return this.validateUser(user); // eslint-disable-line no-underscore-dangle
+        return this.validateUser(user);
     }
 
     /**

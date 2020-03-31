@@ -1,11 +1,8 @@
 /**
  * Created by chris on 9/25/15.
  */
-const { EventEmitter } = require('events');
 const cors = require('cors');
 const express = require('express');
-const httpMocks = require('node-mocks-http');
-const log = require('../helpers/log');
 const AuthenticationMiddleWare = require('../authentication/authentication.middleware');
 const Destiny2Controller = require('./destiny2.controller');
 
@@ -39,15 +36,6 @@ const routes = ({
      * @type {AuthenticationMiddleware}
      */
     const middleware = new AuthenticationMiddleWare({ authenticationController });
-
-    /**
-     * Routes
-     */
-    destiny2Router.route('/leaderboard')
-        .get(cors(corsConfig),
-            (req, res, next) => middleware.authenticateUser(req, res, next),
-            (req, res, next) => destiny2Controller.getLeaderboard(req, res)
-                .catch(next));
 
     /**
      * @swagger
@@ -102,22 +90,6 @@ const routes = ({
             (req, res, next) => middleware.authenticateUser(req, res, next),
             (req, res, next) => destiny2Controller.getXur(req, res)
                 .catch(next));
-
-    /**
-     * Validate the existence and the freshness of the Bungie database.
-     */
-    destiny2Router.validateManifest = () => {
-        const req = httpMocks.createRequest();
-        const res = httpMocks.createResponse({
-            eventEmitter: EventEmitter,
-        });
-
-        destiny2Controller.upsertManifest(req, res);
-
-        res.on('end', () => {
-            log.info(`destiny 2 validateManifest returned a response status code of ${res.statusCode}`);
-        });
-    };
 
     return destiny2Router;
 };

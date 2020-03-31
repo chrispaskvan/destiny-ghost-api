@@ -7,7 +7,7 @@
  */
 const { DocumentClient } = require('documentdb');
 const util = require('util');
-const { documents: { authenticationKey, databaseId, host } } = require('../helpers/config');
+const { documents: { authenticationKey, databaseId, host } } = require('./config');
 
 class Documents {
     constructor() {
@@ -32,7 +32,7 @@ class Documents {
      * @returns {Promise}
      * @private
      */
-    _getCollection(collectionId) {
+    getCollection(collectionId) {
         return new Promise((resolve, reject) => {
             function getCurrentCollection(err, collection) {
                 if (err) {
@@ -75,7 +75,7 @@ class Documents {
      */
     createDocument(collectionId, document) {
         return new Promise((resolve, reject) => {
-            this._getCollection(collectionId) // eslint-disable-line no-underscore-dangle
+            this.getCollection(collectionId)
                 .then(collection => {
                     if (!collection) {
                         reject(new Error(`Collection ${collectionId} not found`));
@@ -128,7 +128,7 @@ class Documents {
                 resolve(results);
             }
 
-            this._getCollection(collectionId) // eslint-disable-line no-underscore-dangle
+            this.getCollection(collectionId) // eslint-disable-line no-underscore-dangle
                 .then(collection => {
                     if (!collection) {
                         reject(new Error(`Collection ${collectionId} not found`));
@@ -147,7 +147,7 @@ class Documents {
      */
     upsertDocument(collectionId, document) {
         return new Promise((resolve, reject) => {
-            this._getCollection(collectionId) // eslint-disable-line no-underscore-dangle
+            this.getCollection(collectionId) // eslint-disable-line no-underscore-dangle
                 .then(collection => {
                     if (!collection) {
                         reject(new Error(`Collection ${collectionId} not found`));

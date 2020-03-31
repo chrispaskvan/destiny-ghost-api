@@ -8,7 +8,7 @@
  */
 const azure = require('azure-sb');
 const azureCommon = require('azure-common');
-const { serviceBus: { connectionString, queueName } } = require('../helpers/config');
+const { serviceBus: { connectionString, queueName } } = require('./config');
 
 /**
  * Message Publisher

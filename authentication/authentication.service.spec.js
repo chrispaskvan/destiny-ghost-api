@@ -102,14 +102,13 @@ describe('AuthenticationService', () => {
                         userService.getUserByDisplayName = jest.fn().mockResolvedValue();
                     });
 
-                    it('should cache and return a user', async () => {
+                    it('should return undefined', async () => {
                         const user = await authenticationService.authenticate({
                             displayName,
                             membershipType,
                         });
 
-                        // eslint-disable-next-line jest/valid-expect, no-unused-expressions
-                        expect(user).not.toBeUndefined;
+                        expect(user).toBeUndefined();
                     });
                 });
             });
@@ -141,16 +140,13 @@ describe('AuthenticationService', () => {
                         userService.getUserByDisplayName = jest.fn().mockResolvedValue();
                     });
 
-                    it('should cache and return a user', async () => {
-                        try {
-                            await authenticationService.authenticate({
-                                displayName,
-                                membershipType,
-                            });
-                        } catch (err) {
-                            // eslint-disable-next-line jest/valid-expect, no-unused-expressions
-                            expect(err).not.toBeUndefined;
-                        }
+                    it('should return undefined', async () => {
+                        const user = await authenticationService.authenticate({
+                            displayName,
+                            membershipType,
+                        });
+
+                        expect(user).toBeUndefined();
                     });
                 });
             });
@@ -159,8 +155,7 @@ describe('AuthenticationService', () => {
                 it('resolves undefined', async () => {
                     const user = await authenticationService.authenticate();
 
-                    // eslint-disable-next-line jest/valid-expect, no-unused-expressions
-                    expect(user).toBeUndefined;
+                    expect(user).toBeUndefined();
                 });
             });
         });

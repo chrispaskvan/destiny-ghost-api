@@ -1,6 +1,6 @@
 const nodemailer = require('nodemailer');
 const smtpTransport = require('nodemailer-smtp-transport');
-const { smtp: smtpConfiguration } = require('../helpers/config');
+const { smtp: smtpConfiguration } = require('./config');
 
 const mailOptions = {};
 const website = process.env.WEBSITE;

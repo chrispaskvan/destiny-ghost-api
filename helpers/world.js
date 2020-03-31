@@ -3,9 +3,10 @@
  */
 const _ = require('underscore');
 const Database = require('better-sqlite3');
+const axios = require('axios');
 const fs = require('fs');
+const httpAdapter = require('axios/lib/adapters/http');
 const path = require('path');
-const request = require('request');
 const yauzl = require('yauzl');
 const log = require('./log');
 
@@ -78,29 +79,37 @@ class World {
 
         return new Promise((resolve, reject) => {
             const file = fs.createWriteStream(`${databasePath}.zip`);
-            const stream = request(`https://www.bungie.net${relativeUrl}`, () => {
-                log.info(`content downloaded from ${relativeUrl}`);
-            }).pipe(file);
 
-            stream.on('finish', () => {
-                yauzl.open(`${databasePath}.zip`, (err, zipFile) => {
-                    if (err) {
-                        return reject(err);
-                    }
+            axios.get(`https://www.bungie.net${relativeUrl}`, {
+                responseType: 'stream',
+                adapter: httpAdapter,
+            }).then(({ data: stream }) => {
+                stream.on('data', chunk => {
+                    // eslint-disable-next-line new-cap
+                    file.write(new Buffer.from(chunk));
+                });
+                stream.on('end', () => {
+                    log.info(`content downloaded from ${relativeUrl}`);
 
-                    return zipFile.on('entry', entry => {
-                        zipFile.openReadStream(entry, (err1, readStream) => {
-                            if (err) {
-                                return reject(err);
-                            }
+                    yauzl.open(`${databasePath}.zip`, (err, zipFile) => {
+                        if (err) {
+                            return reject(err);
+                        }
 
-                            readStream.on('end', () => {
-                                this.bootstrap(fileName);
+                        return zipFile.on('entry', entry => {
+                            zipFile.openReadStream(entry, (err1, readStream) => {
+                                if (err) {
+                                    return reject(err);
+                                }
+
+                                readStream.on('end', () => {
+                                    this.bootstrap(fileName);
+                                });
+                                readStream.pipe(fs.createWriteStream(`${databaseDirectory}/${entry.fileName}`));
+                                fs.unlinkSync(`${databasePath}.zip`);
+
+                                return resolve(manifest);
                             });
-                            readStream.pipe(fs.createWriteStream(`${databaseDirectory}/${entry.fileName}`));
-                            fs.unlinkSync(`${databasePath}.zip`);
-
-                            return resolve(manifest);
                         });
                     });
                 });

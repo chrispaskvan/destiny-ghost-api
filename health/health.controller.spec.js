@@ -1,7 +1,7 @@
 const { EventEmitter } = require('events');
 const httpMocks = require('node-mocks-http');
 const request = require('../helpers/request');
-const HealthController = require('../health/health.controller');
+const HealthController = require('./health.controller');
 const { Response: manifest } = require('../mocks/manifestResponse.json');
 const { Response: manifest2 } = require('../mocks/manifest2Response.json');
 
@@ -65,7 +65,7 @@ describe('HealthController', () => {
                 });
             });
 
-            it('should return a positive response', done => {
+            it('should return a positive response', () => new Promise(done => {
                 const req = httpMocks.createRequest();
 
                 destinyService.getManifest = jest.fn().mockResolvedValue(manifest);
@@ -97,7 +97,7 @@ describe('HealthController', () => {
                 });
 
                 healthController.getHealth(req, res);
-            });
+            }));
         });
 
         describe('when all services are unhealthy', () => {
@@ -127,7 +127,7 @@ describe('HealthController', () => {
                 });
             });
 
-            it('should return a negative response', done => {
+            it('should return a negative response', () => new Promise(done => {
                 const req = httpMocks.createRequest();
 
                 destinyService.getManifest = jest.fn().mockRejectedValue(new Error());
@@ -158,7 +158,7 @@ describe('HealthController', () => {
                 });
 
                 healthController.getHealth(req, res);
-            });
+            }));
         });
     });
 });

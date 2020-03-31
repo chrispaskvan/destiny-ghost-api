@@ -3,7 +3,7 @@
  */
 const cors = require('cors');
 const express = require('express');
-const DestinyController = require('../destiny/destiny.controller');
+const DestinyController = require('./destiny.controller');
 const AuthenticationMiddleWare = require('../authentication/authentication.middleware');
 
 /**

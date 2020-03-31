@@ -1,7 +1,6 @@
 const session = require('express-session');
 const MemorySession = require('memorystore');
-
-const { session: sessionConfig } = require('../helpers/config');
+const { session: sessionConfig } = require('./config');
 
 /**
  * Cache Store Client
