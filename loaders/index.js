@@ -3,7 +3,7 @@ const path = require('path');
 
 const DestinyError = require('../destiny/destiny.error');
 const RequestError = require('../helpers/request.error');
-const { manifests, routes } = require('./routes')();
+const Routes = require('./routes');
 const expressLoader = require('./express');
 const httpLog = require('../helpers/httpLog');
 const log = require('../helpers/log');
@@ -19,13 +19,15 @@ const loaders = {
         databases.forEach(database => {
             const directories = database.split('/');
 
-            directories.forEach((directory, index) => {
-                const directoryPath = directories.slice(0, index + 1).join('/');
+            directories.reduce((directory, folder) => {
+                const directoryPath = directory + folder;
 
                 if (!fs.existsSync(directoryPath)) {
                     fs.mkdirSync(directoryPath);
                 }
-            });
+
+                return `${directoryPath}/`;
+            }, '');
         });
 
         expressLoader(app);
@@ -34,6 +36,8 @@ const loaders = {
          * Request/Response and Error Middleware Loggers
          */
         app.use(httpLog);
+
+        const { manifests, routes } = Routes();
 
         /**
          * Routes

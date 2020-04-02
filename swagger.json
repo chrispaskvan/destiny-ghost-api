@@ -1,0 +1,111 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Destiny-Ghost API",
+    "version": "2.2.1",
+    "description": "A Node Express application for receiving SMS/MMS Notifications around changes to the vendor wares in Bungie's Destiny and make ad-hoc queries in the database.",
+    "license": {
+      "name": "MIT",
+      "url": "https://choosealicense.com/licenses/mit"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:1100"
+    },
+    {
+      "url": "https://api2.destiny-ghost.com"
+    },
+    {
+      "url": "https://api.destiny-ghost.com"
+    }
+  ],
+  "basePath": "/",
+  "paths": {
+    "/destiny/currentUser/": {
+      "get": {
+        "summary": "Get the currently authenticated user.",
+        "tags": [
+          "Destiny"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Destiny Manifest definition"
+          }
+        }
+      }
+    },
+    "/destiny/manifest/": {
+      "get": {
+        "security": [],
+        "summary": "Get details about the latest and greatest Destiny manifest definition.",
+        "tags": [
+          "Destiny"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Destiny Manifest definition"
+          }
+        }
+      }
+    },
+    "/destiny2/manifest/": {
+      "get": {
+        "security": [],
+        "summary": "Get details about the latest and greatest Destiny manifest definition.",
+        "tags": [
+          "Destiny 2"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Destiny Manifest definition"
+          }
+        }
+      }
+    },
+    "/destiny2/xur/": {
+      "get": {
+        "security": [],
+        "summary": "Get Xur's inventory if available.",
+        "tags": [
+          "Destiny 2"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Xur's inventory"
+          }
+        }
+      }
+    },
+    "/health/": {
+      "get": {
+        "summary": "Get a summary of the status of the Destiny Ghost API and its dependencies.",
+        "tags": [
+          "Health"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Status reports of underlying dependencies."
+          }
+        }
+      }
+    }
+  },
+  "components": {},
+  "tags": []
+}
