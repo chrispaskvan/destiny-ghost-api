@@ -2,7 +2,6 @@
  * Route Definitions
  */
 const express = require('express');
-const swaggerJsdoc = require('swagger-jsdoc');
 const swaggerUi = require('swagger-ui-express');
 const twilio = require('twilio');
 
@@ -28,6 +27,7 @@ const Manifests = require('./manifests');
 const NotificationRouter = require('../notifications/notification.routes');
 const TwilioRouter = require('../twilio/twilio.routes');
 const UserRouter = require('../users/user.routes');
+const swaggerDocument = require('../swagger.json');
 
 module.exports = () => {
     const routes = express.Router();
@@ -35,36 +35,10 @@ module.exports = () => {
     /**
      * Swagger
      */
-    const options = {
-        swaggerDefinition: {
-            openapi: '3.0.0',
-            info: {
-                title: 'Destiny-Ghost API',
-                version: '2.2.1',
-                description:
-                    'A Node Express application for receiving SMS/MMS Notifications around changes to the vendor wares in Bungie\'s Destiny and make ad-hoc queries in the database.',
-                license: {
-                    name: 'MIT',
-                    url: 'https://choosealicense.com/licenses/mit',
-                },
-            },
-            servers: [
-                {
-                    url: 'https://api2.destiny-ghost.com',
-                },
-                {
-                    url: 'https://api.destiny-ghost.com',
-                },
-            ],
-        },
-        apis: ['../**/*.routes.js'],
-    };
-    const specs = swaggerJsdoc(options);
-
     routes.use('/docs', swaggerUi.serve);
     routes.get(
         '/docs',
-        swaggerUi.setup(specs, {
+        swaggerUi.setup(swaggerDocument, {
             explorer: false,
         }),
     );

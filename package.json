@@ -6,8 +6,9 @@
   "scripts": {
     "coverage": "npm run test -- --coverage",
     "lint": "eslint --ignore-path .gitignore .",
-    "start": "node server",
-    "test": "NODE_ENV=test DESTINY_DATABASE_DIR=./databases/destiny DESTINY2_DATABASE_DIR=./databases/destiny2 ./node_modules/.bin/jest --config ./jest.config.js",
+    "start": "NODE_ENV=development DESTINY_DATABASE_DIR=./databases/destiny DESTINY2_DATABASE_DIR=./databases/destiny2 node server",
+    "swagger": "swagger-jsdoc -d swaggerDef.js",
+    "test": "NODE_ENV=test DESTINY_DATABASE_DIR=./databases/destiny DESTINY2_DATABASE_DIR=./databases/destiny2 jest --config ./jest.config.js",
     "test:watch": "npm run test -- --watchAll"
   },
   "author": "Chris Paskvan",
@@ -59,7 +60,6 @@
     "qs": "^6.9.3",
     "redis": "^3.0.2",
     "rfc6902": "^3.0.4",
-    "swagger-jsdoc": "^4.0.0",
     "swagger-ui-express": "^4.1.4",
     "twilio": "^3.41.1",
     "underscore": "^1.9.2",
@@ -79,6 +79,7 @@
     "eslint-plugin-jest": "^23.8.2",
     "jest": "^25.2.4",
     "pino-pretty": "^3.6.1",
-    "redis-mock": "^0.49.0"
+    "redis-mock": "^0.49.0",
+    "swagger-jsdoc": "^4.0.0"
   }
 }
