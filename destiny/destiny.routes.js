@@ -1,10 +1,10 @@
 /**
  * Created by chris on 9/25/15.
  */
+const HttpStatus = require('http-status-codes');
 const cors = require('cors');
 const express = require('express');
 const DestinyController = require('./destiny.controller');
-const AuthenticationMiddleWare = require('../authentication/authentication.middleware');
 
 /**
  * Destiny Routes
@@ -16,7 +16,6 @@ const AuthenticationMiddleWare = require('../authentication/authentication.middl
  * @returns {*}
  */
 const routes = ({
-    authenticationController,
     destinyService,
     userService,
     worldRepository,
@@ -33,20 +32,15 @@ const routes = ({
         worldRepository,
     });
 
-    /**
-     * Authentication controller when needed.
-     * @type {AuthenticationMiddleware}
-     */
-    const middleware = new AuthenticationMiddleWare({ authenticationController });
-
     destinyRouter.route('/signIn/')
-        .get(cors(), (req, res, next) => destinyController.getAuthorizationUrl(req, res)
-            .catch(next));
-
-    destinyRouter.route('/characters')
-        .get((req, res, next) => middleware.authenticateUser(req, res, next),
-            (req, res, next) => destinyController.getCharacters(req, res)
-                .catch(next));
+        .get(cors(), (req, res, next) => {
+            destinyController.getAuthorizationUrl()
+                .then(({ state, url }) => {
+                    req.session.state = state;
+                    res.send(url);
+                })
+                .catch(next);
+        });
 
     /**
      * @swagger
@@ -63,13 +57,32 @@ const routes = ({
      *          description: Destiny Manifest definition
      */
     destinyRouter.route('/currentUser/')
-        .get((req, res, next) => destinyController.getCurrentUser(req, res)
-            .catch(next));
+        .get((req, res, next) => {
+            const { session: { displayName, membershipType } } = req;
+
+            destinyController.getCurrentUser(displayName, membershipType)
+                .then(bungieUser => {
+                    res.json(bungieUser);
+                })
+                .catch(next);
+        });
 
     destinyRouter.route('/grimoireCards/:numberOfCards')
         .get(cors(),
-            (req, res, next) => destinyController.getGrimoireCards(req, res)
-                .catch(next));
+            (req, res, next) => {
+                const { params: { numberOfCards } } = req;
+                const count = parseInt(numberOfCards, 10);
+
+                if (Number.isNaN(count)) {
+                    return res.status(422).end();
+                }
+
+                return destinyController.getGrimoireCards(count)
+                    .then(grimoireCards => {
+                        res.status(HttpStatus.OK).json(grimoireCards);
+                    })
+                    .catch(next);
+            });
 
     /**
      * @swagger
@@ -87,12 +100,22 @@ const routes = ({
      *          description: Destiny Manifest definition
      */
     destinyRouter.route('/manifest')
-        .get((req, res, next) => destinyController.getManifest(req, res)
-            .catch(next));
+        .get((req, res, next) => {
+            destinyController.getManifest(req, res)
+                .then(manifest => {
+                    res.status(HttpStatus.OK).json(manifest);
+                })
+                .catch(next);
+        });
 
     destinyRouter.route('/manifest')
-        .post((req, res, next) => destinyController.upsertManifest(req, res)
-            .catch(next));
+        .post((req, res, next) => {
+            destinyController.upsertManifest()
+                .then(manifest => {
+                    res.status(HttpStatus.OK).json(manifest);
+                })
+                .catch(next);
+        });
 
     return destinyRouter;
 };

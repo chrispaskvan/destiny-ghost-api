@@ -145,43 +145,25 @@ class UserController {
     }
 
     /**
-     * Sign the user in by setting the session.
-     *
-     * @param req
-     * @param res
-     * @param user
-     * @private
-     */
-    static signIn(req, res, user) {
-        req.session.displayName = user.displayName;
-        req.session.membershipType = user.membershipType;
-        req.session.state = undefined;
-
-        return res.status(200)
-            .json({ displayName: user.displayName });
-    }
-
-    /**
      * Confirm registration request by creating an account if appropriate.
      *
      * @param req
      * @param res
      */
-    async join(req, res) {
-        const { body: user } = req;
+    async join(user) {
         const registeredUser = await this.users.getUserByEmailAddressToken(user.tokens.emailAddress); // eslint-disable-line max-len
 
         if (!registeredUser
             || this.constructor.getEpoch() > (registeredUser.membership.tokens.timeStamp + ttl)
             || !_.isEqual(user.tokens.phoneNumber, registeredUser.membership.tokens.code)) {
-            return res.status(498).end();
+            return undefined;
         }
 
         registeredUser.dateRegistered = new Date().toISOString();
 
         await this.users.updateUser(registeredUser);
 
-        return res.status(200).end();
+        return user;
     }
 
     /**
@@ -189,28 +171,18 @@ class UserController {
      * @param req
      * @param res
      */
-    async getCurrentUser(req, res) {
-        const { session: { displayName, membershipType } } = req;
-
-        if (!displayName || !membershipType) {
-            return res.status(401).end();
-        }
-
+    async getCurrentUser(displayName, membershipType) {
         const user = await this.users.getUserByDisplayName(displayName, membershipType);
 
         if (user) {
             const { bungie: { access_token: accessToken } } = user;
 
             const bungieUser = await this.destiny.getCurrentUser(accessToken);
-            if (bungieUser) {
-                return res.status(200)
-                    .json(this.constructor.getUserResponse(user));
-            }
 
-            return res.status(401).end();
+            return bungieUser ? this.constructor.getUserResponse(bungieUser) : undefined;
         }
 
-        return res.status(401).end();
+        return undefined;
     }
 
     /**
@@ -218,20 +190,8 @@ class UserController {
      * @param req
      * @param res
      */
-    async getUserByEmailAddress(req, res) {
-        const { params: { emailAddress } } = req;
-
-        if (!emailAddress) {
-            return res.status(409).send('email address not found');
-        }
-
-        const user = await this.users.getUserByEmailAddress(emailAddress);
-
-        if (user) {
-            return res.status(204).end();
-        }
-
-        return res.status(404).end();
+    getUserByEmailAddress(emailAddress) {
+        return this.users.getUserByEmailAddress(emailAddress);
     }
 
     /**
@@ -239,37 +199,31 @@ class UserController {
      * @param req
      * @param res
      */
-    async getUserById(req, res) {
-        const { params: { id, version: _version } } = req;
-
-        if (!id) {
-            return res.status(409).send('phone number not found');
-        }
-
-        let version = parseInt(_version, 10);
-        if (Number.isNaN(version)) {
-            version = 0;
+    async getUserById(id, version) {
+        let versionNumber = parseInt(version, 10);
+        if (Number.isNaN(versionNumber)) {
+            versionNumber = 0;
         }
 
         const user = await this.users.getUserById(id);
 
         if (user) {
-            if (version) {
-                const patches = _.filter(user.patches, patch => patch.version >= version) || [];
+            if (versionNumber) {
+                const patches = user.patches.filter(patch => patch.version >= versionNumber) || [];
 
                 if (patches.length > 0) {
-                    return res.status(200).json(this.constructor.applyPatches(_.chain(patches)
+                    return this.constructor.applyPatches(_.chain(patches)
                         .sortBy(patch => -1 * patch.version)
-                        .value(), user));
+                        .value(), user);
                 }
 
-                return res.status(404).end();
+                return undefined;
             }
 
-            return res.status(200).json(user);
+            return user;
         }
 
-        return res.status(404).end();
+        return undefined;
     }
 
     /**
@@ -277,20 +231,8 @@ class UserController {
      * @param req
      * @param res
      */
-    async getUserByPhoneNumber(req, res) {
-        const { params: { phoneNumber } } = req;
-
-        if (!phoneNumber) {
-            return res.status(409).send('phone number not found');
-        }
-
-        const user = await this.users.getUserByPhoneNumber(phoneNumber);
-
-        if (user) {
-            return res.status(204).end();
-        }
-
-        return res.status(404).end();
+    getUserByPhoneNumber(phoneNumber) {
+        return this.users.getUserByPhoneNumber(phoneNumber);
     }
 
     /**
@@ -298,15 +240,10 @@ class UserController {
      * @param req
      * @param res
      */
-    async signUp(req, res) {
-        const { body: user, session: { displayName, membershipType } } = req;
-
-        if (!(user.firstName && user.lastName && user.phoneNumber && user.emailAddress)) {
-            return res.status(422).end();
-        }
-
+    async signUp({ displayName, membershipType, user }) {
         const bungieUser = await this.users.getUserByDisplayName(displayName, membershipType);
 
+        // eslint-disable-next-line no-param-reassign
         user.phoneNumber = this.constructor.cleanPhoneNumber(user.phoneNumber);
         Object.assign(user, bungieUser, {
             membership: {
@@ -327,29 +264,28 @@ class UserController {
         const registeredUsers = users.filter(user1 => user1 && user1.dateRegistered);
 
         if (registeredUsers.length) {
-            return res.status(409).end();
+            return undefined;
         }
 
-        return this.world.getVendorIcon(postmasterHash)
-            .then(iconUrl => {
-                const promises = [];
+        const iconUrl = await this.world.getVendorIcon(postmasterHash);
+        const promises = [];
 
-                promises.push(this.notifications.sendMessage(`Enter ${
-                    user.membership.tokens.code} to verify your phone number.`,
-                user.phoneNumber, user.type === 'mobile' ? iconUrl : ''));
-                promises.push(this.postmaster.register(user, iconUrl, '/register'));
+        promises.push(this.notifications.sendMessage(`Enter ${
+            user.membership.tokens.code} to verify your phone number.`,
+        user.phoneNumber, user.type === 'mobile' ? iconUrl : ''));
+        promises.push(this.postmaster.register(user, iconUrl, '/register'));
 
-                return Promise.all(promises);
-            })
-            .then(result => {
-                const [message, postMark] = result;
+        const result = await Promise.all(promises);
+        const [message, postMark] = result;
 
-                user.membership.message = message;
-                user.membership.postmark = postMark;
+        // eslint-disable-next-line no-param-reassign
+        user.membership.message = message;
+        // eslint-disable-next-line no-param-reassign
+        user.membership.postmark = postMark;
 
-                return this.users.updateUser(user);
-            })
-            .then(() => res.status(200).end());
+        await this.users.updateUser(user);
+
+        return user;
     }
 
     /**
@@ -357,31 +293,16 @@ class UserController {
      * @param req
      * @param res
      */
-    async signIn(req, res) {
-        let {
-            query: { code, state: queryState }, // eslint-disable-line prefer-const
-            session: { displayName, state: sessionState }, // eslint-disable-line prefer-const
-        } = req;
-
-        if (displayName) {
-            return res.status(200)
-                .json({ displayName });
-        }
-        if (sessionState !== queryState) {
-            return res.sendStatus(403);
-        }
-
+    async signIn({ code, displayName }) {
         const bungie = await this.destiny.getAccessTokenFromCode(code);
         const { access_token: accessToken } = bungie;
         const currentUser = await this.destiny.getCurrentUser(accessToken);
 
-        if (!currentUser) {
-            return res.status(451).end(); // ToDo: Document
-        }
-        if (!currentUser.membershipId) {
-            return res.status(404).end();
+        if (!currentUser || !currentUser.membershipId) {
+            return undefined;
         }
 
+        // eslint-disable-next-line no-param-reassign
         ({ displayName } = currentUser);
 
         const { membershipId, membershipType, profilePicturePath } = currentUser;
@@ -396,7 +317,7 @@ class UserController {
 
         if (!destinyGhostUser) {
             return this.users.createAnonymousUser(user)
-                .then(() => this.constructor.signIn(req, res, user));
+                .then(() => user);
         }
 
         Object.assign(destinyGhostUser, user);
@@ -404,18 +325,7 @@ class UserController {
         return (destinyGhostUser.dateRegistered
             ? this.users.updateUser(destinyGhostUser)
             : this.users.updateAnonymousUser(destinyGhostUser))
-            .then(() => this.constructor.signIn(req, res, user));
-    }
-
-    /**
-     * Sign In with Bungie and PSN/XBox Live
-     * @param req
-     * @param res
-     */
-    // eslint-disable-next-line class-methods-use-this
-    async signOut(req, res) {
-        req.session.destroy();
-        res.status(401).end();
+            .then(() => user);
     }
 
     /**
@@ -425,12 +335,11 @@ class UserController {
      * @param res
      * @returns {*}
      */
-    async update(req, res) {
-        const { body: patches, session: { displayName, membershipType } } = req;
+    async update({ displayName, membershipType, patches }) {
         const user = await this.users.getUserByDisplayName(displayName, membershipType, true);
 
         if (!user) {
-            return res.status(404).send('user not found');
+            return undefined;
         }
 
         const userCopy = JSON.parse(JSON.stringify(user));
@@ -451,7 +360,7 @@ class UserController {
 
         await this.users.updateUser(user);
 
-        return res.json(user);
+        return user;
     }
 }
 

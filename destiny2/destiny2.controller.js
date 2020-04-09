@@ -11,15 +11,48 @@ const DestinyController = require('../destiny/destiny.controller');
  */
 class Destiny2Controller extends DestinyController {
     /**
+     * Get characters for the current user.
+     *
+     * @returns {*|Array}
+     */
+    async getCharacters(displayName, membershipType) {
+        const { membershipId } = await this.users.getUserByDisplayName(displayName, membershipType);
+        const characters = await this.destiny.getCharacters(membershipId, membershipType);
+        const characterBases = characters.map(character => {
+            const { backgroundPath, characterBase = {}, emblem } = character;
+
+            return {
+                characterId: characterBase.characterId,
+                classHash: characterBase.classHash,
+                emblem,
+                backgroundPath,
+                powerLevel: characterBase.powerLevel,
+                links: [
+                    {
+                        rel: 'Character',
+                        href: `/characters/${characterBase.characterId}`,
+                    },
+                ],
+            };
+        });
+        const characterClasses = await Promise.all(characterBases
+            .map(characterBase => this.world.getClassByHash(characterBase.classHash)));
+
+        characterBases.forEach((characterBase, index) => {
+            characterBase.className = characterClasses[index].className; // eslint-disable-line max-len, no-param-reassign
+        });
+
+        return characterBases;
+    }
+
+    /**
      * Get the current manifest definition from Bungie.
      *
      * @param req
      * @param res
      */
-    async getManifest(req, res) {
-        const manifest = await this.destiny.getManifest();
-
-        res.status(200).json(manifest);
+    getManifest() {
+        return this.destiny.getManifest();
     }
 
     /**
@@ -28,17 +61,14 @@ class Destiny2Controller extends DestinyController {
      * @param req
      * @param res
      */
-    async getPlayer(req, res) {
-        const { params: { displayName } } = req;
+    async getPlayer(displayName) {
         const { membershipId, membershipType } = await this.destiny.getPlayer(displayName);
 
         if (!membershipId || !membershipType) {
-            return res.status(401).end();
+            return undefined;
         }
 
-        const statistics = await this.destiny.getPlayerStats(membershipId, membershipType);
-
-        return res.status(200).json(statistics);
+        return this.destiny.getPlayerStats(membershipId, membershipType);
     }
 
     /**
@@ -46,8 +76,7 @@ class Destiny2Controller extends DestinyController {
      * @returns {*|Array}
      * @private
      */
-    async getProfile(req, res) {
-        const { session: { displayName, membershipType } } = req;
+    async getProfile(displayName, membershipType) {
         const currentUser = await this.users.getUserByDisplayName(displayName, membershipType);
         const characters = await this.destiny.getProfile(currentUser.membershipId, membershipType);
         const promises = [];
@@ -80,7 +109,7 @@ class Destiny2Controller extends DestinyController {
             characterBase.className = characterClasses[index].displayProperties.name; // eslint-disable-line max-len, no-param-reassign
         });
 
-        return res.status(200).json(characterBases);
+        return characterBases;
     }
 
     /**
@@ -89,8 +118,7 @@ class Destiny2Controller extends DestinyController {
      * @returns {*|Array}
      * @private
      */
-    async getXur(req, res) {
-        const { session: { displayName, membershipType } } = req;
+    async getXur(displayName, membershipType) {
         const currentUser = await this.users.getUserByDisplayName(displayName, membershipType);
         const { bungie: { access_token: accessToken }, membershipId } = currentUser;
         const characters = await this.destiny.getProfile(membershipId, membershipType);
@@ -101,17 +129,17 @@ class Destiny2Controller extends DestinyController {
             );
 
             if (!itemHashes.length) {
-                return res.status(200).json(itemHashes);
+                return itemHashes;
             }
 
             const items = await Promise.all(
                 itemHashes.map(itemHash => this.world.getItemByHash(itemHash)),
             );
 
-            return res.status(200).json(items);
+            return items;
         }
 
-        return res.status(404);
+        return undefined;
     }
 }
 

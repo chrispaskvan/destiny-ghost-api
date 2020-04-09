@@ -1,6 +1,4 @@
-const event = require('events');
 const chance = require('chance')();
-const httpMocks = require('node-mocks-http');
 const UserController = require('./user.controller');
 
 const displayName = chance.name();
@@ -21,95 +19,10 @@ beforeEach(() => {
 });
 
 describe('UserController', () => {
-    let res;
-
-    beforeEach(() => {
-        res = httpMocks.createResponse({
-            eventEmitter: event.EventEmitter,
-        });
-    });
-
     describe('getCurrentUser', () => {
-        describe('when session displayName is undefined', () => {
-            it('should not return a user', () => new Promise(done => {
-                const req = httpMocks.createRequest({
-                    session: {
-                        displayName,
-                    },
-                });
-
-                destinyService.getCurrentUser.mockImplementation(() => Promise.resolve({
-                    displayName: 'l',
-                    membershipType: 2,
-                    links: [
-                        {
-                            rel: 'characters',
-                            href: '/destiny/characters',
-                        },
-                    ],
-                }));
-                userService.getUserByDisplayName.mockImplementation(() => Promise.resolve({
-                    bungie: {
-                        accessToken: {
-                            value: '11',
-                        },
-                    },
-                }));
-
-                res.on('end', () => {
-                    expect(res.statusCode).toEqual(401);
-                    done();
-                });
-
-                userController.getCurrentUser(req, res);
-            }));
-        });
-
-        describe('when session membershipType is undefined', () => {
-            it('should not return a user', () => new Promise(done => {
-                const req = httpMocks.createRequest({
-                    session: {
-                        membershipType,
-                    },
-                });
-
-                destinyService.getCurrentUser.mockImplementation(() => Promise.resolve({
-                    displayName: 'l',
-                    membershipType: 2,
-                    links: [
-                        {
-                            rel: 'characters',
-                            href: '/destiny/characters',
-                        },
-                    ],
-                }));
-                userService.getUserByDisplayName.mockImplementation(() => Promise.resolve({
-                    bungie: {
-                        accessToken: {
-                            value: '11',
-                        },
-                    },
-                }));
-
-                res.on('end', () => {
-                    expect(res.statusCode).toEqual(401);
-                    done();
-                });
-
-                userController.getCurrentUser(req, res);
-            }));
-        });
-
         describe('when session displayName and membershipType are defined', () => {
             describe('when user and destiny services return a user', () => {
-                it('should return the current user', () => new Promise(done => {
-                    const req = httpMocks.createRequest({
-                        session: {
-                            displayName,
-                            membershipType,
-                        },
-                    });
-
+                it('should return the current user', async () => {
                     destinyService.getCurrentUser.mockImplementation(() => Promise.resolve({
                         displayName: 'l',
                         membershipType: 2,
@@ -128,24 +41,14 @@ describe('UserController', () => {
                         },
                     }));
 
-                    res.on('end', () => {
-                        expect(res.statusCode).toEqual(200);
-                        done();
-                    });
+                    const user = await userController.getCurrentUser(displayName, membershipType);
 
-                    userController.getCurrentUser(req, res);
-                }));
+                    expect(user).not.toBeUndefined();
+                });
             });
 
             describe('when destiny service returns undefined', () => {
-                it('should not return a user', () => new Promise(done => {
-                    const req = httpMocks.createRequest({
-                        session: {
-                            displayName,
-                            membershipType,
-                        },
-                    });
-
+                it('should not return a user', async () => {
                     destinyService.getCurrentUser.mockImplementation(() => Promise.resolve());
                     userService.getUserByDisplayName.mockImplementation(() => Promise.resolve({
                         bungie: {
@@ -155,24 +58,14 @@ describe('UserController', () => {
                         },
                     }));
 
-                    res.on('end', () => {
-                        expect(res.statusCode).toEqual(401);
-                        done();
-                    });
+                    const user = await userController.getCurrentUser(displayName, membershipType);
 
-                    userController.getCurrentUser(req, res);
-                }));
+                    expect(user).toBeUndefined();
+                });
             });
 
             describe('when user service returns undefined', () => {
-                it('should not return a user', () => new Promise(done => {
-                    const req = httpMocks.createRequest({
-                        session: {
-                            displayName,
-                            membershipType,
-                        },
-                    });
-
+                it('should not return a user', async () => {
                     destinyService.getCurrentUser.mockImplementation(() => Promise.resolve({
                         displayName: 'l',
                         membershipType: 2,
@@ -185,51 +78,39 @@ describe('UserController', () => {
                     }));
                     userService.getUserByDisplayName.mockImplementation(() => Promise.resolve());
 
-                    res.on('end', () => {
-                        expect(res.statusCode).toEqual(401);
-                        done();
-                    });
+                    const user = await userController.getCurrentUser(displayName, membershipType);
 
-                    userController.getCurrentUser(req, res);
-                }));
+                    expect(user).toBeUndefined();
+                });
             });
         });
     });
 
     describe('update', () => {
         describe('when user is undefined', () => {
-            it('should not return a user', () => new Promise(done => {
-                const req = httpMocks.createRequest({
-                    session: {},
-                });
-
+            it('should not return a user', async () => {
                 userService.getUserByDisplayName.mockImplementation(() => Promise.resolve());
 
-                res.on('end', () => {
-                    expect(res.statusCode).toEqual(404);
-                    done();
+                const user = await userController.update({
+                    displayName,
+                    membershipType,
+                    patches: [],
                 });
 
-                userController.update(req, res);
-            }));
+                expect(user).toBeUndefined();
+            });
         });
 
         describe('when user is defined', () => {
-            it('should patch the user', () => new Promise(done => {
+            it('should patch the user', async () => {
                 const firstName = '11';
-                const req = httpMocks.createRequest({
-                    body: [
-                        {
-                            op: 'replace',
-                            path: '/firstName',
-                            value: firstName,
-                        },
-                    ],
-                    session: {
-                        displayName,
-                        membershipType,
+                const patches = [
+                    {
+                        op: 'replace',
+                        path: '/firstName',
+                        value: firstName,
                     },
-                });
+                ];
                 const user = {
                     displayName,
                     firstName: '08',
@@ -239,31 +120,32 @@ describe('UserController', () => {
 
                 userService.getUserByDisplayName.mockImplementation(() => Promise.resolve(user));
 
-                res.on('end', () => {
-                    expect(res.statusCode).toEqual(200);
-                    expect(mock).toHaveBeenCalledWith({
-                        displayName,
-                        firstName,
-                        membershipType,
-                        version: 2,
-                        patches: [
-                            {
-                                patch: [
-                                    {
-                                        op: 'replace',
-                                        path: '/firstName',
-                                        value: '08',
-                                    },
-                                ],
-                                version: 1,
-                            },
-                        ],
-                    });
-                    done();
+                const patchedUser = await userController.update({
+                    displayName,
+                    membershipType,
+                    patches,
                 });
 
-                userController.update(req, res);
-            }));
+                expect(patchedUser).not.toBeUndefined();
+                expect(mock).toHaveBeenCalledWith({
+                    displayName,
+                    firstName,
+                    membershipType,
+                    version: 2,
+                    patches: [
+                        {
+                            patch: [
+                                {
+                                    op: 'replace',
+                                    path: '/firstName',
+                                    value: '08',
+                                },
+                            ],
+                            version: 1,
+                        },
+                    ],
+                });
+            });
         });
     });
 });

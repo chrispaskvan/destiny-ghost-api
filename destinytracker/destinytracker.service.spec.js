@@ -36,17 +36,15 @@ describe('DestinyTrackerService', () => {
                 const mockRank = 1;
                 const mockRanking = {
                     data: {
-                        itemInsights: {
-                            insights: {
-                                rank: {
-                                    kills: mockRank,
-                                },
+                        stats: {
+                            rank: {
+                                kills: mockRank,
                             },
                         },
                     },
                 };
 
-                request.post.mockImplementation(() => Promise.resolve(mockRanking));
+                request.get.mockImplementation(() => Promise.resolve(mockRanking));
 
                 const rank = await destinyTrackerService.getRank('3628991658');
 
@@ -58,13 +56,11 @@ describe('DestinyTrackerService', () => {
             it('should return undefined', async () => {
                 const mockRanking = {
                     data: {
-                        itemInsights: {
-                            insights: null,
-                        },
+                        stats: null,
                     },
                 };
 
-                request.post.mockImplementation(() => Promise.resolve(mockRanking));
+                request.get.mockImplementation(() => Promise.resolve(mockRanking));
 
                 const rank = await destinyTrackerService.getRank('3628991658');
 

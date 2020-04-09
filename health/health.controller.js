@@ -76,7 +76,7 @@ class HealthController {
         return description;
     }
 
-    async getHealth(req, res) {
+    async getHealth() {
         failures = 0;
 
         const documents = await this.getDocumentCount()
@@ -92,18 +92,21 @@ class HealthController {
         const world2 = await this.getWorld2Item()
             .catch(err => HealthController.unhealthy(err)) || notAvailable;
 
-        res.status(failures ? 503 : 200).json({
-            documents,
-            twilio,
-            destiny: {
-                manifest: manifestVersion,
-                world,
+        return {
+            failures,
+            health: {
+                documents,
+                twilio,
+                destiny: {
+                    manifest: manifestVersion,
+                    world,
+                },
+                destiny2: {
+                    manifest: manifest2Version,
+                    world: world2,
+                },
             },
-            destiny2: {
-                manifest: manifest2Version,
-                world: world2,
-            },
-        });
+        };
     }
 }
 
