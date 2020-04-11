@@ -49,7 +49,14 @@ class AuthenticationService {
      */
     // eslint-disable-next-line max-len
     async validateUser(user = {}) {
-        const { bungie: { access_token: accessToken, refresh_token: refreshToken } = {} } = user;
+        const {
+            bungie: {
+                access_token: accessToken,
+                membership_id: membershipId,
+                refresh_token: refreshToken,
+            } = {},
+        } = user;
+
         if (!accessToken) {
             return Promise.resolve();
         }
@@ -68,7 +75,14 @@ class AuthenticationService {
             return user;
         }
 
-        return { bungie: { access_token: accessToken, refresh_token: refreshToken }, ...user };
+        return {
+            bungie: {
+                access_token: accessToken,
+                membership_id: membershipId,
+                refresh_token: refreshToken,
+            },
+            ...user,
+        };
     }
 }
 
