@@ -1,4 +1,5 @@
 const express = require('express');
+const HttpStatus = require('http-status-codes');
 const HealthController = require('./health.controller');
 
 /**
@@ -46,8 +47,14 @@ const routes = ({
      *          description: Status reports of underlying dependencies.
      */
     healthRouter.route('/')
-        .get((req, res, next) => healthController.getHealth(req, res)
-            .catch(next));
+        .get((req, res, next) => {
+            healthController.getHealth()
+                .then(({ failures, health }) => {
+                    // eslint-disable-next-line max-len
+                    res.status(failures ? HttpStatus.SERVICE_UNAVAILABLE : HttpStatus.OK).json(health);
+                })
+                .catch(next);
+        });
 
     return healthRouter;
 };

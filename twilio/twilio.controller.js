@@ -5,12 +5,9 @@
  * @author Chris Paskvan
  */
 const _ = require('underscore');
-const twilio = require('twilio');
-const { twiml: { MessagingResponse } } = require('twilio');
+
 const bitly = require('../helpers/bitly');
 const log = require('../helpers/log');
-
-const { twilio: { attributes, authToken } } = require('../helpers/config');
 
 /**
  * Twilio Controller
@@ -26,6 +23,12 @@ class TwilioController {
         this.destinyTracker = options.destinyTrackerService;
         this.users = options.userService;
         this.world = options.worldRepository;
+
+        this.itemKeywords = new Map([
+            ['more', this.constructor.getMore],
+            ['votes', this.getVotes],
+            ['rank', this.getRank],
+        ]);
     }
 
     /**
@@ -59,12 +62,28 @@ class TwilioController {
 
         return [{
             itemCategory: `${tierTypeName} ${itemCategory}${
-                filteredCategories.length < 2 ? (` ${itemTypeDisplayName}`) : ''}`,
+                filteredCategories.length < 2 ? `${itemTypeDisplayName}` : ''}`,
             icon: `https://www.bungie.net${icon}`,
             itemHash: hash,
             itemName: name,
             itemType,
         }];
+    }
+
+    static async getMore(itemHash, cookies = {}) {
+        if (itemHash) {
+            const shortURL = await bitly.getShortUrl(`http://db.destinytracker.com/d2/en/items/${itemHash}`);
+
+            return {
+                cookies,
+                message: `Destiny Tracker\n${shortURL}`,
+            };
+        }
+
+        return {
+            cookies,
+            message: 'More what?',
+        };
     }
 
     /**
@@ -83,6 +102,26 @@ class TwilioController {
         return responses[Math.floor(Math.random() * responses.length)];
     }
 
+    async getRank(itemHash, cookies = {}) {
+        if (itemHash) {
+            const rank = await this.destinyTracker.getRank(itemHash);
+
+            if (rank) {
+                const suffixes = ['th', 'st', 'nd', 'rd'];
+                const mod = rank % 100;
+
+                return {
+                    cookies,
+                    message: `${rank + (suffixes[(mod - 20) % 10] || suffixes[mod] || suffixes[0])} in PVP`,
+                };
+            }
+        }
+
+        return {
+            message: 'Hm, I didn\'t find a PVP ranking for that item.',
+        };
+    }
+
     /**
      * Get a random response to reply when nothing was found.
      * @returns {string}
@@ -96,6 +135,69 @@ class TwilioController {
         ];
 
         return responses[Math.floor(Math.random() * responses.length)];
+    }
+
+    async getVotes(itemHash, cookies = {}) {
+        if (itemHash) {
+            const { upvotes, total } = await this.destinyTracker.getVotes(itemHash) || {};
+
+            if (upvotes && total) {
+                return {
+                    cookies,
+                    message: `${upvotes} of ${total} 👍`,
+                };
+            }
+        }
+
+        return {
+            cookies,
+            message: 'Strange. They must still be counting.',
+        };
+    }
+
+    async getXur(user, cookies) {
+        try {
+            const {
+                bungie: {
+                    access_token: accessToken,
+                },
+                membershipId,
+                membershipType,
+            } = await this.authentication.authenticate(user);
+            const characters = await this.destiny.getProfile(membershipId, membershipType);
+
+            if (characters && characters.length) {
+                const itemHashes = await this.destiny
+                    .getXur(membershipId, membershipType, characters[0].characterId, accessToken); // eslint-disable-line max-len
+                const items = await Promise.all(itemHashes
+                    .map(itemHash1 => this.world.getItemByHash(itemHash1)));
+                const result = _.reduce(items, (memo, { displayProperties }) => (`${memo + displayProperties.name}\n`), ' ').trim();
+
+                return {
+                    cookies: { ...cookies, itemHash: undefined },
+                    message: result.substr(0, 130), // ToDo: Is this still necessary?
+                };
+            }
+
+            return {
+                cookies,
+                message: 'Perhaps your Ghost can help you find what you need.',
+            };
+        } catch (err) {
+            if (err.name === 'DestinyError') {
+                return {
+                    cookies,
+                    message: err.message.substr(0, 130),
+                };
+            }
+
+            log.error(err);
+
+            return {
+                cookies,
+                messsage: TwilioController.getRandomResponseForNoResults(),
+            };
+        }
     }
 
     /**
@@ -131,23 +233,8 @@ class TwilioController {
      * @param req
      * @param res
      */
-    static async fallback(req, res) {
-        const header = req.headers['x-twilio-signature'];
-        const twiml = new MessagingResponse();
-
-        // eslint-disable-next-line max-len
-        if (twilio.validateRequest(authToken, header, `${process.env.PROTOCOL}://${process.env.DOMAIN}${req.originalUrl}`, req.body)) {
-            twiml.message(attributes, TwilioController.getRandomResponseForAnError());
-            res.writeHead(200, {
-                'Content-Type': 'text/xml',
-            });
-        } else {
-            res.writeHead(403, {
-                'Content-Type': 'text/xml',
-            });
-        }
-
-        res.end(twiml.toString());
+    static fallback() {
+        return TwilioController.getRandomResponseForAnError();
     }
 
     /**
@@ -155,205 +242,69 @@ class TwilioController {
      * @param req
      * @param res
      */
-    async request(req, res) {
-        const header = req.headers['x-twilio-signature'];
-        const twiml = new MessagingResponse();
-        const {
-            body,
-            cookies = {},
-            originalUrl,
-        } = req;
+    async request({ body, cookies }) {
+        let responseCookies = {};
+        const user = await this.users.getUserByPhoneNumber(body.From);
 
-        // eslint-disable-next-line max-len
-        if (twilio.validateRequest(authToken, header, `${process.env.PROTOCOL}://${process.env.DOMAIN}${originalUrl}`, body)) {
-            let counter = parseInt(cookies.counter, 10) || 0;
-            const user = await this.users.getUserByPhoneNumber(body.From);
-
-            if (!user || !user.dateRegistered) {
-                if (!cookies.isRegistered) {
-                    twiml.message(`Register your phone at ${process.env.WEBSITE}/register`);
-                    res.writeHead(200, {
-                        'Content-Type': 'text/xml',
-                    });
-
-                    return res.end(twiml.toString());
-                }
-
-                res.writeHead(403);
-                return res.end();
+        if (!user || !user.dateRegistered) {
+            if (!cookies.isRegistered) {
+                return {
+                    message: `Register your phone at ${process.env.WEBSITE}/register`, // ToDo
+                };
             }
 
-            res.cookie('isRegistered', true);
-            await this.users.addUserMessage(user.displayName, user.membershipType, body);
-
-            const { Body: rawMessage } = body;
-            const { itemHash } = cookies;
-            const message = rawMessage.trim().toLowerCase();
-
-            /**
-             * @ToDo Handle STOP and HELP
-             */
-            if (['more', 'rank', 'votes'].includes(message)) {
-                if (message === 'more') {
-                    if (itemHash) {
-                        const shortURL = await bitly.getShortUrl(`http://db.destinytracker.com/d2/en/items/${itemHash}`);
-
-                        twiml.message(attributes, `Destiny Tracker\n${shortURL}`);
-                        res.writeHead(200, {
-                            'Content-Type': 'text/xml',
-                        });
-
-                        return res.end(twiml.toString());
-                    }
-
-                    twiml.message(attributes, 'More what?');
-                }
-
-                if (message === 'rank') {
-                    if (itemHash) {
-                        const rank = await this.destinyTracker.getRank(itemHash);
-
-                        if (rank) {
-                            const suffixes = ['th', 'st', 'nd', 'rd'];
-                            const mod = rank % 100;
-
-                            twiml.message(attributes, `${rank + (suffixes[(mod - 20) % 10] || suffixes[mod] || suffixes[0])} in PVP`);
-                            res.writeHead(200, {
-                                'Content-Type': 'text/xml',
-                            });
-
-                            return res.end(twiml.toString());
-                        }
-                    }
-
-                    twiml.message(attributes, 'Hm, I didn\'t find a PVP ranking for that item.');
-                }
-
-                if (message === 'votes') {
-                    if (itemHash) {
-                        const { upvotes, total } = await this.destinyTracker.getVotes(itemHash);
-
-                        twiml.message(attributes, `${upvotes} of ${total} 👍`);
-                        res.writeHead(200, {
-                            'Content-Type': 'text/xml',
-                        });
-
-                        return res.end(twiml.toString());
-                    }
-
-                    twiml.message(attributes, 'Strange. They must still be counting.');
-                }
-
-                res.writeHead(200, {
-                    'Content-Type': 'text/xml',
-                });
-
-                return res.end(twiml.toString());
-            }
-
-            if (message === 'xur') {
-                try {
-                    const {
-                        bungie: {
-                            access_token: accessToken,
-                        },
-                        membershipId,
-                        membershipType,
-                    } = await this.authentication.authenticate(user);
-                    const characters = await this.destiny.getProfile(membershipId, membershipType);
-
-                    if (characters && characters.length) {
-                        const itemHashes = await this.destiny
-                            .getXur(membershipId, membershipType, characters[0].characterId, accessToken); // eslint-disable-line max-len
-                        const items = await Promise.all(itemHashes
-                            .map(itemHash1 => this.world.getItemByHash(itemHash1)));
-                        const result = _.reduce(items, (memo, { displayProperties }) => (`${memo + displayProperties.name}\n`), ' ').trim();
-
-                        twiml.message(attributes, result.substr(0, 130));
-                        res.clearCookie('itemHash');
-                        res.writeHead(200, {
-                            'Content-Type': 'text/xml',
-                        });
-
-                        return res.end(twiml.toString());
-                    }
-                } catch (err) {
-                    if (err.name === 'DestinyError') {
-                        twiml.message(attributes, err.message.substr(0, 130));
-                        res.writeHead(200, {
-                            'Content-Type': 'text/xml',
-                        });
-
-                        return res.end(twiml.toString());
-                    }
-
-                    log.error(err);
-
-                    twiml.message(attributes, TwilioController.getRandomResponseForNoResults());
-                    res.writeHead(200, {
-                        'Content-Type': 'text/xml',
-                    });
-
-                    return res.end(twiml.toString());
-                }
-            } else if (counter > 25) {
-                twiml.message(attributes, 'Let me check with the Speaker regarding your good standing with the Vanguard.');
-                res.writeHead(429, {
-                    'Content-Type': 'text/xml',
-                });
-
-                return res.end(twiml.toString());
-            } else {
-                const searchTerm = body.Body.trim().toLowerCase();
-                const items = await this.queryItem(searchTerm);
-
-                counter += 1;
-                res.cookie('counter', counter);
-                switch (items.length) {
-                case 0: {
-                    twiml.message(attributes, TwilioController.getRandomResponseForNoResults());
-                    res.writeHead(200, {
-                        'Content-Type': 'text/xml',
-                    });
-
-                    return res.end(twiml.toString());
-                }
-                case 1: {
-                    res.cookie('itemHash', items[0].itemHash);
-                    items[0].itemCategory = items[0].itemCategory.replace(/Weapon/g, '').trim();
-
-                    if (user.type === 'landline') {
-                        twiml.message(attributes, `${items[0].itemName} ${items[0].itemCategory}`.substr(0, 130));
-                    } else {
-                        twiml.message(attributes,
-                            `${items[0].itemName} ${items[0].itemCategory}`.substr(0, 130)).media(items[0].icon);
-                    }
-                    res.writeHead(200, {
-                        'Content-Type': 'text/xml',
-                    });
-
-                    return res.end(twiml.toString());
-                }
-                default: {
-                    const groups = _.groupBy(items, item => item.itemName);
-                    const keys = Object.keys(groups);
-                    const result = _.reduce(keys, (memo, key) => `${memo}\n${key} ${groups[key][0].itemCategory}`, ' ').trim();
-
-                    twiml.message(attributes, result.substr(0, 130));
-                    res.clearCookie('itemHash');
-                    res.writeHead(200, {
-                        'Content-Type': 'text/xml',
-                    });
-
-                    return res.end(twiml.toString());
-                }
-                }
-            }
+            return {};
         }
 
-        res.writeHead(403);
+        responseCookies = { isRegistered: true, ...responseCookies };
+        await this.users.addUserMessage(user.displayName, user.membershipType, body);
 
-        return res.end();
+        const { Body: rawMessage } = body;
+        const { itemHash } = cookies;
+        const message = rawMessage.trim().toLowerCase();
+
+        /**
+         * @ToDo: Handle STOP and HELP
+         */
+        if (this.itemKeywords.has(message)) {
+            return this.itemKeywords.get(message).bind(this)(itemHash, responseCookies);
+        }
+
+        if (message === 'xur') {
+            return this.getXur(user, responseCookies);
+        }
+
+        const searchTerm = body.Body.trim().toLowerCase();
+        const items = await this.queryItem(searchTerm);
+
+        switch (items.length) {
+        case 0: {
+            return {
+                cookies: responseCookies,
+                message: TwilioController.getRandomResponseForNoResults(),
+            };
+        }
+        case 1: {
+            responseCookies = { itemHash: items[0].itemHash, ...responseCookies };
+            items[0].itemCategory = items[0].itemCategory.replace(/Weapon/g, '').trim();
+
+            return {
+                cookies: responseCookies,
+                message: `${items[0].itemName} ${items[0].itemCategory}`.substr(0, 130),
+                media: user.type === 'landline' ? undefined : items[0].icon,
+            };
+        }
+        default: {
+            const groups = _.groupBy(items, item => item.itemName);
+            const keys = Object.keys(groups);
+            const result = _.reduce(keys, (memo, key) => `${memo}\n${key} ${groups[key][0].itemCategory}`, ' ').trim();
+
+            return {
+                cookies: { itemHash: undefined, ...responseCookies },
+                message: result.substr(0, 130),
+            };
+        }
+        }
     }
 
     /**
@@ -361,34 +312,13 @@ class TwilioController {
      * @param req
      * @param res
      */
-    async statusCallback(req, res) {
-        const header = req.headers['x-twilio-signature'];
-        const twiml = new MessagingResponse();
-        const {
-            body,
-            originalUrl,
-        } = req;
+    async statusCallback(message) {
+        const { To: phoneNumber } = message;
+        const user = await this.users.getUserByPhoneNumber(phoneNumber);
 
-        // eslint-disable-next-line max-len
-        if (twilio.validateRequest(authToken, header, `${process.env.PROTOCOL}://${process.env.DOMAIN}${originalUrl}`, body)) {
-            this.users.getUserByPhoneNumber(body.To)
-                .then(user => {
-                    if (user) {
-                        // eslint-disable-next-line max-len
-                        this.users.addUserMessage(user.displayName, user.membershipType, body);
-                    }
-                });
-            log.info(JSON.stringify(req.body));
-            res.writeHead(200, {
-                'Content-Type': 'text/xml',
-            });
-        } else {
-            res.writeHead(403, {
-                'Content-Type': 'text/xml',
-            });
+        if (user) {
+            await this.users.addUserMessage(user.displayName, user.membershipType, message);
         }
-
-        res.end(twiml.toString());
     }
 }
 

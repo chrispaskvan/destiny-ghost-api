@@ -1,6 +1,5 @@
 const Publisher = require('../helpers/publisher');
 const Subscriber = require('../helpers/subscriber');
-const { notificationHeaders } = require('../helpers/config');
 const notificationTypes = require('./notification.types');
 const log = require('../helpers/log');
 
@@ -54,30 +53,27 @@ class NotificationController {
         }
     }
 
-    async create(req, res) {
-        const { headers, params: { subscription } } = req;
-        const headerNames = Object.keys(notificationHeaders);
+    /**
+     * Send notification(s)
+     *
+     * @param {*} subscription
+     * @param {*} phoneNumber
+     */
+    async create(subscription, phoneNumber) {
+        if (phoneNumber) {
+            const user = this.users.getUserByPhoneNumber(phoneNumber);
 
-        for (const headerName of headerNames) { // eslint-disable-line no-restricted-syntax
-            if (headers[headerName] !== notificationHeaders[headerName]) {
-                res.writeHead(403);
-                res.end();
-
-                return;
+            if (user && user.phoneNumber) {
+                return this.publisher.sendNotification(user, subscription);
             }
-        }
-
-        if (notificationTypes[subscription]) {
+        } else {
             const users = await this.users.getSubscribedUsers(subscription);
 
             // eslint-disable-next-line max-len
-            await Promise.all(users.map(user => this.publisher.sendNotification(user, subscription)));
-            res.status(200).end();
-
-            return;
+            return Promise.all(users.map(user => this.publisher.sendNotification(user, subscription)));
         }
 
-        res.status(404).json('That subscription is not recognized.');
+        return undefined;
     }
 }
 

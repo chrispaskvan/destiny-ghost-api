@@ -1,6 +1,4 @@
 const chance = require('chance')();
-const { EventEmitter } = require('events');
-const httpMocks = require('node-mocks-http');
 
 const Destiny2Controller = require('./destiny2.controller');
 const { Response: manifest } = require('../mocks/manifest2Response.json');
@@ -43,25 +41,10 @@ beforeEach(() => {
 });
 
 describe('Destiny2Controller', () => {
-    let res;
-
-    beforeEach(() => {
-        res = httpMocks.createResponse({
-            eventEmitter: EventEmitter,
-        });
-    });
-
     describe('getProfile', () => {
         describe('when session displayName and membershipType are defined', () => {
             describe('when user and destiny services return a user', () => {
-                it('should return user profile', () => new Promise(done => {
-                    const req = httpMocks.createRequest({
-                        session: {
-                            displayName,
-                            membershipType,
-                        },
-                    });
-
+                it('should return user profile', async () => {
                     destiny2Service.getProfile = jest.fn().mockResolvedValue([
                         {
                             characterId: '1111111111111111111',
@@ -79,20 +62,11 @@ describe('Destiny2Controller', () => {
                         membershipId: '1',
                     });
 
-                    res.on('end', () => {
-                        const data = JSON.parse(res._getData()); // eslint-disable-line max-len, no-underscore-dangle
+                    // eslint-disable-next-line max-len
+                    const [{ className }] = await destiny2Controller.getProfile(displayName, membershipType);
 
-                        try {
-                            expect(res.statusCode).toEqual(200);
-                            expect(data[0].className).toEqual('Hunter');
-                            done();
-                        } catch (err) {
-                            done(err);
-                        }
-                    });
-
-                    destiny2Controller.getProfile(req, res);
-                }));
+                    expect(className).toEqual('Hunter');
+                });
             });
         });
     });

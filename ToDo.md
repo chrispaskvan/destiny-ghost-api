@@ -1,16 +1,19 @@
 # Better Caching
+# Replace underscore with lodash
 # Better Test Coverage
 # User Interface
 # Opt Out
+# Cache Health?
 # Axios Streaming
 https://github.com/andrewstart/axios-streaming/blob/master/axios.js
 # Application Insights
 # Use an ORM
-# Extrapolate Request and Response from Coontrollers
+# Extrapolate Request and Response from Controllers
 # Rate Limits/Denial of Service Attacks
+# Twilio Rate Limit
 # Swagger
 https://levelup.gitconnected.com/swagger-time-to-document-that-express-api-you-built-9b8faaeae563
-
+# Google Stadia
 Swagger - Basic Structure
 https://swagger.io/docs/specification/basic-structure/
 # Migrate Azure Scheduler jobs to Azure Logic Apps

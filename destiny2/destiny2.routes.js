@@ -1,6 +1,7 @@
 /**
  * Created by chris on 9/25/15.
  */
+const HttpStatus = require('http-status-codes');
 const cors = require('cors');
 const express = require('express');
 const AuthenticationMiddleWare = require('../authentication/authentication.middleware');
@@ -37,6 +38,18 @@ const routes = ({
      */
     const middleware = new AuthenticationMiddleWare({ authenticationController });
 
+    destiny2Router.route('/characters')
+        .get((req, res, next) => middleware.authenticateUser(req, res, next),
+            (req, res, next) => {
+                const { session: { displayName, membershipType } } = req;
+
+                destiny2Controller.getCharacters(displayName, membershipType)
+                    .then(characterBases => {
+                        res.json(characterBases);
+                    })
+                    .catch(next);
+            });
+
     /**
      * @swagger
      * path:
@@ -53,22 +66,50 @@ const routes = ({
      *          description: Destiny Manifest definition
      */
     destiny2Router.route('/manifest')
-        .get((req, res, next) => destiny2Controller.getManifest(req, res)
-            .catch(next));
+        .get((req, res, next) => {
+            destiny2Controller.getManifest()
+                .then(manifest => {
+                    res.status(HttpStatus.OK).json(manifest);
+                })
+                .catch(next);
+        });
 
     destiny2Router.route('/manifest')
-        .post((req, res, next) => destiny2Controller.upsertManifest(req, res)
-            .catch(next));
+        .post((req, res, next) => {
+            destiny2Controller.upsertManifest()
+                .then(manifest => {
+                    res.status(HttpStatus.OK).json(manifest);
+                })
+                .catch(next);
+        });
 
     destiny2Router.route('/player/:displayName')
-        .get((req, res, next) => destiny2Controller.getPlayer(req, res)
-            .catch(next));
+        .get((req, res, next) => {
+            const { params: { displayName } } = req;
+
+            destiny2Controller.getPlayer(displayName)
+                .then(statistics => {
+                    if (statistics) {
+                        return res.status(200).json(statistics);
+                    }
+
+                    return res.status(HttpStatus.UNAUTHORIZED).end();
+                })
+                .catch(next);
+        });
 
     destiny2Router.route('/profile')
         .get(cors(corsConfig),
             (req, res, next) => middleware.authenticateUser(req, res, next),
-            (req, res, next) => destiny2Controller.getProfile(req, res)
-                .catch(next));
+            (req, res, next) => {
+                const { session: { displayName, membershipType } } = req;
+
+                return destiny2Controller.getProfile(displayName, membershipType)
+                    .then(characterBases => {
+                        res.status(HttpStatus.OK).json(characterBases);
+                    })
+                    .catch(next);
+            });
 
     /**
      * @swagger
@@ -88,8 +129,19 @@ const routes = ({
     destiny2Router.route('/xur')
         .get(cors(corsConfig),
             (req, res, next) => middleware.authenticateUser(req, res, next),
-            (req, res, next) => destiny2Controller.getXur(req, res)
-                .catch(next));
+            (req, res, next) => {
+                const { session: { displayName, membershipType } } = req;
+
+                destiny2Controller.getXur(displayName, membershipType)
+                    .then(items => {
+                        if (items) {
+                            return res.status(HttpStatus.OK).json(items);
+                        }
+
+                        return res.status(HttpStatus.NOT_FOUND);
+                    })
+                    .catch(next);
+            });
 
     return destiny2Router;
 };

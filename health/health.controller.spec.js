@@ -1,5 +1,3 @@
-const { EventEmitter } = require('events');
-const httpMocks = require('node-mocks-http');
 const request = require('../helpers/request');
 const HealthController = require('./health.controller');
 const { Response: manifest } = require('../mocks/manifestResponse.json');
@@ -25,14 +23,6 @@ const store = {
 let healthController;
 
 describe('HealthController', () => {
-    let res;
-
-    beforeEach(() => {
-        res = httpMocks.createResponse({
-            eventEmitter: EventEmitter,
-        });
-    });
-
     describe('getHealth', () => {
         describe('when all services are healthy', () => {
             const world = {
@@ -65,9 +55,7 @@ describe('HealthController', () => {
                 });
             });
 
-            it('should return a positive response', () => new Promise(done => {
-                const req = httpMocks.createRequest();
-
+            it('should return a positive response', async () => {
                 destinyService.getManifest = jest.fn().mockResolvedValue(manifest);
                 destiny2Service.getManifest = jest.fn().mockResolvedValue(manifest2);
                 documents.getDocuments = jest.fn().mockResolvedValue([2]);
@@ -75,29 +63,22 @@ describe('HealthController', () => {
                 store.get = jest.fn().mockImplementation((key, callback) => callback(undefined, 'Thorn'));
                 store.set = jest.fn().mockImplementation((key, value, callback) => callback(undefined, 'OK'));
 
-                res.on('end', () => {
-                    expect(res.statusCode).toEqual(200);
+                const { failures, health } = await healthController.getHealth();
 
-                    const body = JSON.parse(res._getData()); // eslint-disable-line max-len, no-underscore-dangle
-
-                    expect(body).toEqual({
-                        documents: 2,
-                        twilio: 'All Systems Go',
-                        destiny: {
-                            manifest: '56578.17.04.12.1251-6',
-                            world: 'Red Hand IX',
-                        },
-                        destiny2: {
-                            manifest: '61966.18.01.12.0839-8',
-                            world: 'The Number',
-                        },
-                    });
-
-                    done();
+                expect(failures).toEqual(0);
+                expect(health).toEqual({
+                    documents: 2,
+                    twilio: 'All Systems Go',
+                    destiny: {
+                        manifest: '56578.17.04.12.1251-6',
+                        world: 'Red Hand IX',
+                    },
+                    destiny2: {
+                        manifest: '61966.18.01.12.0839-8',
+                        world: 'The Number',
+                    },
                 });
-
-                healthController.getHealth(req, res);
-            }));
+            });
         });
 
         describe('when all services are unhealthy', () => {
@@ -127,9 +108,7 @@ describe('HealthController', () => {
                 });
             });
 
-            it('should return a negative response', () => new Promise(done => {
-                const req = httpMocks.createRequest();
-
+            it('should return a negative response', async () => {
                 destinyService.getManifest = jest.fn().mockRejectedValue(new Error());
                 destiny2Service.getManifest = jest.fn().mockRejectedValue(new Error());
                 documents.getDocuments = jest.fn().mockRejectedValue(new Error());
@@ -137,28 +116,22 @@ describe('HealthController', () => {
                 store.get = jest.fn().mockImplementation((key, callback) => callback(undefined, 'Thorn'));
                 store.set = jest.fn().mockImplementation((key, value, callback) => callback(undefined, 'OK'));
 
-                res.on('end', () => {
-                    expect(res.statusCode).toEqual(503);
+                const { failures, health } = await healthController.getHealth();
 
-                    const body = JSON.parse(res._getData()); // eslint-disable-line max-len, no-underscore-dangle
-                    expect(body).toEqual({
-                        documents: -1,
-                        twilio: 'N/A',
-                        destiny: {
-                            manifest: 'N/A',
-                            world: 'N/A',
-                        },
-                        destiny2: {
-                            manifest: 'N/A',
-                            world: 'N/A',
-                        },
-                    });
-
-                    done();
+                expect(failures).toEqual(6);
+                expect(health).toEqual({
+                    documents: -1,
+                    twilio: 'N/A',
+                    destiny: {
+                        manifest: 'N/A',
+                        world: 'N/A',
+                    },
+                    destiny2: {
+                        manifest: 'N/A',
+                        world: 'N/A',
+                    },
                 });
-
-                healthController.getHealth(req, res);
-            }));
+            });
         });
     });
 });

@@ -6,14 +6,14 @@
  * @author Chris Paskvan
  * @requires request
  */
-const { post } = require('../helpers/request');
+const { get, post } = require('../helpers/request');
 
 /**
  * @constant
  * @type {string}
  * @description Base URL for all of the Bungie API services.
  */
-const servicePlatform = 'https://db-api.destinytracker.com/api';
+const servicePlatform = 'https://api.tracker.gg/api/v1/destiny-2/db';
 
 /**
  * Destiny Tracker Service Class
@@ -33,7 +33,7 @@ class DestinyTrackerService {
             headers: {
                 'Content-Type': 'application/json',
             },
-            url: `${servicePlatform}/external/reviews`,
+            url: `${servicePlatform}/reviews`,
         };
         const { votes } = await post(options);
 
@@ -47,29 +47,20 @@ class DestinyTrackerService {
      * @returns {Promise<Object>}
      */
     async getRank(itemHash) { // eslint-disable-line class-methods-use-this
-        const insightsQuery = {
-            query: 'query Item($hash: Hash!, $modes: [Int]) { itemInsights: item(hash: $hash) { insights(modes: $modes) { rank { kills }}}}',
-            variables: {
-                hash: `${itemHash}`,
-                modes: null,
-            },
-            operationName: 'Item',
-        };
         const options = {
-            data: insightsQuery,
             headers: {
                 'Content-Type': 'application/json',
             },
-            url: `${servicePlatform}/graphql`,
+            url: `${servicePlatform}/items/${itemHash}/insights`,
         };
-        const { data } = await post(options);
+        const { data } = await get(options);
         let kills;
 
         if (data) {
-            const { itemInsights: { insights } } = data;
+            const { stats } = data;
 
-            if (insights) {
-                ({ rank: { kills } } = insights);
+            if (stats) {
+                ({ rank: { kills } } = stats);
             }
         }
 
