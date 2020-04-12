@@ -11,6 +11,9 @@ https://github.com/andrewstart/axios-streaming/blob/master/axios.js
 # Extrapolate Request and Response from Controllers
 # Rate Limits/Denial of Service Attacks
 # Twilio Rate Limit
+# Husky Hooks
+# Coverage Ratchet
+# Cluster Mode
 # Swagger
 https://levelup.gitconnected.com/swagger-time-to-document-that-express-api-you-built-9b8faaeae563
 # Google Stadia

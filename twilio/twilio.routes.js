@@ -63,7 +63,11 @@ const routes = ({
 
                         const twiml = new MessagingResponse();
 
-                        (media ? twiml.message(attributes, message).media(media) : twiml.message(attributes, message));
+                        if (media) {
+                            twiml.message(attributes, message).media(media);
+                        } else {
+                            twiml.message(attributes, message);
+                        }
                         res.writeHead(200, {
                             'Content-Type': 'text/xml',
                         });
