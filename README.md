@@ -1,4 +1,8 @@
 # destiny-ghost-api
+
+[![Codacy Badge](https://api.codacy.com/project/badge/Grade/eb80d748233e4f0c836a329ddb390be4)](https://app.codacy.com/manual/chrispaskvan/destiny-ghost-api?utm_source=github.com&utm_medium=referral&utm_content=chrispaskvan/destiny-ghost-api&utm_campaign=Badge_Grade_Dashboard)
+[![Known Vulnerabilities](https://snyk.io/test/github/chrispaskvan/destiny-ghost-api/badge.svg?targetFile=package.json)](https://snyk.io/test/github/chrispaskvan/destiny-ghost-api?targetFile=package.json)
+
 Node App for SMS/MMS Notifications of Changes to the Vendor Wares in Bungie's Destiny and On-Demand Database Queries
 
 ## Description

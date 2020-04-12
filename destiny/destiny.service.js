@@ -38,17 +38,19 @@ class DestinyService {
     }
 
     /**
-     * Get Bungie access token from code.
+     * Get an access token.
      *
-     * @param code
-     * @returns {Promise}
+     * @static
+     * @param {*} data
+     * @returns
+     * @memberof DestinyService
      */
-    async getAccessTokenFromCode(code) { // eslint-disable-line class-methods-use-this
+    static async getAccessToken(marker) {
         const data = {
             client_id: clientId,
             client_secret: clientSecret,
             grant_type: 'authorization_code',
-            code,
+            ...marker,
         };
         const options = {
             data: qs.stringify(data),
@@ -63,27 +65,22 @@ class DestinyService {
     }
 
     /**
+     * Get Bungie access token from code.
+     *
+     * @param code
+     * @returns {Promise}
+     */
+    async getAccessTokenFromCode(code) { // eslint-disable-line class-methods-use-this
+        return DestinyService.constructor.getAccessToken({ code });
+    }
+
+    /**
      * Refresh access token with Bungie.
      *
      * @param refreshToken
      */
     getAccessTokenFromRefreshToken(refreshToken) { // eslint-disable-line class-methods-use-this
-        const data = {
-            client_id: clientId,
-            client_secret: clientSecret,
-            grant_type: 'refresh_token',
-            refresh_token: refreshToken,
-        };
-        const options = {
-            data: qs.stringify(data),
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'x-api-key': apiKey,
-            },
-            url: `${servicePlatform}/app/oauth/token/`,
-        };
-
-        return post(options);
+        return DestinyService.constructor.getAccessToken({ refresh_token: refreshToken });
     }
 
     /**
