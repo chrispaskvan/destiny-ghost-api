@@ -4,7 +4,7 @@
  * @module User Controller
  * @author Chris Paskvan
  */
-const _ = require('underscore');
+const _ = require('lodash');
 const jsonpatch = require('rfc6902');
 const Postmaster = require('../helpers/postmaster');
 const tokens = require('../helpers/tokens');

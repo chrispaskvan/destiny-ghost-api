@@ -4,7 +4,7 @@
  * @module twilioController
  * @author Chris Paskvan
  */
-const _ = require('underscore');
+const { groupBy, sortBy } = require('lodash');
 
 const bitly = require('../helpers/bitly');
 const log = require('../helpers/log');
@@ -55,9 +55,9 @@ class TwilioController {
             .getItemCategory(itemCategoryHash));
         const itemCategories = await Promise.all(promises);
         const filteredCategories = itemCategories.filter(({ hash1 }) => hash1 > 1);
-        const sortedCategories = _.sortBy(filteredCategories,
+        const sortedCategories = sortBy(filteredCategories,
             itemCategory => itemCategory.hash);
-        const itemCategory = _.reduce(sortedCategories, (memo, { shortTitle }) => (`${memo + shortTitle} `), ' ')
+        const itemCategory = sortedCategories.reduce((memo, { shortTitle }) => (`${memo + shortTitle} `), ' ')
             .trim();
 
         return [{
@@ -171,7 +171,7 @@ class TwilioController {
                     .getXur(membershipId, membershipType, characters[0].characterId, accessToken); // eslint-disable-line max-len
                 const items = await Promise.all(itemHashes
                     .map(itemHash1 => this.world.getItemByHash(itemHash1)));
-                const result = _.reduce(items, (memo, { displayProperties }) => (`${memo + displayProperties.name}\n`), ' ').trim();
+                const result = items.reduce((memo, { displayProperties }) => (`${memo + displayProperties.name}\n`), ' ').trim();
 
                 return {
                     cookies: { ...cookies, itemHash: undefined },
@@ -212,7 +212,7 @@ class TwilioController {
 
         if (items.length > 0) {
             if (items.length > 1) {
-                const groups = _.groupBy(items, item => item.itemName);
+                const groups = groupBy(items, item => item.itemName);
                 const keys = Object.keys(groups);
 
                 if (keys.length === 1) {
@@ -295,9 +295,9 @@ class TwilioController {
             };
         }
         default: {
-            const groups = _.groupBy(items, item => item.itemName);
+            const groups = groupBy(items, item => item.itemName);
             const keys = Object.keys(groups);
-            const result = _.reduce(keys, (memo, key) => `${memo}\n${key} ${groups[key][0].itemCategory}`, ' ').trim();
+            const result = keys.reduce((memo, key) => `${memo}\n${key} ${groups[key][0].itemCategory}`, ' ').trim();
 
             return {
                 cookies: { itemHash: undefined, ...responseCookies },

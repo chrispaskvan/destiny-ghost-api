@@ -1,6 +1,6 @@
-const _ = require('underscore');
+const { defaults, isEmpty } = require('lodash');
 const Joi = require('@hapi/joi');
-const defaults = require('json-schema-defaults');
+const schemaDefaults = require('json-schema-defaults');
 const validator = require('is-my-json-valid');
 const QueryBuilder = require('../helpers/queryBuilder');
 const notificationTypes = require('../notifications/notification.types');
@@ -279,7 +279,7 @@ class UserService {
      * @returns {*}
      */
     async createUser(user) {
-        const errors = [];
+        let errors = [];
         const validateNotifications = validator(notificationSchema);
         const validateUser = validator(userSchema);
 
@@ -289,7 +289,7 @@ class UserService {
 
         for (const notification of user.notifications) { // eslint-disable-line no-restricted-syntax
             if (!validateNotifications(notification)) {
-                _.union(errors, validateNotifications.errors);
+                errors = [...errors, ...validateNotifications.errors];
             }
         }
 
@@ -319,8 +319,8 @@ class UserService {
 
         const filteredUser = filter(user);
 
-        _.defaults(filteredUser, defaults(userSchema));
-        _.extend(existingUser, filteredUser);
+        defaults(filteredUser, schemaDefaults(userSchema));
+        existingUser = { ...existingUser, ...filteredUser };
 
         return this.documents.upsertDocument(collectionId, existingUser);
     }
@@ -434,7 +434,7 @@ class UserService {
     async getUserByEmailAddress(emailAddress) {
         const qb = new QueryBuilder();
 
-        if (typeof emailAddress !== 'string' || _.isEmpty(emailAddress)) {
+        if (typeof emailAddress !== 'string' || isEmpty(emailAddress)) {
             return Promise.reject(new Error('emailAddress string is required'));
         }
 
@@ -462,7 +462,7 @@ class UserService {
     async getUserByEmailAddressToken(emailAddressToken) {
         const qb = new QueryBuilder();
 
-        if (typeof emailAddressToken !== 'string' || _.isEmpty(emailAddressToken)) {
+        if (typeof emailAddressToken !== 'string' || isEmpty(emailAddressToken)) {
             return Promise.reject(new Error('emailAddressToken string is required.'));
         }
 
@@ -490,7 +490,7 @@ class UserService {
     async getUserById(userId) {
         const qb = new QueryBuilder();
 
-        if (typeof userId !== 'string' || _.isEmpty(userId)) {
+        if (typeof userId !== 'string' || isEmpty(userId)) {
             return Promise.reject(new Error('userId string is required'));
         }
 
@@ -518,7 +518,7 @@ class UserService {
     async getUserByMembershipId(membershipId) {
         const qb = new QueryBuilder();
 
-        if (typeof membershipId !== 'string' || _.isEmpty(membershipId)) {
+        if (typeof membershipId !== 'string' || isEmpty(membershipId)) {
             return Promise.reject(new Error('membershipId string is required'));
         }
 
@@ -546,7 +546,7 @@ class UserService {
     async getUserByPhoneNumber(phoneNumber) {
         const qb = new QueryBuilder();
 
-        if (typeof phoneNumber !== 'string' || _.isEmpty(phoneNumber)) {
+        if (typeof phoneNumber !== 'string' || isEmpty(phoneNumber)) {
             return Promise.reject(Error('phoneNumber string is required'));
         }
 
@@ -578,7 +578,7 @@ class UserService {
     async getUserByPhoneNumberToken(phoneNumberToken) {
         const qb = new QueryBuilder();
 
-        if (typeof phoneNumberToken !== 'number' || _.isEmpty(phoneNumberToken)) {
+        if (typeof phoneNumberToken !== 'number' || isEmpty(phoneNumberToken)) {
             return Promise.reject(Error('phoneNumberToken number is required.'));
         }
 

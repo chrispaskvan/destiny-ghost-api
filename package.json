@@ -64,7 +64,6 @@
         "rfc6902": "^3.0.4",
         "swagger-ui-express": "^4.1.4",
         "twilio": "^3.41.1",
-        "underscore": "^1.9.2",
         "yauzl": "^2.10.0"
     },
     "devDependencies": {

@@ -90,7 +90,8 @@ describe('Destiny2Router', () => {
                     });
 
                     res.on('end', () => {
-                        const data = JSON.parse(res._getData()); // eslint-disable-line max-len, no-underscore-dangle
+                        // eslint-disable-next-line no-underscore-dangle
+                        const data = JSON.parse(res._getData());
 
                         try {
                             expect(res.statusCode).toEqual(HttpStatus.OK);

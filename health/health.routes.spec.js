@@ -74,7 +74,8 @@ describe('HealthRouter', () => {
                     try {
                         expect(res.statusCode).toEqual(HttpStatus.OK);
 
-                        const body = JSON.parse(res._getData()); // eslint-disable-line max-len, no-underscore-dangle
+                        // eslint-disable-next-line no-underscore-dangle
+                        const body = JSON.parse(res._getData());
 
                         expect(body).toEqual({
                             documents: 2,
@@ -139,7 +140,8 @@ describe('HealthRouter', () => {
                     try {
                         expect(res.statusCode).toEqual(HttpStatus.SERVICE_UNAVAILABLE);
 
-                        const body = JSON.parse(res._getData()); // eslint-disable-line max-len, no-underscore-dangle
+                        // eslint-disable-next-line no-underscore-dangle
+                        const body = JSON.parse(res._getData());
                         expect(body).toEqual({
                             documents: -1,
                             twilio: 'N/A',

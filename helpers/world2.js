@@ -10,7 +10,7 @@
  * @requires S
  * @requires sqlite3
  */
-const _ = require('underscore');
+const { groupBy, min } = require('lodash');
 const path = require('path');
 const Database = require('better-sqlite3');
 const World = require('./world');
@@ -89,13 +89,12 @@ class World2 extends World {
             try {
                 const items = this.items.filter(({ displayProperties: { name } = '' }) => name.toLowerCase().includes(itemName.toLowerCase()));
 
-                const groups = _.groupBy(items, item => item.displayProperties.name);
+                const groups = groupBy(items, item => item.displayProperties.name);
                 const keys = Object.keys(groups);
 
-                resolve(_.map(keys, key => {
-                    const item = _.min(_.filter(items,
-                        item1 => item1.displayProperties.name === key),
-                    item1 => (item1.quality ? item1.quality.qualityLevel : 0));
+                resolve(keys.map(key => {
+                    const item = min(items.filter(item1 => item1.displayProperties.name === key),
+                        item1 => (item1.quality ? item1.quality.qualityLevel : 0));
 
                     return Object.assign(item, {
                         itemCategory: item.itemTypeAndTierDisplayName,
