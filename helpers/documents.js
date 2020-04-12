@@ -49,7 +49,8 @@ class Documents {
                     reject(err);
                 }
                 if (database) {
-                    this.client.queryCollections(database._self, // eslint-disable-line no-underscore-dangle, max-len
+                    // eslint-disable-next-line no-underscore-dangle
+                    this.client.queryCollections(database._self,
                         util.format('SELECT * FROM collections c WHERE c.id = "%s"', collectionId))
                         .current(getCurrentCollection.bind(this));
                 } else {
@@ -81,7 +82,8 @@ class Documents {
                         reject(new Error(`Collection ${collectionId} not found`));
                     }
 
-                    this.client.createDocument(collection._self, document, // eslint-disable-line no-underscore-dangle, max-len
+                    // eslint-disable-next-line no-underscore-dangle
+                    this.client.createDocument(collection._self, document,
                         (err, document1) => (err ? reject(err) : resolve(document1.id)));
                 });
         });
@@ -128,13 +130,14 @@ class Documents {
                 resolve(results);
             }
 
-            this.getCollection(collectionId) // eslint-disable-line no-underscore-dangle
+            this.getCollection(collectionId)
                 .then(collection => {
                     if (!collection) {
                         reject(new Error(`Collection ${collectionId} not found`));
                     }
 
-                    this.client.queryDocuments(collection._self, query, options).toArray(getDocuments); // eslint-disable-line no-underscore-dangle, max-len
+                    // eslint-disable-next-line max-len, no-underscore-dangle
+                    this.client.queryDocuments(collection._self, query, options).toArray(getDocuments);
                 });
         });
     }
@@ -147,7 +150,7 @@ class Documents {
      */
     upsertDocument(collectionId, document) {
         return new Promise((resolve, reject) => {
-            this.getCollection(collectionId) // eslint-disable-line no-underscore-dangle
+            this.getCollection(collectionId)
                 .then(collection => {
                     if (!collection) {
                         reject(new Error(`Collection ${collectionId} not found`));
@@ -159,7 +162,8 @@ class Documents {
                             condition: document._etag, // eslint-disable-line no-underscore-dangle
                         },
                     };
-                    this.client.upsertDocument(collection._self, document, options, err => (err ? reject(err) : resolve())); // eslint-disable-line no-underscore-dangle, max-len
+                    // eslint-disable-next-line max-len, no-underscore-dangle
+                    this.client.upsertDocument(collection._self, document, options, err => (err ? reject(err) : resolve()));
                 });
         });
     }

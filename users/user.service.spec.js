@@ -1,7 +1,7 @@
 /**
  * User Service Tests
  */
-const _ = require('underscore');
+const { omit } = require('lodash');
 const chance = require('chance')();
 const { cloneDeep } = require('lodash');
 const CacheService = require('./user.cache');
@@ -147,7 +147,7 @@ describe('UserService', () => {
             it('should reject the anonymous user', () => {
                 userService.getUserByDisplayName = jest.fn().mockResolvedValue(anonymousUser);
 
-                return userService.createAnonymousUser(_.omit(anonymousUser, 'membershipId'))
+                return userService.createAnonymousUser(omit(anonymousUser, 'membershipId'))
                     .catch(err => {
                         expect(err).toBeDefined();
                     });
@@ -185,7 +185,7 @@ describe('UserService', () => {
         });
 
         describe('when user is invalid', () => {
-            it('should reject the user', () => userService.createUser(_.omit(user, 'phoneNumber'))
+            it('should reject the user', () => userService.createUser(omit(user, 'phoneNumber'))
                 .catch(err => {
                     expect(err).toBeDefined();
                 }));

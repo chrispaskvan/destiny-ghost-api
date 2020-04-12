@@ -1,7 +1,7 @@
 /**
  * A module for accessing the Destiny World database.
  */
-const _ = require('underscore');
+const { sampleSize } = require('lodash');
 const Database = require('better-sqlite3');
 const axios = require('axios');
 const fs = require('fs');
@@ -58,7 +58,7 @@ class World {
      * @returns {Promise}
      */
     getGrimoireCards(numberOfCards) {
-        return Promise.resolve(_.sample(this.grimoireCards, numberOfCards));
+        return Promise.resolve(sampleSize(this.grimoireCards, numberOfCards));
     }
 
     /**
