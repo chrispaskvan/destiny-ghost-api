@@ -63,6 +63,7 @@ const routes = ({
             }
 
             notificationController.create(subscription)
+                .then(() => res.status(200).end())
                 .catch(next);
         });
 
@@ -79,6 +80,8 @@ const routes = ({
 
             if (!notificationTypes[subscription]) {
                 res.status(404).json('That subscription is not recognized.');
+
+                return;
             }
 
             notificationController.create(subscription, phoneNumber)
