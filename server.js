@@ -47,7 +47,7 @@ async function startServer() {
 
         applicationInsights.defaultClient.trackMetric({ name: 'Startup Time', value: duration });
         // eslint-disable-next-line no-console
-        console.log(`HTTP server listening on port ${port}`)
+        console.log(`HTTP server listening on port ${port}`);
     });
 }
 
