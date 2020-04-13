@@ -70,8 +70,8 @@ class DestinyService {
      * @param code
      * @returns {Promise}
      */
-    async getAccessTokenFromCode(code) { // eslint-disable-line class-methods-use-this
-        return DestinyService.constructor.getAccessToken({ code });
+    async getAccessTokenFromCode(code) {
+        return this.constructor.getAccessToken({ code });
     }
 
     /**
@@ -79,8 +79,8 @@ class DestinyService {
      *
      * @param refreshToken
      */
-    getAccessTokenFromRefreshToken(refreshToken) { // eslint-disable-line class-methods-use-this
-        return DestinyService.constructor.getAccessToken({ refresh_token: refreshToken });
+    getAccessTokenFromRefreshToken(refreshToken) {
+        return this.constructor.getAccessToken({ refresh_token: refreshToken });
     }
 
     /**
