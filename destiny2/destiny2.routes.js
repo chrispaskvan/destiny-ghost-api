@@ -55,7 +55,6 @@ const routes = ({
      * path:
      *  /destiny2/manifest/:
      *    get:
-     *      security: []
      *      summary: Get details about the latest and greatest Destiny manifest definition.
      *      tags:
      *        - Destiny 2
@@ -116,7 +115,6 @@ const routes = ({
      * path:
      *  /destiny2/xur/:
      *    get:
-     *      security: []
      *      summary: Get Xur's inventory if available.
      *      tags:
      *        - Destiny 2

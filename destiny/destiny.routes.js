@@ -89,7 +89,6 @@ const routes = ({
      * path:
      *  /destiny/manifest/:
      *    get:
-     *      security: []
      *      summary: Get details about the latest and greatest Destiny manifest definition.
      *      tags:
      *        - Destiny
