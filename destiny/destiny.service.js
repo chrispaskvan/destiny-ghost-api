@@ -45,12 +45,11 @@ class DestinyService {
      * @returns
      * @memberof DestinyService
      */
-    static async getAccessToken(marker) {
+    static getAccessToken(grant) {
         const data = {
             client_id: clientId,
             client_secret: clientSecret,
-            grant_type: 'authorization_code',
-            ...marker,
+            ...grant,
         };
         const options = {
             data: qs.stringify(data),
@@ -70,8 +69,11 @@ class DestinyService {
      * @param code
      * @returns {Promise}
      */
-    async getAccessTokenFromCode(code) {
-        return this.constructor.getAccessToken({ code });
+    getAccessTokenFromCode(code) {
+        return this.constructor.getAccessToken({
+            code,
+            grant_type: 'authorization_code',
+        });
     }
 
     /**
@@ -80,7 +82,10 @@ class DestinyService {
      * @param refreshToken
      */
     getAccessTokenFromRefreshToken(refreshToken) {
-        return this.constructor.getAccessToken({ refresh_token: refreshToken });
+        return this.constructor.getAccessToken({
+            grant_type: 'refresh_token',
+            refresh_token: refreshToken,
+        });
     }
 
     /**

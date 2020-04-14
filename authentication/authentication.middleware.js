@@ -28,11 +28,11 @@ class AuthenticationMiddleware {
         try {
             const user = await this.authentication.authenticate(req);
 
-            if (!user) {
+            if (user) {
+                next();
+            } else {
                 res.status(401).end();
             }
-
-            next();
         } catch (err) {
             next(err);
         }
