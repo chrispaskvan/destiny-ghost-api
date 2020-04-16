@@ -66,6 +66,25 @@ class DestinyTrackerService {
 
         return kills;
     }
+
+    /**
+     * Get Top 10 used weapons in PVP.
+     *
+     * @returns {Promise<Object>}
+     */
+    async getTop10() { // eslint-disable-line class-methods-use-this
+        const options = {
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            url: `${servicePlatform}/items/insights`,
+        };
+        const { data } = await get(options);
+
+        return data
+            ? data.filter(({ rank: { usage } }) => usage < 11).map(({ hash }) => hash)
+            : undefined;
+    }
 }
 
 module.exports = DestinyTrackerService;
