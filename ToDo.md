@@ -1,17 +1,18 @@
 # Better Caching
-# Replace underscore with lodash
 # Better Test Coverage
 # User Interface
+https://material-ui.com/store/items/onepirate/
+https://github.com/expressjs/vhost
+https://www.hacksparrow.com/webdev/express/vhost.html
 # Opt Out
 # Cache Health?
 # Axios Streaming
 https://github.com/andrewstart/axios-streaming/blob/master/axios.js
 # Application Insights
 # Use an ORM
+https://blog.logrocket.com/why-you-should-avoid-orms-with-examples-in-node-js-e0baab73fa5/
 # Extrapolate Request and Response from Controllers
 # Rate Limits/Denial of Service Attacks
-# Twilio Rate Limit
-# Husky Hooks
 # Coverage Ratchet
 # Cluster Mode
 # Swagger

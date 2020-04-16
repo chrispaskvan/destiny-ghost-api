@@ -137,6 +137,33 @@ class TwilioController {
         return responses[Math.floor(Math.random() * responses.length)];
     }
 
+    /**
+     * Get the Top 10 used weapons in PVP.
+     *
+     * @param {*} cookies
+     * @returns
+     * @memberof TwilioController
+     */
+    async getTop10(cookies) {
+        const itemHashes = await this.destinyTracker.getTop10();
+        const items = await Promise.all(itemHashes
+            .map(itemHash1 => this.world.getItemByHash(itemHash1)));
+        const result = items.reduce((memo, { displayProperties }) => (`${memo + displayProperties.name}\n`), ' ').trim();
+
+        return {
+            cookies: { ...cookies, itemHash: undefined },
+            message: result.substr(0, 130), // ToDo: Is this still necessary?
+        };
+    }
+
+    /**
+     * Get the vote tally for the requested item.
+     *
+     * @param {*} itemHash
+     * @param {*} [cookies={}]
+     * @returns
+     * @memberof TwilioController
+     */
     async getVotes(itemHash, cookies = {}) {
         if (itemHash) {
             const { upvotes, total } = await this.destinyTracker.getVotes(itemHash) || {};
@@ -155,6 +182,14 @@ class TwilioController {
         };
     }
 
+    /**
+     * Get Xur's inventory.
+     *
+     * @param {*} user
+     * @param {*} cookies
+     * @returns
+     * @memberof TwilioController
+     */
     async getXur(user, cookies) {
         try {
             const {
@@ -272,6 +307,10 @@ class TwilioController {
 
         if (message === 'xur') {
             return this.getXur(user, responseCookies);
+        }
+
+        if (message === 'top 10') {
+            return this.getTop10(responseCookies);
         }
 
         const searchTerm = body.Body.trim().toLowerCase();
