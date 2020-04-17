@@ -2,7 +2,8 @@
 
 [![Codacy Badge](https://api.codacy.com/project/badge/Grade/eb80d748233e4f0c836a329ddb390be4)](https://app.codacy.com/manual/chrispaskvan/destiny-ghost-api?utm_source=github.com&utm_medium=referral&utm_content=chrispaskvan/destiny-ghost-api&utm_campaign=Badge_Grade_Dashboard)
 [![Maintainability](https://api.codeclimate.com/v1/badges/da028fbc47cd8718e45b/maintainability)](https://codeclimate.com/github/chrispaskvan/destiny-ghost-api/maintainability)
-[![Known Vulnerabilities](https://snyk.io/test/github/chrispaskvan/destiny-ghost-api/badge.svg?targetFile=package.json)](https://snyk.io/test/github/chrispaskvan/destiny-ghost-api?targetFile=package.json)
+[![Known Vulnerabilities](https://snyk.io/test/github/chrispaskvan/destiny-ghost-api/badge.svg)](https://snyk.io/test/github/chrispaskvan/destiny-ghost-api)
+
 
 Node App for SMS/MMS Notifications of Changes to the Vendor Wares in Bungie's Destiny and On-Demand Database Queries
 
