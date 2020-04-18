@@ -1,6 +1,6 @@
 const HttpStatus = require('http-status-codes');
 const { RateLimiterRedis } = require('rate-limiter-flexible');
-const { client } = require('./session-store.redis');
+const client = require('./cache');
 
 const options = {
     redis: client,

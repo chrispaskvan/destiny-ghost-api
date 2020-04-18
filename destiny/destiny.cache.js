@@ -1,4 +1,4 @@
-const NodeCache = require('node-cache');
+const client = require('../helpers/cache');
 
 /**
  * Cache key for the latest Destiny Manifest cached.
@@ -11,13 +11,6 @@ const manifestKey = 'destiny-manifest';
  */
 class DestinyCache {
     /**
-     * @constructor
-     */
-    constructor() {
-        this.cache = new NodeCache({ stdTTL: 3600, checkperiod: 0, useClones: true });
-    }
-
-    /**
      * Get manifest key.
      * @returns {string}
      */
@@ -26,12 +19,20 @@ class DestinyCache {
     }
 
     /**
+     * Get the seconds left before the next daily reset.
+     * @returns {number}
+     */
+    static secondsUntilDailyReset() {
+        return 60 * 60 * 24; // ToDo
+    }
+
+    /**
      * Get the cached Destiny Manifest.
      * @returns {Promise}
      */
     getManifest() {
         return new Promise((resolve, reject) => {
-            this.cache.get(this.constructor.manifestKey, (err, manifest) => {
+            client.get(this.constructor.manifestKey, (err, manifest) => {
                 if (err) {
                     reject(err);
                 } else {
@@ -46,9 +47,10 @@ class DestinyCache {
      * @param vendorHash
      * @returns {Promise}
      */
+    // eslint-disable-next-line class-methods-use-this
     getVendor(vendorHash) {
         return new Promise((resolve, reject) => {
-            this.cache.get(vendorHash,
+            client.get(vendorHash,
                 (err, res) => (err ? reject(err) : resolve(res ? JSON.parse(res) : undefined)));
         });
     }
@@ -61,7 +63,7 @@ class DestinyCache {
     setManifest(manifest) {
         if (manifest && typeof manifest === 'object') {
             return new Promise((resolve, reject) => {
-                this.cache.set(this.constructor.manifestKey, manifest, (err, success) => {
+                client.set(this.constructor.manifestKey, manifest, 'EX', this.constructor.secondsUntilDailyReset(), (err, success) => {
                     if (err) {
                         reject(err);
                     } else {
@@ -86,8 +88,8 @@ class DestinyCache {
         }
 
         return new Promise((resolve, reject) => {
-            this.cache.set(hash,
-                JSON.stringify(vendor), (err, res) => (err ? reject(err) : resolve(res)));
+            client.set(hash,
+                JSON.stringify(vendor), 'EX', this.constructor.secondsUntilDailyReset(), (err, res) => (err ? reject(err) : resolve(res)));
         });
     }
 }

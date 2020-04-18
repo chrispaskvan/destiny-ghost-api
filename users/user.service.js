@@ -389,7 +389,6 @@ class UserService {
      * @returns {Promise}
      */
     async getUserByDisplayName(displayName, membershipType, noCache = false) {
-        const qb = new QueryBuilder();
         const schema = {
             displayName: Joi.string().required(),
             membershipType: Joi.number().required(),
@@ -404,13 +403,16 @@ class UserService {
             return Promise.reject(messages.join(','));
         }
 
-        qb.where('displayName', displayName);
-        qb.where('membershipType', membershipType);
-
         const user = await this.cacheService.getUser(displayName, membershipType);
+
         if (!noCache && user) {
             return user;
         }
+
+        const qb = new QueryBuilder();
+
+        qb.where('displayName', displayName);
+        qb.where('membershipType', membershipType);
 
         const documents = await this.documents.getDocuments(collectionId, qb.getQuery());
         if (documents) {

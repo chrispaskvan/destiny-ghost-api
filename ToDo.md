@@ -13,6 +13,8 @@ https://github.com/andrewstart/axios-streaming/blob/master/axios.js
 https://blog.logrocket.com/why-you-should-avoid-orms-with-examples-in-node-js-e0baab73fa5/
 # Extrapolate Request and Response from Controllers
 # Rate Limits/Denial of Service Attacks
+https://blog.logrocket.com/rate-limiting-node-js/
+https://github.com/animir/node-rate-limiter-flexible#readme
 # Coverage Ratchet
 # Cluster Mode
 # Swagger

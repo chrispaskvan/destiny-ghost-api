@@ -1,22 +1,9 @@
-const redis = require('redis');
-const { redis: redisConfig } = require('../helpers/config');
+const client = require('../helpers/cache');
 
 /**
  *  User Cache Class
  */
 class UserCache {
-    /**
-     * @constructor
-     */
-    constructor() {
-        this.client = redis.createClient(redisConfig.port, redisConfig.host, {
-            auth_pass: redisConfig.key, // jscs:ignore requireCamelCaseOrUpperCaseIdentifiers
-            tls: {
-                servername: redisConfig.host,
-            },
-        });
-    }
-
     /**
      * @param teeth
      * @returns {string}
@@ -31,9 +18,10 @@ class UserCache {
      * @returns {Promise}
      * @private
      */
+    // eslint-disable-next-line class-methods-use-this
     deleteCache(key) {
         return new Promise((resolve, reject) => {
-            this.client.del(key, (err, res) => {
+            client.del(key, (err, res) => {
                 if (err) {
                     reject(err);
                 } else {
@@ -67,20 +55,16 @@ class UserCache {
         return Promise.all([promise1, promise2]);
     }
 
-    // ToDo
-    destroy() {
-        this.client.quit();
-    }
-
     /**
      * Get cached item by key.
      * @param key
      * @returns {Promise}
      * @private
      */
+    // eslint-disable-next-line class-methods-use-this
     getCache(key) {
         return new Promise((resolve, reject) => {
-            this.client.get(key, (err, res) => {
+            client.get(key, (err, res) => {
                 if (err) {
                     return reject(err);
                 }
@@ -129,7 +113,7 @@ class UserCache {
 
         const key = this.constructor.getCacheKey(displayName, membershipType);
         const promise1 = new Promise((resolve, reject) => {
-            this.client.set(key, JSON.stringify(user), (err, res) => {
+            client.set(key, JSON.stringify(user), 'EX', 60 * 60, (err, res) => {
                 if (err) {
                     reject(err);
                 } else {
@@ -142,8 +126,8 @@ class UserCache {
 
         if (phoneNumber) {
             promise2 = new Promise((resolve, reject) => {
-                this.client.set(phoneNumber,
-                    JSON.stringify({ displayName, membershipType }), (err, res) => {
+                client.set(phoneNumber,
+                    JSON.stringify({ displayName, membershipType }), 'EX', 60 * 60, (err, res) => {
                         if (err) {
                             reject(err);
                         } else {

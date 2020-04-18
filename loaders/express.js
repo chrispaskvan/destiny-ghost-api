@@ -3,7 +3,7 @@ const cookieParser = require('cookie-parser');
 const session = require('express-session');
 
 const rateLimiterMiddleware = require('../helpers/rate-limiter.middleware');
-const { store } = require('../helpers/session-store');
+const store = require('../helpers/store');
 const { session: sessionConfig } = require('../helpers/config');
 
 module.exports = app => {
