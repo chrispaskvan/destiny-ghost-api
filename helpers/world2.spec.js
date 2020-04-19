@@ -10,7 +10,7 @@ const world = new World({
 
 describe('It\'s Bungie\'s 2nd world. You\'re just querying it.', () => {
     it('should return the lore for Ghost Primus', () => new Promise(done => {
-        world.getLore(2505533224)
+        world.getLore('2505533224')
             .then(lore => {
                 const { displayProperties: { name } } = lore;
 
@@ -36,7 +36,7 @@ describe('It\'s Bungie\'s 2nd world. You\'re just querying it.', () => {
     }));
 
     it('should return the Hunter character class', () => new Promise(done => {
-        world.getClassByHash(671679327)
+        world.getClassByHash('671679327')
             .then(characterClass => {
                 const { displayProperties: { name } } = characterClass;
 

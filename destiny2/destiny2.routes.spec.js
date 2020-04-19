@@ -36,7 +36,7 @@ beforeEach(() => {
                 Male: 'Hunter',
                 Female: 'Hunter',
             },
-            hash: 671679327,
+            hash: '671679327',
             index: 1,
             redacted: false,
         })),
@@ -75,7 +75,7 @@ describe('Destiny2Router', () => {
                     destiny2Service.getProfile = jest.fn().mockResolvedValue([
                         {
                             characterId: '1111111111111111111',
-                            classHash: 671679327,
+                            classHash: '671679327',
                             light: 284,
                             links: [
                                 {
