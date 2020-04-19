@@ -1,6 +1,8 @@
-const redis = require('redis');
+const client = require('../helpers/cache');
 const UserCache = require('./user.cache');
 const mockUser = require('../mocks/users.json')[0];
+
+jest.mock('../helpers/cache');
 
 describe('UserCache', () => {
     let cacheService;
@@ -12,14 +14,8 @@ describe('UserCache', () => {
             const clientResponse = 1;
 
             beforeEach(() => {
-                redis.createClient = jest.fn(() => {
-                    const client = {
-                        del: jest.fn((key, callback) => callback(undefined, clientResponse)),
-                        quit: jest.fn(),
-                    };
-
-                    return client;
-                });
+                client.del = jest.fn((key, callback) => callback(undefined, clientResponse));
+                client.quit = jest.fn();
 
                 cacheService = new UserCache();
             });
@@ -35,14 +31,8 @@ describe('UserCache', () => {
             const errMessage = 'error';
 
             beforeEach(() => {
-                redis.createClient = jest.fn(() => {
-                    const client = {
-                        del: jest.fn((key, callback) => callback(errMessage)),
-                        quit: jest.fn(),
-                    };
-
-                    return client;
-                });
+                client.del = jest.fn((key, callback) => callback(errMessage));
+                client.quit = jest.fn();
 
                 cacheService = new UserCache();
             });
@@ -59,13 +49,7 @@ describe('UserCache', () => {
         const del = jest.fn((key, callback) => callback(undefined, 1));
 
         beforeEach(() => {
-            redis.createClient = jest.fn(() => {
-                const client = {
-                    del,
-                };
-
-                return client;
-            });
+            client.del = del;
 
             cacheService = new UserCache();
         });
@@ -84,31 +68,11 @@ describe('UserCache', () => {
                 const res = await cacheService.deleteUser({});
 
                 expect(res).toEqual([undefined, undefined]);
-                expect(del).not.toHaveBeenCalled();
+                expect(client.del).not.toHaveBeenCalled();
             });
         });
 
         afterEach(() => jest.clearAllMocks());
-    });
-
-    describe('destroy', () => {
-        it('calls quit', () => {
-            const quit = jest.fn();
-
-            redis.createClient = jest.fn(() => {
-                const client = {
-                    quit,
-                };
-
-                return client;
-            });
-
-            cacheService = new UserCache();
-
-            cacheService.destroy();
-
-            expect(quit).toHaveBeenCalled();
-        });
     });
 
     describe('getCache', () => {
@@ -117,14 +81,7 @@ describe('UserCache', () => {
         describe('when client get operation succeeds', () => {
             describe('when cache is found', () => {
                 it('resolves value', async () => {
-                    redis.createClient = jest.fn(() => {
-                        const client = {
-                            get: jest.fn((key, callback) => callback(undefined, JSON.stringify(mockUser))), // eslint-disable-line max-len
-                        };
-
-                        return client;
-                    });
-
+                    client.get = jest.fn((key, callback) => callback(undefined, JSON.stringify(mockUser))); // eslint-disable-line max-len
                     cacheService = new UserCache();
 
                     const res = await cacheService.getCache(cacheKey);
@@ -135,14 +92,7 @@ describe('UserCache', () => {
 
             describe('when cache is not found', () => {
                 it('resolves value', async () => {
-                    redis.createClient = jest.fn(() => {
-                        const client = {
-                            get: jest.fn((key, callback) => callback(undefined, undefined)),
-                        };
-
-                        return client;
-                    });
-
+                    client.get = jest.fn((key, callback) => callback(undefined, undefined));
                     cacheService = new UserCache();
 
                     const res = await cacheService.getCache(cacheKey);
@@ -156,14 +106,7 @@ describe('UserCache', () => {
             it('returns undefined', () => {
                 const errMessage = 'error';
 
-                redis.createClient = jest.fn(() => {
-                    const client = {
-                        get: jest.fn((key, callback) => callback(errMessage, undefined)),
-                    };
-
-                    return client;
-                });
-
+                client.get = jest.fn((key, callback) => callback(errMessage, undefined));
                 cacheService = new UserCache();
 
                 return cacheService.getCache(cacheKey)
@@ -177,16 +120,10 @@ describe('UserCache', () => {
 
     describe('getUser', () => {
         beforeEach(() => {
-            redis.createClient = jest.fn(() => {
-                const client = {
-                    del: jest.fn((key, callback) => callback(undefined, 1)),
-                    get: jest.fn((key, callback) => callback(undefined, JSON.stringify(mockUser))), // eslint-disable-line max-len
-                    quit: jest.fn(),
-                    set: jest.fn((key, value, callback) => callback()),
-                };
-
-                return client;
-            });
+            client.del = jest.fn((key, callback) => callback(undefined, 1));
+            client.get = jest.fn((key, callback) => callback(undefined, JSON.stringify(mockUser))); // eslint-disable-line max-len
+            client.quit = jest.fn();
+            client.set = jest.fn((key, value, option, ttl, callback) => callback());
 
             cacheService = new UserCache();
         });
@@ -234,16 +171,10 @@ describe('UserCache', () => {
 
     describe('setUser', () => {
         describe('when client set operation succeeds', () => {
-            const set = jest.fn((key, value, callback) => callback());
+            const set = jest.fn((key, value, option, ttl, callback) => callback());
 
             beforeEach(() => {
-                redis.createClient = jest.fn(() => {
-                    const client = {
-                        set,
-                    };
-
-                    return client;
-                });
+                client.set = set;
 
                 cacheService = new UserCache();
             });
@@ -291,14 +222,8 @@ describe('UserCache', () => {
             it('cache user', async () => {
                 const errMessage = 'error';
 
-                redis.createClient = jest.fn(() => {
-                    const client = {
-                        set: jest.fn((key, value, callback) => callback(errMessage, undefined)),
-                    };
-
-                    return client;
-                });
-
+                // eslint-disable-next-line max-len
+                client.set = jest.fn((key, value, option, ttl, callback) => callback(errMessage, undefined));
                 cacheService = new UserCache();
 
                 return cacheService.setUser(mockUser)

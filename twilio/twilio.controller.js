@@ -10,6 +10,13 @@ const bitly = require('../helpers/bitly');
 const log = require('../helpers/log');
 
 /**
+ * Maximum number of characters Twilio supports in an SMS message.
+ * {@link https://www.twilio.com/docs/glossary/what-sms-character-limit}
+ * @type {number}
+ */
+const MAX_SMS_MESSAGE_LENGTH = 160;
+
+/**
  * Twilio Controller
  */
 class TwilioController {
@@ -152,7 +159,7 @@ class TwilioController {
 
         return {
             cookies: { ...cookies, itemHash: undefined },
-            message: result.substr(0, 130), // ToDo: Is this still necessary?
+            message: result.substr(0, MAX_SMS_MESSAGE_LENGTH),
         };
     }
 
@@ -210,7 +217,7 @@ class TwilioController {
 
                 return {
                     cookies: { ...cookies, itemHash: undefined },
-                    message: result.substr(0, 130), // ToDo: Is this still necessary?
+                    message: result.substr(0, MAX_SMS_MESSAGE_LENGTH),
                 };
             }
 
@@ -222,7 +229,7 @@ class TwilioController {
             if (err.name === 'DestinyError') {
                 return {
                     cookies,
-                    message: err.message.substr(0, 130),
+                    message: err.message.substr(0, MAX_SMS_MESSAGE_LENGTH),
                 };
             }
 
@@ -329,7 +336,7 @@ class TwilioController {
 
             return {
                 cookies: responseCookies,
-                message: `${items[0].itemName} ${items[0].itemCategory}`.substr(0, 130),
+                message: `${items[0].itemName} ${items[0].itemCategory}`.substr(0, MAX_SMS_MESSAGE_LENGTH),
                 media: user.type === 'landline' ? undefined : items[0].icon,
             };
         }
@@ -340,7 +347,7 @@ class TwilioController {
 
             return {
                 cookies: { itemHash: undefined, ...responseCookies },
-                message: result.substr(0, 130),
+                message: result.substr(0, MAX_SMS_MESSAGE_LENGTH),
             };
         }
         }

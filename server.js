@@ -8,8 +8,10 @@ const express = require('express');
 const fs = require('fs');
 const http = require('http');
 const https = require('https');
+const { createTerminus } = require('@godaddy/terminus');
 
 const loaders = require('./loaders');
+const client = require('./helpers/cache');
 const { applicationInsights: { instrumentationKey } } = require('./helpers/config');
 
 
@@ -41,6 +43,15 @@ async function startServer() {
     }
 
     const insecureServer = http.createServer(app);
+
+    createTerminus(insecureServer, {
+        signal: 'SIGINT',
+        onSignal: () => (new Promise(resolve => {
+            client.quit(err => {
+                resolve(err);
+            });
+        })),
+    });
 
     insecureServer.listen(port, () => {
         const duration = Date.now() - start;

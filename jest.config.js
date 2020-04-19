@@ -1,5 +1,6 @@
 module.exports = {
     coverageDirectory: '<rootDir>/.coverage',
+    coverageReporters: ['clover', 'html'],
     coveragePathIgnorePatterns: [
         '/node_modules/', '/settings/', '/databases/', '/.coverage/',
     ],
