@@ -1,6 +1,7 @@
 # destiny-ghost-api
 
 [![Codacy Badge](https://api.codacy.com/project/badge/Grade/eb80d748233e4f0c836a329ddb390be4)](https://app.codacy.com/manual/chrispaskvan/destiny-ghost-api?utm_source=github.com&utm_medium=referral&utm_content=chrispaskvan/destiny-ghost-api&utm_campaign=Badge_Grade_Dashboard)
+[![Codacy Badge](https://api.codacy.com/project/badge/Coverage/f3739ef16c3a4c9d9ad08423744fa5d3)](https://www.codacy.com/manual/chrispaskvan/destiny-ghost-api?utm_source=github.com&utm_medium=referral&utm_content=chrispaskvan/destiny-ghost-api&utm_campaign=Badge_Coverage)
 [![Maintainability](https://api.codeclimate.com/v1/badges/da028fbc47cd8718e45b/maintainability)](https://codeclimate.com/github/chrispaskvan/destiny-ghost-api/maintainability)
 [![Known Vulnerabilities](https://snyk.io/test/github/chrispaskvan/destiny-ghost-api/badge.svg)](https://snyk.io/test/github/chrispaskvan/destiny-ghost-api)
 
