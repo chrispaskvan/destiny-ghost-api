@@ -54,9 +54,41 @@
         }
       }
     },
+    "/destiny2/characters/": {
+      "get": {
+        "summary": "Get a list of the user's characters.",
+        "tags": [
+          "Destiny 2"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Destiny Manifest definition"
+          }
+        }
+      }
+    },
     "/destiny2/manifest/": {
       "get": {
         "summary": "Get details about the latest and greatest Destiny manifest definition.",
+        "tags": [
+          "Destiny 2"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Destiny Manifest definition"
+          }
+        }
+      }
+    },
+    "/destiny2/profile/": {
+      "get": {
+        "summary": "Get the user's profile.",
         "tags": [
           "Destiny 2"
         ],

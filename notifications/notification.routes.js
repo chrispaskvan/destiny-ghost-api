@@ -9,15 +9,12 @@ const NotificationController = require('./notification.controller');
  * @param {*} headers
  */
 function authorized(headers = []) {
-    const headerNames = Object.keys(notificationHeaders);
+    const notificationEntries = Object.entries(notificationHeaders);
+    const headerEntries = Object.entries(headers)
+        .filter(([key1, value1]) => notificationEntries
+            .find(([key2, value2]) => key1 === key2 && value1 === value2));
 
-    for (const headerName of headerNames) { // eslint-disable-line no-restricted-syntax
-        if (headers[headerName] !== notificationHeaders[headerName]) {
-            return false;
-        }
-    }
-
-    return true;
+    return headerEntries.length === notificationEntries.length;
 }
 
 /**
@@ -78,7 +75,7 @@ const routes = ({
                 return;
             }
 
-            if (!notificationTypes[subscription]) {
+            if (!Object.keys(notificationTypes).find(key => key === subscription)) {
                 res.status(404).json('That subscription is not recognized.');
 
                 return;

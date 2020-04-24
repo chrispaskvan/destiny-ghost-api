@@ -62,8 +62,8 @@ describe('Destiny2Controller', () => {
                         membershipId: '1',
                     });
 
-                    // eslint-disable-next-line max-len
-                    const [{ className }] = await destiny2Controller.getProfile(displayName, membershipType);
+                    const [{ className }] = await destiny2Controller
+                        .getCharacters(displayName, membershipType);
 
                     expect(className).toEqual('Hunter');
                 });

@@ -33,7 +33,8 @@ class NotificationController {
 
             if (notificationType === notificationTypes.Xur) {
                 try {
-                    const { bungie: { access_token: accessToken } } = await this.authentication.authenticate(user); // eslint-disable-line max-len
+                    const { bungie: { access_token: accessToken } } = await this
+                        .authentication.authenticate(user);
                     const characters = await this.destiny.getProfile(membershipId, membershipType);
 
                     if (characters && characters.length) {
@@ -69,8 +70,8 @@ class NotificationController {
         } else {
             const users = await this.users.getSubscribedUsers(subscription);
 
-            // eslint-disable-next-line max-len
-            return Promise.all(users.map(user => this.publisher.sendNotification(user, subscription)));
+            return Promise.all(users.map(user => this.publisher
+                .sendNotification(user, subscription)));
         }
 
         return undefined;

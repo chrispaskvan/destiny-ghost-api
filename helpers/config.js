@@ -2,6 +2,7 @@ const { camelCase } = require('lodash');
 const fs = require('fs');
 
 function loadFile(file) {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
     const data = fs.readFileSync(`./settings/${file}`, 'utf8');
 
     return {

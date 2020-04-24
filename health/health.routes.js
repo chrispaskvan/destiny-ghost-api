@@ -50,8 +50,9 @@ const routes = ({
         .get((req, res, next) => {
             healthController.getHealth()
                 .then(({ failures, health }) => {
-                    // eslint-disable-next-line max-len
-                    res.status(failures ? HttpStatus.SERVICE_UNAVAILABLE : HttpStatus.OK).json(health);
+                    res.status(failures
+                        ? HttpStatus.SERVICE_UNAVAILABLE
+                        : HttpStatus.OK).json(health);
                 })
                 .catch(next);
         });

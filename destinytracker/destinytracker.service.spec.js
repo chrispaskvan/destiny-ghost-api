@@ -38,7 +38,7 @@ describe('DestinyTrackerService', () => {
                     data: {
                         stats: {
                             rank: {
-                                kills: mockRank,
+                                usage: mockRank,
                             },
                         },
                     },

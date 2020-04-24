@@ -59,7 +59,8 @@ class World2 extends World {
      * @param classHash {string}
      */
     getClassByHash(classHash) {
-        return Promise.resolve(this.classes.find(characterClass => characterClass.hash === classHash)); // eslint-disable-line max-len
+        return Promise.resolve(this.classes
+            .find(characterClass => characterClass.hash === classHash));
     }
 
     /**
@@ -113,7 +114,8 @@ class World2 extends World {
      * @returns {Promise}
      */
     getItemCategory(itemCategoryHash) {
-        return Promise.resolve(this.categories.find(category => category.hash === itemCategoryHash)); // eslint-disable-line max-len
+        return Promise.resolve(this.categories
+            .find(category => category.hash === itemCategoryHash));
     }
 
     /**

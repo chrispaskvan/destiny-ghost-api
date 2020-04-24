@@ -38,6 +38,20 @@ const routes = ({
      */
     const middleware = new AuthenticationMiddleWare({ authenticationController });
 
+    /**
+     * @swagger
+     * path:
+     *  /destiny2/characters/:
+     *    get:
+     *      summary: Get a list of the user's characters.
+     *      tags:
+     *        - Destiny 2
+     *      produces:
+     *        - application/json
+     *      responses:
+     *        200:
+     *          description: Destiny Manifest definition
+     */
     destiny2Router.route('/characters')
         .get((req, res, next) => middleware.authenticateUser(req, res, next),
             (req, res, next) => {
@@ -96,19 +110,6 @@ const routes = ({
                 })
                 .catch(next);
         });
-
-    destiny2Router.route('/profile')
-        .get(cors(corsConfig),
-            (req, res, next) => middleware.authenticateUser(req, res, next),
-            (req, res, next) => {
-                const { session: { displayName, membershipType } } = req;
-
-                return destiny2Controller.getProfile(displayName, membershipType)
-                    .then(characterBases => {
-                        res.status(HttpStatus.OK).json(characterBases);
-                    })
-                    .catch(next);
-            });
 
     /**
      * @swagger

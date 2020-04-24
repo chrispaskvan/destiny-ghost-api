@@ -24,8 +24,9 @@ class RoleMiddleware {
             const user = await this.authentication.authenticate(req);
 
             if (user) {
-                if (administrators.find(administrator => administrator.displayName === user.displayName // eslint-disable-line max-len
-                    && administrator.membershipType === user.membershipType)) {
+                if (administrators
+                    .find(administrator => administrator.displayName === user.displayName
+                        && administrator.membershipType === user.membershipType)) {
                     next();
                 } else {
                     res.status(401).end();

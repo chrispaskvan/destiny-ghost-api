@@ -81,7 +81,8 @@ describe('UserCache', () => {
         describe('when client get operation succeeds', () => {
             describe('when cache is found', () => {
                 it('resolves value', async () => {
-                    client.get = jest.fn((key, callback) => callback(undefined, JSON.stringify(mockUser))); // eslint-disable-line max-len
+                    client.get = jest
+                        .fn((key, callback) => callback(undefined, JSON.stringify(mockUser)));
                     cacheService = new UserCache();
 
                     const res = await cacheService.getCache(cacheKey);
@@ -121,7 +122,7 @@ describe('UserCache', () => {
     describe('getUser', () => {
         beforeEach(() => {
             client.del = jest.fn((key, callback) => callback(undefined, 1));
-            client.get = jest.fn((key, callback) => callback(undefined, JSON.stringify(mockUser))); // eslint-disable-line max-len
+            client.get = jest.fn((key, callback) => callback(undefined, JSON.stringify(mockUser)));
             client.quit = jest.fn();
             client.set = jest.fn((key, value, option, ttl, callback) => callback());
 
@@ -222,8 +223,8 @@ describe('UserCache', () => {
             it('cache user', async () => {
                 const errMessage = 'error';
 
-                // eslint-disable-next-line max-len
-                client.set = jest.fn((key, value, option, ttl, callback) => callback(errMessage, undefined));
+                client.set = jest
+                    .fn((key, value, option, ttl, callback) => callback(errMessage, undefined));
                 cacheService = new UserCache();
 
                 return cacheService.setUser(mockUser)

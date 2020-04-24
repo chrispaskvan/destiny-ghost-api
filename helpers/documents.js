@@ -22,7 +22,7 @@ class Documents {
          * Local Cache
          * @type {object}
          */
-        this.map = Object.create(null);
+        this.map = new Map();
     }
 
     /**
@@ -39,7 +39,7 @@ class Documents {
                     reject(err);
                 }
 
-                this.map[collectionId] = collection;
+                this.map.set(collectionId, collection);
 
                 resolve(collection);
             }
@@ -58,8 +58,8 @@ class Documents {
                 }
             }
 
-            if (this.map[collectionId]) {
-                return resolve(this.map[collectionId]);
+            if (this.map.has(collectionId)) {
+                return resolve(this.map.get(collectionId));
             }
 
             return this.client.queryDatabases(util.format('SELECT * FROM root r WHERE r.id = "%s"', databaseId))

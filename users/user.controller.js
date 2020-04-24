@@ -151,7 +151,8 @@ class UserController {
      * @param res
      */
     async join(user) {
-        const registeredUser = await this.users.getUserByEmailAddressToken(user.tokens.emailAddress); // eslint-disable-line max-len
+        const registeredUser = await this.users
+            .getUserByEmailAddressToken(user.tokens.emailAddress);
 
         if (!registeredUser
             || this.constructor.getEpoch() > (registeredUser.membership.tokens.timeStamp + ttl)

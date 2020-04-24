@@ -47,7 +47,6 @@ class AuthenticationService {
      * @returns {Promise}
      * @private
      */
-    // eslint-disable-next-line max-len
     async validateUser(user = {}) {
         const {
             bungie: {
@@ -62,7 +61,8 @@ class AuthenticationService {
         }
 
         try {
-            user = await this.destinyService.getCurrentUser(accessToken); // eslint-disable-line max-len, no-param-reassign
+            // eslint-disable-next-line no-param-reassign
+            user = await this.destinyService.getCurrentUser(accessToken);
         } catch (err) {
             const bungie = await this.destinyService.getAccessTokenFromRefreshToken(refreshToken);
 

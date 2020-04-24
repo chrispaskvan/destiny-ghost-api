@@ -67,6 +67,7 @@
         "eslint-config-airbnb-base": "^14.1.0",
         "eslint-plugin-import": "^2.20.2",
         "eslint-plugin-jest": "^23.8.2",
+        "eslint-plugin-security": "^1.4.0",
         "husky": "^4.2.5",
         "jest": "^25.2.4",
         "node-mocks-http": "^1.8.1",
