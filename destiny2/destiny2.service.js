@@ -101,7 +101,8 @@ class Destiny2Service extends DestinyService {
      * @param membershipId
      * @param membershipType
      */
-    async getPlayerStats(membershipId, membershipType) { // eslint-disable-line class-methods-use-this, max-len
+    // eslint-disable-next-line class-methods-use-this
+    async getPlayerStats(membershipId, membershipType) {
         const options = {
             headers: {
                 'x-api-key': apiKey,
@@ -148,7 +149,7 @@ class Destiny2Service extends DestinyService {
 
         if (responseBody.ErrorCode === 1) {
             const { Response: { characters: { data } } } = responseBody;
-            const characters = Object.keys(data).map(character => data[character]);
+            const characters = Object.values(data).map(character => character);
 
             return characters;
         }

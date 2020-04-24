@@ -119,7 +119,7 @@ class TwilioController {
 
                 return {
                     cookies,
-                    message: `${rank + (suffixes[(mod - 20) % 10] || suffixes[mod] || suffixes[0])} in PVP`,
+                    message: `${rank + (suffixes[(mod - 20) % 10] || suffixes.findIndex(suffix => suffix === mod) || suffixes[0])} in PVP`,
                 };
             }
         }
@@ -210,7 +210,7 @@ class TwilioController {
 
             if (characters && characters.length) {
                 const itemHashes = await this.destiny
-                    .getXur(membershipId, membershipType, characters[0].characterId, accessToken); // eslint-disable-line max-len
+                    .getXur(membershipId, membershipType, characters[0].characterId, accessToken);
                 const items = await Promise.all(itemHashes
                     .map(itemHash1 => this.world.getItemByHash(itemHash1)));
                 const result = items.reduce((memo, { displayProperties }) => (`${memo + displayProperties.name}\n`), ' ').trim();
@@ -343,6 +343,7 @@ class TwilioController {
         default: {
             const groups = groupBy(items, item => item.itemName);
             const keys = Object.keys(groups);
+            // eslint-disable-next-line security/detect-object-injection
             const result = keys.reduce((memo, key) => `${memo}\n${key} ${groups[key][0].itemCategory}`, ' ').trim();
 
             return {

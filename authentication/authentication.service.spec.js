@@ -63,7 +63,8 @@ describe('AuthenticationService', () => {
                     describe('when token is fresh', () => {
                         beforeEach(async () => {
                             userService.getCurrentUser = jest.fn().mockResolvedValue(mockUser);
-                            userService.getUserByDisplayName = jest.fn().mockResolvedValue(mockUser); // eslint-disable-line max-len
+                            userService.getUserByDisplayName = jest.fn()
+                                .mockResolvedValue(mockUser);
                         });
 
                         it('should cache and return a user', async () => {
@@ -73,15 +74,16 @@ describe('AuthenticationService', () => {
                             });
 
                             expect(user).toEqual(user1);
-                            // eslint-disable-next-line no-unused-expressions
-                            expect(cacheService.setUser).toHaveBeenCalledOnce; // eslint-disable-line jest/valid-expect, max-len
+                            // eslint-disable-next-line jest/valid-expect, no-unused-expressions
+                            expect(cacheService.setUser).toHaveBeenCalledOnce;
                         });
                     });
 
                     describe('when token is not fresh', () => {
                         beforeEach(async () => {
                             userService.getCurrentUser = jest.fn().mockRejectedValue();
-                            userService.getUserByDisplayName = jest.fn().mockResolvedValue(mockUser); // eslint-disable-line max-len
+                            userService.getUserByDisplayName = jest.fn()
+                                .mockResolvedValue(mockUser);
                         });
 
                         it('should cache and return a user', async () => {

@@ -59,13 +59,13 @@ describe('Destiny2Router', () => {
         });
     });
 
-    describe('getProfile', () => {
+    describe('getCharacters', () => {
         describe('when session displayName and membershipType are defined', () => {
             describe('when user and destiny services return a user', () => {
-                it('should return user profile', () => new Promise((done, reject) => {
+                it('should return list of characters', () => new Promise((done, reject) => {
                     const req = httpMocks.createRequest({
                         method: 'GET',
-                        url: '/profile',
+                        url: '/characters',
                         session: {
                             displayName,
                             membershipType,
@@ -111,7 +111,7 @@ describe('Destiny2Router', () => {
             it('should respond with unauthorized', () => new Promise((done, reject) => {
                 const req = httpMocks.createRequest({
                     method: 'GET',
-                    url: '/profile',
+                    url: '/characters',
                     session: {},
                 });
 

@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-non-literal-fs-filename */
 /**
  * A module for accessing the Destiny World database.
  */
@@ -48,7 +49,8 @@ class World {
 
             database.close();
 
-            this.grimoireCards = grimoireCards.map(({ json: grimoireCard }) => JSON.parse(grimoireCard)); // eslint-disable-line max-len
+            this.grimoireCards = grimoireCards
+                .map(({ json: grimoireCard }) => JSON.parse(grimoireCard));
         }
     }
 

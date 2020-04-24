@@ -54,17 +54,17 @@ class DestinyTrackerService {
             url: `${servicePlatform}/items/${itemHash}/insights`,
         };
         const { data } = await get(options);
-        let kills;
+        let usage;
 
         if (data) {
             const { stats } = data;
 
             if (stats) {
-                ({ rank: { kills } } = stats);
+                ({ rank: { usage } } = stats);
             }
         }
 
-        return kills;
+        return usage;
     }
 
     /**

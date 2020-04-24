@@ -87,7 +87,8 @@ describe('UserService', () => {
 
                 Object.assign(user1.notifications[0], { messages: [message] });
 
-                return userService.addUserMessage(displayName, membershipType, message, notificationType) // eslint-disable-line max-len
+                return userService
+                    .addUserMessage(displayName, membershipType, message, notificationType)
                     .then(() => {
                         expect(documentService.upsertDocument).toHaveBeenCalledWith('Users', user1);
                     });
@@ -110,7 +111,8 @@ describe('UserService', () => {
                     messages: [message],
                 });
 
-                return userService.addUserMessage(displayName, membershipType, message, notificationType) // eslint-disable-line max-len
+                return userService
+                    .addUserMessage(displayName, membershipType, message, notificationType)
                     .then(() => {
                         expect(documentService.upsertDocument).toHaveBeenCalledWith('Users', user1);
                     });
@@ -129,7 +131,8 @@ describe('UserService', () => {
 
                 Object.assign(user1, { messages: [message] });
 
-                return userService.addUserMessage(displayName, membershipType, message, notificationType) // eslint-disable-line max-len
+                return userService
+                    .addUserMessage(displayName, membershipType, message, notificationType)
                     .then(() => {
                         expect(documentService.upsertDocument).toHaveBeenCalledWith('Users', user1);
                     });

@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-object-injection */
 /**
  * A module for creating tokens.
  *

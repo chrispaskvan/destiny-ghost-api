@@ -45,7 +45,7 @@ describe('Destiny2Service', () => {
 
         it('should return the user\'s list of characters', async () => {
             const { Response: { characters: { data } } } = mockProfileCharactersResponse;
-            const mockCharacters = Object.keys(data).map(character => data[character]);
+            const mockCharacters = Object.values(data).map(character => character);
             const characters = await destiny2Service
                 .getProfile(mockUser.membershipId, mockUser.membershipType);
 

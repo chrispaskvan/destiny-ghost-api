@@ -202,11 +202,11 @@ class UserService {
      * @returns {Promise}
      */
     async addUserMessage(displayName, membershipType, message, notificationType) {
-        const notificationKey = Object.keys(notificationTypes)
-            .find(key => notificationTypes[key] === notificationType);
-        const user = await this.getUserByDisplayName(displayName, membershipType, true);
-        let notification;
         let messages = [];
+        let notification = Object.entries(notificationTypes)
+            .find(([, value]) => value === notificationType);
+        const notificationKey = notification ? notification[0] : undefined;
+        const user = await this.getUserByDisplayName(displayName, membershipType, true);
 
         if (notificationKey) {
             notification = user.notifications.find(
@@ -260,7 +260,8 @@ class UserService {
             return Promise.reject(Error(JSON.stringify(validateUser.errors)));
         }
 
-        const existingUser = await this.getUserByDisplayName(user.displayName, user.membershipType, true); // eslint-disable-line max-len
+        const existingUser = await this
+            .getUserByDisplayName(user.displayName, user.membershipType, true);
 
         if (existingUser) {
             if (existingUser.dateRegistered) {
@@ -287,11 +288,11 @@ class UserService {
             return Promise.reject(new Error(JSON.stringify(validateUser.errors)));
         }
 
-        for (const notification of user.notifications) { // eslint-disable-line no-restricted-syntax
+        user.notifications.forEach(notification => {
             if (!validateNotifications(notification)) {
                 errors = [...errors, ...validateNotifications.errors];
             }
-        }
+        });
 
         if (errors.length) {
             return Promise.reject(new Error(JSON.stringify(errors)));
@@ -363,8 +364,10 @@ class UserService {
      */
     getSubscribedUsers(notificationType) {
         const qb = new QueryBuilder();
+        const notification = Object.values(notificationTypes)
+            .find(type => notificationType === type);
 
-        if (!notificationTypes[notificationType]) {
+        if (!notification) {
             return Promise.reject(Error('notificationType is not valid'));
         }
         qb
@@ -374,7 +377,7 @@ class UserService {
             .select('phoneNumber')
             .from(collectionId)
             .join('notifications')
-            .where('type', notificationTypes[notificationType])
+            .where('type', notification)
             .where('enabled', true);
 
         return this.documents.getDocuments(collectionId, qb.getQuery(), {
@@ -612,7 +615,8 @@ class UserService {
             return Promise.reject(new Error(JSON.stringify(validateUser.errors)));
         }
 
-        const user = await this.getUserByDisplayName(anonymousUser.displayName, anonymousUser.membershipType); // eslint-disable-line max-len
+        const user = await this
+            .getUserByDisplayName(anonymousUser.displayName, anonymousUser.membershipType);
 
         if (user) {
             return this.documents.upsertDocument(collectionId, anonymousUser)
