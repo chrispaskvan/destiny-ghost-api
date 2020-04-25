@@ -23,7 +23,15 @@ class DestinyCache {
      * @returns {number}
      */
     static secondsUntilDailyReset() {
-        return 60 * 60 * 24; // ToDo
+        const now = new Date();
+        const then = new Date(now);
+
+        then.setUTCHours(17);
+        if (then < now) {
+            then.setDate(then.getDate() + 1);
+        }
+
+        return (then - now) / 1000;
     }
 
     /**
