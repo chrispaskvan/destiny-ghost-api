@@ -5,8 +5,7 @@
  * @summary Helper class for interfacing with DocumentDB.
  * @author Chris Paskvan
  */
-const { DocumentClient } = require('documentdb');
-const util = require('util');
+const { CosmosClient } = require('@azure/cosmos');
 const { documents: { authenticationKey, databaseId, host } } = require('./config');
 
 class Documents {
@@ -15,14 +14,10 @@ class Documents {
          * Initialize Client
          * @type {*|DocumentClient}
          */
-        this.client = new DocumentClient(host, {
-            masterKey: authenticationKey,
+        this.client = new CosmosClient({
+            endpoint: host,
+            key: authenticationKey,
         });
-        /**
-         * Local Cache
-         * @type {object}
-         */
-        this.map = new Map();
     }
 
     /**
@@ -33,38 +28,9 @@ class Documents {
      * @private
      */
     getCollection(collectionId) {
-        return new Promise((resolve, reject) => {
-            function getCurrentCollection(err, collection) {
-                if (err) {
-                    reject(err);
-                }
-
-                this.map.set(collectionId, collection);
-
-                resolve(collection);
-            }
-
-            function getCurrentDatabase(err, database) {
-                if (err) {
-                    reject(err);
-                }
-                if (database) {
-                    // eslint-disable-next-line no-underscore-dangle
-                    this.client.queryCollections(database._self,
-                        util.format('SELECT * FROM collections c WHERE c.id = "%s"', collectionId))
-                        .current(getCurrentCollection.bind(this));
-                } else {
-                    resolve();
-                }
-            }
-
-            if (this.map.has(collectionId)) {
-                return resolve(this.map.get(collectionId));
-            }
-
-            return this.client.queryDatabases(util.format('SELECT * FROM root r WHERE r.id = "%s"', databaseId))
-                .current(getCurrentDatabase.bind(this));
-        });
+        return Promise.resolve(this.client
+            .database(databaseId)
+            .container(collectionId));
     }
 
     /**
@@ -74,19 +40,11 @@ class Documents {
      * @param document
      * @returns {Promise}
      */
-    createDocument(collectionId, document) {
-        return new Promise((resolve, reject) => {
-            this.getCollection(collectionId)
-                .then(collection => {
-                    if (!collection) {
-                        reject(new Error(`Collection ${collectionId} not found`));
-                    }
+    async createDocument(collectionId, document) {
+        const container = await this.getCollection(collectionId);
+        const { resource: createdDocument } = await container.items.create(document);
 
-                    // eslint-disable-next-line no-underscore-dangle
-                    this.client.createDocument(collection._self, document,
-                        (err, document1) => (err ? reject(err) : resolve(document1.id)));
-                });
-        });
+        return createdDocument;
     }
 
     /**
@@ -97,20 +55,11 @@ class Documents {
      * @param partitionKey
      * @returns {Promise}
      */
-    deleteDocumentById(collectionId, documentId, partitionKey) {
-        const documentUrl = `dbs/${databaseId}/colls/${collectionId}/docs/${documentId}`;
+    async deleteDocumentById(collectionId, documentId, partitionKey) {
+        const container = await this.getCollection(collectionId);
+        const { resource: result } = await container.item(documentId, partitionKey).delete();
 
-        return new Promise((resolve, reject) => {
-            this.client.deleteDocument(documentUrl, {
-                partitionKey: [partitionKey],
-            }, (err, result) => {
-                if (err) {
-                    reject(err);
-                }
-
-                resolve(result);
-            });
-        });
+        return result;
     }
 
     /**
@@ -120,26 +69,13 @@ class Documents {
      * @param options
      * @returns {Promise}
      */
-    getDocuments(collectionId, query, options) {
-        return new Promise((resolve, reject) => {
-            function getDocuments(err, results) {
-                if (err) {
-                    reject(err);
-                }
+    async getDocuments(collectionId, query, options) {
+        const container = await this.getCollection(collectionId);
+        const { resources: items } = await container.items
+            .query(query, options)
+            .fetchAll();
 
-                resolve(results);
-            }
-
-            this.getCollection(collectionId)
-                .then(collection => {
-                    if (!collection) {
-                        reject(new Error(`Collection ${collectionId} not found`));
-                    }
-
-                    // eslint-disable-next-line max-len, no-underscore-dangle
-                    this.client.queryDocuments(collection._self, query, options).toArray(getDocuments);
-                });
-        });
+        return items;
     }
 
     /**
@@ -148,24 +84,19 @@ class Documents {
      * @param document
      * @returns {Promise}
      */
-    upsertDocument(collectionId, document) {
-        return new Promise((resolve, reject) => {
-            this.getCollection(collectionId)
-                .then(collection => {
-                    if (!collection) {
-                        reject(new Error(`Collection ${collectionId} not found`));
-                    }
+    async updateDocument(collectionId, document, partitionKey) {
+        const container = await this.getCollection(collectionId);
+        const options = {
+            accessCondition: {
+                type: 'IfMatch',
+                condition: document._etag, // eslint-disable-line no-underscore-dangle
+            },
+        };
+        const { resource: updatedDocument } = await container
+            .item(document.id, partitionKey, options)
+            .replace(document);
 
-                    const options = {
-                        accessCondition: {
-                            type: 'IfMatch',
-                            condition: document._etag, // eslint-disable-line no-underscore-dangle
-                        },
-                    };
-                    // eslint-disable-next-line max-len, no-underscore-dangle
-                    this.client.upsertDocument(collection._self, document, options, err => (err ? reject(err) : resolve()));
-                });
-        });
+        return updatedDocument;
     }
 }
 

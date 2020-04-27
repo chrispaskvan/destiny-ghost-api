@@ -1,38 +1,19 @@
-# Better Caching
-# Better Test Coverage
 # User Interface
 https://material-ui.com/store/items/onepirate/
 https://github.com/expressjs/vhost
 https://www.hacksparrow.com/webdev/express/vhost.html
-# Opt Out
-# Cache Health?
-# Axios Streaming
-https://github.com/andrewstart/axios-streaming/blob/master/axios.js
-# Application Insights
-# Use an ORM
-https://blog.logrocket.com/why-you-should-avoid-orms-with-examples-in-node-js-e0baab73fa5/
-# Extrapolate Request and Response from Controllers
-# Rate Limits/Denial of Service Attacks
-https://blog.logrocket.com/rate-limiting-node-js/
-https://github.com/animir/node-rate-limiter-flexible#readme
 # Coverage Ratchet
 # Cluster Mode
-# Swagger
-https://levelup.gitconnected.com/swagger-time-to-document-that-express-api-you-built-9b8faaeae563
 # Google Stadia
-Swagger - Basic Structure
-https://swagger.io/docs/specification/basic-structure/
-# Migrate Azure Scheduler jobs to Azure Logic Apps
-https://docs.microsoft.com/en-us/azure/scheduler/migrate-from-scheduler-to-logic-apps#schedule-one-time-jobs
 # Performance Testing
 https://github.com/nearform/node-clinic
+# CosmosDB Stored Procedure for Removing Intermediate Message Statuses
 
-1) Get User by dis
-play name or phone number
-2) Get number messages received
-3) Get Subscription Messages
-4) Get Subscribed Users by Type
-
+# Notifications
+Save array of subscriber phone numbers to the Notifications collection.
+Emit an event to notify the class to add a subscriber.
+Fetch subscribers from the Notification collection.
+Add a utility end point for synchronization in case of failures.
 
 # File Structure
 https://softwareontheroad.com/ideal-nodejs-project-structure

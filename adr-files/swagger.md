@@ -17,3 +17,6 @@ Use swagger-jsdoc cli and add a npm script to generate the swagger.json file.
 ## Consequences
 
 The swagger.json file is not generated automatically. The npm script "swagger" must be executed and the file committed.
+
+## References
+* [Swagger - Basic Structure](https://swagger.io/docs/specification/basic-structure/)
