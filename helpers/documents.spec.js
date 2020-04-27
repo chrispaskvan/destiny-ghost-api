@@ -1,52 +1,51 @@
 /**
  * Document Tests
  */
+const QueryBuilder = require('./queryBuilder');
 const documentService = require('./documents');
 
 describe('Documents', () => {
-    const collectionId = 'Users';
+    const collectionId = 'Messages';
 
-    describe('deleteDocumentById', () => {
-        // eslint-disable-next-line jest/no-disabled-tests
-        describe.skip('when document exists', () => {
-            it('should delete document', () => {
-                const documentId = '1';
+    it('should create, read, update, and delete a document', async () => {
+        const document = {
+            DateTime: new Date().toISOString(),
+            SmsSid: 'SM11',
+            SmsStatus: 'queued',
+            MessageStatus: 'queued',
+            To: '+1234567890',
+        };
+        const { id: createdDocumentId } = await documentService
+            .createDocument(collectionId, document);
 
-                return documentService.deleteDocumentById(collectionId, documentId)
-                    .then(res => {
-                        expect(res).toBeDefined();
-                    });
-            });
-        });
+        expect(createdDocumentId).toBeDefined();
 
-        describe('when document does not exist', () => {
-            it('should throw an error', () => {
-                const documentId = '1';
+        const qb = new QueryBuilder();
 
-                return documentService.deleteDocumentById(collectionId, documentId)
-                    .catch(err => {
-                        expect(err).toBeDefined();
-                    });
-            });
-        });
-    });
+        qb.where('SmsSid', document.SmsSid);
 
-    describe('getDocuments', () => {
-        it('should return 1 document', () => {
-            const options = {
-                enableCrossPartitionQuery: true,
-                pageSize: 1,
-            };
-            const query = {
-                query: 'SELECT * FROM u',
-            };
+        const [fetchedDocument] = await documentService
+            .getDocuments(collectionId, qb.getQuery(), { partitionKey: document.To });
 
-            jest.setTimeout(20000);
-            return documentService.getDocuments(collectionId, query, options)
-                .then(documents => {
-                    expect(documents).toBeDefined();
-                    expect(documents.length).toBeGreaterThan(0);
-                });
-        });
+        expect(fetchedDocument).toBeDefined();
+        expect(fetchedDocument.id).toEqual(createdDocumentId);
+        expect(fetchedDocument.To).toEqual(document.To);
+
+        const dateTime = new Date().toISOString();
+
+        const updatedDocument = await documentService.updateDocument(collectionId, {
+            ...document,
+            DateTime: dateTime,
+            SmsStatus: 'sent',
+            MessageStatus: 'sent',
+        }, document.To);
+
+        expect(updatedDocument).toBeDefined();
+        expect(updatedDocument.DateTime).toEqual(dateTime);
+
+        const result = await documentService
+            .deleteDocumentById(collectionId, createdDocumentId, document.To);
+
+        expect(result).toBeDefined();
     });
 });

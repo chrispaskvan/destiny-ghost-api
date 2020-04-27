@@ -28,6 +28,7 @@
         }
     },
     "dependencies": {
+        "@azure/cosmos": "^3.6.3",
         "@godaddy/terminus": "^4.3.1",
         "@hapi/joi": "^17.1.1",
         "applicationinsights": "^1.7.3",
@@ -41,7 +42,6 @@
         "cookie-parser": "^1.4.5",
         "cors": "^2.8.5",
         "cuid": "^2.1.8",
-        "documentdb": "^1.15.3",
         "dotenv": "^8.2.0",
         "express": "^4.17.1",
         "express-session": "^1.17.0",

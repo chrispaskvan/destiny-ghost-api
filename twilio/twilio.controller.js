@@ -299,7 +299,7 @@ class TwilioController {
         }
 
         responseCookies = { isRegistered: true, ...responseCookies };
-        await this.users.addUserMessage(user.displayName, user.membershipType, body);
+        await this.users.addUserMessage(body);
 
         const { Body: rawMessage } = body;
         const { itemHash } = cookies;
@@ -364,7 +364,7 @@ class TwilioController {
         const user = await this.users.getUserByPhoneNumber(phoneNumber);
 
         if (user) {
-            await this.users.addUserMessage(user.displayName, user.membershipType, message);
+            await this.users.addUserMessage(message);
         }
     }
 }

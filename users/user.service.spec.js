@@ -69,73 +69,49 @@ beforeEach(() => {
 });
 
 describe('UserService', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+    });
+
     describe('addUserMessage', () => {
+        let currentDate;
+        let realDate;
+
         beforeEach(() => {
+            realDate = Date;
+            global.Date = class extends Date {
+                constructor(date) {
+                    if (date) {
+                        // eslint-disable-next-line constructor-super
+                        return super(date);
+                    }
+
+                    return currentDate;
+                }
+            };
+
             documentService.upsertDocument.mockImplementation(() => Promise.resolve());
             userService.getUserByDisplayName = jest.fn().mockResolvedValue(user);
         });
-
-        describe('when notification type is Xur', () => {
-            it('should add message to the list of Xur notifications', () => {
-                const displayName = 'user1';
-                const membershipType = 2;
-                const message = {
-                    sid: '1',
-                };
-                const notificationType = 'Xur';
-                const user1 = JSON.parse(JSON.stringify(user));
-
-                Object.assign(user1.notifications[0], { messages: [message] });
-
-                return userService
-                    .addUserMessage(displayName, membershipType, message, notificationType)
-                    .then(() => {
-                        expect(documentService.upsertDocument).toHaveBeenCalledWith('Users', user1);
-                    });
-            });
+        afterEach(() => {
+            global.Date = realDate;
         });
 
-        describe('when user has no previous messages of the notification type', () => {
-            it('should create a new list of this notification type', () => {
-                const displayName = 'user1';
-                const membershipType = 2;
-                const message = {
-                    sid: '1',
-                };
-                const notificationType = 'Banshee-44';
-                const user1 = JSON.parse(JSON.stringify(user));
+        it('should add the message to the database collection', async () => {
+            const currentDateAsString = '2020-04-25T18:00:00.000Z';
+            const message = {
+                SmsSid: 'SM11',
+                SmsStatus: 'sent',
+                To: '+1234567890',
+            };
 
-                user1.notifications.push({
-                    enabled: false,
-                    type: notificationType,
-                    messages: [message],
-                });
+            currentDate = new Date(currentDateAsString);
 
-                return userService
-                    .addUserMessage(displayName, membershipType, message, notificationType)
-                    .then(() => {
-                        expect(documentService.upsertDocument).toHaveBeenCalledWith('Users', user1);
-                    });
-            });
-        });
+            await userService.addUserMessage(message);
 
-        describe('when user notification type is unknown', () => {
-            it('should add to the list of generic messages', () => {
-                const displayName = 'user1';
-                const membershipType = 2;
-                const message = {
-                    sid: '1',
-                };
-                const notificationType = 'Failsafe';
-                const user1 = JSON.parse(JSON.stringify(user));
-
-                Object.assign(user1, { messages: [message] });
-
-                return userService
-                    .addUserMessage(displayName, membershipType, message, notificationType)
-                    .then(() => {
-                        expect(documentService.upsertDocument).toHaveBeenCalledWith('Users', user1);
-                    });
+            expect(documentService.createDocument).toHaveBeenCalledWith('Messages', {
+                DateTime: currentDateAsString,
+                ...message,
             });
         });
     });
@@ -193,10 +169,6 @@ describe('UserService', () => {
                     expect(err).toBeDefined();
                 }));
         });
-
-        describe('when user is valid', () => {
-            // ToDo
-        });
     });
 
     describe('getUserByDisplayName', () => {
@@ -210,6 +182,14 @@ describe('UserService', () => {
                         expect(user1.displayName).toEqual(user.displayName);
                         expect(documentService.getDocuments).not.toHaveBeenCalled();
                     });
+            });
+        });
+
+        describe('when display name and membership type are not valid', () => {
+            it('should throw an error', async () => {
+                await expect(userService
+                    .getUserByDisplayName(user.membershipType, user.displayName))
+                    .rejects.toThrow('"displayName" must be a string. "membershipType" must be a number');
             });
         });
 
@@ -315,6 +295,239 @@ describe('UserService', () => {
                 documentService.getDocuments.mockImplementation(() => Promise.resolve());
 
                 return userService.getUserByEmailAddress(user.emailAddress)
+                    .catch(err => {
+                        expect(err).toBeDefined();
+                        expect(documentService.getDocuments).toHaveBeenCalled();
+                    });
+            });
+        });
+    });
+
+    describe('getUserByEmailAddressToken', () => {
+        describe('when email address token is defined', () => {
+            it('should return an existing user', () => {
+                documentService.getDocuments.mockImplementation(() => Promise.resolve([user]));
+
+                return userService.getUserByEmailAddressToken('some_token')
+                    .then(user1 => {
+                        expect(user1).toEqual(user);
+                        expect(documentService.getDocuments).toHaveBeenCalled();
+                    });
+            });
+
+            it('should fail when more than one existing user is found', () => {
+                documentService.getDocuments
+                    .mockImplementation(() => Promise.resolve([user, user]));
+
+                return userService.getUserByEmailAddressToken('some_token')
+                    .catch(err => {
+                        expect(err).toBeDefined();
+                        expect(documentService.getDocuments).toHaveBeenCalled();
+                    });
+            });
+
+            it('should fail when no users are found', () => {
+                documentService.getDocuments.mockImplementation(() => Promise.resolve([]));
+
+                return userService.getUserByEmailAddressToken('some_token')
+                    .then(user1 => {
+                        expect(user1).toBeUndefined();
+                        expect(documentService.getDocuments).toHaveBeenCalled();
+                    });
+            });
+
+            it('should fail when email address token is empty', () => {
+                documentService.getDocuments.mockImplementation(() => Promise.resolve());
+
+                return userService.getUserByEmailAddressToken()
+                    .catch(err => {
+                        expect(err).toBeDefined();
+                        expect(documentService.getDocuments).not.toHaveBeenCalled();
+                    });
+            });
+
+            it('should fail when no documents are found', () => {
+                documentService.getDocuments.mockImplementation(() => Promise.resolve());
+
+                return userService.getUserByEmailAddressToken('some_token')
+                    .catch(err => {
+                        expect(err).toBeDefined();
+                        expect(documentService.getDocuments).toHaveBeenCalled();
+                    });
+            });
+        });
+    });
+
+    describe('getUserByMembershipId', () => {
+        describe('when membership Id is defined', () => {
+            it('should return an existing user', () => {
+                documentService.getDocuments.mockImplementation(() => Promise.resolve([user]));
+
+                return userService.getUserByMembershipId(user.membershipId)
+                    .then(user1 => {
+                        expect(user1).toEqual(user);
+                        expect(documentService.getDocuments).toHaveBeenCalled();
+                    });
+            });
+
+            it('should fail when more than one existing user is found', () => {
+                documentService.getDocuments
+                    .mockImplementation(() => Promise.resolve([user, user]));
+
+                return userService.getUserByMembershipId(user.membershipId)
+                    .catch(err => {
+                        expect(err).toBeDefined();
+                        expect(documentService.getDocuments).toHaveBeenCalled();
+                    });
+            });
+
+            it('should fail when no users are found', () => {
+                documentService.getDocuments.mockImplementation(() => Promise.resolve([]));
+
+                return userService.getUserByMembershipId(user.membershipId)
+                    .then(user1 => {
+                        expect(user1).toBeUndefined();
+                        expect(documentService.getDocuments).toHaveBeenCalled();
+                    });
+            });
+
+            it('should fail when email address is empty', () => {
+                documentService.getDocuments.mockImplementation(() => Promise.resolve());
+
+                return userService.getUserByMembershipId()
+                    .catch(err => {
+                        expect(err).toBeDefined();
+                        expect(documentService.getDocuments).not.toHaveBeenCalled();
+                    });
+            });
+
+            it('should fail when no documents are found', () => {
+                documentService.getDocuments.mockImplementation(() => Promise.resolve());
+
+                return userService.getUserByMembershipId(user.membershipId)
+                    .catch(err => {
+                        expect(err).toBeDefined();
+                        expect(documentService.getDocuments).toHaveBeenCalled();
+                    });
+            });
+        });
+    });
+
+    describe('getUserByPhoneNumber', () => {
+        describe('when user is cached', () => {
+            it('should return cached user', () => {
+                cacheService.getUser.mockImplementationOnce(() => Promise.resolve(user));
+
+                return userService.getUserByPhoneNumber(user.phoneNumber)
+                    .then(user1 => {
+                        expect(cacheService.getUser).toHaveBeenCalled();
+                        expect(user1.displayName).toEqual(user.displayName);
+                        expect(documentService.getDocuments).not.toHaveBeenCalled();
+                    });
+            });
+        });
+
+        describe('when phone number is found', () => {
+            it('should return an existing user', () => {
+                documentService.getDocuments.mockImplementation(() => Promise.resolve([user]));
+
+                return userService.getUserByPhoneNumber(user.phoneNumber)
+                    .then(user1 => {
+                        expect(user1).toEqual(user);
+                        expect(documentService.getDocuments).toHaveBeenCalled();
+                    });
+            });
+
+            it('should fail when more than one existing user is found', () => {
+                documentService.getDocuments
+                    .mockImplementation(() => Promise.resolve([user, user]));
+
+                return userService.getUserByPhoneNumber(user.phoneNumber)
+                    .catch(err => {
+                        expect(err).toBeDefined();
+                        expect(documentService.getDocuments).toHaveBeenCalled();
+                    });
+            });
+
+            it('should fail when no users are found', () => {
+                documentService.getDocuments.mockImplementation(() => Promise.resolve([]));
+
+                return userService.getUserByPhoneNumber(user.phoneNumber)
+                    .then(user1 => {
+                        expect(user1).toBeUndefined();
+                        expect(documentService.getDocuments).toHaveBeenCalled();
+                    });
+            });
+
+            it('should fail when phone number is empty', () => {
+                documentService.getDocuments.mockImplementation(() => Promise.resolve());
+
+                return userService.getUserByPhoneNumber()
+                    .catch(err => {
+                        expect(err).toBeDefined();
+                        expect(documentService.getDocuments).not.toHaveBeenCalled();
+                    });
+            });
+
+            it('should fail when no documents are found', () => {
+                documentService.getDocuments.mockImplementation(() => Promise.resolve());
+
+                return userService.getUserByPhoneNumber(user.phoneNumber)
+                    .catch(err => {
+                        expect(err).toBeDefined();
+                        expect(documentService.getDocuments).toHaveBeenCalled();
+                    });
+            });
+        });
+    });
+
+    describe('getUserByPhoneNumberToken', () => {
+        describe('when phone number token is found', () => {
+            it('should return an existing user', () => {
+                documentService.getDocuments.mockImplementation(() => Promise.resolve([user]));
+
+                return userService.getUserByPhoneNumberToken(1)
+                    .then(user1 => {
+                        expect(user1).toEqual(user);
+                        expect(documentService.getDocuments).toHaveBeenCalled();
+                    });
+            });
+
+            it('should fail when more than one existing user is found', () => {
+                documentService.getDocuments
+                    .mockImplementation(() => Promise.resolve([user, user]));
+
+                return userService.getUserByPhoneNumberToken(1)
+                    .catch(err => {
+                        expect(err).toBeDefined();
+                        expect(documentService.getDocuments).toHaveBeenCalled();
+                    });
+            });
+
+            it('should fail when no users are found', () => {
+                documentService.getDocuments.mockImplementation(() => Promise.resolve([]));
+
+                return userService.getUserByPhoneNumberToken(1)
+                    .then(user1 => {
+                        expect(user1).toBeUndefined();
+                        expect(documentService.getDocuments).toHaveBeenCalled();
+                    });
+            });
+
+            it('should fail when phone number is empty', () => {
+                documentService.getDocuments.mockImplementation(() => Promise.resolve());
+
+                return userService.getUserByPhoneNumberToken()
+                    .catch(err => {
+                        expect(err).toBeDefined();
+                        expect(documentService.getDocuments).not.toHaveBeenCalled();
+                    });
+            });
+
+            it('should fail when no documents are found', () => {
+                documentService.getDocuments.mockImplementation(() => Promise.resolve());
+
+                return userService.getUserByPhoneNumberToken(1)
                     .catch(err => {
                         expect(err).toBeDefined();
                         expect(documentService.getDocuments).toHaveBeenCalled();
@@ -449,6 +662,4 @@ describe('UserService', () => {
             });
         });
     });
-
-    afterEach(() => jest.clearAllMocks());
 });
