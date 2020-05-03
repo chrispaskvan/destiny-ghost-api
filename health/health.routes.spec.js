@@ -33,7 +33,7 @@ describe('HealthRouter', () => {
         describe('when all services are healthy', () => {
             const world = {
                 getGrimoireCards: () => Promise.resolve([{
-                    cardDescription: 'Red Hand IX',
+                    cardName: 'Red Hand IX',
                 }]),
             };
             const world2 = {

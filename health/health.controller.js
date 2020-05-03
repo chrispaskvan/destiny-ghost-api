@@ -65,13 +65,13 @@ class HealthController {
     }
 
     async getWorldItem() {
-        const [{ cardDescription } = {}] = await this.world.getGrimoireCards(1);
+        const [{ cardName } = {}] = await this.world.getGrimoireCards(1);
 
-        return cardDescription;
+        return cardName;
     }
 
     async getWorld2Item() {
-        const [{ displayProperties: { description = notAvailable } = {} } = {}] = await this.world2.getItemByName('Polaris Lance');
+        const [{ displayProperties: { description = notAvailable } = {} } = {}] = await this.world2.getItemByName('Austringer');
 
         return description;
     }

@@ -1,3 +1,4 @@
+const client = require('../helpers/cache');
 const DestinyCache = require('../destiny/destiny.cache');
 
 /**
@@ -24,7 +25,7 @@ class Destiny2Cache extends DestinyCache {
      */
     getManifest() {
         return new Promise((resolve, reject) => {
-            this.cache.get(this.constructor.manifestKey, (err, manifest) => {
+            client.get(this.constructor.manifestKey, (err, manifest) => {
                 if (err) {
                     reject(err);
                 } else {
