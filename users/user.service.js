@@ -266,7 +266,7 @@ class UserService {
         defaults(filteredUser, schemaDefaults(userSchema));
         existingUser = { ...existingUser, ...filteredUser };
 
-        return this.documents.upsertDocument(userCollectionId, existingUser);
+        return this.documents.updateDocument(userCollectionId, existingUser);
     }
 
     /**
@@ -562,7 +562,7 @@ class UserService {
             .getUserByDisplayName(anonymousUser.displayName, anonymousUser.membershipType);
 
         if (user) {
-            return this.documents.upsertDocument(userCollectionId, anonymousUser)
+            return this.documents.updateDocument(userCollectionId, anonymousUser)
                 .then(() => undefined);
         }
 
@@ -584,7 +584,7 @@ class UserService {
         const userDocument = await this.getUserByDisplayName(user.displayName, user.membershipType);
         Object.assign(userDocument, user);
 
-        return this.documents.upsertDocument(userCollectionId, userDocument)
+        return this.documents.updateDocument(userCollectionId, userDocument)
             .then(() => this.cacheService.setUser(userDocument));
     }
 
@@ -603,7 +603,7 @@ class UserService {
 
         userDocument.bungie = bungie;
 
-        return this.documents.upsertDocument(userCollectionId, userDocument)
+        return this.documents.updateDocument(userCollectionId, userDocument)
             .then(() => undefined);
     }
 }

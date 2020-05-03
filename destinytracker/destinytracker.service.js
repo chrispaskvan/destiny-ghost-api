@@ -20,27 +20,6 @@ const servicePlatform = 'https://api.tracker.gg/api/v1/destiny-2/db';
  */
 class DestinyTrackerService {
     /**
-     * Get the overall summary of voter data from the reviews.
-     *
-     * @param itemHash {string}
-     * @returns {Promise}
-     */
-    async getVotes(itemHash) { // eslint-disable-line class-methods-use-this
-        const options = {
-            data: {
-                referenceId: itemHash,
-            },
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            url: `${servicePlatform}/reviews`,
-        };
-        const { votes } = await post(options);
-
-        return votes;
-    }
-
-    /**
      * Get PVP rank.
      *
      * @param itemHash {string}
@@ -68,6 +47,29 @@ class DestinyTrackerService {
     }
 
     /**
+     * Get number of stars by review rankings.
+     *
+     * @param itemHash {string}
+     * @returns {Promise<Object>}
+     */
+    async getStars(itemHash) { // eslint-disable-line class-methods-use-this
+        const options = {
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            url: `${servicePlatform}/items/${itemHash}`,
+        };
+        const { data } = await get(options);
+        let all;
+
+        if (data) {
+            ({ reviewRatings: { all } = {} } = data);
+        }
+
+        return all;
+    }
+
+    /**
      * Get Top 10 used weapons in PVP.
      *
      * @returns {Promise<Object>}
@@ -84,6 +86,27 @@ class DestinyTrackerService {
         return data
             ? data.filter(({ rank: { usage } }) => usage < 11).map(({ hash }) => hash)
             : undefined;
+    }
+
+    /**
+     * Get the overall summary of voter data from the reviews.
+     *
+     * @param itemHash {string}
+     * @returns {Promise}
+     */
+    async getVotes(itemHash) { // eslint-disable-line class-methods-use-this
+        const options = {
+            data: {
+                referenceId: itemHash,
+            },
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            url: `${servicePlatform}/reviews`,
+        };
+        const { votes } = await post(options);
+
+        return votes;
     }
 }
 

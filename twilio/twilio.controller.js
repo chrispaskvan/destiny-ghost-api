@@ -33,8 +33,9 @@ class TwilioController {
 
         this.itemKeywords = new Map([
             ['more', this.constructor.getMore],
-            ['votes', this.getVotes],
             ['rank', this.getRank],
+            ['stars', this.getStars],
+            ['votes', this.getVotes],
         ]);
     }
 
@@ -160,6 +161,32 @@ class TwilioController {
         return {
             cookies: { ...cookies, itemHash: undefined },
             message: result.substr(0, MAX_SMS_MESSAGE_LENGTH),
+        };
+    }
+
+    /**
+     * Get the 5 stars review for the requested item.
+     *
+     * @param {*} itemHash
+     * @param {*} [cookies={}]
+     * @returns
+     * @memberof TwilioController
+     */
+    async getStars(itemHash, cookies = {}) {
+        if (itemHash) {
+            const stars = await this.destinyTracker.getStars(itemHash);
+
+            if (stars) {
+                return {
+                    cookies,
+                    message: `${stars} stars out of 5`,
+                };
+            }
+        }
+
+        return {
+            cookies,
+            message: 'The reviews aren\'t in yet.',
         };
     }
 
