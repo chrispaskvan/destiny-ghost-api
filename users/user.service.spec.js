@@ -13,7 +13,7 @@ const cacheService = new CacheService();
 const documentService = {
     createDocument: jest.fn(),
     getDocuments: jest.fn(),
-    upsertDocument: jest.fn(),
+    updateDocument: jest.fn(),
 };
 
 /**
@@ -90,7 +90,7 @@ describe('UserService', () => {
                 }
             };
 
-            documentService.upsertDocument.mockImplementation(() => Promise.resolve());
+            documentService.updateDocument.mockImplementation(() => Promise.resolve());
             userService.getUserByDisplayName = jest.fn().mockResolvedValue(user);
         });
         afterEach(() => {
@@ -119,7 +119,7 @@ describe('UserService', () => {
     describe('createAnonymousUser', () => {
         beforeEach(() => {
             documentService.createDocument.mockImplementation(() => Promise.resolve());
-            documentService.upsertDocument.mockImplementation(() => Promise.resolve());
+            documentService.updateDocument.mockImplementation(() => Promise.resolve());
         });
 
         describe('when anonymous user is invalid', () => {
@@ -596,7 +596,7 @@ describe('UserService', () => {
             describe('and user update is valid', () => {
                 it('should resolve undefined', () => {
                     const user1 = cloneDeep(user);
-                    documentService.upsertDocument.mockImplementation(() => Promise.resolve());
+                    documentService.updateDocument.mockImplementation(() => Promise.resolve());
 
                     user1.firstName = chance.first();
 
@@ -605,7 +605,7 @@ describe('UserService', () => {
                     return userService.updateUser(user1)
                         .then(user2 => {
                             expect(user2).toBeUndefined();
-                            expect(documentService.upsertDocument)
+                            expect(documentService.updateDocument)
                                 .toHaveBeenCalledWith(expect.anything(), user1);
                         });
                 });
@@ -617,13 +617,13 @@ describe('UserService', () => {
                         firstName: chance.first(),
                     };
 
-                    documentService.upsertDocument.mockImplementation(() => Promise.resolve());
+                    documentService.updateDocument.mockImplementation(() => Promise.resolve());
                     userService.getUserByDisplayName = jest.fn().mockResolvedValue();
 
                     return userService.updateUser(user1)
                         .catch(err => {
                             expect(err).toBeDefined();
-                            expect(documentService.upsertDocument).not.toHaveBeenCalled();
+                            expect(documentService.updateDocument).not.toHaveBeenCalled();
                         });
                 });
             });
@@ -633,7 +633,7 @@ describe('UserService', () => {
     describe('updateUserBungie', () => {
         describe('when user id exists', () => {
             it('should return undefined', () => {
-                documentService.upsertDocument
+                documentService.updateDocument
                     .mockImplementation(() => Promise.resolve());
 
                 userService.getUserById = jest.fn().mockResolvedValue(user);
@@ -641,7 +641,7 @@ describe('UserService', () => {
                 return userService.updateUserBungie(user.id, {})
                     .then(user1 => {
                         expect(user1).toBeUndefined();
-                        expect(documentService.upsertDocument)
+                        expect(documentService.updateDocument)
                             .toHaveBeenCalledWith(expect.anything(), user);
                     });
             });
@@ -649,7 +649,7 @@ describe('UserService', () => {
 
         describe('when user id does not exist', () => {
             it('should not modify user document', () => {
-                documentService.upsertDocument
+                documentService.updateDocument
                     .mockImplementation(() => Promise.resolve());
 
                 userService.getUserById = jest.fn().mockResolvedValue();
@@ -657,7 +657,7 @@ describe('UserService', () => {
                 return userService.updateUserBungie(user.id)
                     .catch(err => {
                         expect(err).toBeDefined();
-                        expect(documentService.upsertDocument).not.toHaveBeenCalled();
+                        expect(documentService.updateDocument).not.toHaveBeenCalled();
                     });
             });
         });
