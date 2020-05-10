@@ -8,6 +8,7 @@ const express = require('express');
 const fs = require('fs');
 const http = require('http');
 const https = require('https');
+const os = require('os');
 const { createTerminus } = require('@godaddy/terminus');
 
 const loaders = require('./loaders');
@@ -54,11 +55,12 @@ async function startServer() {
     });
 
     insecureServer.listen(port, () => {
+        const cpuCount = os.cpus().length;
         const duration = Date.now() - start;
 
         applicationInsights.defaultClient.trackMetric({ name: 'Startup Time', value: duration });
         // eslint-disable-next-line no-console
-        console.log(`HTTP server listening on port ${port}`);
+        console.log(`HTTP server listening on port ${port} with ${cpuCount} cpus.`);
     });
 }
 

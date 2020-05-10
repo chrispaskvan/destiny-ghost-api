@@ -4,6 +4,8 @@
 const QueryBuilder = require('./queryBuilder');
 const documentService = require('./documents');
 
+jest.setTimeout(10000);
+
 describe('Documents', () => {
     const collectionId = 'Messages';
 

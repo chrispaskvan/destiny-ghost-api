@@ -1,15 +1,27 @@
-const chance = require('chance')();
+const Chance = require('chance');
 const UserController = require('./user.controller');
 
+const chance = new Chance();
 const displayName = chance.name();
+const membershipId = chance.integer().toString();
 const membershipType = chance.integer({ min: 1, max: 2 });
-
+const mockUser = {
+    displayName,
+    membershipId,
+    membershipType,
+    profilePicturePath: 'some-profile-picture-path',
+};
 const destinyService = {
+    getAccessTokenFromCode: jest.fn(),
     getCurrentUser: jest.fn(),
 };
 const userService = {
+    createAnonymousUser: jest.fn().mockImplementation(user => Promise.resolve(user)),
+    getCurrentUser: jest.fn(),
     getUserByDisplayName: jest.fn(),
-    updateUser: jest.fn(),
+    getUserByMembershipId: jest.fn(),
+    updateAnonymousUser: jest.fn().mockImplementation(user => Promise.resolve(user)),
+    updateUser: jest.fn().mockImplementation(user => Promise.resolve(user)),
 };
 
 let userController;
@@ -81,6 +93,81 @@ describe('UserController', () => {
                     const user = await userController.getCurrentUser(displayName, membershipType);
 
                     expect(user).toBeUndefined();
+                });
+            });
+        });
+    });
+
+    describe('signIn', () => {
+        beforeEach(() => {
+            destinyService.getAccessTokenFromCode.mockImplementation(() => Promise.resolve({
+                access_token: 'some-access-token',
+            }));
+        });
+
+        describe('when current user is not found', () => {
+            it('should return undefined', async () => {
+                const currentUser = await userController.signIn({});
+
+                expect(currentUser).toBeUndefined();
+            });
+        });
+
+        describe('when current user is found', () => {
+            beforeEach(() => {
+                destinyService.getCurrentUser
+                    .mockImplementation(() => Promise.resolve(mockUser));
+            });
+            describe('when current user is a first time visitor', () => {
+                it('should create anonymous user', async () => {
+                    const currentUser = await userController.signIn({});
+
+                    expect(currentUser).toEqual({
+                        bungie: {
+                            access_token: 'some-access-token',
+                        },
+                        ...mockUser,
+                    });
+                    expect(userService.createAnonymousUser).toHaveBeenCalled();
+                });
+            });
+
+            describe('when current user is a repeat visitor', () => {
+                describe('when current user is anonymous', () => {
+                    it('should update the anonymous user', async () => {
+                        userService.getUserByMembershipId
+                            .mockImplementation(() => Promise.resolve(mockUser));
+
+                        const currentUser = await userController.signIn({});
+
+                        expect(currentUser).toEqual({
+                            bungie: {
+                                access_token: 'some-access-token',
+                            },
+                            ...mockUser,
+                        });
+                        expect(userService.updateAnonymousUser).toHaveBeenCalled();
+                    });
+                });
+
+                describe('when current user is registered', () => {
+                    it('should update the registered user', async () => {
+                        userService.getUserByMembershipId
+                            .mockImplementation(() => Promise.resolve({
+                                dateRegistered: new Date().toISOString(),
+                                ...mockUser,
+                            }));
+
+                        const currentUser = await userController.signIn({});
+
+                        expect(currentUser).toEqual({
+                            bungie: {
+                                access_token: 'some-access-token',
+                            },
+                            ...mockUser,
+                        });
+                        expect(userService.updateUser).toHaveBeenCalled();
+                    });
                 });
             });
         });

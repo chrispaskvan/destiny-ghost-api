@@ -17,7 +17,8 @@ class Destiny2Controller extends DestinyController {
      */
     async getCharacters(displayName, membershipType) {
         const currentUser = await this.users.getUserByDisplayName(displayName, membershipType);
-        const characters = await this.destiny.getProfile(currentUser.membershipId, membershipType);
+        const characters = await this.destiny
+            .getProfile(currentUser.membershipId, membershipType, true);
 
         return Promise.all(characters.map(async character => {
             const {

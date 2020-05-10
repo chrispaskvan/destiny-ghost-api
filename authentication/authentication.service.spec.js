@@ -1,7 +1,7 @@
 /**
  * Destiny Service Tests
  */
-const chance = require('chance')();
+const Chance = require('chance');
 const { cloneDeep } = require('lodash');
 
 const AuthenticationService = require('./authentication.service');
@@ -10,6 +10,7 @@ const [mockUser] = require('../mocks/users.json');
 const cacheService = {
     setUser: jest.fn().mockResolvedValue(),
 };
+const chance = new Chance();
 const destinyService = {
     getAccessTokenFromRefreshToken: jest.fn(),
     getCurrentUser: jest.fn(),
