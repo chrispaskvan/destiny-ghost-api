@@ -2,7 +2,7 @@
  * User Service Tests
  */
 const { omit } = require('lodash');
-const chance = require('chance')();
+const Chance = require('chance');
 const { cloneDeep } = require('lodash');
 const CacheService = require('./user.cache');
 const UserService = require('./user.service');
@@ -10,6 +10,7 @@ const UserService = require('./user.service');
 jest.mock('./user.cache');
 
 const cacheService = new CacheService();
+const chance = new Chance();
 const documentService = {
     createDocument: jest.fn(),
     getDocuments: jest.fn(),
@@ -186,7 +187,7 @@ describe('UserService', () => {
         });
 
         describe('when display name and membership type are not valid', () => {
-            it('should throw an error', async () => {
+            it('should throw', async () => {
                 await expect(userService
                     .getUserByDisplayName(user.membershipType, user.displayName))
                     .rejects.toThrow('"displayName" must be a string. "membershipType" must be a number');

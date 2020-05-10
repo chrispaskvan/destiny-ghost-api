@@ -1,11 +1,12 @@
 const HttpStatus = require('http-status-codes');
-const chance = require('chance')();
+const Chance = require('chance');
 const { EventEmitter } = require('events');
 const httpMocks = require('node-mocks-http');
 
 const Destiny2Router = require('./destiny2.routes');
 const { Response: manifest } = require('../mocks/manifest2Response.json');
 
+const chance = new Chance();
 const displayName = chance.name();
 const membershipType = chance.integer({ min: 1, max: 2 });
 const authenticationController = {

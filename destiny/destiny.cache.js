@@ -27,6 +27,7 @@ class DestinyCache {
         const then = new Date(now);
 
         then.setUTCHours(17);
+        then.setUTCMinutes(0);
         if (then < now) {
             then.setDate(then.getDate() + 1);
         }
@@ -91,7 +92,7 @@ class DestinyCache {
      * @returns {Promise}
      */
     setVendor(hash, vendor) {
-        if (typeof hash !== 'number') {
+        if (!hash || typeof hash !== 'string') {
             return Promise.reject(new Error('vendorHash number is required.'));
         }
 

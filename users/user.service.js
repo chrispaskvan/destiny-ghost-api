@@ -334,13 +334,13 @@ class UserService {
      * @param membershipType
      * @returns {Promise}
      */
-    async getUserByDisplayName(displayName, membershipType, noCache = false) {
+    async getUserByDisplayName(displayName, membershipType, skipCache = false) {
         const schema = {
             displayName: Joi.string().required(),
             membershipType: Joi.number().required(),
-            noCache: Joi.boolean().optional(),
+            skipCache: Joi.boolean().optional(),
         };
-        const error = validate({ displayName, membershipType, noCache },
+        const error = validate({ displayName, membershipType, skipCache },
             schema, { abortEarly: false });
 
         if (error) {
@@ -351,7 +351,7 @@ class UserService {
 
         const user = await this.cacheService.getUser(displayName, membershipType);
 
-        if (!noCache && user) {
+        if (!skipCache && user) {
             return user;
         }
 

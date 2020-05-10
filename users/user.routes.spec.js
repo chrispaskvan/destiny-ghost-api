@@ -1,9 +1,10 @@
 const { EventEmitter } = require('events');
 const HttpStatus = require('http-status-codes');
-const chance = require('chance')();
+const Chance = require('chance');
 const httpMocks = require('node-mocks-http');
 const UserRouter = require('./user.routes');
 
+const chance = new Chance();
 const displayName = chance.name();
 const membershipType = chance.integer({ min: 1, max: 2 });
 const authenticationController = {

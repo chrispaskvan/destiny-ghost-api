@@ -57,13 +57,13 @@ class Destiny2Service extends DestinyService {
      * Get the cached Destiny Manifest definition if available,
      *   otherwise get the latest from Bungie.
      *
-     * @param noCache
+     * @param skipCache
      * @returns {Promise}
      */
-    async getManifest(noCache) {
+    async getManifest(skipCache) {
         const manifest = await this.cacheService.getManifest();
 
-        if (!noCache && manifest) {
+        if (!skipCache && manifest) {
             return manifest;
         }
 
@@ -138,7 +138,15 @@ class Destiny2Service extends DestinyService {
      * @param membershipType
      * @returns {Promise}
      */
-    async getProfile(membershipId, membershipType) { // eslint-disable-line class-methods-use-this
+    async getProfile(membershipId, membershipType, skipCache) {
+        let characters;
+
+        if (!skipCache) {
+            characters = await this.cacheService.getCharacters(membershipId);
+
+            if (characters) return characters;
+        }
+
         const options = {
             headers: {
                 'x-api-key': apiKey,
@@ -149,7 +157,9 @@ class Destiny2Service extends DestinyService {
 
         if (responseBody.ErrorCode === 1) {
             const { Response: { characters: { data } } } = responseBody;
-            const characters = Object.values(data).map(character => character);
+
+            characters = Object.values(data).map(character => character);
+            await this.cacheService.setCharacters(membershipId, characters);
 
             return characters;
         }

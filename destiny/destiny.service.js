@@ -160,13 +160,6 @@ class DestinyService {
             membershipType,
         } = this.getPreferredMembership(destinyMemberships);
 
-        if (!displayName) {
-            throw new Error('Gamer tag not found.');
-        }
-        if (!membershipId) {
-            throw new Error(`membershipId is undefined for the displayName ${displayName} and membershipType ${membershipType}.`);
-        }
-
         return {
             displayName,
             membershipId,
@@ -178,13 +171,13 @@ class DestinyService {
     /**
      * Get the lastest Destiny Manifest definition.
      *
-     * @param noCache
+     * @param skipCache
      * @returns {Promise}
      */
-    async getManifest(noCache) {
+    async getManifest(skipCache) {
         let manifest = await this.cacheService.getManifest();
 
-        if (!noCache && manifest) {
+        if (!skipCache && manifest) {
             return manifest;
         }
 
@@ -207,7 +200,7 @@ class DestinyService {
      * @private
      * @param memberships
      */
-    getPreferredMembership(memberships = [{}]) { // eslint-disable-line class-methods-use-this
+    getPreferredMembership(memberships) { // eslint-disable-line class-methods-use-this
         const [{ crossSaveOverride }] = memberships;
 
         return memberships.find(({ membershipType }) => membershipType === crossSaveOverride)

@@ -71,7 +71,7 @@ class World2 extends World {
     getItemByHash(itemHash) {
         return new Promise((resolve, reject) => {
             try {
-                const [item] = this.items.filter(item1 => item1.hash === itemHash);
+                const item = this.items.find(item1 => item1.hash === itemHash);
 
                 resolve(item);
             } catch (err) {
