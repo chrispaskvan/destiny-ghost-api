@@ -386,6 +386,10 @@ class UserService {
             return Promise.reject(new Error('emailAddress string is required'));
         }
 
+        const user = await this.cacheService.getUser(emailAddress);
+        if (user) {
+            return user;
+        }
         qb.where('emailAddress', emailAddress);
 
         const documents = await this.documents.getDocuments(userCollectionId, qb.getQuery(), {
@@ -395,6 +399,7 @@ class UserService {
             if (documents.length > 1) {
                 throw new Error(`more than 1 document found for emailAddress ${emailAddress}`);
             }
+            this.cacheService.setUser(documents[0]);
 
             return documents[0];
         }

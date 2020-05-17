@@ -21,6 +21,8 @@ const notificationService = {
 };
 const userService = {
     getUserByDisplayName: jest.fn(),
+    getUserByEmailAddress: jest.fn(),
+    getUserByPhoneNumber: jest.fn(),
     updateUser: jest.fn(),
 };
 
@@ -254,6 +256,110 @@ describe('UserRouter', () => {
                     userRouter(req, res);
                 }));
             });
+        });
+    });
+
+    describe('getUserByEmailAddress', () => {
+        describe('when user is found', () => {
+            it('should return no content ', () => new Promise((done, reject) => {
+                const req = httpMocks.createRequest({
+                    method: 'GET',
+                    url: '/cayde%40destiny-ghost.com/emailAddress',
+                });
+
+                userService.getUserByEmailAddress.mockImplementation(() => Promise.resolve({
+                    bungie: {
+                        accessToken: {
+                            value: '11',
+                        },
+                    },
+                }));
+
+                res.on('end', () => {
+                    try {
+                        expect(res.statusCode).toEqual(HttpStatus.NO_CONTENT);
+                        done();
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
+
+                userRouter(req, res);
+            }));
+        });
+
+        describe('when user is not found', () => {
+            it('should return not found', () => new Promise((done, reject) => {
+                const req = httpMocks.createRequest({
+                    method: 'GET',
+                    url: '/cayde%40destiny-ghost.com/emailAddress',
+                });
+
+                userService.getUserByEmailAddress.mockImplementation(() => Promise.resolve());
+
+                res.on('end', () => {
+                    try {
+                        expect(res.statusCode).toEqual(HttpStatus.NOT_FOUND);
+                        done();
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
+
+                userRouter(req, res);
+            }));
+        });
+    });
+
+    describe('getUserByPhoneNumber', () => {
+        describe('when user is found', () => {
+            it('should return no content ', () => new Promise((done, reject) => {
+                const req = httpMocks.createRequest({
+                    method: 'GET',
+                    url: '/+12345678901/phoneNumber',
+                });
+
+                userService.getUserByPhoneNumber.mockImplementation(() => Promise.resolve({
+                    bungie: {
+                        accessToken: {
+                            value: '11',
+                        },
+                    },
+                }));
+
+                res.on('end', () => {
+                    try {
+                        expect(res.statusCode).toEqual(HttpStatus.NO_CONTENT);
+                        done();
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
+
+                userRouter(req, res);
+            }));
+        });
+
+        describe('when user is not found', () => {
+            it('should return not found', () => new Promise((done, reject) => {
+                const req = httpMocks.createRequest({
+                    method: 'GET',
+                    url: '/+12345678901/phoneNumber',
+                });
+
+                userService.getUserByPhoneNumber.mockImplementation(() => Promise.resolve());
+
+                res.on('end', () => {
+                    try {
+                        expect(res.statusCode).toEqual(HttpStatus.NOT_FOUND);
+                        done();
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
+
+                userRouter(req, res);
+            }));
         });
     });
 
