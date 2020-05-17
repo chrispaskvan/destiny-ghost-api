@@ -41,13 +41,8 @@ class DestinyCache {
      */
     getManifest() {
         return new Promise((resolve, reject) => {
-            client.get(this.constructor.manifestKey, (err, manifest) => {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve(manifest);
-                }
-            });
+            client.get(this.constructor.manifestKey,
+                (err, res) => (err ? reject(err) : resolve(res ? JSON.parse(res) : undefined)));
         });
     }
 
@@ -72,13 +67,14 @@ class DestinyCache {
     setManifest(manifest) {
         if (manifest && typeof manifest === 'object') {
             return new Promise((resolve, reject) => {
-                client.set(this.constructor.manifestKey, manifest, 'EX', this.constructor.secondsUntilDailyReset(), (err, success) => {
-                    if (err) {
-                        reject(err);
-                    } else {
-                        resolve(success);
-                    }
-                });
+                client.set(this.constructor.manifestKey, JSON.stringify(manifest),
+                    'EX', this.constructor.secondsUntilDailyReset(), (err, success) => {
+                        if (err) {
+                            reject(err);
+                        } else {
+                            resolve(success);
+                        }
+                    });
             });
         }
 

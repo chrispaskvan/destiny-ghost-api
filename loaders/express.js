@@ -2,6 +2,7 @@ const bodyParser = require('body-parser');
 const cookieParser = require('cookie-parser');
 const session = require('express-session');
 
+const httpLog = require('../helpers/httpLog');
 const rateLimiterMiddleware = require('../helpers/rate-limiter.middleware');
 const store = require('../helpers/store');
 const { session: sessionConfig } = require('../helpers/config');
@@ -69,5 +70,13 @@ module.exports = app => {
         lookupSession();
     });
 
+    /**
+     * Request/Response and Error Loggers
+     */
+    app.use(httpLog);
+
+    /**
+     * Rate Limiter
+     */
     app.use(rateLimiterMiddleware);
 };

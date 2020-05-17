@@ -166,23 +166,36 @@ describe('AuthenticationService', () => {
         describe('when current user requires a refresh', () => {
             // eslint-disable-next-line camelcase
             const { bungie: { access_token } } = mockUser;
+            const expiresIn = 1;
+            const now = 11;
 
             beforeEach(async () => {
                 destinyService.getCurrentUser = jest.fn().mockRejectedValue();
                 destinyService.getAccessTokenFromRefreshToken = jest.fn().mockResolvedValue({
                     access_token,
+                    expires_in: expiresIn,
                 });
                 userService.getCurrentUser = jest.fn().mockResolvedValue(mockUser);
                 userService.getUserByDisplayName = jest.fn().mockResolvedValue(mockUser);
             });
 
             it('refreshes Bungie token', async () => {
+                jest.spyOn(global.Date, 'now')
+                    .mockImplementationOnce(() => now);
+
                 const user = await authenticationService.authenticate({
                     displayName,
                     membershipType,
                 });
 
-                expect(user).toEqual(user1);
+                expect(user).toEqual({
+                    ...user1,
+                    bungie: {
+                        _ttl: now + expiresIn * 1000,
+                        access_token,
+                        expires_in: expiresIn,
+                    },
+                });
             });
         });
     });

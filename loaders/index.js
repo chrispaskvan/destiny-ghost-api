@@ -6,9 +6,7 @@ const DestinyError = require('../destiny/destiny.error');
 const RequestError = require('../helpers/request.error');
 const Routes = require('./routes');
 const expressLoader = require('./express');
-const httpLog = require('../helpers/httpLog');
 const log = require('../helpers/log');
-
 
 const loaders = {
     init: async ({ app }) => {
@@ -34,15 +32,10 @@ const loaders = {
         expressLoader(app);
 
         /**
-         * Request/Response and Error Middleware Loggers
-         */
-        app.use(httpLog);
-
-        const { manifests, routes } = Routes();
-
-        /**
          * Routes
          */
+        const { manifests, routes } = Routes();
+
         app.use('/', routes);
 
         // noinspection ES6MissingAwait
