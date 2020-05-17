@@ -25,7 +25,9 @@ async function startServer() {
     /**
      * Application Insights
      */
-    applicationInsights.setup(instrumentationKey).start();
+    if (process.env.NODE_ENV === 'production') {
+        applicationInsights.setup(instrumentationKey).start();
+    }
 
     /**
      * Server(s)
@@ -56,9 +58,13 @@ async function startServer() {
 
     insecureServer.listen(port, () => {
         const cpuCount = os.cpus().length;
-        const duration = Date.now() - start;
 
-        applicationInsights.defaultClient.trackMetric({ name: 'Startup Time', value: duration });
+        if (process.env.NODE_ENV === 'production') {
+            const duration = Date.now() - start;
+
+            applicationInsights.defaultClient.trackMetric({ name: 'Startup Time', value: duration });
+        }
+
         // eslint-disable-next-line no-console
         console.log(`HTTP server listening on port ${port} with ${cpuCount} cpus.`);
     });

@@ -53,26 +53,32 @@ class AuthenticationService {
                 access_token: accessToken,
                 membership_id: membershipId,
                 refresh_token: refreshToken,
+                _ttl: ttl = 0,
             } = {},
         } = user;
+        const now = Date.now();
 
         if (!accessToken) {
             return Promise.resolve();
         }
 
-        try {
-            // eslint-disable-next-line no-param-reassign
-            user = await this.destinyService.getCurrentUser(accessToken);
-        } catch (err) {
-            const bungie = await this.destinyService.getAccessTokenFromRefreshToken(refreshToken);
+        if (ttl < now) {
+            try {
+                // eslint-disable-next-line no-param-reassign
+                user = await this.destinyService.getCurrentUser(accessToken);
+            } catch (err) {
+                const bungie = await this.destinyService
+                    .getAccessTokenFromRefreshToken(refreshToken);
 
-            user.bungie = bungie; // eslint-disable-line no-param-reassign
-            await Promise.all([
-                this.cacheService.setUser(user),
-                this.userService.updateUserBungie(user.id, bungie),
-            ]);
+                bungie._ttl = now + bungie.expires_in * 1000; // eslint-disable-line max-len, no-underscore-dangle
+                user.bungie = bungie; // eslint-disable-line no-param-reassign
+                await Promise.all([
+                    this.cacheService.setUser(user),
+                    this.userService.updateUserBungie(user.id, bungie),
+                ]);
 
-            return user;
+                return user;
+            }
         }
 
         return {
