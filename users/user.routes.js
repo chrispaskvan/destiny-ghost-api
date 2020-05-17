@@ -106,11 +106,7 @@ const routes = ({
             (req, res, next) => {
                 const { params: { emailAddress } } = req;
 
-                if (!emailAddress) {
-                    return res.status(HttpStatus.CONFLICT).send('email address not found');
-                }
-
-                return userController.getUserByEmailAddress(req, res)
+                return userController.getUserByEmailAddress(emailAddress)
                     .then(user => (user
                         ? res.status(HttpStatus.NO_CONTENT).end()
                         : res.status(HttpStatus.NOT_FOUND).end()))
@@ -121,10 +117,6 @@ const routes = ({
         .get((req, res, next) => middleware.authenticateUser(req, res, next),
             (req, res, next) => {
                 const { params: { phoneNumber } } = req;
-
-                if (!phoneNumber) {
-                    return res.status(HttpStatus.CONFLICT).send('phone number not found');
-                }
 
                 return userController.getUserByPhoneNumber(phoneNumber)
                     .then(user => (user

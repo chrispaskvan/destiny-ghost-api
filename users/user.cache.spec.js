@@ -197,22 +197,32 @@ describe('UserCache', () => {
             });
 
             describe('when display name and membership type are given', () => {
+                describe('when email address is not included', () => {
+                    it('cache user', async () => {
+                        const { emailAddress, ...mockUser1 } = mockUser;
+                        const res = await cacheService.setUser(mockUser1);
+
+                        expect(res).toEqual([undefined, undefined, undefined]);
+                        expect(set).toHaveBeenCalledTimes(2);
+                    });
+                });
+
                 describe('when phone number is not included', () => {
                     it('cache user', async () => {
                         const { phoneNumber, ...mockUser1 } = mockUser;
                         const res = await cacheService.setUser(mockUser1);
 
-                        expect(res).toEqual([undefined, undefined]);
-                        expect(set).toHaveBeenCalledTimes(1);
+                        expect(res).toEqual([undefined, undefined, undefined]);
+                        expect(set).toHaveBeenCalledTimes(2);
                     });
                 });
 
-                describe('when phone number is included', () => {
+                describe('when email address and phone number is included', () => {
                     it('cache user', async () => {
                         const res = await cacheService.setUser(mockUser);
 
-                        expect(res).toEqual([undefined, undefined]);
-                        expect(set).toHaveBeenCalledTimes(2);
+                        expect(res).toEqual([undefined, undefined, undefined]);
+                        expect(set).toHaveBeenCalledTimes(3);
                     });
                 });
             });

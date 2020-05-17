@@ -102,7 +102,12 @@ class UserCache {
      * @returns {*}
      */
     setUser(user = {}) {
-        const { displayName, membershipType, phoneNumber } = user;
+        const {
+            displayName,
+            emailAddress,
+            membershipType,
+            phoneNumber,
+        } = user;
 
         if (!displayName) {
             return Promise.reject(new Error('displayName not found'));
@@ -139,7 +144,24 @@ class UserCache {
             promise2 = Promise.resolve();
         }
 
-        return Promise.all([promise1, promise2]);
+        let promise3;
+
+        if (emailAddress) {
+            promise3 = new Promise((resolve, reject) => {
+                client.set(emailAddress,
+                    JSON.stringify({ displayName, membershipType }), 'EX', 60 * 60, (err, res) => {
+                        if (err) {
+                            reject(err);
+                        } else {
+                            resolve(res);
+                        }
+                    });
+            });
+        } else {
+            promise3 = Promise.resolve();
+        }
+
+        return Promise.all([promise1, promise2, promise3]);
     }
 }
 
