@@ -62,7 +62,7 @@
         "swagger-ui-express": "^4.1.4",
         "twilio": "^3.43.0",
         "yauzl": "^2.10.0",
-        "snyk": "^1.317.0"
+        "snyk": "^1.320.2"
     },
     "devDependencies": {
         "chance": "^1.1.4",
