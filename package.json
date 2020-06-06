@@ -29,7 +29,7 @@
     },
     "dependencies": {
         "@azure/cosmos": "^3.6.3",
-        "@godaddy/terminus": "^4.4.0",
+        "@godaddy/terminus": "^4.4.1",
         "@hapi/joi": "^17.1.1",
         "applicationinsights": "^1.7.5",
         "axios": "^0.19.2",
