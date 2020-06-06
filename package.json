@@ -9,9 +9,7 @@
         "start": "NODE_ENV=development DESTINY_DATABASE_DIR=./databases/destiny DESTINY2_DATABASE_DIR=./databases/destiny2 node server",
         "swagger": "swagger-jsdoc -d swaggerDef.js",
         "test": "NODE_ENV=test DESTINY_DATABASE_DIR=./databases/destiny DESTINY2_DATABASE_DIR=./databases/destiny2 jest --config ./jest.config.js",
-        "test:watch": "npm run test -- --watchAll",
-        "snyk-protect": "snyk protect",
-        "prepare": "npm run snyk-protect"
+        "test:watch": "npm run test -- --watchAll"
     },
     "author": "Chris Paskvan",
     "license": "MIT",

@@ -1,4 +1,5 @@
 /* eslint-disable security/detect-non-literal-fs-filename */
+const HttpStatus = require('http-status-codes');
 const fs = require('fs');
 const path = require('path');
 
@@ -38,7 +39,6 @@ const loaders = {
 
         app.use('/', routes);
 
-        // noinspection ES6MissingAwait
         /**
          * Check for the latest manifest definition and database from Bungie.
          */
@@ -66,10 +66,10 @@ const loaders = {
             } = err;
 
             log.error(err);
-            // noinspection JSUnresolvedVariable
+
             if (res.status) {
                 if (err instanceof DestinyError) {
-                    res.status(500).json({
+                    res.status(HttpStatus.NOT_FOUND).json({
                         errors: [{
                             code,
                             message,
@@ -77,14 +77,14 @@ const loaders = {
                         }],
                     });
                 } else if (err instanceof RequestError) {
-                    res.status(500).json({
+                    res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
                         errors: [{
                             status,
                             statusText,
                         }],
                     });
                 } else {
-                    res.status(500).json({
+                    res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
                         errors: [{
                             message,
                         }],

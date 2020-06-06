@@ -8,11 +8,15 @@ async function request(options) {
 
         return responseBody;
     } catch (err) {
+        const requestError = new RequestError(err);
+
         log.error({
             message: 'HTTP request failed!',
             err,
+            requestError,
         });
-        throw new RequestError(err);
+
+        throw requestError;
     }
 }
 

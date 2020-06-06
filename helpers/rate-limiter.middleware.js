@@ -21,9 +21,9 @@ function setRateLimitHeaders(rateLimiterRes, res) {
 }
 
 const rateLimiterMiddleware = (req, res, next) => {
-    const { ip, session: { membershipId } = {} } = req;
+    const { ip, session: { membershipId, dateRegistered } = {} } = req;
     const key = membershipId || ip;
-    const pointsToConsume = membershipId ? 1 : 10;
+    const pointsToConsume = dateRegistered ? 1 : 10;
 
     rateLimiter.consume(key, pointsToConsume)
         .then(rateLimiterRes => {
