@@ -306,13 +306,15 @@ class UserService {
      * @returns {*|Array.User}
      */
     getSubscribedUsers(notificationType) {
-        const qb = new QueryBuilder();
         const notification = Object.values(notificationTypes)
             .find(type => notificationType === type);
 
         if (!notification) {
             return Promise.reject(Error('notificationType is not valid'));
         }
+
+        const qb = new QueryBuilder();
+
         qb
             .select('displayName')
             .select('membershipId')
@@ -356,17 +358,18 @@ class UserService {
         }
 
         const qb = new QueryBuilder();
+        const documents = await this.documents.getDocuments(userCollectionId,
+            qb.where('displayName', displayName).where('membershipType', membershipType).getQuery());
 
-        qb.where('displayName', displayName);
-        qb.where('membershipType', membershipType);
-
-        const documents = await this.documents.getDocuments(userCollectionId, qb.getQuery());
         if (documents) {
-            if (documents.length > 1) {
-                throw new Error(`more than 1 document found for displayName ${
-                    displayName} and membershipType ${membershipType}`);
+            if (documents.length) {
+                if (documents.length > 1) {
+                    throw new Error(`more than 1 document found for displayName ${
+                        displayName} and membershipType ${membershipType}`);
+                }
+
+                await this.cacheService.setUser(documents[0]);
             }
-            await this.cacheService.setUser(documents[0]);
 
             return documents[0];
         }
@@ -380,21 +383,21 @@ class UserService {
      * @returns {Promise}
      */
     async getUserByEmailAddress(emailAddress) {
-        const qb = new QueryBuilder();
-
         if (typeof emailAddress !== 'string' || isEmpty(emailAddress)) {
             return Promise.reject(new Error('emailAddress string is required'));
         }
 
         const user = await this.cacheService.getUser(emailAddress);
+
         if (user) {
             return user;
         }
-        qb.where('emailAddress', emailAddress);
 
-        const documents = await this.documents.getDocuments(userCollectionId, qb.getQuery(), {
-            enableCrossPartitionQuery: true,
-        });
+        const qb = new QueryBuilder();
+        const documents = await this.documents.getDocuments(userCollectionId,
+            qb.where('emailAddress', emailAddress).getQuery(), {
+                enableCrossPartitionQuery: true,
+            });
         if (documents) {
             if (documents.length > 1) {
                 throw new Error(`more than 1 document found for emailAddress ${emailAddress}`);
@@ -413,17 +416,15 @@ class UserService {
      * @returns {Promise}
      */
     async getUserByEmailAddressToken(emailAddressToken) {
-        const qb = new QueryBuilder();
-
         if (typeof emailAddressToken !== 'string' || isEmpty(emailAddressToken)) {
             return Promise.reject(new Error('emailAddressToken string is required.'));
         }
 
-        qb.where('membership.tokens.blob', emailAddressToken);
-
-        const documents = await this.documents.getDocuments(userCollectionId, qb.getQuery(), {
-            enableCrossPartitionQuery: true,
-        });
+        const qb = new QueryBuilder();
+        const documents = await this.documents.getDocuments(userCollectionId,
+            qb.where('membership.tokens.blob', emailAddressToken).getQuery(), {
+                enableCrossPartitionQuery: true,
+            });
         if (documents) {
             if (documents.length > 1) {
                 throw new Error(`more than 1 document found for emailAddressToken ${emailAddressToken}`);
@@ -441,17 +442,15 @@ class UserService {
      * @returns {Promise}
      */
     async getUserById(userId) {
-        const qb = new QueryBuilder();
-
         if (typeof userId !== 'string' || isEmpty(userId)) {
             return Promise.reject(new Error('userId string is required'));
         }
 
-        qb.where('id', userId);
-
-        const documents = await this.documents.getDocuments(userCollectionId, qb.getQuery(), {
-            enableCrossPartitionQuery: true,
-        });
+        const qb = new QueryBuilder();
+        const documents = await this.documents.getDocuments(userCollectionId,
+            qb.where('id', userId).getQuery(), {
+                enableCrossPartitionQuery: true,
+            });
         if (documents) {
             if (documents.length > 1) {
                 throw new Error(`more than 1 document found for userId ${userId}`);
@@ -469,17 +468,15 @@ class UserService {
      * @returns {Promise}
      */
     async getUserByMembershipId(membershipId) {
-        const qb = new QueryBuilder();
-
         if (typeof membershipId !== 'string' || isEmpty(membershipId)) {
             return Promise.reject(new Error('membershipId string is required'));
         }
 
-        qb.where('membershipId', membershipId);
-
-        const documents = await this.documents.getDocuments(userCollectionId, qb.getQuery(), {
-            enableCrossPartitionQuery: true,
-        });
+        const qb = new QueryBuilder();
+        const documents = await this.documents.getDocuments(userCollectionId,
+            qb.where('membershipId', membershipId).getQuery(), {
+                enableCrossPartitionQuery: true,
+            });
         if (documents) {
             if (documents.length > 1) {
                 throw new Error(`more than 1 document found for membershipId ${membershipId}`);
@@ -497,8 +494,6 @@ class UserService {
      * @returns {Promise}
      */
     async getUserByPhoneNumber(phoneNumber) {
-        const qb = new QueryBuilder();
-
         if (typeof phoneNumber !== 'string' || isEmpty(phoneNumber)) {
             return Promise.reject(Error('phoneNumber string is required'));
         }
@@ -507,10 +502,12 @@ class UserService {
         if (user) {
             return user;
         }
-        qb.where('phoneNumber', phoneNumber);
-        const documents = await this.documents.getDocuments(userCollectionId, qb.getQuery(), {
-            enableCrossPartitionQuery: true,
-        });
+
+        const qb = new QueryBuilder();
+        const documents = await this.documents.getDocuments(userCollectionId,
+            qb.where('phoneNumber', phoneNumber).getQuery(), {
+                enableCrossPartitionQuery: true,
+            });
         if (documents) {
             if (documents.length > 1) {
                 throw new Error(`more than 1 document found for phoneNumber ${phoneNumber}`);
@@ -529,17 +526,15 @@ class UserService {
      * @returns {Promise}
      */
     async getUserByPhoneNumberToken(phoneNumberToken) {
-        const qb = new QueryBuilder();
-
         if (typeof phoneNumberToken !== 'number') {
             return Promise.reject(Error('phoneNumberToken number is required.'));
         }
 
-        qb.where('membership.tokens.code', phoneNumberToken);
-
-        const documents = await this.documents.getDocuments(userCollectionId, qb.getQuery(), {
-            enableCrossPartitionQuery: true,
-        });
+        const qb = new QueryBuilder();
+        const documents = await this.documents.getDocuments(userCollectionId,
+            qb.where('membership.tokens.code', phoneNumberToken).getQuery(), {
+                enableCrossPartitionQuery: true,
+            });
         if (documents) {
             if (documents.length > 1) {
                 throw new Error(`more than 1 document found for phoneNumberToken ${phoneNumberToken}`);
@@ -568,7 +563,7 @@ class UserService {
 
         if (user) {
             return this.documents.updateDocument(userCollectionId, anonymousUser)
-                .then(() => undefined);
+                .then(() => this.cacheService.setUser(anonymousUser));
         }
 
         throw new Error(`user not found ${JSON.stringify(anonymousUser)}`);

@@ -4,7 +4,10 @@
  * @module healthController
  * @author Chris Paskvan
  */
+const v8 = require('v8');
+
 const { get } = require('../helpers/request');
+const applicationInsights = require('../helpers/application-insights');
 
 /**
  * Not available
@@ -51,6 +54,25 @@ class HealthController {
         return documents[0];
     }
 
+    static getMemoryUsage() {
+        const convertBytesToMegaBytes = bytes => Math.floor(bytes / (1024 * 1024));
+        const {
+            rss,
+            heapTotal,
+            heapUsed,
+            external,
+        } = process.memoryUsage();
+        const { total_available_size: totalAvailableSize } = v8.getHeapStatistics();
+
+        return {
+            rss: convertBytesToMegaBytes(rss),
+            heapTotal: convertBytesToMegaBytes(heapTotal),
+            heapUsed: convertBytesToMegaBytes(heapUsed),
+            external: convertBytesToMegaBytes(external),
+            totalAvailableSize: convertBytesToMegaBytes(totalAvailableSize),
+        };
+    }
+
     static async twilio() {
         const options = {
             url: 'https://gpkpyklzq55q.statuspage.io/api/v2/status.json',
@@ -91,6 +113,13 @@ class HealthController {
             .catch(err => HealthController.unhealthy(err)) || notAvailable;
         const world2 = await this.getWorld2Item()
             .catch(err => HealthController.unhealthy(err)) || notAvailable;
+        const memory = this.constructor.getMemoryUsage();
+
+        applicationInsights.trackMetric({ name: 'Resident Set Size', value: memory.rss });
+        applicationInsights.trackMetric({ name: 'Heap Memory Used', value: memory.heapUsed });
+        applicationInsights.trackMetric({ name: 'Total Heap Memory', value: memory.heapTotal });
+        applicationInsights.trackMetric({ name: 'External Memory', value: memory.external });
+        applicationInsights.trackMetric({ name: 'Available Memory', value: memory.totalAvailableSize });
 
         return {
             failures,

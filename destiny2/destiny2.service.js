@@ -147,25 +147,39 @@ class Destiny2Service extends DestinyService {
             if (characters) return characters;
         }
 
-        const options = {
-            headers: {
-                'x-api-key': apiKey,
-            },
-            url: `${servicePlatform}/Destiny2/${membershipType}/Profile/${membershipId}?components=Characters`,
-        };
-        const responseBody = await get(options);
+        try {
+            const options = {
+                headers: {
+                    'x-api-key': apiKey,
+                },
+                url: `${servicePlatform}/Destiny2/${membershipType}/Profile/${membershipId}?components=Characters`,
+            };
+            const responseBody = await get(options);
 
-        if (responseBody.ErrorCode === 1) {
-            const { Response: { characters: { data } } } = responseBody;
+            if (responseBody.ErrorCode === 1) {
+                const { Response: { characters: { data } } } = responseBody;
 
-            characters = Object.values(data).map(character => character);
-            await this.cacheService.setCharacters(membershipId, characters);
+                characters = Object.values(data).map(character => character);
+                await this.cacheService.setCharacters(membershipId, characters);
 
-            return characters;
+                return characters;
+            }
+
+            throw new DestinyError(responseBody.ErrorCode || -1,
+                responseBody.Message || '', responseBody.ErrorStatus || '');
+        } catch (err) {
+            if (err instanceof DestinyError) throw err;
+
+            const {
+                data: {
+                    ErrorCode: code,
+                    ErrorStatus: status,
+                    Message: message = 'Failed to get characters from profile.',
+                } = {},
+            } = err;
+
+            throw new DestinyError(code, message, status);
         }
-
-        throw new DestinyError(responseBody.ErrorCode || -1,
-            responseBody.Message || '', responseBody.ErrorStatus || '');
     }
 
     /**

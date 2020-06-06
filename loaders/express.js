@@ -15,9 +15,9 @@ module.exports = app => {
     app.use(cookieParser());
 
     /**
-     * Disable X-Powered-By Header
+     * Disable etag and x-powered-by headers.
      */
-    app.disable('x-powered-by');
+    app.disable('etag').disable('x-powered-by');
 
     /**
      * Set Access Headers

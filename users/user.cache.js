@@ -21,13 +21,8 @@ class UserCache {
     // eslint-disable-next-line class-methods-use-this
     deleteCache(key) {
         return new Promise((resolve, reject) => {
-            client.del(key, (err, res) => {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve(res);
-                }
-            });
+            client.del(key,
+                (err, res) => (err ? reject(err) : resolve(res)));
         });
     }
 
@@ -118,13 +113,8 @@ class UserCache {
 
         const key = this.constructor.getCacheKey(displayName, membershipType);
         const promise1 = new Promise((resolve, reject) => {
-            client.set(key, JSON.stringify(user), 'EX', 60 * 60, (err, res) => {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve(res);
-                }
-            });
+            client.set(key, JSON.stringify(user), 'EX', 60 * 60,
+                (err, res) => (err ? reject(err) : resolve(res)));
         });
 
         let promise2;
@@ -132,13 +122,8 @@ class UserCache {
         if (phoneNumber) {
             promise2 = new Promise((resolve, reject) => {
                 client.set(phoneNumber,
-                    JSON.stringify({ displayName, membershipType }), 'EX', 60 * 60, (err, res) => {
-                        if (err) {
-                            reject(err);
-                        } else {
-                            resolve(res);
-                        }
-                    });
+                    JSON.stringify({ displayName, membershipType }), 'EX', 60 * 60,
+                    (err, res) => (err ? reject(err) : resolve(res)));
             });
         } else {
             promise2 = Promise.resolve();
@@ -149,13 +134,8 @@ class UserCache {
         if (emailAddress) {
             promise3 = new Promise((resolve, reject) => {
                 client.set(emailAddress,
-                    JSON.stringify({ displayName, membershipType }), 'EX', 60 * 60, (err, res) => {
-                        if (err) {
-                            reject(err);
-                        } else {
-                            resolve(res);
-                        }
-                    });
+                    JSON.stringify({ displayName, membershipType }), 'EX', 60 * 60,
+                    (err, res) => (err ? reject(err) : resolve(res)));
             });
         } else {
             promise3 = Promise.resolve();

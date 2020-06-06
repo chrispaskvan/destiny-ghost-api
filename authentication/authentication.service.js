@@ -55,6 +55,7 @@ class AuthenticationService {
                 refresh_token: refreshToken,
                 _ttl: ttl = 0,
             } = {},
+            dateRegistered,
         } = user;
         const now = Date.now();
 
@@ -87,6 +88,7 @@ class AuthenticationService {
                 membership_id: membershipId,
                 refresh_token: refreshToken,
             },
+            dateRegistered,
             ...user,
         };
     }
