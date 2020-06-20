@@ -1,21 +1,7 @@
 const express = require('express');
-const { notificationHeaders } = require('../helpers/config');
 const notificationTypes = require('./notification.types');
 const NotificationController = require('./notification.controller');
-
-/**
- * Check for expected notification headers.
- *
- * @param {*} headers
- */
-function authorized(headers = []) {
-    const notificationEntries = Object.entries(notificationHeaders);
-    const headerEntries = Object.entries(headers)
-        .filter(([key1, value1]) => notificationEntries
-            .find(([key2, value2]) => key1 === key2 && value1 === value2));
-
-    return headerEntries.length === notificationEntries.length;
-}
+const authorizeUser = require('../authorization/authorization.middleware');
 
 /**
  * Notification Routes
@@ -49,15 +35,8 @@ const routes = ({
     });
 
     notificationRouter.route('/:subscription')
-        .post((req, res, next) => {
-            const { headers, params: { subscription } } = req;
-
-            if (!authorized(headers)) {
-                res.writeHead(403);
-                res.end();
-
-                return;
-            }
+        .post((req, res, next) => authorizeUser(req, res, next), (req, res, next) => {
+            const { params: { subscription } } = req;
 
             notificationController.create(subscription)
                 .then(() => res.status(200).end())
@@ -65,15 +44,8 @@ const routes = ({
         });
 
     notificationRouter.route('/:subscription/:phoneNumber')
-        .post((req, res, next) => {
-            const { headers, params: { subscription, phoneNumber } } = req;
-
-            if (!authorized(headers)) {
-                res.writeHead(403);
-                res.end();
-
-                return;
-            }
+        .post((req, res, next) => authorizeUser(req, res, next), (req, res, next) => {
+            const { params: { subscription, phoneNumber } } = req;
 
             if (!Object.keys(notificationTypes).find(key => key === subscription)) {
                 res.status(404).json('That subscription is not recognized.');

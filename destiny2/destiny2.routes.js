@@ -6,6 +6,7 @@ const cors = require('cors');
 const express = require('express');
 const AuthenticationMiddleWare = require('../authentication/authentication.middleware');
 const Destiny2Controller = require('./destiny2.controller');
+const authorizeUser = require('../authorization/authorization.middleware');
 
 const { cors: corsConfig } = require('../helpers/config');
 
@@ -88,7 +89,7 @@ const routes = ({
         });
 
     destiny2Router.route('/manifest')
-        .post((req, res, next) => {
+        .post((req, res, next) => authorizeUser(req, res, next), (req, res, next) => {
             destiny2Controller.upsertManifest()
                 .then(manifest => {
                     res.status(HttpStatus.OK).json(manifest);
