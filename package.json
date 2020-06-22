@@ -49,7 +49,7 @@
         "is-my-json-valid": "^2.20.0",
         "json-schema-defaults": "^0.4.0",
         "lodash": "^4.17.15",
-        "nodemailer": "^6.4.6",
+        "nodemailer": "^6.4.8",
         "nodemailer-smtp-transport": "^2.7.4",
         "pino": "^6.2.1",
         "pino-http": "^5.2.0",
