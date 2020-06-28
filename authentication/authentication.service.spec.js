@@ -1,7 +1,7 @@
 /**
  * Destiny Service Tests
  */
-const chance = require('chance')();
+const Chance = require('chance');
 const { cloneDeep } = require('lodash');
 
 const AuthenticationService = require('./authentication.service');
@@ -10,6 +10,7 @@ const [mockUser] = require('../mocks/users.json');
 const cacheService = {
     setUser: jest.fn().mockResolvedValue(),
 };
+const chance = new Chance();
 const destinyService = {
     getAccessTokenFromRefreshToken: jest.fn(),
     getCurrentUser: jest.fn(),
@@ -63,7 +64,8 @@ describe('AuthenticationService', () => {
                     describe('when token is fresh', () => {
                         beforeEach(async () => {
                             userService.getCurrentUser = jest.fn().mockResolvedValue(mockUser);
-                            userService.getUserByDisplayName = jest.fn().mockResolvedValue(mockUser); // eslint-disable-line max-len
+                            userService.getUserByDisplayName = jest.fn()
+                                .mockResolvedValue(mockUser);
                         });
 
                         it('should cache and return a user', async () => {
@@ -73,15 +75,16 @@ describe('AuthenticationService', () => {
                             });
 
                             expect(user).toEqual(user1);
-                            // eslint-disable-next-line no-unused-expressions
-                            expect(cacheService.setUser).toHaveBeenCalledOnce; // eslint-disable-line jest/valid-expect, max-len
+                            // eslint-disable-next-line jest/valid-expect, no-unused-expressions
+                            expect(cacheService.setUser).toHaveBeenCalledOnce;
                         });
                     });
 
                     describe('when token is not fresh', () => {
                         beforeEach(async () => {
                             userService.getCurrentUser = jest.fn().mockRejectedValue();
-                            userService.getUserByDisplayName = jest.fn().mockResolvedValue(mockUser); // eslint-disable-line max-len
+                            userService.getUserByDisplayName = jest.fn()
+                                .mockResolvedValue(mockUser);
                         });
 
                         it('should cache and return a user', async () => {
@@ -102,14 +105,13 @@ describe('AuthenticationService', () => {
                         userService.getUserByDisplayName = jest.fn().mockResolvedValue();
                     });
 
-                    it('should cache and return a user', async () => {
+                    it('should return undefined', async () => {
                         const user = await authenticationService.authenticate({
                             displayName,
                             membershipType,
                         });
 
-                        // eslint-disable-next-line jest/valid-expect, no-unused-expressions
-                        expect(user).not.toBeUndefined;
+                        expect(user).toBeUndefined();
                     });
                 });
             });
@@ -141,16 +143,13 @@ describe('AuthenticationService', () => {
                         userService.getUserByDisplayName = jest.fn().mockResolvedValue();
                     });
 
-                    it('should cache and return a user', async () => {
-                        try {
-                            await authenticationService.authenticate({
-                                displayName,
-                                membershipType,
-                            });
-                        } catch (err) {
-                            // eslint-disable-next-line jest/valid-expect, no-unused-expressions
-                            expect(err).not.toBeUndefined;
-                        }
+                    it('should return undefined', async () => {
+                        const user = await authenticationService.authenticate({
+                            displayName,
+                            membershipType,
+                        });
+
+                        expect(user).toBeUndefined();
                     });
                 });
             });
@@ -159,8 +158,7 @@ describe('AuthenticationService', () => {
                 it('resolves undefined', async () => {
                     const user = await authenticationService.authenticate();
 
-                    // eslint-disable-next-line jest/valid-expect, no-unused-expressions
-                    expect(user).toBeUndefined;
+                    expect(user).toBeUndefined();
                 });
             });
         });
@@ -168,23 +166,36 @@ describe('AuthenticationService', () => {
         describe('when current user requires a refresh', () => {
             // eslint-disable-next-line camelcase
             const { bungie: { access_token } } = mockUser;
+            const expiresIn = 1;
+            const now = 11;
 
             beforeEach(async () => {
                 destinyService.getCurrentUser = jest.fn().mockRejectedValue();
                 destinyService.getAccessTokenFromRefreshToken = jest.fn().mockResolvedValue({
                     access_token,
+                    expires_in: expiresIn,
                 });
                 userService.getCurrentUser = jest.fn().mockResolvedValue(mockUser);
                 userService.getUserByDisplayName = jest.fn().mockResolvedValue(mockUser);
             });
 
             it('refreshes Bungie token', async () => {
+                jest.spyOn(global.Date, 'now')
+                    .mockImplementationOnce(() => now);
+
                 const user = await authenticationService.authenticate({
                     displayName,
                     membershipType,
                 });
 
-                expect(user).toEqual(user1);
+                expect(user).toEqual({
+                    ...user1,
+                    bungie: {
+                        _ttl: now + expiresIn * 1000,
+                        access_token,
+                        expires_in: expiresIn,
+                    },
+                });
             });
         });
     });

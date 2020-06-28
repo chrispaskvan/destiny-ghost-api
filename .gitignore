@@ -1,11 +1,11 @@
-# Created by .ignore support plugin (hsz.mobi)
+.DS_store
+.artillery/
+.clinic/
 .coverage/
 .env
 .idea/
-.nyc_output
-appInsights-node/
+.vscode/
 databases/
-logs/
 security/
 settings/
 node_modules/

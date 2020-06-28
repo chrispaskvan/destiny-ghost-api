@@ -8,7 +8,7 @@ describe('Tokens', () => {
         it('should return a blob', () => {
             const blob = tokens.getBlob();
 
-            expect(blob).not.toBeUndefined;
+            expect(blob).toBeDefined();
         });
     });
     describe('getCode', () => {

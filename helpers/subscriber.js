@@ -9,7 +9,8 @@
  */
 const azure = require('azure-sb');
 const azureCommon = require('azure-common');
-const settings = require('../settings/serviceBus.json');
+const { serviceBus: settings } = require('./config');
+const log = require('./log');
 
 class Subscriber {
     /**
@@ -57,7 +58,10 @@ class Subscriber {
 
                     this.serviceBusService.deleteMessage(lockedMessage, err2 => {
                         if (err2) {
-                            console.log('message deletion failed: ', err2);
+                            log.error({
+                                msg: 'message deletion failed: ',
+                                obj: err2,
+                            });
                         }
 
                         setTimeout(() => this.getFromTheBus(callback), 1);

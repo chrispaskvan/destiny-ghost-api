@@ -37,6 +37,9 @@ class AuthenticationController {
             if (!membershipType) {
                 req.session.membershipType = user.membershipType;
             }
+
+            req.session.dateRegistered = user.dateRegistered;
+            req.session.membershipId = user.bungie.membership_id;
         }
 
         return user;

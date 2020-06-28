@@ -1,98 +1,120 @@
 /**
  * Created by chris on 9/25/15.
  */
-const DestinyController = require('../destiny/destiny.controller'),
-    AuthenticationMiddleWare = require('../authentication/authentication.middleware'),
-    cors = require('cors'),
-    express = require('express'),
-    httpMocks = require('node-mocks-http'),
-    log = require('../helpers/log');
+const HttpStatus = require('http-status-codes');
+const cors = require('cors');
+const express = require('express');
+const DestinyController = require('./destiny.controller');
 
 /**
  * Destiny Routes
+ *
  * @param authenticationController
  * @param destinyService
  * @param userService
  * @param worldRepository
  * @returns {*}
  */
-const routes = ({ authenticationController, destinyService, userService, worldRepository }) => {
+const routes = ({
+    destinyService,
+    userService,
+    worldRepository,
+}) => {
     const destinyRouter = express.Router();
 
     /**
      * Set up routes and initialize the controller.
      * @type {DestinyController}
      */
-    const destinyController = new DestinyController({ destinyService, userService, worldRepository });
+    const destinyController = new DestinyController({
+        destinyService,
+        userService,
+        worldRepository,
+    });
 
-    /**
-     * Authentication controller when needed.
-     * @type {AuthenticationMiddleware}
-     */
-    const middleware = new AuthenticationMiddleWare({ authenticationController });
-
-    /**
-     * Routes
-     */
     destinyRouter.route('/signIn/')
-        .get(cors(), (req, res, next) => destinyController.getAuthorizationUrl(req, res)
-            .catch(next));
+        .get(cors(), (req, res, next) => {
+            destinyController.getAuthorizationUrl()
+                .then(({ state, url }) => {
+                    req.session.state = state;
+                    res.send(url);
+                })
+                .catch(next);
+        });
 
-    destinyRouter.route('/characters')
-        .get((req, res, next) => middleware.authenticateUser(req, res, next),
-            (req, res, next) => destinyController.getCharacters(req, res)
-                .catch(next));
-
+    /**
+     * @swagger
+     * path:
+     *  /destiny/currentUser/:
+     *    get:
+     *      summary: Get the currently authenticated user.
+     *      tags:
+     *        - Destiny
+     *      produces:
+     *        - application/json
+     *      responses:
+     *        200:
+     *          description: Destiny Manifest definition
+     */
     destinyRouter.route('/currentUser/')
-        .get((req, res, next) => destinyController.getCurrentUser(req, res)
-            .catch(next));
+        .get((req, res, next) => {
+            const { session: { displayName, membershipType } } = req;
 
-    destinyRouter.route('/fieldTestWeapons/')
-        .get((req, res, next) => middleware.authenticateUser(req, res, next),
-            (req, res, next) => destinyController.getFieldTestWeapons(req, res)
-                .catch(next));
-
-    destinyRouter.route('/foundryOrders/')
-        .get((req, res, next) => middleware.authenticateUser(req, res, next),
-            (req, res, next) => destinyController.getFoundryOrders(req, res)
-                .catch(next));
+            destinyController.getCurrentUser(displayName, membershipType)
+                .then(bungieUser => {
+                    res.json(bungieUser);
+                })
+                .catch(next);
+        });
 
     destinyRouter.route('/grimoireCards/:numberOfCards')
         .get(cors(),
-            (req, res, next) => destinyController.getGrimoireCards(req, res)
-                .catch(next));
+            (req, res, next) => {
+                const { params: { numberOfCards } } = req;
+                const count = parseInt(numberOfCards, 10);
 
-    destinyRouter.route('/ironBannerEventRewards/')
-        .get((req, res, next) => destinyController.getIronBannerEventRewards(req, res)
-            .catch(next));
+                if (Number.isNaN(count)) {
+                    return res.status(422).end();
+                }
 
-    destinyRouter.route('/manifest')
-        .get((req, res, next) => destinyController.getManifest(req, res)
-            .catch(next));
-
-    destinyRouter.route('/manifest')
-        .post((req, res, next) => destinyController.upsertManifest(req, res)
-            .catch(next));
-
-    destinyRouter.route('/xur/')
-        .get((req, res, next) => destinyController.getXur(req, res)
-            .catch(next));
+                return destinyController.getGrimoireCards(count)
+                    .then(grimoireCards => {
+                        res.status(HttpStatus.OK).json(grimoireCards);
+                    })
+                    .catch(next);
+            });
 
     /**
-     * Validate the existence and the freshness of the Bungie database.
+     * @swagger
+     * path:
+     *  /destiny/manifest/:
+     *    get:
+     *      summary: Get details about the latest and greatest Destiny manifest definition.
+     *      tags:
+     *        - Destiny
+     *      produces:
+     *        - application/json
+     *      responses:
+     *        200:
+     *          description: Destiny Manifest definition
      */
-    destinyRouter.validateManifest = () => {
-        const req = httpMocks.createRequest();
-        const res = httpMocks.createResponse({
-            eventEmitter: require('events').EventEmitter
+    destinyRouter.route('/manifest')
+        .get((req, res, next) => {
+            destinyController.getManifest(req, res)
+                .then(manifest => {
+                    res.status(HttpStatus.OK).json(manifest);
+                })
+                .catch(next);
         });
 
-        destinyController.upsertManifest(req, res);
-
-        res.on('end', () => {
-            log.info(`destiny validateManifest responded with a status code of ${res.statusCode}`);
+    destinyRouter.route('/manifest')
+        .post((req, res, next) => {
+            destinyController.upsertManifest()
+                .then(manifest => {
+                    res.status(HttpStatus.OK).json(manifest);
+                })
+                .catch(next);
         });
-    };
 
     return destinyRouter;
 };

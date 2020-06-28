@@ -6,71 +6,108 @@
  * @author Chris Paskvan
  * @requires request
  */
-const { post } = require('../helpers/request');
+const { get, post } = require('../helpers/request');
 
 /**
  * @constant
  * @type {string}
  * @description Base URL for all of the Bungie API services.
  */
-const servicePlatform = 'https://db-api.destinytracker.com/api';
+const servicePlatform = 'https://api.tracker.gg/api/v1/destiny-2/db';
 
 /**
  * Destiny Tracker Service Class
  */
 class DestinyTrackerService {
-	/**
-	 * Get the overall summary of voter data from the reviews.
-	 *
-	 * @param itemHash {string}
-	 * @returns {Promise}
-	 */
-	async getVotes(itemHash) {
-		const options = {
-			data: {
-				referenceId: itemHash
-			},
-			headers: {
-				'Content-Type': 'application/json'
-			},
-			url: `${servicePlatform}/external/reviews`
-		};
-		const { votes } = await post(options);
+    /**
+     * Get PVP rank.
+     *
+     * @param itemHash {string}
+     * @returns {Promise<Object>}
+     */
+    async getRank(itemHash) { // eslint-disable-line class-methods-use-this
+        const options = {
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            url: `${servicePlatform}/items/${itemHash}/insights`,
+        };
+        const { data } = await get(options);
+        let usage;
 
-		return votes;
-	}
+        if (data) {
+            const { stats } = data;
 
-	/**
-	 * Get PVP rank.
-	 *
-	 * @param itemHash {string}
-	 * @returns {Promise<Object>}
-	 */
-	async getRank(itemHash) {
-		const insightsQuery = {
-			query: 'query Item($hash: Hash!, $modes: [Int]) { itemInsights: item(hash: $hash) { insights(modes: $modes) { rank { kills }}}}',
-			variables: {
-				hash: `${itemHash}`,
-				modes: null
-			},
-			operationName: 'Item'
-		};
-		const options = {
-			data: insightsQuery,
-			headers: {
-				'Content-Type': 'application/json'
-			},
-			url: `${servicePlatform}/graphql`
-		};
-		const { data: { itemInsights: { insights}} } = await post(options);
-		let kills;
+            if (stats) {
+                ({ rank: { usage } } = stats);
+            }
+        }
 
-		if (insights) {
-			({ rank: { kills }} = insights);
-		}
+        return usage;
+    }
 
-		return kills;
-	}
+    /**
+     * Get number of stars by review rankings.
+     *
+     * @param itemHash {string}
+     * @returns {Promise<Object>}
+     */
+    async getStars(itemHash) { // eslint-disable-line class-methods-use-this
+        const options = {
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            url: `${servicePlatform}/items/${itemHash}`,
+        };
+        const { data } = await get(options);
+        let all;
+
+        if (data) {
+            ({ reviewRatings: { all } = {} } = data);
+        }
+
+        return all;
+    }
+
+    /**
+     * Get Top 10 used weapons in PVP.
+     *
+     * @returns {Promise<Object>}
+     */
+    async getTop10() { // eslint-disable-line class-methods-use-this
+        const options = {
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            url: `${servicePlatform}/items/insights`,
+        };
+        const { data } = await get(options);
+
+        return data
+            ? data.filter(({ rank: { usage } }) => usage < 11).map(({ hash }) => hash)
+            : undefined;
+    }
+
+    /**
+     * Get the overall summary of voter data from the reviews.
+     *
+     * @param itemHash {string}
+     * @returns {Promise}
+     */
+    async getVotes(itemHash) { // eslint-disable-line class-methods-use-this
+        const options = {
+            data: {
+                referenceId: itemHash,
+            },
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            url: `${servicePlatform}/reviews`,
+        };
+        const { votes } = await post(options);
+
+        return votes;
+    }
 }
 
 module.exports = DestinyTrackerService;

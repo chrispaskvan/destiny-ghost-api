@@ -10,7 +10,7 @@
  * @requires S
  * @requires sqlite3
  */
-const _ = require('underscore');
+const { groupBy, min } = require('lodash');
 const path = require('path');
 const Database = require('better-sqlite3');
 const World = require('./world');
@@ -59,7 +59,8 @@ class World2 extends World {
      * @param classHash {string}
      */
     getClassByHash(classHash) {
-        return Promise.resolve(this.classes.find(characterClass => characterClass.hash === classHash)); // eslint-disable-line max-len
+        return Promise.resolve(this.classes
+            .find(characterClass => characterClass.hash === classHash));
     }
 
     /**
@@ -70,7 +71,7 @@ class World2 extends World {
     getItemByHash(itemHash) {
         return new Promise((resolve, reject) => {
             try {
-                const [item] = this.items.filter(item1 => item1.hash === itemHash);
+                const item = this.items.find(item1 => item1.hash === itemHash);
 
                 resolve(item);
             } catch (err) {
@@ -89,13 +90,12 @@ class World2 extends World {
             try {
                 const items = this.items.filter(({ displayProperties: { name } = '' }) => name.toLowerCase().includes(itemName.toLowerCase()));
 
-                const groups = _.groupBy(items, item => item.displayProperties.name);
+                const groups = groupBy(items, item => item.displayProperties.name);
                 const keys = Object.keys(groups);
 
-                resolve(_.map(keys, key => {
-                    const item = _.min(_.filter(items,
-                        item1 => item1.displayProperties.name === key),
-                    item1 => (item1.quality ? item1.quality.qualityLevel : 0));
+                resolve(keys.map(key => {
+                    const item = min(items.filter(item1 => item1.displayProperties.name === key),
+                        item1 => (item1.quality ? item1.quality.qualityLevel : 0));
 
                     return Object.assign(item, {
                         itemCategory: item.itemTypeAndTierDisplayName,
@@ -114,7 +114,8 @@ class World2 extends World {
      * @returns {Promise}
      */
     getItemCategory(itemCategoryHash) {
-        return Promise.resolve(this.categories.find(category => category.hash === itemCategoryHash)); // eslint-disable-line max-len
+        return Promise.resolve(this.categories
+            .find(category => category.hash === itemCategoryHash));
     }
 
     /**
@@ -124,6 +125,23 @@ class World2 extends World {
      */
     getLore(hash) {
         return Promise.resolve(this.loreDefinitions.find(lore => lore.hash === hash));
+    }
+
+    /**
+     * Get vendor's icon.
+     * @param vendorHash
+     * @returns {Promise}
+     */
+    getVendorIcon(vendorHash) {
+        return new Promise((resolve, reject) => {
+            try {
+                const [vendor] = this.vendors.filter(vendor1 => vendor1.hash === vendorHash);
+
+                resolve(`https://www.bungie.net${vendor.displayProperties.icon}`);
+            } catch (err) {
+                reject(err);
+            }
+        });
     }
 }
 
