@@ -37,35 +37,60 @@ class AuthenticationService {
             ? this.userService.getUserByPhoneNumber(phoneNumber)
             : this.userService.getUserByDisplayName(displayName, membershipType));
 
-        return this._validateUser(user); // eslint-disable-line no-underscore-dangle
+        return this.validateUser(user);
     }
 
     /**
      * Validate user access token with Bungie.
+     * @private
      * @param user
      * @returns {Promise}
      * @private
      */
-    _validateUser(user = {}) {
-        const { bungie: { access_token: accessToken, refresh_token: refreshToken } = {} } = user;
+    async validateUser(user = {}) {
+        const {
+            bungie: {
+                access_token: accessToken,
+                membership_id: membershipId,
+                refresh_token: refreshToken,
+                _ttl: ttl = 0,
+            } = {},
+            dateRegistered,
+        } = user;
+        const now = Date.now();
 
         if (!accessToken) {
             return Promise.resolve();
         }
 
-        return this.destinyService.getCurrentUser(accessToken)
-            .then(() => this.cacheService.setUser(user)
-                .then(() => user))
-            .catch(() => this.destinyService.getAccessTokenFromRefreshToken(refreshToken)
-                .then(bungie => {
-                    user.bungie = bungie; // eslint-disable-line no-param-reassign
+        if (ttl < now) {
+            try {
+                // eslint-disable-next-line no-param-reassign
+                user = await this.destinyService.getCurrentUser(accessToken);
+            } catch (err) {
+                const bungie = await this.destinyService
+                    .getAccessTokenFromRefreshToken(refreshToken);
 
-                    return Promise.all([
-                        this.cacheService.setUser(user),
-                        this.userService.updateUserBungie(user.id, bungie),
-                    ])
-                        .then(() => user);
-                }));
+                bungie._ttl = now + bungie.expires_in * 1000; // eslint-disable-line max-len, no-underscore-dangle
+                user.bungie = bungie; // eslint-disable-line no-param-reassign
+                await Promise.all([
+                    this.cacheService.setUser(user),
+                    this.userService.updateUserBungie(user.id, bungie),
+                ]);
+
+                return user;
+            }
+        }
+
+        return {
+            bungie: {
+                access_token: accessToken,
+                membership_id: membershipId,
+                refresh_token: refreshToken,
+            },
+            dateRegistered,
+            ...user,
+        };
     }
 }
 

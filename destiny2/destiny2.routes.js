@@ -1,13 +1,14 @@
 /**
  * Created by chris on 9/25/15.
  */
-const AuthenticationMiddleWare = require('../authentication/authentication.middleware'),
-	Destiny2Controller = require('./destiny2.controller'),
-	cors = require('cors'),
-	corsConfig = require('../settings/cors.' + process.env.NODE_ENV + '.json'),
-	express = require('express'),
-	httpMocks = require('node-mocks-http'),
-	log = require('../helpers/log');
+const HttpStatus = require('http-status-codes');
+const cors = require('cors');
+const express = require('express');
+const AuthenticationMiddleWare = require('../authentication/authentication.middleware');
+const Destiny2Controller = require('./destiny2.controller');
+const authorizeUser = require('../authorization/authorization.middleware');
+
+const { cors: corsConfig } = require('../helpers/config');
 
 /**
  * Destiny Routes
@@ -17,69 +18,130 @@ const AuthenticationMiddleWare = require('../authentication/authentication.middl
  * @param worldRepository
  * @returns {*}
  */
-const routes = ({ authenticationController, destiny2Service, userService, worldRepository }) => {
+const routes = ({
+    authenticationController, destiny2Service, userService, worldRepository,
+}) => {
     const destiny2Router = express.Router();
 
     /**
      * Set up routes and initialize the controller.
      * @type {DestinyController}
      */
-    const destiny2Controller = new Destiny2Controller({ destinyService: destiny2Service, userService, worldRepository });
-
-	/**
-	 * Authentication controller when needed.
-	 * @type {AuthenticationMiddleware}
-	 */
-	const middleware = new AuthenticationMiddleWare({ authenticationController });
+    const destiny2Controller = new Destiny2Controller({
+        destinyService: destiny2Service,
+        userService,
+        worldRepository,
+    });
 
     /**
-     * Routes
+     * Authentication controller when needed.
+     * @type {AuthenticationMiddleware}
      */
-    destiny2Router.route('/leaderboard')
-		.get(cors(corsConfig),
-			(req, res, next) => middleware.authenticateUser(req, res, next),
-			(req, res, next) => destiny2Controller.getLeaderboard(req, res)
-				.catch(next));
+    const middleware = new AuthenticationMiddleWare({ authenticationController });
+
+    /**
+     * @swagger
+     * path:
+     *  /destiny2/characters/:
+     *    get:
+     *      summary: Get a list of the user's characters.
+     *      tags:
+     *        - Destiny 2
+     *      produces:
+     *        - application/json
+     *      responses:
+     *        200:
+     *          description: Destiny Manifest definition
+     */
+    destiny2Router.route('/characters')
+        .get((req, res, next) => middleware.authenticateUser(req, res, next),
+            (req, res, next) => {
+                const { session: { displayName, membershipType } } = req;
+
+                destiny2Controller.getCharacters(displayName, membershipType)
+                    .then(characterBases => {
+                        res.json(characterBases);
+                    })
+                    .catch(next);
+            });
+
+    /**
+     * @swagger
+     * path:
+     *  /destiny2/manifest/:
+     *    get:
+     *      summary: Get details about the latest and greatest Destiny manifest definition.
+     *      tags:
+     *        - Destiny 2
+     *      produces:
+     *        - application/json
+     *      responses:
+     *        200:
+     *          description: Destiny Manifest definition
+     */
+    destiny2Router.route('/manifest')
+        .get((req, res, next) => {
+            destiny2Controller.getManifest()
+                .then(manifest => {
+                    res.status(HttpStatus.OK).json(manifest);
+                })
+                .catch(next);
+        });
 
     destiny2Router.route('/manifest')
-        .get((req, res, next) => destiny2Controller.getManifest(req, res)
-	        .catch(next));
+        .post((req, res, next) => authorizeUser(req, res, next), (req, res, next) => {
+            destiny2Controller.upsertManifest()
+                .then(manifest => {
+                    res.status(HttpStatus.OK).json(manifest);
+                })
+                .catch(next);
+        });
 
-    destiny2Router.route('/manifest')
-        .post((req, res, next) => destiny2Controller.upsertManifest(req, res)
-	        .catch(next));
+    destiny2Router.route('/player/:displayName')
+        .get((req, res, next) => {
+            const { params: { displayName } } = req;
 
-	destiny2Router.route('/player/:displayName')
-		.get((req, res, next) => destiny2Controller.getPlayer(req, res)
-			.catch(next));
+            destiny2Controller.getPlayer(displayName)
+                .then(statistics => {
+                    if (statistics) {
+                        return res.status(200).json(statistics);
+                    }
 
-	destiny2Router.route('/profile')
-		.get(cors(corsConfig),
-			(req, res, next) => middleware.authenticateUser(req, res, next),
-			(req, res, next) => destiny2Controller.getProfile(req, res)
-				.catch(next));
+                    return res.status(HttpStatus.UNAUTHORIZED).end();
+                })
+                .catch(next);
+        });
 
-	destiny2Router.route('/xur')
-		.get(cors(corsConfig),
-			(req, res, next) => middleware.authenticateUser(req, res, next),
-			(req, res, next) => destiny2Controller.getXur(req, res)
-				.catch(next));
+    /**
+     * @swagger
+     * path:
+     *  /destiny2/xur/:
+     *    get:
+     *      summary: Get Xur's inventory if available.
+     *      tags:
+     *        - Destiny 2
+     *      produces:
+     *        - application/json
+     *      responses:
+     *        200:
+     *          description: Xur's inventory
+     */
+    destiny2Router.route('/xur')
+        .get(cors(corsConfig),
+            (req, res, next) => middleware.authenticateUser(req, res, next),
+            (req, res, next) => {
+                const { session: { displayName, membershipType } } = req;
 
-	/**
-	 * Validate the existence and the freshness of the Bungie database.
-	 */
-	destiny2Router.validateManifest = () => {
-		const req = httpMocks.createRequest();
-		const res = httpMocks.createResponse({
-			eventEmitter: require('events').EventEmitter
-		});
+                destiny2Controller.getXur(displayName, membershipType)
+                    .then(items => {
+                        if (items) {
+                            return res.status(HttpStatus.OK).json(items);
+                        }
 
-		destiny2Controller.upsertManifest(req, res);
-
-		res.on('end', () => {
-			log.info('destiny 2 validateManifest returned a response status code of ' + res.statusCode);
-		});
-	};
+                        return res.status(HttpStatus.NOT_FOUND);
+                    })
+                    .catch(next);
+            });
 
     return destiny2Router;
 };

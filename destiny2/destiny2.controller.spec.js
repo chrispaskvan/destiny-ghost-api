@@ -1,93 +1,126 @@
-const Destiny2Controller = require('./destiny2.controller'),
-	chance = require('chance')(),
-	httpMocks = require('node-mocks-http'),
-	{ Response: manifest } = require('../mocks/manifest2Response.json');
+const Chance = require('chance');
 
+const Destiny2Controller = require('./destiny2.controller');
+const { Response: manifest } = require('../mocks/manifest2Response.json');
+
+const chance = new Chance();
 const destiny2Service = {
-	getManifest: () => Promise.resolve(manifest),
-	getProfile: () => Promise.resolve()
+    getManifest: () => Promise.resolve(manifest),
+    getProfile: () => Promise.resolve(),
 };
 const displayName = chance.name();
 const membershipType = chance.integer({ min: 1, max: 2 });
 const userService = {
-	getUserByDisplayName: jest.fn(() => Promise.resolve())
+    getUserByDisplayName: jest.fn(() => Promise.resolve()),
 };
 
 let destiny2Controller;
 
 beforeEach(() => {
-	const world = {
-		getClassByHash: jest.fn(() => Promise.resolve({
-			classType: 1,
-			displayProperties: {
-				name: 'Hunter',
-				hasIcon: false
-			},
-			genderedClassNames: {
-				Male: 'Hunter',
-				Female: 'Hunter'
-			},
-			hash: 671679327,
-			index: 1,
-			redacted: false
-		}))
-	};
+    const world = {
+        getClassByHash: jest.fn(() => Promise.resolve({
+            classType: 1,
+            displayProperties: {
+                name: 'Hunter',
+                hasIcon: false,
+            },
+            genderedClassNames: {
+                Male: 'Hunter',
+                Female: 'Hunter',
+            },
+            hash: '671679327',
+            index: 1,
+            redacted: false,
+        })),
+        getItemByHash: jest.fn(() => Promise.resolve({
+            displayProperties: {
+                name: 'Eyasluna',
+            },
+        })),
+    };
 
-	destiny2Controller = new Destiny2Controller({ destinyService: destiny2Service, userService, worldRepository: world });
+    destiny2Controller = new Destiny2Controller({
+        destinyService: destiny2Service,
+        userService,
+        worldRepository: world,
+    });
 });
 
 describe('Destiny2Controller', () => {
-	let res;
+    const characterId = '1111111111111111111';
 
-	beforeEach(() => {
-		res = httpMocks.createResponse({
-			eventEmitter: require('events').EventEmitter
-		});
-	});
+    describe('getProfile', () => {
+        describe('when session displayName and membershipType are defined', () => {
+            describe('when user and destiny services return a user', () => {
+                it('should return user profile', async () => {
+                    destiny2Service.getProfile = jest.fn().mockResolvedValue([
+                        {
+                            characterId,
+                            classHash: '671679327',
+                            light: 284,
+                            links: [
+                                {
+                                    rel: 'Character',
+                                    href: `/characters/${characterId}`,
+                                },
+                            ],
+                        },
+                    ]);
+                    userService.getUserByDisplayName = jest.fn().mockResolvedValue({
+                        membershipId: '1',
+                    });
 
-	describe('getProfile', () => {
-		describe('when session displayName and membershipType are defined', () => {
-			describe('when user and destiny services return a user', () => {
-				it('should return user profile', (done) => {
-					const req = httpMocks.createRequest({
-						session: {
-							displayName,
-							membershipType
-						}
-					});
+                    const [{ className }] = await destiny2Controller
+                        .getCharacters(displayName, membershipType);
 
-					destiny2Service.getProfile = jest.fn().mockResolvedValue([
-						{
-							characterId: '1111111111111111111',
-							classHash: 671679327,
-							light: 284,
-							links: [
-								{
-									rel: 'Character',
-									href: '/characters/1111111111111111111'
-								}
-							]
-						}
-					]);
-					userService.getUserByDisplayName = jest.fn().mockResolvedValue({
-						membershipId: '1'
-					});
+                    expect(className).toEqual('Hunter');
+                });
+            });
+        });
+    });
 
-					res.on('end', () => {
-						const data = JSON.parse(res._getData());
+    describe('getXur', () => {
+        describe('when session displayName and membershipType are defined', () => {
+            describe('when user and destiny services return a user', () => {
+                it('should return user profile', async () => {
+                    const accessToken = 'some-access-token';
+                    const membershipId = '1';
 
-						try {
-							expect(res.statusCode).toEqual(200);
-							expect(data[0].className).toEqual('Hunter');
-							done();
-						} catch (err) {
-							done(err);
-						}
-					});
+                    destiny2Service.getProfile = jest.fn().mockResolvedValue([
+                        {
+                            characterId: '1111111111111111111',
+                            classHash: '671679327',
+                            light: 284,
+                            links: [
+                                {
+                                    rel: 'Character',
+                                    href: '/characters/1111111111111111111',
+                                },
+                            ],
+                        },
+                    ]);
+                    destiny2Service.getXur = jest.fn().mockResolvedValue([
+                        'some-item-hash',
+                    ]);
+                    userService.getUserByDisplayName = jest.fn().mockResolvedValue({
+                        bungie: {
+                            access_token: accessToken,
+                        },
+                        membershipId,
+                    });
 
-					destiny2Controller.getProfile(req, res);
-				});
-			});
-		});
-	});
+                    const saleItems = await destiny2Controller
+                        .getXur(displayName, membershipType);
+
+                    expect(saleItems).toEqual([{
+                        displayProperties: {
+                            name: 'Eyasluna',
+                        },
+                    }]);
+                    expect(destiny2Service.getXur)
+                        .toHaveBeenCalledWith(membershipId, membershipType, characterId, accessToken); // eslint-disable-line max-len
+                });
+            });
+        });
+    });
 });

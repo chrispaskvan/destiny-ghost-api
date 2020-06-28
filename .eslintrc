@@ -1,10 +1,12 @@
 {
     "extends": [
         "airbnb-base",
-        "plugin:jest/recommended"
+        "plugin:jest/recommended",
+        "plugin:security/recommended"
     ],
     "plugins": [
-        "jest"
+        "jest",
+        "security"
     ],
     "rules": {
         "arrow-parens": ["error", "as-needed"],

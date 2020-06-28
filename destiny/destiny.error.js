@@ -15,7 +15,7 @@ class DestinyError extends Error {
         Object.assign(this, {
             code,
             name: 'DestinyError',
-            status
+            status,
         });
     }
 }

@@ -4,7 +4,10 @@
  * @module healthController
  * @author Chris Paskvan
  */
+const v8 = require('v8');
+
 const { get } = require('../helpers/request');
+const applicationInsights = require('../helpers/application-insights');
 
 /**
  * Not available
@@ -30,19 +33,19 @@ class HealthController {
         this.world2 = options.world2Repository;
     }
 
-    async _getDestinyManifestVersion() {
+    async getDestinyManifestVersion() {
         const { version } = await this.destinyService.getManifest();
 
         return version;
     }
 
-    async _getDestiny2ManifestVersion() {
+    async getDestiny2ManifestVersion() {
         const { version } = await this.destiny2Service.getManifest();
 
         return version;
     }
 
-    async _getDocumentCount() {
+    async getDocumentCount() {
         const documents = await this.documents.getDocuments('Users',
             'SELECT VALUE COUNT(1) FROM Users', {
                 enableCrossPartitionQuery: true,
@@ -51,7 +54,26 @@ class HealthController {
         return documents[0];
     }
 
-    static async _twilio() {
+    static getMemoryUsage() {
+        const convertBytesToMegaBytes = bytes => Math.floor(bytes / (1024 * 1024));
+        const {
+            rss,
+            heapTotal,
+            heapUsed,
+            external,
+        } = process.memoryUsage();
+        const { total_available_size: totalAvailableSize } = v8.getHeapStatistics();
+
+        return {
+            rss: convertBytesToMegaBytes(rss),
+            heapTotal: convertBytesToMegaBytes(heapTotal),
+            heapUsed: convertBytesToMegaBytes(heapUsed),
+            external: convertBytesToMegaBytes(external),
+            totalAvailableSize: convertBytesToMegaBytes(totalAvailableSize),
+        };
+    }
+
+    static async twilio() {
         const options = {
             url: 'https://gpkpyklzq55q.statuspage.io/api/v2/status.json',
         };
@@ -60,51 +82,60 @@ class HealthController {
         return responseBody.status.description;
     }
 
-    static _unhealthy() {
+    static unhealthy() {
         failures += 1;
     }
 
-    async _getWorldItem() {
-        const [{ itemDescription } = {}] = await this.world.getItemByName('Doctrine of Passing');
+    async getWorldItem() {
+        const [{ cardName } = {}] = await this.world.getGrimoireCards(1);
 
-        return itemDescription;
+        return cardName;
     }
 
-    async _getWorld2Item() {
-        const [{ displayProperties: { description = notAvailable } = {} } = {}] = await this.world2.getItemByName('Polaris Lance');
+    async getWorld2Item() {
+        const [{ displayProperties: { description = notAvailable } = {} } = {}] = await this.world2.getItemByName('Austringer');
 
         return description;
     }
 
-    async getHealth(req, res) {
-        /* eslint-disable no-underscore-dangle, max-len */
+    async getHealth() {
         failures = 0;
 
-        const documents = await this._getDocumentCount()
-            .catch(err => HealthController._unhealthy(err)) || -1;
-        const manifestVersion = await this._getDestinyManifestVersion()
-            .catch(err => HealthController._unhealthy(err)) || notAvailable;
-        const manifest2Version = await this._getDestiny2ManifestVersion()
-            .catch(err => HealthController._unhealthy(err)) || notAvailable;
-        const twilio = await HealthController._twilio()
-            .catch(err => HealthController._unhealthy(err)) || notAvailable;
-        const world = await this._getWorldItem()
-            .catch(err => HealthController._unhealthy(err)) || notAvailable;
-        const world2 = await this._getWorld2Item()
-            .catch(err => HealthController._unhealthy(err)) || notAvailable;
+        const documents = await this.getDocumentCount()
+            .catch(err => HealthController.unhealthy(err)) || -1;
+        const manifestVersion = await this.getDestinyManifestVersion()
+            .catch(err => HealthController.unhealthy(err)) || notAvailable;
+        const manifest2Version = await this.getDestiny2ManifestVersion()
+            .catch(err => HealthController.unhealthy(err)) || notAvailable;
+        const twilio = await HealthController.twilio()
+            .catch(err => HealthController.unhealthy(err)) || notAvailable;
+        const world = await this.getWorldItem()
+            .catch(err => HealthController.unhealthy(err)) || notAvailable;
+        const world2 = await this.getWorld2Item()
+            .catch(err => HealthController.unhealthy(err)) || notAvailable;
+        const memory = this.constructor.getMemoryUsage();
 
-        res.status(failures ? 503 : 200).json({
-            documents,
-            twilio,
-            destiny: {
-                manifest: manifestVersion,
-                world,
+        applicationInsights.trackMetric({ name: 'Resident Set Size', value: memory.rss });
+        applicationInsights.trackMetric({ name: 'Heap Memory Used', value: memory.heapUsed });
+        applicationInsights.trackMetric({ name: 'Total Heap Memory', value: memory.heapTotal });
+        applicationInsights.trackMetric({ name: 'External Memory', value: memory.external });
+        applicationInsights.trackMetric({ name: 'Available Memory', value: memory.totalAvailableSize });
+
+        return {
+            failures,
+            health: {
+                documents,
+                twilio,
+                destiny: {
+                    manifest: manifestVersion,
+                    world,
+                },
+                destiny2: {
+                    manifest: manifest2Version,
+                    world: world2,
+                },
             },
-            destiny2: {
-                manifest: manifest2Version,
-                world: world2,
-            },
-        });
+        };
     }
 }
 

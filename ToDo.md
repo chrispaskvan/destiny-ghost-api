@@ -1,16 +1,24 @@
-# Better Caching
-# Better Logging
-# Better Test Coverage
 # User Interface
-# HTTP2
-# Insights
-# Opt Out
-# Axios Streaming
-# Replace Redis
-# CosmosDB AccessCondition
-https://github.com/Azure/azure-cosmos-js/blob/216672a679ab389e5b341280eeacab1cab3691e4/samples/ItemManagement/app.js#L139-L160
+https://material-ui.com/store/items/onepirate/
+https://github.com/expressjs/vhost
+https://www.hacksparrow.com/webdev/express/vhost.html
+# Coverage Ratchet
+# Cluster Mode
+# Google Stadia
+# Performance Testing
+https://github.com/nearform/node-clinic
+# CosmosDB Stored Procedure for Removing Intermediate Message Statuses
 
-1) Get User by display name or phone number
-2) Get number messages received
-3) Get Subscription Messages
-4) Get Subscribed Users by Type
+# Notifications
+Save array of subscriber phone numbers to the Notifications collection.
+Emit an event to notify the class to add a subscriber.
+Fetch subscribers from the Notification collection.
+Add a utility end point for synchronization in case of failures.
+
+# File Structure
+https://softwareontheroad.com/ideal-nodejs-project-structure
+https://github.com/santiq/bulletproof-nodejs
+
+# Local SSL Certificate
+https://github.com/FiloSottile/mkcert
+https://stackoverflow.com/questions/21397809/create-a-trusted-self-signed-ssl-cert-for-localhost-for-use-with-express-node

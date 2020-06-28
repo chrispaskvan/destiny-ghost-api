@@ -1,98 +1,185 @@
 /**
  * Destiny Service Tests
  */
-const DestinyService = require('./destiny.service'),
-    chance = require('chance')(),
-    mockBansheeResponse = require('../mocks/bansheeResponse.json'),
-    mockManifestResponse = require('../mocks/manifestResponse.json'),
-    mockXurResponse = require('../mocks/xurResponse.json'),
-    request = require('../helpers/request');
+const Chance = require('chance');
+const request = require('../helpers/request');
+const DestinyError = require('./destiny.error');
+const DestinyService = require('./destiny.service');
+const mockManifestResponse = require('../mocks/manifestResponse.json');
 
 jest.mock('../helpers/request');
 
 let destinyService;
 
-beforeEach(() => {
-    const cacheService = {
-        getManifest: jest.fn(),
-        getVendor: jest.fn(),
-        setManifest: jest.fn(),
-        setVendor: jest.fn()
-    };
+const cacheService = {
+    getManifest: jest.fn(),
+    getVendor: jest.fn(),
+    setManifest: jest.fn(),
+    setVendor: jest.fn(),
+};
+const chance = new Chance();
 
+beforeEach(() => {
     destinyService = new DestinyService({ cacheService });
 });
 
 describe('DestinyService', () => {
-    const accessToken = chance.hash();
-    const characterId = chance.guid();
+    beforeEach(() => {
+        jest.resetAllMocks();
+    });
 
-    describe('getFieldTestWeapons', () => {
-	    beforeEach(async () => {
-		    request.get.mockImplementation(() => Promise.resolve(mockBansheeResponse));
-	    });
+    describe('getCharacters', () => {
+        describe('when characters are returned', () => {
+            it('should return an array of characters', async () => {
+                const characters = [];
 
-        it('should return an array of field test weapon hashes', () => {
-            const { Response: { data: { vendorHash, nextRefreshDate, saleItemCategories }}} = mockBansheeResponse;
-            const fieldTestWeapons = saleItemCategories.find((saleItemCategory) => {
-                return saleItemCategory.categoryTitle === 'Field Test Weapons';
+                request.get.mockImplementation(() => Promise.resolve({
+                    ErrorCode: 1,
+                    Response: {
+                        data: {
+                            characters,
+                        },
+                    },
+                }));
+
+                const result = await destinyService.getCharacters();
+
+                expect(result).toEqual(characters);
             });
-            const itemHashes = fieldTestWeapons.saleItems.map((saleItem) => {
-                const { item: { itemHash }} = saleItem;
+        });
 
-                return itemHash;
+        describe('when an error response is returned', () => {
+            it('should throw', async () => {
+                request.get.mockImplementation(() => Promise.resolve({
+                    ErrorCode: 2,
+                }));
+
+                await expect(destinyService.getCharacters()).rejects.toThrow(DestinyError);
             });
+        });
+    });
 
-            return destinyService.getFieldTestWeapons(characterId, accessToken)
-                .then(fieldTestWeapons => {
-                    expect(fieldTestWeapons).toEqual({
-                        vendorHash,
-                        nextRefreshDate,
-                        itemHashes
+    describe('getCurrentUser', () => {
+        describe('when current user is defined', () => {
+            describe('when displayName and membershipId exist', () => {
+                it('should return the current user', async () => {
+                    const displayName = chance.word();
+                    const membershipId = '2';
+                    const membershipType = 2;
+                    const profilePicturePath = '/img/profile/avatars/Destiny26.jpg';
+
+                    request.get.mockImplementation(() => Promise.resolve({
+                        ErrorCode: 1,
+                        Response: {
+                            destinyMemberships: [
+                                {
+                                    crossSaveOverride: membershipType,
+                                    displayName,
+                                    membershipId,
+                                    membershipType,
+                                },
+                            ],
+                            bungieNetUser: {
+                                profilePicturePath,
+                            },
+                        },
+                    }));
+
+                    const currentUser = await destinyService.getCurrentUser();
+
+                    expect(currentUser).toEqual({
+                        displayName,
+                        membershipId,
+                        membershipType,
+                        profilePicturePath,
                     });
                 });
+            });
+
+            describe('when ErrorCode is not 1', () => {
+                it('should throw', async () => {
+                    request.get.mockImplementation(() => Promise.resolve({
+                        ErrorCode: 0,
+                        Message: 'Ok',
+                        Response: {
+                            destinyMemberships: [],
+                        },
+                        Status: 'Failed',
+                    }));
+
+                    await expect(destinyService.getCurrentUser()).rejects.toThrow(DestinyError);
+                });
+            });
         });
     });
 
     describe('getManifest', () => {
-	    beforeEach(async () => {
-		    request.get.mockImplementation(() => Promise.resolve(mockManifestResponse));
-	    });
+        const { Response: manifest1 } = mockManifestResponse;
 
-	    it('should return the latest manifest', () => {
-            const { Response: manifest1 } = mockManifestResponse;
+        beforeEach(() => {
+            request.get.mockImplementation(() => Promise.resolve(mockManifestResponse));
+        });
 
-            return destinyService.getManifest()
+        describe('when manifest is cached', () => {
+            it('should return the cached manifest', () => {
+                cacheService.getManifest.mockImplementation(() => Promise.resolve(manifest1));
+
+                return destinyService.getManifest()
+                    .then(manifest => {
+                        expect(manifest).toEqual(manifest1);
+                        expect(cacheService.getManifest).toBeCalledTimes(1);
+                        expect(cacheService.setManifest).not.toBeCalled();
+                    });
+            });
+        });
+
+        describe('when manifest is not cached', () => {
+            it('should return the latest manifest', () => destinyService.getManifest()
                 .then(manifest => {
                     expect(manifest).toEqual(manifest1);
-                });
+                    expect(cacheService.getManifest).toBeCalledTimes(1);
+                    expect(cacheService.setManifest).toBeCalledTimes(1);
+                }));
         });
     });
 
-    describe('getXur', () => {
-	    beforeEach(async () => {
-		    request.get.mockImplementation(() => Promise.resolve(mockXurResponse));
-	    });
+    describe('getPreferredMembership', () => {
+        describe('when crossSaveOverride is defined', () => {
+            it('should return the matching membership type', async () => {
+                const memberships = [
+                    {
+                        crossSaveOverride: 2,
+                        membershipId: 1,
+                        membershipType: 1,
+                    },
+                    {
+                        crossSaveOverride: 2,
+                        membershipId: 2,
+                        membershipType: 2,
+                    },
+                ];
+                const membership = await destinyService.getPreferredMembership(memberships);
 
-	    it('should return an array of exotic gear hashes', () => {
-            const { Response: { data: { vendorHash, nextRefreshDate, saleItemCategories }}} = mockXurResponse;
-            const exoticGear = saleItemCategories.find((saleItemCategory) => {
-                return saleItemCategory.categoryTitle === 'Exotic Gear';
+                expect(membership).toEqual(memberships[1]);
             });
-            const itemHashes = exoticGear.saleItems.map((saleItem) => {
-                const { item: { itemHash }} = saleItem;
+        });
 
-                return itemHash;
+        describe('when crossSaveOverride is not defined', () => {
+            it('should return the first membership', async () => {
+                const memberships = [
+                    {
+                        membershipId: 1,
+                        membershipType: 1,
+                    },
+                    {
+                        membershipId: 2,
+                        membershipType: 2,
+                    },
+                ];
+                const membership = await destinyService.getPreferredMembership(memberships);
+
+                expect(membership).toEqual(memberships[0]);
             });
-
-            return destinyService.getXur(accessToken)
-                .then(xur => {
-                    expect(xur).toEqual({
-                        vendorHash,
-                        nextRefreshDate,
-                        itemHashes
-                    });
-                });
         });
     });
 });

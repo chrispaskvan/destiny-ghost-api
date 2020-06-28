@@ -1,5 +1,6 @@
 const axios = require('axios');
-const RequestError = require('../helpers/request.error');
+const RequestError = require('./request.error');
+const log = require('./log');
 
 async function request(options) {
     try {
@@ -7,7 +8,15 @@ async function request(options) {
 
         return responseBody;
     } catch (err) {
-        throw new RequestError(err);
+        const requestError = new RequestError(err);
+
+        log.error({
+            message: 'HTTP request failed!',
+            err,
+            requestError,
+        });
+
+        throw requestError;
     }
 }
 

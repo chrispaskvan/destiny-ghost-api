@@ -1,6 +1,4 @@
-const NodeCache = require('node-cache');
-const redis = require('redis');
-const { host, key, port } = require('../settings/redis.json');
+const client = require('../helpers/cache');
 
 /**
  * Cache key for the latest Destiny Manifest cached.
@@ -13,13 +11,6 @@ const manifestKey = 'destiny-manifest';
  */
 class DestinyCache {
     /**
-     * @constructor
-     */
-    constructor() {
-        this.cache = new NodeCache({ stdTTL: 3600, checkperiod: 0, useClones: true });
-    }
-
-    /**
      * Get manifest key.
      * @returns {string}
      */
@@ -28,18 +19,30 @@ class DestinyCache {
     }
 
     /**
+     * Get the seconds left before the next daily reset.
+     * @returns {number}
+     */
+    static secondsUntilDailyReset() {
+        const now = new Date();
+        const then = new Date(now);
+
+        then.setUTCHours(17);
+        then.setUTCMinutes(0);
+        if (then < now) {
+            then.setDate(then.getDate() + 1);
+        }
+
+        return (then - now) / 1000;
+    }
+
+    /**
      * Get the cached Destiny Manifest.
      * @returns {Promise}
      */
     getManifest() {
         return new Promise((resolve, reject) => {
-            this.cache.get(this.constructor.manifestKey, (err, manifest) => {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve(manifest);
-                }
-            });
+            client.get(this.constructor.manifestKey,
+                (err, res) => (err ? reject(err) : resolve(res ? JSON.parse(res) : undefined)));
         });
     }
 
@@ -48,9 +51,10 @@ class DestinyCache {
      * @param vendorHash
      * @returns {Promise}
      */
+    // eslint-disable-next-line class-methods-use-this
     getVendor(vendorHash) {
         return new Promise((resolve, reject) => {
-            this.cache.get(vendorHash,
+            client.get(vendorHash,
                 (err, res) => (err ? reject(err) : resolve(res ? JSON.parse(res) : undefined)));
         });
     }
@@ -63,13 +67,14 @@ class DestinyCache {
     setManifest(manifest) {
         if (manifest && typeof manifest === 'object') {
             return new Promise((resolve, reject) => {
-                this.cache.set(this.constructor.manifestKey, manifest, (err, success) => {
-                    if (err) {
-                        reject(err);
-                    } else {
-                        resolve(success);
-                    }
-                });
+                client.set(this.constructor.manifestKey, JSON.stringify(manifest),
+                    'EX', this.constructor.secondsUntilDailyReset(), (err, success) => {
+                        if (err) {
+                            reject(err);
+                        } else {
+                            resolve(success);
+                        }
+                    });
             });
         }
 
@@ -78,19 +83,18 @@ class DestinyCache {
 
     /**
      * Set the vendor cache.
+     * @param hash
      * @param vendor
      * @returns {Promise}
      */
-    setVendor(vendor) {
-        const { vendorHash } = vendor;
-
-        if (typeof vendorHash !== 'number') {
+    setVendor(hash, vendor) {
+        if (!hash || typeof hash !== 'string') {
             return Promise.reject(new Error('vendorHash number is required.'));
         }
 
         return new Promise((resolve, reject) => {
-            this.cache.set(vendorHash,
-                JSON.stringify(vendor), (err, res) => (err ? reject(err) : resolve(res)));
+            client.set(hash,
+                JSON.stringify(vendor), 'EX', this.constructor.secondsUntilDailyReset(), (err, res) => (err ? reject(err) : resolve(res)));
         });
     }
 }

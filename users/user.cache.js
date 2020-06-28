@@ -1,22 +1,9 @@
-const redis = require('redis');
-const redisConfig = require('../settings/redis.json');
+const client = require('../helpers/cache');
 
 /**
  *  User Cache Class
  */
 class UserCache {
-    /**
-     * @constructor
-     */
-    constructor() {
-        this.client = redis.createClient(redisConfig.port, redisConfig.host, {
-            auth_pass: redisConfig.key, // jscs:ignore requireCamelCaseOrUpperCaseIdentifiers
-            tls: {
-                servername: redisConfig.host,
-            },
-        });
-    }
-
     /**
      * @param teeth
      * @returns {string}
@@ -31,15 +18,11 @@ class UserCache {
      * @returns {Promise}
      * @private
      */
-    _deleteCache(key) {
+    // eslint-disable-next-line class-methods-use-this
+    deleteCache(key) {
         return new Promise((resolve, reject) => {
-            this.client.del(key, (err, res) => {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve(res);
-                }
-            });
+            client.del(key,
+                (err, res) => (err ? reject(err) : resolve(res)));
         });
     }
 
@@ -53,23 +36,18 @@ class UserCache {
         let promise2;
 
         if (phoneNumber) {
-            promise1 = this._deleteCache(this.constructor.getCacheKey(phoneNumber)); // eslint-disable-line no-underscore-dangle, max-len
+            promise1 = this.deleteCache(this.constructor.getCacheKey(phoneNumber));
         } else {
-            promise1 = Promise.resolve(); // eslint-disable-line new-cap
+            promise1 = Promise.resolve();
         }
 
         if (displayName && membershipType) {
-            promise2 = this._deleteCache(this.constructor.getCacheKey(displayName, membershipType)); // eslint-disable-line no-underscore-dangle, max-len
+            promise2 = this.deleteCache(this.constructor.getCacheKey(displayName, membershipType));
         } else {
-            promise2 = Promise.resolve(); // eslint-disable-line new-cap
+            promise2 = Promise.resolve();
         }
 
         return Promise.all([promise1, promise2]);
-    }
-
-    // ToDo
-    destroy() {
-        this.client.quit();
     }
 
     /**
@@ -78,9 +56,10 @@ class UserCache {
      * @returns {Promise}
      * @private
      */
-    _getCache(key) {
+    // eslint-disable-next-line class-methods-use-this
+    getCache(key) {
         return new Promise((resolve, reject) => {
-            this.client.get(key, (err, res) => {
+            client.get(key, (err, res) => {
                 if (err) {
                     return reject(err);
                 }
@@ -98,7 +77,7 @@ class UserCache {
     async getUser(...teeth) {
         const key = this.constructor.getCacheKey(...teeth);
 
-        const user = await this._getCache(key); // eslint-disable-line no-underscore-dangle
+        const user = await this.getCache(key);
         if (user) {
             const { displayName, membershipId, membershipType } = user;
 
@@ -118,7 +97,12 @@ class UserCache {
      * @returns {*}
      */
     setUser(user = {}) {
-        const { displayName, membershipType, phoneNumber } = user;
+        const {
+            displayName,
+            emailAddress,
+            membershipType,
+            phoneNumber,
+        } = user;
 
         if (!displayName) {
             return Promise.reject(new Error('displayName not found'));
@@ -129,33 +113,35 @@ class UserCache {
 
         const key = this.constructor.getCacheKey(displayName, membershipType);
         const promise1 = new Promise((resolve, reject) => {
-            this.client.set(key, JSON.stringify(user), (err, res) => {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve(res);
-                }
-            });
+            client.set(key, JSON.stringify(user), 'EX', 60 * 60,
+                (err, res) => (err ? reject(err) : resolve(res)));
         });
 
         let promise2;
 
         if (phoneNumber) {
             promise2 = new Promise((resolve, reject) => {
-                this.client.set(phoneNumber,
-                    JSON.stringify({ displayName, membershipType }), (err, res) => {
-                        if (err) {
-                            reject(err);
-                        } else {
-                            resolve(res);
-                        }
-                    });
+                client.set(phoneNumber,
+                    JSON.stringify({ displayName, membershipType }), 'EX', 60 * 60,
+                    (err, res) => (err ? reject(err) : resolve(res)));
             });
         } else {
             promise2 = Promise.resolve();
         }
 
-        return Promise.all([promise1, promise2]);
+        let promise3;
+
+        if (emailAddress) {
+            promise3 = new Promise((resolve, reject) => {
+                client.set(emailAddress,
+                    JSON.stringify({ displayName, membershipType }), 'EX', 60 * 60,
+                    (err, res) => (err ? reject(err) : resolve(res)));
+            });
+        } else {
+            promise3 = Promise.resolve();
+        }
+
+        return Promise.all([promise1, promise2, promise3]);
     }
 }
 

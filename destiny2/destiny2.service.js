@@ -11,7 +11,7 @@
  */
 const DestinyError = require('../destiny/destiny.error');
 const DestinyService = require('../destiny/destiny.service');
-const { apiKey } = require('../settings/bungie.json');
+const { bungie: { apiKey } } = require('../helpers/config');
 const { xurHash } = require('./destiny2.constants');
 const { get } = require('../helpers/request');
 
@@ -32,7 +32,7 @@ class Destiny2Service extends DestinyService {
      * @returns {Promise}
      * @private
      */
-    async _getManifestFromBungie() {
+    async getManifestFromBungie() {
         const options = {
             headers: {
                 'x-api-key': apiKey,
@@ -57,17 +57,17 @@ class Destiny2Service extends DestinyService {
      * Get the cached Destiny Manifest definition if available,
      *   otherwise get the latest from Bungie.
      *
-     * @param noCache
+     * @param skipCache
      * @returns {Promise}
      */
-    async getManifest(noCache) {
+    async getManifest(skipCache) {
         const manifest = await this.cacheService.getManifest();
 
-        if (!noCache && manifest) {
+        if (!skipCache && manifest) {
             return manifest;
         }
 
-        return this._getManifestFromBungie(); // eslint-disable-line no-underscore-dangle
+        return this.getManifestFromBungie();
     }
 
     /**
@@ -76,7 +76,7 @@ class Destiny2Service extends DestinyService {
      * @param displayName
      * @returns {Promise}
      */
-    async getPlayer(displayName) {
+    async getPlayer(displayName) { // eslint-disable-line class-methods-use-this
         const options = {
             headers: {
                 'x-api-key': apiKey,
@@ -101,6 +101,7 @@ class Destiny2Service extends DestinyService {
      * @param membershipId
      * @param membershipType
      */
+    // eslint-disable-next-line class-methods-use-this
     async getPlayerStats(membershipId, membershipType) {
         const options = {
             headers: {
@@ -137,24 +138,48 @@ class Destiny2Service extends DestinyService {
      * @param membershipType
      * @returns {Promise}
      */
-    async getProfile(membershipId, membershipType) {
-        const options = {
-            headers: {
-                'x-api-key': apiKey,
-            },
-            url: `${servicePlatform}/Destiny2/${membershipType}/Profile/${membershipId}?components=Characters`,
-        };
-        const responseBody = await get(options);
+    async getProfile(membershipId, membershipType, skipCache) {
+        let characters;
 
-        if (responseBody.ErrorCode === 1) {
-            const { Response: { characters: { data } } } = responseBody;
-            const characters = Object.keys(data).map(character => data[character]);
+        if (!skipCache) {
+            characters = await this.cacheService.getCharacters(membershipId);
 
-            return characters;
+            if (characters) return characters;
         }
 
-        throw new DestinyError(responseBody.ErrorCode || -1,
-            responseBody.Message || '', responseBody.ErrorStatus || '');
+        try {
+            const options = {
+                headers: {
+                    'x-api-key': apiKey,
+                },
+                url: `${servicePlatform}/Destiny2/${membershipType}/Profile/${membershipId}?components=Characters`,
+            };
+            const responseBody = await get(options);
+
+            if (responseBody.ErrorCode === 1) {
+                const { Response: { characters: { data } } } = responseBody;
+
+                characters = Object.values(data).map(character => character);
+                await this.cacheService.setCharacters(membershipId, characters);
+
+                return characters;
+            }
+
+            throw new DestinyError(responseBody.ErrorCode || -1,
+                responseBody.Message || '', responseBody.ErrorStatus || '');
+        } catch (err) {
+            if (err instanceof DestinyError) throw err;
+
+            const {
+                data: {
+                    ErrorCode: code,
+                    ErrorStatus: status,
+                    Message: message = 'Failed to get characters from profile.',
+                } = {},
+            } = err;
+
+            throw new DestinyError(code, message, status);
+        }
     }
 
     /**
@@ -167,7 +192,7 @@ class Destiny2Service extends DestinyService {
      * @returns {Promise}
      */
     async getXur(membershipId, membershipType, characterId, accessToken) {
-        let vendor = await this.cacheService.getVendor(xurHash);
+        const vendor = await this.cacheService.getVendor(xurHash);
 
         if (vendor) {
             return vendor;
@@ -186,12 +211,7 @@ class Destiny2Service extends DestinyService {
             const { Response: { sales: { data } } } = responseBody;
             const itemHashes = Object.entries(data).map(([, value]) => value.itemHash);
 
-            vendor = {
-                vendorHash: xurHash,
-                itemHashes,
-            };
-
-            this.cacheService.setVendor(vendor);
+            this.cacheService.setVendor(xurHash, itemHashes);
 
             return itemHashes;
         }

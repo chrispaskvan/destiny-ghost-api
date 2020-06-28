@@ -11,15 +11,54 @@ const DestinyController = require('../destiny/destiny.controller');
  */
 class Destiny2Controller extends DestinyController {
     /**
+     * Get characters for the current user.
+     *
+     * @returns {*|Array}
+     */
+    async getCharacters(displayName, membershipType) {
+        const currentUser = await this.users.getUserByDisplayName(displayName, membershipType);
+        const characters = await this.destiny
+            .getProfile(currentUser.membershipId, membershipType, true);
+
+        return Promise.all(characters.map(async character => {
+            const {
+                emblemBackgroundPath: backgroundPath,
+                characterId,
+                classHash,
+                light: powerLevel,
+                emblemPath: emblem,
+            } = character;
+            const {
+                displayProperties: {
+                    name: className,
+                },
+            } = await this.world.getClassByHash(classHash);
+
+            return {
+                characterId,
+                classHash,
+                className,
+                emblem,
+                backgroundPath,
+                powerLevel,
+                links: [
+                    {
+                        rel: 'Character',
+                        href: `/characters/${characterId}`,
+                    },
+                ],
+            };
+        }));
+    }
+
+    /**
      * Get the current manifest definition from Bungie.
      *
      * @param req
      * @param res
      */
-    async getManifest(req, res) {
-        const manifest = await this.destiny.getManifest();
-
-        res.status(200).json(manifest);
+    getManifest() {
+        return this.destiny.getManifest();
     }
 
     /**
@@ -28,53 +67,14 @@ class Destiny2Controller extends DestinyController {
      * @param req
      * @param res
      */
-    async getPlayer(req, res) {
-        const { params: { displayName }} = req;
+    async getPlayer(displayName) {
         const { membershipId, membershipType } = await this.destiny.getPlayer(displayName);
 
         if (!membershipId || !membershipType) {
-            return res.status(401).end();
+            return undefined;
         }
 
-        const statistics = await this.destiny.getPlayerStats(membershipId, membershipType);
-
-        res.status(200).json(statistics);
-    }
-
-    /**
-     * Get characters for the current user.
-     * @returns {*|Array}
-     * @private
-     */
-    async getProfile(req, res) {
-        const { session: { displayName, membershipType }} = req;
-        const currentUser = await this.users.getUserByDisplayName(displayName, membershipType);
-        const characters = await this.destiny.getProfile(currentUser.membershipId, membershipType);
-        const promises = [];
-        const characterBases = characters.map(character => {
-            promises.push(this.world.getClassByHash(character.classHash));
-
-            return {
-                characterId: character.characterId,
-                classHash: character.classHash,
-                emblem: character.emblemPath,
-                backgroundPath: character.emblemBackgroundPath,
-                powerLevel: character.light,
-                links: [
-                    {
-                        rel: 'Character',
-                        href: '/characters/' + character.characterId
-                    }
-                ]
-            }
-        });
-        const characterClasses = await Promise.all(promises);
-
-        characterBases.forEach((characterBase, index) => {
-            characterBase.className = characterClasses[index].displayProperties.name;
-        });
-
-        res.status(200).json(characterBases);
+        return this.destiny.getPlayerStats(membershipId, membershipType);
     }
 
     /**
@@ -83,39 +83,28 @@ class Destiny2Controller extends DestinyController {
      * @returns {*|Array}
      * @private
      */
-    async getXur(req, res) {
-        const { session: { displayName, membershipType }} = req;
+    async getXur(displayName, membershipType) {
         const currentUser = await this.users.getUserByDisplayName(displayName, membershipType);
         const { bungie: { access_token: accessToken }, membershipId } = currentUser;
         const characters = await this.destiny.getProfile(membershipId, membershipType);
 
         if (characters && characters.length) {
-            const itemHashes = await this.destiny.getXur(membershipId, membershipType, characters[0].characterId, accessToken);
+            const itemHashes = await this.destiny.getXur(
+                membershipId, membershipType, characters[0].characterId, accessToken,
+            );
 
             if (!itemHashes.length) {
-                return res.status(200).json(itemHashes);
+                return itemHashes;
             }
 
-            const items = await Promise.all(itemHashes.map(itemHash => this.world.getItemByHash(itemHash)));
+            const items = await Promise.all(
+                itemHashes.map(itemHash => this.world.getItemByHash(itemHash)),
+            );
 
-            return res.status(200).json(items);
+            return items;
         }
 
-        res.status(404);
-    }
-
-    /**
-     * Fetch the latest and greatest manifest if needed.
-     *
-     * @param req
-     * @param res
-     */
-    async upsertManifest(req, res) {
-        const manifest = await this.destiny.getManifest(true);
-
-        await this.world.updateManifest(manifest);
-
-        res.status(200).json(manifest);
+        return undefined;
     }
 }
 

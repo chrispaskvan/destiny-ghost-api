@@ -1,3 +1,4 @@
+const client = require('../helpers/cache');
 const DestinyCache = require('../destiny/destiny.cache');
 
 /**
@@ -19,16 +20,54 @@ class Destiny2Cache extends DestinyCache {
     }
 
     /**
+     * Get the cached list of characters for the user.
+     * @param {*} membershipId
+     */
+    // eslint-disable-next-line class-methods-use-this
+    getCharacters(membershipId) {
+        return new Promise((resolve, reject) => {
+            client.get(membershipId, (err, res) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(res ? JSON.parse(res) : undefined);
+                }
+            });
+        });
+    }
+
+    /**
      * Get the cached Destiny Manifest.
      * @returns {Promise}
      */
     getManifest() {
         return new Promise((resolve, reject) => {
-            this.cache.get(this.constructor.manifestKey, (err, manifest) => {
+            client.get(this.constructor.manifestKey,
+                (err, res) => (err ? reject(err) : resolve(res ? JSON.parse(res) : undefined)));
+        });
+    }
+
+    /**
+     * Set the list of characters for the user.
+     * @param {*} membershipId
+     * @param {*} characters
+     */
+    // eslint-disable-next-line class-methods-use-this
+    setCharacters(membershipId, characters) {
+        if (!(membershipId && typeof membershipId === 'string')) {
+            return Promise.reject(new Error('membershipId is a required string.'));
+        }
+
+        if (!(characters && characters.length)) {
+            return Promise.reject(new Error('characters is a required and must be a nonempty array.'));
+        }
+
+        return new Promise((resolve, reject) => {
+            client.set(membershipId, JSON.stringify(characters), (err, success) => {
                 if (err) {
                     reject(err);
                 } else {
-                    resolve(manifest);
+                    resolve(success);
                 }
             });
         });
