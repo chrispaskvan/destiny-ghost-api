@@ -46,7 +46,7 @@ async function startServer() {
             () => console.log('HTTPS server listening on port 443.'));
     }
 
-    const insecureServer = http.createServer(serverOptions, app);
+    const insecureServer = http.createServer(app);
 
     createTerminus(insecureServer, {
         signals: ['SIGINT', 'SIGTERM'],
@@ -67,6 +67,14 @@ async function startServer() {
         // eslint-disable-next-line no-console
         console.log(`HTTP server listening on port ${port} with ${cpuCount} cpus.`);
     });
+
+    insecureServer.headersTimeout = serverOptions.headersTimeout;
+    insecureServer.keepAliveTimeout = serverOptions.keepAliveTimeout;
 }
 
-startServer();
+startServer()
+    .catch(err => {
+        // eslint-disable-next-line no-console
+        console.log(err);
+        process.exit(1);
+    });
