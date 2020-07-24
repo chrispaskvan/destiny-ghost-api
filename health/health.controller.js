@@ -54,6 +54,14 @@ class HealthController {
         return documents[0];
     }
 
+    /**
+     * {@link https://www.valentinog.com/blog/node-usage/|Guide: How To Inspect Memory Usage in Node.js}
+     * {@link https://deepu.tech/memory-management-in-v8/|Visualizing memory management in V8 Engine (JavaScript, NodeJS, Deno, WebAssembly)}
+     *
+     * @static
+     * @returns
+     * @memberof HealthController
+     */
     static getMemoryUsage() {
         const convertBytesToMegaBytes = bytes => Math.floor(bytes / (1024 * 1024));
         const {
@@ -116,9 +124,6 @@ class HealthController {
         const memory = this.constructor.getMemoryUsage();
 
         applicationInsights.trackMetric({ name: 'Resident Set Size', value: memory.rss });
-        applicationInsights.trackMetric({ name: 'Heap Memory Used', value: memory.heapUsed });
-        applicationInsights.trackMetric({ name: 'Total Heap Memory', value: memory.heapTotal });
-        applicationInsights.trackMetric({ name: 'External Memory', value: memory.external });
         applicationInsights.trackMetric({ name: 'Available Memory', value: memory.totalAvailableSize });
 
         return {
