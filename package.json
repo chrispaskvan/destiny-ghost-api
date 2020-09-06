@@ -56,7 +56,7 @@
         "qs": "^6.9.4",
         "rate-limiter-flexible": "^2.1.9",
         "redis": "^3.0.2",
-        "rfc6902": "^3.0.4",
+        "rfc6902": "^3.1.1",
         "swagger-ui-express": "^4.1.4",
         "twilio": "^3.48.2",
         "yauzl": "^2.10.0",
