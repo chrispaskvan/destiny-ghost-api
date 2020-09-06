@@ -54,7 +54,7 @@
         "pino": "^6.5.0",
         "pino-http": "^5.2.0",
         "qs": "^6.9.4",
-        "rate-limiter-flexible": "^2.1.9",
+        "rate-limiter-flexible": "^2.1.10",
         "redis": "^3.0.2",
         "rfc6902": "^3.0.4",
         "swagger-ui-express": "^4.1.4",
