@@ -7,6 +7,7 @@ const DestinyError = require('../destiny/destiny.error');
 const RequestError = require('../helpers/request.error');
 const Routes = require('./routes');
 const expressLoader = require('./express');
+const hook = require('../helpers/performance');
 const log = require('../helpers/log');
 
 const loaders = {
@@ -38,6 +39,13 @@ const loaders = {
         const { manifests, routes } = Routes();
 
         app.use('/', routes);
+
+        /**
+         * Performance Hook
+         */
+        if (process.env.NODE_DEBUG) {
+            hook.enable();
+        }
 
         /**
          * Check for the latest manifest definition and database from Bungie.
