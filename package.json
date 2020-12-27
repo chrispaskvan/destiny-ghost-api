@@ -32,7 +32,7 @@
         "@godaddy/terminus": "^4.4.1",
         "@hapi/joi": "^17.1.1",
         "applicationinsights": "^1.8.8",
-        "axios": "^0.21.0",
+        "axios": "^0.21.1",
         "azure-common": "^0.9.25",
         "azure-sb": "^0.11.1",
         "base64url": "^3.0.1",
@@ -58,7 +58,7 @@
         "redis": "^3.0.2",
         "rfc6902": "^3.1.1",
         "swagger-ui-express": "^4.1.5",
-        "twilio": "^3.52.0",
+        "twilio": "^4.6.0",
         "yauzl": "^2.10.0",
         "snyk": "^1.431.2"
     },
