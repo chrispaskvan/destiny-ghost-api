@@ -261,7 +261,7 @@ describe('UserRouter', () => {
 
     describe('getUserByEmailAddress', () => {
         describe('when user is found', () => {
-            it('should return no content ', () => new Promise((done, reject) => {
+            it('should return no content', () => new Promise((done, reject) => {
                 const req = httpMocks.createRequest({
                     method: 'GET',
                     url: '/cayde%40destiny-ghost.com/emailAddress',
@@ -313,7 +313,7 @@ describe('UserRouter', () => {
 
     describe('getUserByPhoneNumber', () => {
         describe('when user is found', () => {
-            it('should return no content ', () => new Promise((done, reject) => {
+            it('should return no content', () => new Promise((done, reject) => {
                 const req = httpMocks.createRequest({
                     method: 'GET',
                     url: '/+12345678901/phoneNumber',
