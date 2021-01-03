@@ -47,6 +47,7 @@ class TwilioController {
      */
     async getItem(item) {
         const {
+            defaultDamageTypeHash,
             displayProperties: {
                 icon,
                 name,
@@ -67,9 +68,15 @@ class TwilioController {
             itemCategory => itemCategory.hash);
         const itemCategory = sortedCategories.reduce((memo, { shortTitle }) => (`${memo + shortTitle} `), ' ')
             .trim();
+        let damageType;
+
+        if (defaultDamageTypeHash) {
+            ({ displayProperties: { name: damageType } = {} } = await this.world
+                .getDamageTypeByHash(defaultDamageTypeHash));
+        }
 
         return [{
-            itemCategory: `${tierTypeName} ${itemCategory}${
+            itemCategory: `${tierTypeName} ${damageType ? `${damageType} ` : ''}${itemCategory}${
                 filteredCategories.length < 2 ? `${itemTypeDisplayName}` : ''}`,
             icon: `https://www.bungie.net${icon}`,
             itemHash: hash,

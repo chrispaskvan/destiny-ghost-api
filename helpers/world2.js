@@ -10,7 +10,6 @@
  * @requires S
  * @requires sqlite3
  */
-const { groupBy, min } = require('lodash');
 const path = require('path');
 const Database = require('better-sqlite3');
 const World = require('./world');
@@ -40,6 +39,7 @@ class World2 extends World {
 
             const categories = database.prepare('SELECT json FROM DestinyItemCategoryDefinition').all();
             const classes = database.prepare('SELECT json FROM DestinyClassDefinition').all();
+            const damageTypes = database.prepare('SELECT json FROM DestinyDamageTypeDefinition').all();
             const items = database.prepare('SELECT json FROM DestinyInventoryItemDefinition').all();
             const loreDefinitions = database.prepare('SELECT json FROM DestinyLoreDefinition').all();
             const vendors = database.prepare('SELECT json FROM DestinyVendorDefinition').all();
@@ -48,6 +48,7 @@ class World2 extends World {
 
             this.categories = categories.map(({ json: category }) => JSON.parse(category));
             this.classes = classes.map(({ json: classDefinition }) => JSON.parse(classDefinition));
+            this.damageTypes = damageTypes.map(({ json: damageType }) => JSON.parse(damageType));
             this.items = items.map(({ json: item }) => JSON.parse(item));
             this.loreDefinitions = loreDefinitions.map(({ json: lore }) => JSON.parse(lore));
             this.vendors = vendors.map(({ json: vendor }) => JSON.parse(vendor));
@@ -61,6 +62,15 @@ class World2 extends World {
     getClassByHash(classHash) {
         return Promise.resolve(this.classes
             .find(characterClass => characterClass.hash === classHash));
+    }
+
+    /**
+     * Get the damage type according to the provided hash.
+     * @param classHash {string}
+     */
+    getDamageTypeByHash(damageTypeHash) {
+        return Promise.resolve(this.damageTypes
+            .find(damageType => damageType.hash === damageTypeHash));
     }
 
     /**
@@ -86,26 +96,12 @@ class World2 extends World {
      * @returns {Promise}
      */
     async getItemByName(itemName) {
-        return new Promise((resolve, reject) => {
-            try {
-                const items = this.items.filter(({ displayProperties: { name } = '' }) => name.toLowerCase().includes(itemName.toLowerCase()));
+        const items = this.items.filter(({ displayProperties: { name } = '' }) => name.toLowerCase().includes(itemName.toLowerCase()));
 
-                const groups = groupBy(items, item => item.displayProperties.name);
-                const keys = Object.keys(groups);
-
-                resolve(keys.map(key => {
-                    const item = min(items.filter(item1 => item1.displayProperties.name === key),
-                        item1 => (item1.quality ? item1.quality.qualityLevel : 0));
-
-                    return Object.assign(item, {
-                        itemCategory: item.itemTypeAndTierDisplayName,
-                        itemName: item.displayProperties.name,
-                    });
-                }));
-            } catch (err) {
-                reject(err);
-            }
-        });
+        return Promise.resolve(items.map(item => Object.assign(item, {
+            itemCategory: item.itemTypeAndTierDisplayName,
+            itemName: item.displayProperties.name,
+        })));
     }
 
     /**
