@@ -47,7 +47,7 @@ beforeEach(() => {
 });
 
 describe('Destiny2Controller', () => {
-    const characterId = '1111111111111111111';
+    const characterId = '11';
 
     describe('getProfile', () => {
         describe('when session displayName and membershipType are defined', () => {
@@ -88,13 +88,13 @@ describe('Destiny2Controller', () => {
 
                     destiny2Service.getProfile = jest.fn().mockResolvedValue([
                         {
-                            characterId: '1111111111111111111',
+                            characterId,
                             classHash: '671679327',
                             light: 284,
                             links: [
                                 {
                                     rel: 'Character',
-                                    href: '/characters/1111111111111111111',
+                                    href: `/characters/${characterId}`,
                                 },
                             ],
                         },
