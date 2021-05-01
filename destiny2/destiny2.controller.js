@@ -52,10 +52,20 @@ class Destiny2Controller extends DestinyController {
     }
 
     /**
+     * Get the complete list of items.
+     *
+     * @returns Promise
+     * @memberof Destiny2Controller
+     */
+    getInventory() {
+        return Promise.resolve(this.world.items);
+    }
+
+    /**
      * Get the current manifest definition from Bungie.
      *
-     * @param req
-     * @param res
+     * @returns Promise
+     * @memberof Destiny2Controller
      */
     getManifest() {
         return this.destiny.getManifest();
@@ -64,8 +74,9 @@ class Destiny2Controller extends DestinyController {
     /**
      * Search for the Destiny player.
      *
-     * @param req
-     * @param res
+     * @param {*} displayName
+     * @returns Promise
+     * @memberof Destiny2Controller
      */
     async getPlayer(displayName) {
         const { membershipId, membershipType } = await this.destiny.getPlayer(displayName);

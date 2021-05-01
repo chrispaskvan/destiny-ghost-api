@@ -1,4 +1,5 @@
 const bodyParser = require('body-parser');
+const compression = require('compression');
 const cookieParser = require('cookie-parser');
 const session = require('express-session');
 
@@ -12,6 +13,7 @@ module.exports = app => {
     app.use(bodyParser.urlencoded({
         extended: true,
     }));
+    app.use(compression());
     app.use(cookieParser());
 
     /**
