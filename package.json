@@ -54,7 +54,7 @@
         "nodemailer-smtp-transport": "^2.7.4",
         "pino": "^6.11.3",
         "pino-http": "^5.5.0",
-        "qs": "^6.9.6",
+        "qs": "^6.10.1",
         "rate-limiter-flexible": "^2.2.1",
         "redis": "^3.1.1",
         "rfc6902": "^3.1.1",
