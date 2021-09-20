@@ -52,7 +52,7 @@
         "lodash": "^4.17.21",
         "nodemailer": "^6.6.3",
         "nodemailer-smtp-transport": "^2.7.4",
-        "pino": "^6.11.3",
+        "pino": "^6.13.1",
         "pino-http": "^5.5.0",
         "qs": "^6.10.1",
         "rate-limiter-flexible": "^2.2.4",
