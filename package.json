@@ -58,7 +58,7 @@
         "rate-limiter-flexible": "^2.2.4",
         "redis": "^3.1.1",
         "rfc6902": "^3.1.1",
-        "snyk": "^1.685.0",
+        "snyk": "^1.707.0",
         "swagger-ui-express": "^4.1.6",
         "twilio": "^3.64.0",
         "yauzl": "^2.10.0"
