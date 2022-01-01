@@ -1,74 +1,82 @@
 /**
  * World Model Tests
  */
+const fs = require('fs');
 const World = require('./world2');
+const itif = require('./itif');
 const { xurHash } = require('../destiny2/destiny2.constants');
 
-const world = new World({
-    directory: process.env.DESTINY2_DATABASE_DIR,
-});
+const directory = process.env.DESTINY2_DATABASE_DIR;
 
 describe('It\'s Bungie\'s 2nd world. You\'re just querying it.', () => {
-    it('should return the lore for Ghost Primus', () => new Promise(done => {
-        world.getLore('2505533224')
-            .then(lore => {
-                const { displayProperties: { name } } = lore;
-
-                expect(name).toEqual('Ghost Primus');
-                done();
-            })
-            .catch(err => {
-                done(err);
+    itif(
+        'should return the lore for Ghost Primus',
+        () => fs.existsSync(directory), // eslint-disable-line security/detect-non-literal-fs-filename, max-len
+        async () => {
+            const world = new World({
+                directory,
             });
-    }));
 
-    it('should return the item category Hand Cannon', () => new Promise(done => {
-        world.getItemCategory(6)
-            .then(category => {
-                const { displayProperties: { name } } = category;
+            const { displayProperties: { name } } = await world.getLore(2505533224);
 
-                expect(name).toEqual('Hand Cannon');
-                done();
-            })
-            .catch(err => {
-                done(err);
+            expect(name).toEqual('Ghost Primus'); // eslint-disable-line jest/no-standalone-expect
+        },
+    );
+
+    itif(
+        'should return the item category Hand Cannon',
+        () => fs.existsSync(directory), // eslint-disable-line security/detect-non-literal-fs-filename, max-len
+        async () => {
+            const world = new World({
+                directory,
             });
-    }));
 
-    it('should return the Hunter character class', () => new Promise(done => {
-        world.getClassByHash('671679327')
-            .then(characterClass => {
-                const { displayProperties: { name } } = characterClass;
+            const { displayProperties: { name } } = await world.getItemCategory(6);
 
-                expect(name).toEqual('Hunter');
-                done();
-            })
-            .catch(err => {
-                done(err);
+            expect(name).toEqual('Hand Cannon'); // eslint-disable-line jest/no-standalone-expect
+        },
+    );
+
+    itif(
+        'should return the Hunter character class',
+        () => fs.existsSync(directory), // eslint-disable-line security/detect-non-literal-fs-filename, max-len
+        async () => {
+            const world = new World({
+                directory,
             });
-    }));
 
-    it('should return Night Watch', () => new Promise(done => {
-        const itemName = 'Night Watch';
+            const { displayProperties: { name } } = await world.getClassByHash(671679327);
 
-        world.getItemByName(itemName)
-            .then(items => {
-                expect(items[0].displayProperties.name).toEqual(itemName);
-                done();
-            })
-            .catch(err => {
-                done(err);
+            expect(name).toEqual('Hunter'); // eslint-disable-line jest/no-standalone-expect
+        },
+    );
+
+    itif(
+        'should return Night Watch',
+        () => fs.existsSync(directory), // eslint-disable-line security/detect-non-literal-fs-filename, max-len
+        async () => {
+            const world = new World({
+                directory,
             });
-    }));
 
-    it('should return the icon of the Agent of Nine', () => new Promise(done => {
-        world.getVendorIcon(xurHash)
-            .then(url => {
-                expect(url).toBeDefined();
-                done();
-            })
-            .catch(err => {
-                done(err);
+            const itemName = 'Night Watch';
+            const items = await world.getItemByName(itemName);
+
+            expect(items[0].displayProperties.name).toEqual(itemName); // eslint-disable-line jest/no-standalone-expect, max-len
+        },
+    );
+
+    itif(
+        'should return the icon of the Agent of Nine',
+        () => fs.existsSync(directory), // eslint-disable-line security/detect-non-literal-fs-filename, max-len
+        async () => {
+            const world = new World({
+                directory,
             });
-    }));
+
+            const url = await world.getVendorIcon(xurHash);
+
+            expect(url).toBeDefined(); // eslint-disable-line jest/no-standalone-expect
+        },
+    );
 });

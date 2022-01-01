@@ -32,9 +32,8 @@ describe('HealthController', () => {
             };
             const world2 = {
                 getItemByName: () => Promise.resolve([{
-                    displayProperties: {
-                        description: 'The Number',
-                    },
+                    itemName: 'Austringer',
+                    itemTypeAndTierDisplayName: 'Legendary Hand Cannon',
                 }]),
             };
 
@@ -75,7 +74,7 @@ describe('HealthController', () => {
                     },
                     destiny2: {
                         manifest: '61966.18.01.12.0839-8',
-                        world: 'The Number',
+                        world: 'Austringer Legendary Hand Cannon',
                     },
                 });
             });

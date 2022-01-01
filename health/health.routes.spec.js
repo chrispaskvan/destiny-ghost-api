@@ -38,9 +38,8 @@ describe('HealthRouter', () => {
             };
             const world2 = {
                 getItemByName: () => Promise.resolve([{
-                    displayProperties: {
-                        description: 'The Number',
-                    },
+                    itemName: 'Austringer',
+                    itemTypeAndTierDisplayName: 'Legendary Hand Cannon',
                 }]),
             };
 
@@ -86,7 +85,7 @@ describe('HealthRouter', () => {
                             },
                             destiny2: {
                                 manifest: '61966.18.01.12.0839-8',
-                                world: 'The Number',
+                                world: 'Austringer Legendary Hand Cannon',
                             },
                         });
 
@@ -164,5 +163,39 @@ describe('HealthRouter', () => {
                 healthRouter(req, res);
             }));
         });
+    });
+
+    describe('liveness', () => {
+        it('should return up', () => new Promise((done, reject) => {
+            const req = httpMocks.createRequest({
+                method: 'GET',
+                url: '/live',
+            });
+
+            res.on('end', () => {
+                try {
+                    expect(res.statusCode).toEqual(HttpStatus.OK);
+
+                    // eslint-disable-next-line no-underscore-dangle
+                    const body = JSON.parse(res._getData());
+
+                    expect(body).toEqual({
+                        status: 'UP',
+                        checks: [
+                            {
+                                name: 'liveliness',
+                                state: 'UP',
+                            },
+                        ],
+                    });
+
+                    done();
+                } catch (err) {
+                    reject(err);
+                }
+            });
+
+            healthRouter(req, res);
+        }));
     });
 });

@@ -1,10 +1,16 @@
-FROM node:12.16.3-buster-slim
+FROM node:16.11.1-buster-slim
 
 # labels
 LABEL org.opencontainers.image.created=$CREATED_DATE
 LABEL org.opencontainers.image.source=https://github.com/chrispaskvan/destiny-ghost-api
 LABEL org.opencontainers.image.licenses=MIT
 LABEL com.destiny-ghost.nodeversion=$NODE_VERSION
+
+# Install python 3
+RUN apt-get update && \
+    apt-get install -y make && \
+    apt-get install -y build-essential && \
+    apt-get install -y python3
 
 # arguments with default values and expected environment variables
 ARG DESTINY_DATABASE_DIR=./databases/destiny
@@ -18,6 +24,9 @@ ENV DOMAIN=$DOMAIN
 
 ARG NODE_ENV=production
 ENV NODE_ENV=$NODE_ENV
+
+ARG NODE_OPTIONS="--max-old-space-size=8192 --unhandled-rejections=strict"
+ENV NODE_OPTIONS=$NODE_OPTIONS
 
 ARG PORT=1100
 ENV PORT=$PORT
@@ -36,4 +45,4 @@ RUN npm config list && npm ci && npm cache clean --force
 
 COPY --chown=node:node . /destiny-ghost-api/
 
-CMD [ "node", "server" ]
+CMD ["sh", "-c", "node  ${NODE_OPTIONS} server.js"]

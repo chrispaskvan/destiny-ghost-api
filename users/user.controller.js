@@ -35,21 +35,6 @@ class UserController {
     }
 
     /**
-     * Apply JSON patches successively in reverse order.
-     *
-     * @param patches {Array}
-     * @param user {Object}
-     * @private
-     */
-    static applyPatches(patches, user) {
-        patches.forEach(patch => {
-            jsonpatch.applyPatch(user, patch.patch);
-        });
-
-        return user;
-    }
-
-    /**
      * Get the phone number format into the Twilio standard.
      *
      * @param phoneNumber
