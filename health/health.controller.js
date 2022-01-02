@@ -101,9 +101,14 @@ class HealthController {
     }
 
     async getWorld2Item() {
-        const [{ displayProperties: { description = notAvailable } = {} } = {}] = await this.world2.getItemByName('Austringer');
+        const [
+            {
+                itemName = notAvailable,
+                itemTypeAndTierDisplayName,
+            } = {},
+        ] = await this.world2.getItemByName('Eyasluna');
 
-        return description;
+        return `${itemName} ${itemTypeAndTierDisplayName}`;
     }
 
     async getHealth() {
@@ -123,8 +128,10 @@ class HealthController {
             .catch(err => HealthController.unhealthy(err)) || notAvailable;
         const memory = this.constructor.getMemoryUsage();
 
-        applicationInsights.trackMetric({ name: 'Resident Set Size', value: memory.rss });
-        applicationInsights.trackMetric({ name: 'Available Memory', value: memory.totalAvailableSize });
+        applicationInsights.trackMetric({
+            name: 'Percent of Available Memory Used',
+            value: Math.round((memory.rss / memory.totalAvailableSize) * 100),
+        });
 
         return {
             failures,

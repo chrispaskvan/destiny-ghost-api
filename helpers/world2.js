@@ -10,8 +10,8 @@
  * @requires S
  * @requires sqlite3
  */
-const path = require('path');
 const Database = require('better-sqlite3');
+const path = require('path');
 const World = require('./world');
 
 /**
@@ -21,7 +21,7 @@ class World2 extends World {
     constructor(options = {}) {
         super(options);
 
-        this.bootstrap(this.database);
+        this.bootstrap(this.databasePath);
     }
 
     /**
@@ -99,6 +99,7 @@ class World2 extends World {
         const items = this.items.filter(({ displayProperties: { name } = '' }) => name.toLowerCase().includes(itemName.toLowerCase()));
 
         return Promise.resolve(items.map(item => Object.assign(item, {
+            flavorText: item.flavorText,
             itemCategory: item.itemTypeAndTierDisplayName,
             itemName: item.displayProperties.name,
         })));

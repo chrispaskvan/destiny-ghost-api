@@ -124,25 +124,22 @@ describe('UserService', () => {
         });
 
         describe('when anonymous user is invalid', () => {
-            it('should reject the anonymous user', () => {
+            it('should reject the anonymous user', async () => {
                 userService.getUserByDisplayName = jest.fn().mockResolvedValue(anonymousUser);
 
-                return userService.createAnonymousUser(omit(anonymousUser, 'membershipId'))
-                    .catch(err => {
-                        expect(err).toBeDefined();
-                    });
+                await expect(userService.createAnonymousUser(omit(anonymousUser, 'membershipId')))
+                    .rejects.toThrow(undefined);
             });
         });
 
         describe('when anonymous user is valid', () => {
             describe('when the anonymous user exists', () => {
-                it('should reject the anonymous user', () => {
+                it('should reject the anonymous user', async () => {
                     userService.getUserByDisplayName = jest.fn().mockResolvedValue(anonymousUser);
 
-                    return userService.createAnonymousUser(anonymousUser)
-                        .catch(() => {
-                            expect(documentService.createDocument).not.toHaveBeenCalled();
-                        });
+                    await expect(userService.createAnonymousUser(anonymousUser)).rejects.toThrow();
+
+                    expect(documentService.createDocument).not.toHaveBeenCalled();
                 });
             });
 
@@ -165,10 +162,9 @@ describe('UserService', () => {
         });
 
         describe('when user is invalid', () => {
-            it('should reject the user', () => userService.createUser(omit(user, 'phoneNumber'))
-                .catch(err => {
-                    expect(err).toBeDefined();
-                }));
+            it('should reject the user', async () => {
+                await expect(userService.createUser(omit(user, 'phoneNumber'))).rejects.toThrow(undefined);
+            });
         });
     });
 
@@ -206,15 +202,15 @@ describe('UserService', () => {
                     });
             });
 
-            it('should fail when more than one existing user is found', () => {
+            it('should fail when more than one existing user is found', async () => {
                 documentService.getDocuments
                     .mockImplementation(() => Promise.resolve([user, user]));
 
-                return userService.getUserByDisplayName(user.displayName, user.membershipType)
-                    .catch(err => {
-                        expect(err).toBeDefined();
-                        expect(documentService.getDocuments).toHaveBeenCalled();
-                    });
+                // eslint-disable-next-line max-len
+                await expect(userService.getUserByDisplayName(user.displayName, user.membershipType))
+                    .rejects.toThrow();
+
+                expect(documentService.getDocuments).toHaveBeenCalled();
             });
 
             it('should return undefined if user is not found', () => {
@@ -227,24 +223,22 @@ describe('UserService', () => {
                     });
             });
 
-            it('should fail when display name is empty', () => userService.getUserByDisplayName()
-                .catch(err => {
-                    expect(err).toBeDefined();
-                }));
+            it('should fail when display name is empty', async () => {
+                await expect(userService.getUserByDisplayName()).rejects.toThrow();
+            });
 
-            it('should fail when membership type is not a number', () => userService.getUserByDisplayName(user.displayName, '')
-                .catch(err => {
-                    expect(err).toBeDefined();
-                }));
+            it('should fail when membership type is not a number', async () => {
+                await expect(userService.getUserByDisplayName(user.displayName, '')).rejects.toThrow();
+            });
 
-            it('should fail when no documents are returned', () => {
+            it('should fail when no documents are returned', async () => {
                 documentService.getDocuments.mockImplementation(() => Promise.resolve());
 
-                return userService.getUserByDisplayName(user.displayName, user.membershipType)
-                    .catch(err => {
-                        expect(err).toBeDefined();
-                        expect(documentService.getDocuments).toHaveBeenCalled();
-                    });
+                // eslint-disable-next-line max-len
+                await expect(userService.getUserByDisplayName(user.displayName, user.membershipType))
+                    .rejects.toThrow();
+
+                expect(documentService.getDocuments).toHaveBeenCalled();
             });
         });
     });
@@ -261,15 +255,14 @@ describe('UserService', () => {
                     });
             });
 
-            it('should fail when more than one existing user is found', () => {
+            it('should fail when more than one existing user is found', async () => {
                 documentService.getDocuments
                     .mockImplementation(() => Promise.resolve([user, user]));
 
-                return userService.getUserByEmailAddress(user.emailAddress)
-                    .catch(err => {
-                        expect(err).toBeDefined();
-                        expect(documentService.getDocuments).toHaveBeenCalled();
-                    });
+                await expect(userService.getUserByEmailAddress(user.emailAddress))
+                    .rejects.toThrow();
+
+                expect(documentService.getDocuments).toHaveBeenCalled();
             });
 
             it('should fail when no users are found', () => {
@@ -282,24 +275,22 @@ describe('UserService', () => {
                     });
             });
 
-            it('should fail when email address is empty', () => {
+            it('should fail when email address is empty', async () => {
                 documentService.getDocuments.mockImplementation(() => Promise.resolve());
 
-                return userService.getUserByEmailAddress()
-                    .catch(err => {
-                        expect(err).toBeDefined();
-                        expect(documentService.getDocuments).not.toHaveBeenCalled();
-                    });
+                await expect(userService.getUserByEmailAddress())
+                    .rejects.toThrow();
+
+                expect(documentService.getDocuments).not.toHaveBeenCalled();
             });
 
-            it('should fail when no documents are found', () => {
+            it('should fail when no documents are found', async () => {
                 documentService.getDocuments.mockImplementation(() => Promise.resolve());
 
-                return userService.getUserByEmailAddress(user.emailAddress)
-                    .catch(err => {
-                        expect(err).toBeDefined();
-                        expect(documentService.getDocuments).toHaveBeenCalled();
-                    });
+                await expect(userService.getUserByEmailAddress(user.emailAddress))
+                    .rejects.toThrow();
+
+                expect(documentService.getDocuments).toHaveBeenCalled();
             });
         });
     });
@@ -316,15 +307,14 @@ describe('UserService', () => {
                     });
             });
 
-            it('should fail when more than one existing user is found', () => {
+            it('should fail when more than one existing user is found', async () => {
                 documentService.getDocuments
                     .mockImplementation(() => Promise.resolve([user, user]));
 
-                return userService.getUserByEmailAddressToken('some_token')
-                    .catch(err => {
-                        expect(err).toBeDefined();
-                        expect(documentService.getDocuments).toHaveBeenCalled();
-                    });
+                await expect(userService.getUserByEmailAddressToken('some_token'))
+                    .rejects.toThrow();
+
+                expect(documentService.getDocuments).toHaveBeenCalled();
             });
 
             it('should fail when no users are found', () => {
@@ -337,24 +327,22 @@ describe('UserService', () => {
                     });
             });
 
-            it('should fail when email address token is empty', () => {
+            it('should fail when email address token is empty', async () => {
                 documentService.getDocuments.mockImplementation(() => Promise.resolve());
 
-                return userService.getUserByEmailAddressToken()
-                    .catch(err => {
-                        expect(err).toBeDefined();
-                        expect(documentService.getDocuments).not.toHaveBeenCalled();
-                    });
+                await expect(userService.getUserByEmailAddressToken())
+                    .rejects.toThrow();
+
+                expect(documentService.getDocuments).not.toHaveBeenCalled();
             });
 
-            it('should fail when no documents are found', () => {
+            it('should fail when no documents are found', async () => {
                 documentService.getDocuments.mockImplementation(() => Promise.resolve());
 
-                return userService.getUserByEmailAddressToken('some_token')
-                    .catch(err => {
-                        expect(err).toBeDefined();
-                        expect(documentService.getDocuments).toHaveBeenCalled();
-                    });
+                await expect(userService.getUserByEmailAddressToken('some_token'))
+                    .rejects.toThrow();
+
+                expect(documentService.getDocuments).toHaveBeenCalled();
             });
         });
     });
@@ -371,15 +359,14 @@ describe('UserService', () => {
                     });
             });
 
-            it('should fail when more than one existing user is found', () => {
+            it('should fail when more than one existing user is found', async () => {
                 documentService.getDocuments
                     .mockImplementation(() => Promise.resolve([user, user]));
 
-                return userService.getUserByMembershipId(user.membershipId)
-                    .catch(err => {
-                        expect(err).toBeDefined();
-                        expect(documentService.getDocuments).toHaveBeenCalled();
-                    });
+                await expect(userService.getUserByMembershipId(user.membershipId))
+                    .rejects.toThrow();
+
+                expect(documentService.getDocuments).toHaveBeenCalled();
             });
 
             it('should fail when no users are found', () => {
@@ -392,24 +379,22 @@ describe('UserService', () => {
                     });
             });
 
-            it('should fail when email address is empty', () => {
+            it('should fail when email address is empty', async () => {
                 documentService.getDocuments.mockImplementation(() => Promise.resolve());
 
-                return userService.getUserByMembershipId()
-                    .catch(err => {
-                        expect(err).toBeDefined();
-                        expect(documentService.getDocuments).not.toHaveBeenCalled();
-                    });
+                await expect(userService.getUserByMembershipId())
+                    .rejects.toThrow();
+
+                expect(documentService.getDocuments).not.toHaveBeenCalled();
             });
 
-            it('should fail when no documents are found', () => {
+            it('should fail when no documents are found', async () => {
                 documentService.getDocuments.mockImplementation(() => Promise.resolve());
 
-                return userService.getUserByMembershipId(user.membershipId)
-                    .catch(err => {
-                        expect(err).toBeDefined();
-                        expect(documentService.getDocuments).toHaveBeenCalled();
-                    });
+                await expect(userService.getUserByMembershipId(user.membershipId))
+                    .rejects.toThrow();
+
+                expect(documentService.getDocuments).toHaveBeenCalled();
             });
         });
     });
@@ -439,15 +424,14 @@ describe('UserService', () => {
                     });
             });
 
-            it('should fail when more than one existing user is found', () => {
+            it('should fail when more than one existing user is found', async () => {
                 documentService.getDocuments
                     .mockImplementation(() => Promise.resolve([user, user]));
 
-                return userService.getUserByPhoneNumber(user.phoneNumber)
-                    .catch(err => {
-                        expect(err).toBeDefined();
-                        expect(documentService.getDocuments).toHaveBeenCalled();
-                    });
+                await expect(userService.getUserByPhoneNumber(user.phoneNumber))
+                    .rejects.toThrow();
+
+                expect(documentService.getDocuments).toHaveBeenCalled();
             });
 
             it('should fail when no users are found', () => {
@@ -460,24 +444,22 @@ describe('UserService', () => {
                     });
             });
 
-            it('should fail when phone number is empty', () => {
+            it('should fail when phone number is empty', async () => {
                 documentService.getDocuments.mockImplementation(() => Promise.resolve());
 
-                return userService.getUserByPhoneNumber()
-                    .catch(err => {
-                        expect(err).toBeDefined();
-                        expect(documentService.getDocuments).not.toHaveBeenCalled();
-                    });
+                await expect(userService.getUserByPhoneNumber())
+                    .rejects.toThrow();
+
+                expect(documentService.getDocuments).not.toHaveBeenCalled();
             });
 
-            it('should fail when no documents are found', () => {
+            it('should fail when no documents are found', async () => {
                 documentService.getDocuments.mockImplementation(() => Promise.resolve());
 
-                return userService.getUserByPhoneNumber(user.phoneNumber)
-                    .catch(err => {
-                        expect(err).toBeDefined();
-                        expect(documentService.getDocuments).toHaveBeenCalled();
-                    });
+                await expect(userService.getUserByPhoneNumber(user.phoneNumber))
+                    .rejects.toThrow();
+
+                expect(documentService.getDocuments).toHaveBeenCalled();
             });
         });
     });
@@ -494,15 +476,14 @@ describe('UserService', () => {
                     });
             });
 
-            it('should fail when more than one existing user is found', () => {
+            it('should fail when more than one existing user is found', async () => {
                 documentService.getDocuments
                     .mockImplementation(() => Promise.resolve([user, user]));
 
-                return userService.getUserByPhoneNumberToken(1)
-                    .catch(err => {
-                        expect(err).toBeDefined();
-                        expect(documentService.getDocuments).toHaveBeenCalled();
-                    });
+                await expect(userService.getUserByPhoneNumberToken(1))
+                    .rejects.toThrow();
+
+                expect(documentService.getDocuments).toHaveBeenCalled();
             });
 
             it('should fail when no users are found', () => {
@@ -515,24 +496,22 @@ describe('UserService', () => {
                     });
             });
 
-            it('should fail when phone number is empty', () => {
+            it('should fail when phone number is empty', async () => {
                 documentService.getDocuments.mockImplementation(() => Promise.resolve());
 
-                return userService.getUserByPhoneNumberToken()
-                    .catch(err => {
-                        expect(err).toBeDefined();
-                        expect(documentService.getDocuments).not.toHaveBeenCalled();
-                    });
+                await expect(userService.getUserByPhoneNumberToken())
+                    .rejects.toThrow();
+
+                expect(documentService.getDocuments).not.toHaveBeenCalled();
             });
 
-            it('should fail when no documents are found', () => {
+            it('should fail when no documents are found', async () => {
                 documentService.getDocuments.mockImplementation(() => Promise.resolve());
 
-                return userService.getUserByPhoneNumberToken(1)
-                    .catch(err => {
-                        expect(err).toBeDefined();
-                        expect(documentService.getDocuments).toHaveBeenCalled();
-                    });
+                await expect(userService.getUserByPhoneNumberToken(1))
+                    .rejects.toThrow();
+
+                expect(documentService.getDocuments).toHaveBeenCalled();
             });
         });
     });
@@ -549,15 +528,14 @@ describe('UserService', () => {
                     });
             });
 
-            it('should fail when more than one existing user is found', () => {
+            it('should fail when more than one existing user is found', async () => {
                 documentService.getDocuments
                     .mockImplementation(() => Promise.resolve([user, user]));
 
-                return userService.getUserById(user.id)
-                    .catch(err => {
-                        expect(err).toBeDefined();
-                        expect(documentService.getDocuments).toHaveBeenCalled();
-                    });
+                await expect(userService.getUserById(user.id))
+                    .rejects.toThrow();
+
+                expect(documentService.getDocuments).toHaveBeenCalled();
             });
 
             it('should fail when no users are found', () => {
@@ -570,24 +548,22 @@ describe('UserService', () => {
                     });
             });
 
-            it('should fail when user id is empty', () => {
+            it('should fail when user id is empty', async () => {
                 documentService.getDocuments.mockImplementation(() => Promise.resolve());
 
-                return userService.getUserById()
-                    .catch(err => {
-                        expect(err).toBeDefined();
-                        expect(documentService.getDocuments).not.toHaveBeenCalled();
-                    });
+                await expect(userService.getUserById())
+                    .rejects.toThrow();
+
+                expect(documentService.getDocuments).not.toHaveBeenCalled();
             });
 
-            it('should fail when no documents are found', () => {
+            it('should fail when no documents are found', async () => {
                 documentService.getDocuments.mockImplementation(() => Promise.resolve());
 
-                return userService.getUserById(user.id)
-                    .catch(err => {
-                        expect(err).toBeDefined();
-                        expect(documentService.getDocuments).toHaveBeenCalled();
-                    });
+                await expect(userService.getUserById(user.id))
+                    .rejects.toThrow();
+
+                expect(documentService.getDocuments).toHaveBeenCalled();
             });
         });
     });
@@ -613,7 +589,7 @@ describe('UserService', () => {
             });
 
             describe('and user update is invalid', () => {
-                it('should fail validation of user schema', () => {
+                it('should fail validation of user schema', async () => {
                     const user1 = {
                         firstName: chance.first(),
                     };
@@ -621,11 +597,10 @@ describe('UserService', () => {
                     documentService.updateDocument.mockImplementation(() => Promise.resolve());
                     userService.getUserByDisplayName = jest.fn().mockResolvedValue();
 
-                    return userService.updateUser(user1)
-                        .catch(err => {
-                            expect(err).toBeDefined();
-                            expect(documentService.updateDocument).not.toHaveBeenCalled();
-                        });
+                    await expect(userService.updateUser(user1))
+                        .rejects.toThrow();
+
+                    expect(documentService.updateDocument).not.toHaveBeenCalled();
                 });
             });
         });
@@ -649,17 +624,16 @@ describe('UserService', () => {
         });
 
         describe('when user id does not exist', () => {
-            it('should not modify user document', () => {
+            it('should not modify user document', async () => {
                 documentService.updateDocument
                     .mockImplementation(() => Promise.resolve());
 
                 userService.getUserById = jest.fn().mockResolvedValue();
 
-                return userService.updateUserBungie(user.id)
-                    .catch(err => {
-                        expect(err).toBeDefined();
-                        expect(documentService.updateDocument).not.toHaveBeenCalled();
-                    });
+                await expect(userService.updateUserBungie(user.id))
+                    .rejects.toThrow();
+
+                expect(documentService.updateDocument).not.toHaveBeenCalled();
             });
         });
     });

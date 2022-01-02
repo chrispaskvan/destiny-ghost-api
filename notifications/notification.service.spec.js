@@ -1,4 +1,4 @@
-const mockTwilioCreateMessageResponse = require('../mocks/twilioCreateMessageResponse');
+const mockTwilioCreateMessageResponse = require('../mocks/twilioCreateMessageResponse.json');
 
 const Notifications = require('./notification.service');
 

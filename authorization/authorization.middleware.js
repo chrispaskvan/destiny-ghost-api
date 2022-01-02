@@ -8,7 +8,7 @@ const { notificationHeaders } = require('../helpers/config');
  *
  * @param {*} headers
  */
-const authorized = (headers = []) => {
+const authorized = headers => {
     const notificationEntries = Object.entries(notificationHeaders);
     const headerEntries = Object.entries(headers)
         .filter(([key1, value1]) => notificationEntries

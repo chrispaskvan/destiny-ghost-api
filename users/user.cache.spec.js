@@ -31,17 +31,18 @@ describe('UserCache', () => {
             const errMessage = 'error';
 
             beforeEach(() => {
-                client.del = jest.fn((key, callback) => callback(errMessage));
+                client.del = jest.fn(() => {
+                    throw new Error(errMessage);
+                });
                 client.quit = jest.fn();
 
                 cacheService = new UserCache();
             });
 
-            it('resolves', () => cacheService.deleteCache(cacheKey)
-                .then(res => expect(res).toBeUndefined())
-                .catch(err => {
-                    expect(err).toEqual(errMessage);
-                }));
+            it('rejects', async () => {
+                await expect(cacheService.deleteCache(cacheKey))
+                    .rejects.toThrow(errMessage);
+            });
         });
     });
 
@@ -104,17 +105,17 @@ describe('UserCache', () => {
         });
 
         describe('when client get operation fails', () => {
-            it('returns undefined', () => {
+            it('rejects', async () => {
                 const errMessage = 'error';
 
-                client.get = jest.fn((key, callback) => callback(errMessage, undefined));
+                client.get = jest.fn(() => {
+                    throw new Error(errMessage);
+                });
+
                 cacheService = new UserCache();
 
-                return cacheService.getCache(cacheKey)
-                    .then(res => expect(res).toBeUndefined())
-                    .catch(err => {
-                        expect(err).toEqual(errMessage);
-                    });
+                await expect(cacheService.getCache(cacheKey))
+                    .rejects.toThrow(errMessage);
             });
         });
     });
@@ -181,19 +182,17 @@ describe('UserCache', () => {
             });
 
             describe('when display name is not found', () => {
-                it('rejects', () => cacheService.setUser()
-                    .catch(err => {
-                        expect(err).toEqual(new Error('displayName not found'));
-                    }));
+                it('rejects', async () => {
+                    await expect(cacheService.setUser()).rejects.toThrow(new Error('displayName not found'));
+                });
             });
 
             describe('when display name is found, but membership type is not', () => {
-                it('rejects', () => cacheService.setUser({
-                    displayName: 11,
-                })
-                    .catch(err => {
-                        expect(err).toEqual(new Error('membershipType not found'));
-                    }));
+                it('rejects', async () => {
+                    await expect(cacheService.setUser({
+                        displayName: 11,
+                    })).rejects.toThrow(new Error('membershipType not found'));
+                });
             });
 
             describe('when display name and membership type are given', () => {
@@ -233,15 +232,13 @@ describe('UserCache', () => {
             it('cache user', async () => {
                 const errMessage = 'error';
 
-                client.set = jest
-                    .fn((key, value, option, ttl, callback) => callback(errMessage, undefined));
+                client.set = jest.fn(() => {
+                    throw new Error(errMessage);
+                });
                 cacheService = new UserCache();
 
-                return cacheService.setUser(mockUser)
-                    .then(res => expect(res).toBeUndefined())
-                    .catch(err => {
-                        expect(err).toEqual(errMessage);
-                    });
+                await expect(cacheService.setUser(mockUser))
+                    .rejects.toThrow(errMessage);
             });
         });
     });
