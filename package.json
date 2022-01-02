@@ -28,8 +28,8 @@
         }
     },
     "dependencies": {
-        "@azure/cosmos": "^3.13.1",
-        "@godaddy/terminus": "^4.8.0",
+        "@azure/cosmos": "^3.14.1",
+        "@godaddy/terminus": "^4.9.0",
         "@hapi/joi": "^17.1.1",
         "applicationinsights": "^1.8.10",
         "axios": "^0.21.3",
@@ -59,9 +59,9 @@
         "rate-limiter-flexible": "^2.2.4",
         "redis": "^3.1.1",
         "rfc6902": "^3.1.1",
-        "snyk": "^1.685.0",
+        "snyk": "^1.707.0",
         "swagger-ui-express": "^4.1.6",
-        "twilio": "^3.64.0",
+        "twilio": "^3.67.2",
         "yauzl": "^2.10.0"
     },
     "devDependencies": {
