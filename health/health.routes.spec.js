@@ -38,7 +38,7 @@ describe('HealthRouter', () => {
             };
             const world2 = {
                 getItemByName: () => Promise.resolve([{
-                    itemName: 'Austringer',
+                    itemName: 'Eyasluna',
                     itemTypeAndTierDisplayName: 'Legendary Hand Cannon',
                 }]),
             };
@@ -85,7 +85,7 @@ describe('HealthRouter', () => {
                             },
                             destiny2: {
                                 manifest: '61966.18.01.12.0839-8',
-                                world: 'Austringer Legendary Hand Cannon',
+                                world: 'Eyasluna Legendary Hand Cannon',
                             },
                         });
 

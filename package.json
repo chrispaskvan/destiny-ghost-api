@@ -6,7 +6,7 @@
     "scripts": {
         "coverage": "npm run test -- --coverage",
         "lint": "eslint --ignore-path .gitignore .",
-        "start": "NODE_ENV=development DESTINY_DATABASE_DIR=./databases/destiny DESTINY2_DATABASE_DIR=./databases/destiny2 node server",
+        "start": "NODE_ENV=development DESTINY_DATABASE_DIR=./databases/destiny DESTINY2_DATABASE_DIR=./databases/destiny2 node --trace-warnings server",
         "swagger": "swagger-jsdoc -d swaggerDef.js",
         "test": "NODE_ENV=test DESTINY_DATABASE_DIR=./databases/destiny DESTINY2_DATABASE_DIR=./databases/destiny2 jest --config ./jest.config.js",
         "test:watch": "npm run test -- --watchAll"
@@ -53,7 +53,8 @@
         "nodemailer": "^6.6.3",
         "nodemailer-smtp-transport": "^2.7.4",
         "pino": "^6.13.1",
-        "pino-http": "^5.5.0",
+        "pino-http": "^6.5.0",
+        "pino-pretty": "^4.7.1",
         "qs": "^6.10.1",
         "rate-limiter-flexible": "^2.2.4",
         "redis": "^3.1.1",
@@ -65,14 +66,14 @@
     },
     "devDependencies": {
         "chance": "^1.1.7",
-        "eslint": "7.25.0",
+        "eslint": "^7.25.0",
         "eslint-config-airbnb-base": "^14.2.1",
         "eslint-plugin-import": "^2.22.1",
-        "eslint-plugin-jest": "24.3.6",
+        "eslint-plugin-jest": "^24.3.6",
         "eslint-plugin-security": "^1.4.0",
-        "husky": "4.3.8",
+        "husky": "^4.3.8",
         "jest": "^27.2.5",
-        "node-mocks-http": "1.10.1",
+        "node-mocks-http": "^1.10.1",
         "redis-mock": "^0.56.3",
         "swagger-jsdoc": "^4.3.2"
     },
