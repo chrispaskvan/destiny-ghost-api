@@ -32,7 +32,7 @@
         "@godaddy/terminus": "^4.9.0",
         "@hapi/joi": "^17.1.1",
         "applicationinsights": "^1.8.10",
-        "axios": "^0.21.3",
+        "axios": "^0.24.0",
         "azure-common": "^0.9.26",
         "azure-sb": "^0.11.2",
         "base64url": "^3.0.1",
