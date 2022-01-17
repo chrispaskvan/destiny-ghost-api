@@ -6,9 +6,9 @@
     "scripts": {
         "coverage": "npm run test -- --coverage",
         "lint": "eslint --ignore-path .gitignore .",
-        "start": "NODE_ENV=development DESTINY_DATABASE_DIR=./databases/destiny DESTINY2_DATABASE_DIR=./databases/destiny2 node --trace-warnings server",
+        "start": "NODE_ENV=development node -r dotenv/config --trace-warnings server",
         "swagger": "swagger-jsdoc -d swaggerDef.js",
-        "test": "NODE_ENV=test DESTINY_DATABASE_DIR=./databases/destiny DESTINY2_DATABASE_DIR=./databases/destiny2 jest --config ./jest.config.js",
+        "test": "NODE_ENV=test jest --config ./jest.config.js",
         "test:watch": "npm run test -- --watchAll"
     },
     "author": "Chris Paskvan",
@@ -30,7 +30,6 @@
     "dependencies": {
         "@azure/cosmos": "^3.14.1",
         "@godaddy/terminus": "^4.9.0",
-        "@hapi/joi": "^17.1.1",
         "applicationinsights": "^1.8.10",
         "axios": "^0.24.0",
         "azure-common": "^0.9.26",
@@ -48,6 +47,7 @@
         "express-session": "^1.17.2",
         "http-status-codes": "^2.1.4",
         "is-my-json-valid": "^2.20.6",
+        "joi": "^17.5.0",
         "json-schema-defaults": "^0.4.0",
         "lodash": "^4.17.21",
         "nodemailer": "^6.6.3",
