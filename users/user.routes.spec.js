@@ -77,7 +77,7 @@ describe('UserRouter', () => {
 
                 res.on('end', () => {
                     try {
-                        expect(res.statusCode).toEqual(HttpStatus.NOT_FOUND);
+                        expect(res.statusCode).toEqual(HttpStatus.StatusCodes.NOT_FOUND);
                         done();
                     } catch (err) {
                         reject(err);
@@ -118,7 +118,7 @@ describe('UserRouter', () => {
 
                 res.on('end', () => {
                     try {
-                        expect(res.statusCode).toEqual(HttpStatus.NOT_FOUND);
+                        expect(res.statusCode).toEqual(HttpStatus.StatusCodes.NOT_FOUND);
                         done();
                     } catch (err) {
                         reject(err);
@@ -161,7 +161,7 @@ describe('UserRouter', () => {
 
                     res.on('end', () => {
                         try {
-                            expect(res.statusCode).toEqual(HttpStatus.OK);
+                            expect(res.statusCode).toEqual(HttpStatus.StatusCodes.OK);
 
                             // eslint-disable-next-line no-underscore-dangle
                             const body = JSON.parse(res._getData());
@@ -210,7 +210,7 @@ describe('UserRouter', () => {
 
                     res.on('end', () => {
                         try {
-                            expect(res.statusCode).toEqual(HttpStatus.UNAUTHORIZED);
+                            expect(res.statusCode).toEqual(HttpStatus.StatusCodes.UNAUTHORIZED);
                             done();
                         } catch (err) {
                             reject(err);
@@ -277,7 +277,7 @@ describe('UserRouter', () => {
 
                 res.on('end', () => {
                     try {
-                        expect(res.statusCode).toEqual(HttpStatus.NO_CONTENT);
+                        expect(res.statusCode).toEqual(HttpStatus.StatusCodes.NO_CONTENT);
                         done();
                     } catch (err) {
                         reject(err);
@@ -299,7 +299,7 @@ describe('UserRouter', () => {
 
                 res.on('end', () => {
                     try {
-                        expect(res.statusCode).toEqual(HttpStatus.NOT_FOUND);
+                        expect(res.statusCode).toEqual(HttpStatus.StatusCodes.NOT_FOUND);
                         done();
                     } catch (err) {
                         reject(err);
@@ -329,7 +329,7 @@ describe('UserRouter', () => {
 
                 res.on('end', () => {
                     try {
-                        expect(res.statusCode).toEqual(HttpStatus.NO_CONTENT);
+                        expect(res.statusCode).toEqual(HttpStatus.StatusCodes.NO_CONTENT);
                         done();
                     } catch (err) {
                         reject(err);
@@ -351,7 +351,7 @@ describe('UserRouter', () => {
 
                 res.on('end', () => {
                     try {
-                        expect(res.statusCode).toEqual(HttpStatus.NOT_FOUND);
+                        expect(res.statusCode).toEqual(HttpStatus.StatusCodes.NOT_FOUND);
                         done();
                     } catch (err) {
                         reject(err);

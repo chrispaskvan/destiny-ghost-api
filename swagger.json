@@ -33,7 +33,10 @@
         ],
         "responses": {
           "200": {
-            "description": "Destiny Manifest definition"
+            "description": "Returns current user details."
+          },
+          "401": {
+            "description": "Unauthorized"
           }
         }
       }
@@ -49,7 +52,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Destiny Manifest definition"
+            "description": "Returns the Destiny Manifest definition."
           }
         }
       }
@@ -65,7 +68,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Destiny Manifest definition"
+            "description": "Returns the current user's list of characters."
           }
         }
       }
@@ -81,7 +84,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Destiny 2 Item Inventory"
+            "description": "Returns the complete Destiny 2 item inventory."
           }
         }
       }
@@ -97,7 +100,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Destiny Manifest definition"
+            "description": "Returns the Destiny Manifest definition."
           }
         }
       }
@@ -113,7 +116,10 @@
         ],
         "responses": {
           "200": {
-            "description": "Xur's inventory"
+            "description": "Returns Xur's inventory."
+          },
+          "404": {
+            "description": "Xur could not be found."
           }
         }
       }
@@ -129,7 +135,10 @@
         ],
         "responses": {
           "200": {
-            "description": "Status reports of underlying dependencies."
+            "description": "Returns the status reports of underlying dependencies."
+          },
+          "503": {
+            "description": "Service is unavailable."
           }
         }
       }

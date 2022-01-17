@@ -78,7 +78,7 @@ class DestinyCache {
             });
         }
 
-        return Promise.reject(new Error('vendorHash number is required.'));
+        return Promise.reject(new Error('Manifest object is required.'));
     }
 
     /**
@@ -88,8 +88,8 @@ class DestinyCache {
      * @returns {Promise}
      */
     setVendor(hash, vendor) {
-        if (!hash || typeof hash !== 'string') {
-            return Promise.reject(new Error('vendorHash number is required.'));
+        if (!hash || typeof hash !== 'number') {
+            return Promise.reject(new Error('Vendor hash number is required.'));
         }
 
         return new Promise((resolve, reject) => {

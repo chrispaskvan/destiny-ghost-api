@@ -116,7 +116,7 @@ const routes = ({
         .get((req, res, next) => {
             destiny2Controller.getManifest()
                 .then(manifest => {
-                    res.status(HttpStatus.OK).json(manifest);
+                    res.status(HttpStatus.StatusCodes.OK).json(manifest);
                 })
                 .catch(next);
         });
@@ -125,7 +125,7 @@ const routes = ({
         .post((req, res, next) => authorizeUser(req, res, next), (req, res, next) => {
             destiny2Controller.upsertManifest()
                 .then(manifest => {
-                    res.status(HttpStatus.OK).json(manifest);
+                    res.status(HttpStatus.StatusCodes.OK).json(manifest);
                 })
                 .catch(next);
         });
@@ -140,7 +140,7 @@ const routes = ({
                         return res.status(200).json(statistics);
                     }
 
-                    return res.status(HttpStatus.UNAUTHORIZED).end();
+                    return res.status(HttpStatus.StatusCodes.UNAUTHORIZED).end();
                 })
                 .catch(next);
         });
@@ -168,10 +168,10 @@ const routes = ({
                 destiny2Controller.getXur(displayName, membershipType)
                     .then(items => {
                         if (items) {
-                            return res.status(HttpStatus.OK).json(items);
+                            return res.status(HttpStatus.StatusCodes.OK).json(items);
                         }
 
-                        return res.status(HttpStatus.NOT_FOUND);
+                        return res.status(HttpStatus.StatusCodes.NOT_FOUND);
                     })
                     .catch(next);
             });

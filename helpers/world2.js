@@ -35,6 +35,7 @@ class World2 extends World {
             const database = new Database(databasePath, {
                 readonly: true,
                 fileMustExist: true,
+                timeout: 3000,
             });
 
             const categories = database.prepare('SELECT json FROM DestinyItemCategoryDefinition').all();

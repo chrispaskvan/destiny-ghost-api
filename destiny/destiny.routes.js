@@ -60,7 +60,11 @@ const routes = ({
         .get((req, res, next) => {
             const { session: { displayName, membershipType } } = req;
 
-            destinyController.getCurrentUser(displayName, membershipType)
+            if (!displayName || !membershipType) {
+                return res.status(HttpStatus.StatusCodes.UNAUTHORIZED).end();
+            }
+
+            return destinyController.getCurrentUser(displayName, membershipType)
                 .then(bungieUser => {
                     res.json(bungieUser);
                 })
@@ -74,12 +78,12 @@ const routes = ({
                 const count = parseInt(numberOfCards, 10);
 
                 if (Number.isNaN(count)) {
-                    return res.status(422).end();
+                    return res.status(HttpStatus.StatusCodes.UNPROCESSABLE_ENTITY).end();
                 }
 
                 return destinyController.getGrimoireCards(count)
                     .then(grimoireCards => {
-                        res.status(HttpStatus.OK).json(grimoireCards);
+                        res.status(HttpStatus.StatusCodes.OK).json(grimoireCards);
                     })
                     .catch(next);
             });
@@ -102,7 +106,7 @@ const routes = ({
         .get((req, res, next) => {
             destinyController.getManifest(req, res)
                 .then(manifest => {
-                    res.status(HttpStatus.OK).json(manifest);
+                    res.status(HttpStatus.StatusCodes.OK).json(manifest);
                 })
                 .catch(next);
         });
@@ -111,7 +115,7 @@ const routes = ({
         .post((req, res, next) => {
             destinyController.upsertManifest()
                 .then(manifest => {
-                    res.status(HttpStatus.OK).json(manifest);
+                    res.status(HttpStatus.StatusCodes.OK).json(manifest);
                 })
                 .catch(next);
         });

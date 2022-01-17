@@ -51,8 +51,8 @@ const routes = ({
             healthController.getHealth()
                 .then(({ failures, health }) => {
                     res.status(failures
-                        ? HttpStatus.SERVICE_UNAVAILABLE
-                        : HttpStatus.OK).json(health);
+                        ? HttpStatus.StatusCodes.SERVICE_UNAVAILABLE
+                        : HttpStatus.StatusCodes.OK).json(health);
                 })
                 .catch(next);
         });

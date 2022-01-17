@@ -20,7 +20,7 @@ function signIn(req, res, user) {
     req.session.membershipType = user.membershipType;
     req.session.state = undefined;
 
-    return res.status(HttpStatus.OK)
+    return res.status(HttpStatus.StatusCodes.OK)
         .json({ displayName: user.displayName });
 }
 
@@ -42,13 +42,13 @@ const routes = ({
                 const { body: user, session: { displayName, membershipType } } = req;
 
                 if (!(user.firstName && user.lastName && user.phoneNumber && user.emailAddress)) {
-                    return res.status(HttpStatus.UNPROCESSABLE_ENTITY).end();
+                    return res.status(HttpStatus.StatusCodes.UNPROCESSABLE_ENTITY).end();
                 }
 
                 return userController.signUp({ displayName, membershipType, user })
                     .then(newUser => (newUser
-                        ? res.status(HttpStatus.OK).end()
-                        : res.status(HttpStatus.CONFLICT).end()))
+                        ? res.status(HttpStatus.StatusCodes.OK).end()
+                        : res.status(HttpStatus.StatusCodes.CONFLICT).end()))
                     .catch(next);
             });
 
@@ -59,8 +59,8 @@ const routes = ({
 
                 userController.join(user)
                     .then(newUser => (newUser
-                        ? res.status(HttpStatus.OK).end()
-                        : res.status(HttpStatus.BAD_REQUEST).end()))
+                        ? res.status(HttpStatus.StatusCodes.OK).end()
+                        : res.status(HttpStatus.StatusCodes.BAD_REQUEST).end()))
                     .catch(next);
             });
 
@@ -72,11 +72,11 @@ const routes = ({
             } = req;
 
             if (displayName) {
-                return res.status(HttpStatus.OK)
+                return res.status(HttpStatus.StatusCodes.OK)
                     .json({ displayName });
             }
             if (sessionState !== queryState) {
-                return res.sendStatus(HttpStatus.FORBIDDEN);
+                return res.sendStatus(HttpStatus.StatusCodes.FORBIDDEN);
             }
 
             return userController.signIn({
@@ -87,7 +87,7 @@ const routes = ({
             })
                 .then(user => {
                     if (!user) {
-                        return res.status(HttpStatus.NOT_FOUND).end();
+                        return res.status(HttpStatus.StatusCodes.NOT_FOUND).end();
                     }
 
                     return signIn(req, res, user);
@@ -98,7 +98,7 @@ const routes = ({
     userRouter.route('/signOut')
         .get((req, res) => {
             req.session.destroy();
-            res.status(HttpStatus.UNAUTHORIZED).end();
+            res.status(HttpStatus.StatusCodes.UNAUTHORIZED).end();
         });
 
     userRouter.route('/:emailAddress/emailAddress')
@@ -108,8 +108,8 @@ const routes = ({
 
                 return userController.getUserByEmailAddress(emailAddress)
                     .then(user => (user
-                        ? res.status(HttpStatus.NO_CONTENT).end()
-                        : res.status(HttpStatus.NOT_FOUND).end()))
+                        ? res.status(HttpStatus.StatusCodes.NO_CONTENT).end()
+                        : res.status(HttpStatus.StatusCodes.NOT_FOUND).end()))
                     .catch(next);
             });
 
@@ -120,8 +120,8 @@ const routes = ({
 
                 return userController.getUserByPhoneNumber(phoneNumber)
                     .then(user => (user
-                        ? res.status(HttpStatus.NO_CONTENT).end()
-                        : res.status(HttpStatus.NOT_FOUND).end()))
+                        ? res.status(HttpStatus.StatusCodes.NO_CONTENT).end()
+                        : res.status(HttpStatus.StatusCodes.NOT_FOUND).end()))
                     .catch(next);
             });
 
@@ -136,16 +136,16 @@ const routes = ({
                 const { session: { displayName, membershipType } } = req;
 
                 if (!displayName || !membershipType) {
-                    return res.status(HttpStatus.NOT_FOUND).end();
+                    return res.status(HttpStatus.StatusCodes.NOT_FOUND).end();
                 }
 
                 return userController.getCurrentUser(displayName, membershipType)
                     .then(user => {
                         if (user) {
-                            return res.status(HttpStatus.OK).json(user);
+                            return res.status(HttpStatus.StatusCodes.OK).json(user);
                         }
 
-                        return res.status(HttpStatus.UNAUTHORIZED).end();
+                        return res.status(HttpStatus.StatusCodes.UNAUTHORIZED).end();
                     })
                     .catch(next);
             });
@@ -157,7 +157,7 @@ const routes = ({
                 userController.update({ displayName, membershipType, patches })
                     .then(user => (user
                         ? res.json(user)
-                        : res.status(HttpStatus.NOT_FOUND).send('user not found')))
+                        : res.status(HttpStatus.StatusCodes.NOT_FOUND).send('user not found')))
                     .catch(next);
             });
 
@@ -168,13 +168,13 @@ const routes = ({
                 const { params: { id, version } } = req;
 
                 if (!id) {
-                    return res.status(HttpStatus.CONFLICT).send('phone number not found');
+                    return res.status(HttpStatus.StatusCodes.CONFLICT).send('phone number not found');
                 }
 
                 return userController.getUserById(id, version)
                     .then(user => (user
-                        ? res.status(HttpStatus.OK).json(user)
-                        : res.status(HttpStatus.NOT_FOUND).send('user not found')))
+                        ? res.status(HttpStatus.StatusCodes.OK).json(user)
+                        : res.status(HttpStatus.StatusCodes.NOT_FOUND).send('user not found')))
                     .catch(next);
             });
 
