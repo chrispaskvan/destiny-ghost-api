@@ -17,6 +17,7 @@ const loaders = {
          */
         const databases = [process.env.DESTINY_DATABASE_DIR, process.env.DESTINY2_DATABASE_DIR];
 
+        log.info(`DESTINY_DATABASE_DIR=${databases[0]},DESTINY2_DATABASE_DIR=${databases[1]}`);
         databases.forEach(database => {
             const directories = database.split('/');
 

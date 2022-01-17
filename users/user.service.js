@@ -1,5 +1,5 @@
 const { defaults, isEmpty } = require('lodash');
-const Joi = require('@hapi/joi');
+const Joi = require('joi');
 const schemaDefaults = require('json-schema-defaults');
 const validator = require('is-my-json-valid');
 const QueryBuilder = require('../helpers/queryBuilder');
