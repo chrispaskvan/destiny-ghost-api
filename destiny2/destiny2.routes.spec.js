@@ -95,7 +95,7 @@ describe('Destiny2Router', () => {
                         const data = JSON.parse(res._getData());
 
                         try {
-                            expect(res.statusCode).toEqual(HttpStatus.OK);
+                            expect(res.statusCode).toEqual(HttpStatus.StatusCodes.OK);
                             expect(data[0].className).toEqual('Hunter');
                             done();
                         } catch (err) {
@@ -119,7 +119,7 @@ describe('Destiny2Router', () => {
                 authenticationController.authenticate = jest.fn().mockResolvedValue(undefined);
                 res.on('end', () => {
                     try {
-                        expect(res.statusCode).toEqual(HttpStatus.UNAUTHORIZED);
+                        expect(res.statusCode).toEqual(HttpStatus.StatusCodes.UNAUTHORIZED);
                         done();
                     } catch (err) {
                         reject(err);

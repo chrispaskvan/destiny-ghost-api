@@ -1,10 +1,33 @@
+const Agent = require('agentkeepalive');
 const axios = require('axios');
 const RequestError = require('./request.error');
 const log = require('./log');
 
+const axiosSingleton = (function singleton() {
+    let instance;
+
+    function createInstance() {
+        const keepAliveAgent = new Agent();
+        const axiosInstance = axios.create({ httpAgent: keepAliveAgent });
+
+        return axiosInstance;
+    }
+
+    return {
+        getInstance() {
+            if (!instance) {
+                instance = createInstance();
+            }
+
+            return instance;
+        },
+    };
+}());
+
 async function request(options) {
     try {
-        const { data: responseBody } = await axios(options);
+        const axiosInstance = axiosSingleton.getInstance();
+        const { data: responseBody } = await axiosInstance(options);
 
         return responseBody;
     } catch (err) {

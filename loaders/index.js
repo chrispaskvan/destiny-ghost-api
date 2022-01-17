@@ -78,7 +78,7 @@ const loaders = {
 
             if (res.status) {
                 if (err instanceof DestinyError) {
-                    res.status(HttpStatus.NOT_FOUND).json({
+                    res.status(HttpStatus.StatusCodes.NOT_FOUND).json({
                         errors: [{
                             code,
                             message,
@@ -86,14 +86,14 @@ const loaders = {
                         }],
                     });
                 } else if (err instanceof RequestError) {
-                    res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
+                    res.status(HttpStatus.StatusCodes.INTERNAL_SERVER_ERROR).json({
                         errors: [{
                             status,
                             statusText,
                         }],
                     });
                 } else {
-                    res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
+                    res.status(HttpStatus.StatusCodes.INTERNAL_SERVER_ERROR).json({
                         errors: [{
                             message,
                         }],

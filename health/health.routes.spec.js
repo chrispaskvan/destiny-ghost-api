@@ -71,7 +71,7 @@ describe('HealthRouter', () => {
 
                 res.on('end', () => {
                     try {
-                        expect(res.statusCode).toEqual(HttpStatus.OK);
+                        expect(res.statusCode).toEqual(HttpStatus.StatusCodes.OK);
 
                         // eslint-disable-next-line no-underscore-dangle
                         const body = JSON.parse(res._getData());
@@ -113,7 +113,7 @@ describe('HealthRouter', () => {
 
             beforeEach(() => {
                 request.get.mockImplementation(() => Promise.rejects({
-                    statusCode: HttpStatus.BAD_REQUEST,
+                    statusCode: HttpStatus.StatusCodes.BAD_REQUEST,
                 }));
 
                 healthRouter = HealthRouter({
@@ -137,7 +137,7 @@ describe('HealthRouter', () => {
 
                 res.on('end', () => {
                     try {
-                        expect(res.statusCode).toEqual(HttpStatus.SERVICE_UNAVAILABLE);
+                        expect(res.statusCode).toEqual(HttpStatus.StatusCodes.SERVICE_UNAVAILABLE);
 
                         // eslint-disable-next-line no-underscore-dangle
                         const body = JSON.parse(res._getData());
@@ -174,7 +174,7 @@ describe('HealthRouter', () => {
 
             res.on('end', () => {
                 try {
-                    expect(res.statusCode).toEqual(HttpStatus.OK);
+                    expect(res.statusCode).toEqual(HttpStatus.StatusCodes.OK);
 
                     // eslint-disable-next-line no-underscore-dangle
                     const body = JSON.parse(res._getData());

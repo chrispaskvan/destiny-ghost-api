@@ -32,7 +32,7 @@ const rateLimiterMiddleware = (req, res, next) => {
         })
         .catch(rateLimiterRes => {
             setRateLimitHeaders(rateLimiterRes, res);
-            res.status(HttpStatus.TOO_MANY_REQUESTS).end();
+            res.status(HttpStatus.StatusCodes.TOO_MANY_REQUESTS).end();
         });
 };
 
