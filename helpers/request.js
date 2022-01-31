@@ -7,8 +7,12 @@ const axiosSingleton = (function singleton() {
     let instance;
 
     function createInstance() {
-        const keepAliveAgent = new Agent();
-        const axiosInstance = axios.create({ httpAgent: keepAliveAgent });
+        const httpAgent = new Agent();
+        const httpsAgent = new Agent.HttpsAgent();
+        const axiosInstance = axios.create({
+            httpAgent,
+            httpsAgent,
+        });
 
         return axiosInstance;
     }

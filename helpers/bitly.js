@@ -14,7 +14,7 @@
  */
 const util = require('util');
 const { bitly: settings } = require('./config');
-const { get } = require('./request');
+const { post } = require('./request');
 
 /**
  * @param {string} bitylSettingsFullPath - Full path to the JSON Bitly settings file.
@@ -29,15 +29,22 @@ class Bitly {
      */
     static async getShortUrl(longUrl) {
         const options = {
-            url: util.format('https://api-ssl.bitly.com/v3/shorten?access_token=%s&longUrl=%s',
-                settings.accessToken, encodeURIComponent(longUrl)),
+            url: util.format('https://api-ssl.bitly.com/v4/shorten'),
+            data: {
+                domain: 'bit.ly',
+                group_id: '',
+                long_url: longUrl,
+            },
+            headers: {
+                Authorization: `Bearer ${settings.accessToken}`,
+            },
         };
 
         if (typeof longUrl !== 'string') {
             return Promise.reject(new Error('URL is not a string'));
         }
 
-        const { data: { url: shortUrl } } = await get(options);
+        const { link: shortUrl } = await post(options);
 
         return shortUrl;
     }
