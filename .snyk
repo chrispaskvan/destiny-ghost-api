@@ -5,39 +5,43 @@ ignore:
   SNYK-JS-RFC6902-1053318:
     - rfc6902:
         reason: wait
-        expires: '2022-02-16T00:50:17.590Z'
+        expires: '2020-05-03T22:53:56.543Z'
   SNYK-JS-SWAGGERUIDIST-2314884:
     - swagger-ui-express > swagger-ui-dist:
         reason: wait
-        expires: '2022-02-16T00:50:17.590Z'
+        expires: '2020-05-03T22:53:56.543Z'
   SNYK-JS-VALIDATOR-1090599:
     - azure-common > validator:
         reason: wait
-        expires: '2022-02-16T00:50:17.590Z'
+        expires: '2020-05-03T22:53:56.543Z'
     - azure-sb > azure-common > validator:
         reason: wait
-        expires: '2022-02-16T00:50:17.590Z'
+        expires: '2020-05-03T22:53:56.543Z'
   SNYK-JS-VALIDATOR-1090600:
     - azure-common > validator:
         reason: wait
-        expires: '2022-02-16T00:50:17.590Z'
+        expires: '2020-05-03T22:53:56.543Z'
     - azure-sb > azure-common > validator:
         reason: wait
-        expires: '2022-02-16T00:50:17.590Z'
+        expires: '2020-05-03T22:53:56.543Z'
   SNYK-JS-VALIDATOR-1090601:
     - azure-common > validator:
         reason: wait
-        expires: '2022-02-16T00:50:17.590Z'
+        expires: '2020-05-03T22:53:56.543Z'
     - azure-sb > azure-common > validator:
         reason: None given
-        expires: '2022-02-16T00:50:17.590Z'
+        expires: '2020-05-03T22:53:56.543Z'
   SNYK-JS-VALIDATOR-1090602:
     - azure-common > validator:
         reason: wait
-        expires: '2022-02-16T00:50:17.590Z'
+        expires: '2020-05-03T22:53:56.543Z'
     - azure-sb > azure-common > validator:
         reason: None given
-        expires: '2022-02-16T00:50:17.590Z'
+        expires: '2020-05-03T22:53:56.543Z'
+  SNYK-JS-UNDERSCORE-1080984:
+    - nodemailer-smtp-transport > smtp-connection > httpntlm > underscore:
+        reason: None given
+        expires: '2020-05-03T22:53:56.543Z'
 # patches apply the minimum changes required to fix a vulnerability
 patch:
   SNYK-JS-LODASH-567746:
