@@ -54,7 +54,7 @@
         "nodemailer": "^6.6.3",
         "nodemailer-smtp-transport": "^2.7.4",
         "pino": "^6.13.1",
-        "pino-http": "^6.5.0",
+        "pino-http": "^6.6.0",
         "pino-pretty": "^4.7.1",
         "qs": "^6.10.3",
         "rate-limiter-flexible": "^2.2.4",
