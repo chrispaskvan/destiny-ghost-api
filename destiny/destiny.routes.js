@@ -54,7 +54,9 @@ const routes = ({
      *        - application/json
      *      responses:
      *        200:
-     *          description: Destiny Manifest definition
+     *          description: Returns current user details.
+     *        401:
+     *          description: Unauthorized
      */
     destinyRouter.route('/currentUser/')
         .get((req, res, next) => {
@@ -72,7 +74,8 @@ const routes = ({
         });
 
     destinyRouter.route('/grimoireCards/:numberOfCards')
-        .get(cors(),
+        .get(
+            cors(),
             (req, res, next) => {
                 const { params: { numberOfCards } } = req;
                 const count = parseInt(numberOfCards, 10);
@@ -86,7 +89,8 @@ const routes = ({
                         res.status(HttpStatus.StatusCodes.OK).json(grimoireCards);
                     })
                     .catch(next);
-            });
+            },
+        );
 
     /**
      * @swagger
@@ -100,7 +104,7 @@ const routes = ({
      *        - application/json
      *      responses:
      *        200:
-     *          description: Destiny Manifest definition
+     *          description: Returns the Destiny Manifest definition.
      */
     destinyRouter.route('/manifest')
         .get((req, res, next) => {

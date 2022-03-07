@@ -74,8 +74,10 @@ class Publisher {
      * @param notificationType - required
      * @returns {Promise}
      */
-    async sendNotification(user,
-        notificationType = this.constructor.throwIfMissingNotificationType()) {
+    async sendNotification(
+        user,
+        notificationType = this.constructor.throwIfMissingNotificationType(),
+    ) {
         const message = {
             body: JSON.stringify(user),
             customProperties: {
@@ -88,8 +90,10 @@ class Publisher {
             return false;
         }
 
-        const { isSuccessful = false } = await this.constructor.sendTopicMessage(message,
-            this.serviceBusService);
+        const { isSuccessful = false } = await this.constructor.sendTopicMessage(
+            message,
+            this.serviceBusService,
+        );
 
         return isSuccessful;
     }

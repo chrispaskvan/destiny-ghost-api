@@ -64,8 +64,10 @@ class TwilioController {
             .getItemCategory(itemCategoryHash));
         const itemCategories = await Promise.all(promises);
         const filteredCategories = itemCategories.filter(({ hash1 }) => hash1 > 1);
-        const sortedCategories = sortBy(filteredCategories,
-            itemCategory => itemCategory.hash);
+        const sortedCategories = sortBy(
+            filteredCategories,
+            itemCategory => itemCategory.hash,
+        );
         const itemCategory = sortedCategories.reduce((memo, { shortTitle }) => (`${memo + shortTitle} `), ' ')
             .trim();
         let damageType;

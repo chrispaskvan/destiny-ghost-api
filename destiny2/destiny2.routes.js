@@ -51,10 +51,13 @@ const routes = ({
      *        - application/json
      *      responses:
      *        200:
-     *          description: Destiny Manifest definition
+     *          description: Returns the current user's list of characters.
+     *        401:
+     *          description: Unauthorized
      */
     destiny2Router.route('/characters')
-        .get((req, res, next) => middleware.authenticateUser(req, res, next),
+        .get(
+            (req, res, next) => middleware.authenticateUser(req, res, next),
             (req, res, next) => {
                 const { session: { displayName, membershipType } } = req;
 
@@ -63,7 +66,8 @@ const routes = ({
                         res.json(characterBases);
                     })
                     .catch(next);
-            });
+            },
+        );
 
     /**
      * @swagger
@@ -77,7 +81,7 @@ const routes = ({
      *        - application/json
      *      responses:
      *        200:
-     *          description: Destiny 2 Item Inventory
+     *          description: Returns the complete Destiny 2 item inventory.
      */
     destiny2Router.route('/inventory')
         .get((req, res, next) => {
@@ -110,7 +114,7 @@ const routes = ({
      *        - application/json
      *      responses:
      *        200:
-     *          description: Destiny Manifest definition
+     *          description: Returns the Destiny Manifest definition.
      */
     destiny2Router.route('/manifest')
         .get((req, res, next) => {
@@ -157,10 +161,13 @@ const routes = ({
      *        - application/json
      *      responses:
      *        200:
-     *          description: Xur's inventory
+     *          description: Returns Xur's inventory.
+     *        404:
+     *          description: Xur could not be found.
      */
     destiny2Router.route('/xur')
-        .get(cors(corsConfig),
+        .get(
+            cors(corsConfig),
             (req, res, next) => middleware.authenticateUser(req, res, next),
             (req, res, next) => {
                 const { session: { displayName, membershipType } } = req;
@@ -174,7 +181,8 @@ const routes = ({
                         return res.status(HttpStatus.StatusCodes.NOT_FOUND);
                     })
                     .catch(next);
-            });
+            },
+        );
 
     return destiny2Router;
 };

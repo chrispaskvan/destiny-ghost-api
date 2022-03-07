@@ -27,7 +27,8 @@ const routes = ({
     });
 
     twilioRouter.route('/destiny/r')
-        .post((req, res, next) => middleware.authenticateUser(req, res, next),
+        .post(
+            (req, res, next) => middleware.authenticateUser(req, res, next),
             (req, res, next) => {
                 const header = req.headers['x-twilio-signature'];
                 const {
@@ -75,7 +76,8 @@ const routes = ({
                         return res.end(twiml.toString());
                     })
                     .catch(next);
-            });
+            },
+        );
 
     twilioRouter.route('/destiny/s')
         .post((req, res, next) => {

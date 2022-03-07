@@ -46,10 +46,13 @@ class HealthController {
     }
 
     async getDocumentCount() {
-        const documents = await this.documents.getDocuments('Users',
-            'SELECT VALUE COUNT(1) FROM Users', {
+        const documents = await this.documents.getDocuments(
+            'Users',
+            'SELECT VALUE COUNT(1) FROM Users',
+            {
                 enableCrossPartitionQuery: true,
-            });
+            },
+        );
 
         return documents[0];
     }

@@ -101,7 +101,10 @@ class Destiny2Controller extends DestinyController {
 
         if (characters && characters.length) {
             const itemHashes = await this.destiny.getXur(
-                membershipId, membershipType, characters[0].characterId, accessToken,
+                membershipId,
+                membershipType,
+                characters[0].characterId,
+                accessToken,
             );
 
             if (!itemHashes.length) {

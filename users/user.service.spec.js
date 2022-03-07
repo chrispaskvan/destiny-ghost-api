@@ -4,12 +4,12 @@
 const { omit } = require('lodash');
 const Chance = require('chance');
 const { cloneDeep } = require('lodash');
-const CacheService = require('./user.cache');
 const UserService = require('./user.service');
 
-jest.mock('./user.cache');
-
-const cacheService = new CacheService();
+const cacheService = {
+    getUser: jest.fn(),
+    setUser: jest.fn(),
+};
 const chance = new Chance();
 const documentService = {
     createDocument: jest.fn(),
@@ -83,10 +83,10 @@ describe('UserService', () => {
             global.Date = class extends Date {
                 constructor(date) {
                     if (date) {
-                        // eslint-disable-next-line constructor-super
-                        return super(date);
+                        return super(date); // eslint-disable-line constructor-super, max-len, no-constructor-return
                     }
 
+                    // eslint-disable-next-line no-constructor-return
                     return currentDate;
                 }
             };

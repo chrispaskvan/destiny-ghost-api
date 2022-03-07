@@ -38,8 +38,12 @@ class NotificationController {
                     const characters = await this.destiny.getProfile(membershipId, membershipType);
 
                     if (characters && characters.length) {
-                        const itemHashes = await this.destiny.getXur(membershipId,
-                            membershipType, characters[0].characterId, accessToken);
+                        const itemHashes = await this.destiny.getXur(
+                            membershipId,
+                            membershipType,
+                            characters[0].characterId,
+                            accessToken,
+                        );
                         const items = await Promise.all(itemHashes
                             .map(itemHash => this.world.getItemByHash(itemHash)));
                         const message = items.map(({ displayProperties: { name } }) => name).join('\n');

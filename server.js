@@ -39,9 +39,11 @@ async function startServer() {
             ...serverOptions,
         }, app);
 
-        server.listen(443,
+        server.listen(
+            443,
             // eslint-disable-next-line no-console
-            () => console.log('HTTPS server listening on port 443.'));
+            () => console.log('HTTPS server listening on port 443.'),
+        );
     }
 
     const insecureServer = http.createServer(app);

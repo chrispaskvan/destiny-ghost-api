@@ -9,7 +9,9 @@
 const pino = require('pino');
 
 const log = pino({
-    prettyPrint: process.env.NODE_ENV !== 'production',
+    transport: {
+        target: 'pino-pretty',
+    },
 });
 
 module.exports = log;

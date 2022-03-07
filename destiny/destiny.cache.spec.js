@@ -10,10 +10,11 @@ describe('AuthenticationService', () => {
             global.Date = class extends Date {
                 constructor(date) {
                     if (date) {
-                        // eslint-disable-next-line constructor-super
+                        // eslint-disable-next-line constructor-super, no-constructor-return
                         return super(date);
                     }
 
+                    // eslint-disable-next-line constructor-super, no-constructor-return
                     return currentDate;
                 }
             };
