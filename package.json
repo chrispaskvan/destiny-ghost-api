@@ -33,7 +33,7 @@
         "agentkeepalive": "^4.2.0",
         "applicationinsights": "^2.2.1",
         "axios": "^0.25.0",
-        "azure-common": "^0.9.26",
+        "azure-common": "^0.9.27",
         "azure-sb": "^0.11.2",
         "base64url": "^3.0.1",
         "better-sqlite3": "^7.5.0",
