@@ -44,7 +44,9 @@ const routes = ({
      *        - application/json
      *      responses:
      *        200:
-     *          description: Status reports of underlying dependencies.
+     *          description: Returns the status reports of underlying dependencies.
+     *        503:
+     *          description: Service is unavailable.
      */
     healthRouter.route('/')
         .get((req, res, next) => {

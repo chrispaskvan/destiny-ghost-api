@@ -256,9 +256,12 @@ class UserController {
         const iconUrl = await this.world.getVendorIcon(postmasterHash);
         const promises = [];
 
-        promises.push(this.notifications.sendMessage(`Enter ${
-            user.membership.tokens.code} to verify your phone number.`,
-        user.phoneNumber, user.type === 'mobile' ? iconUrl : ''));
+        promises.push(this.notifications.sendMessage(
+            `Enter ${
+                user.membership.tokens.code} to verify your phone number.`,
+            user.phoneNumber,
+            user.type === 'mobile' ? iconUrl : '',
+        ));
         promises.push(this.postmaster.register(user, iconUrl, '/register'));
 
         const result = await Promise.all(promises);

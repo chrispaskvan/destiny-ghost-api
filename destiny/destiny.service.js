@@ -121,8 +121,11 @@ class DestinyService {
             return characters;
         }
 
-        throw new DestinyError(responseBody.ErrorCode || -1,
-            responseBody.Message || '', responseBody.ErrorStatus || '');
+        throw new DestinyError(
+            responseBody.ErrorCode || -1,
+            responseBody.Message || '',
+            responseBody.ErrorStatus || '',
+        );
     }
 
     /**

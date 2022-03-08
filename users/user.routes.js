@@ -37,7 +37,8 @@ const routes = ({
     userRouter.all('*', cors(corsConfig));
 
     userRouter.route('/signUp')
-        .post((req, res, next) => middleware.authenticateUser(req, res, next),
+        .post(
+            (req, res, next) => middleware.authenticateUser(req, res, next),
             (req, res, next) => {
                 const { body: user, session: { displayName, membershipType } } = req;
 
@@ -50,10 +51,12 @@ const routes = ({
                         ? res.status(HttpStatus.StatusCodes.OK).end()
                         : res.status(HttpStatus.StatusCodes.CONFLICT).end()))
                     .catch(next);
-            });
+            },
+        );
 
     userRouter.route('/join')
-        .post((req, res, next) => middleware.authenticateUser(req, res, next),
+        .post(
+            (req, res, next) => middleware.authenticateUser(req, res, next),
             (req, res, next) => {
                 const { body: user } = req;
 
@@ -62,7 +65,8 @@ const routes = ({
                         ? res.status(HttpStatus.StatusCodes.OK).end()
                         : res.status(HttpStatus.StatusCodes.BAD_REQUEST).end()))
                     .catch(next);
-            });
+            },
+        );
 
     userRouter.route('/signIn/Bungie')
         .get((req, res, next) => {
@@ -102,7 +106,8 @@ const routes = ({
         });
 
     userRouter.route('/:emailAddress/emailAddress')
-        .get((req, res, next) => middleware.authenticateUser(req, res, next),
+        .get(
+            (req, res, next) => middleware.authenticateUser(req, res, next),
             (req, res, next) => {
                 const { params: { emailAddress } } = req;
 
@@ -111,10 +116,12 @@ const routes = ({
                         ? res.status(HttpStatus.StatusCodes.NO_CONTENT).end()
                         : res.status(HttpStatus.StatusCodes.NOT_FOUND).end()))
                     .catch(next);
-            });
+            },
+        );
 
     userRouter.route('/:phoneNumber/phoneNumber')
-        .get((req, res, next) => middleware.authenticateUser(req, res, next),
+        .get(
+            (req, res, next) => middleware.authenticateUser(req, res, next),
             (req, res, next) => {
                 const { params: { phoneNumber } } = req;
 
@@ -123,15 +130,19 @@ const routes = ({
                         ? res.status(HttpStatus.StatusCodes.NO_CONTENT).end()
                         : res.status(HttpStatus.StatusCodes.NOT_FOUND).end()))
                     .catch(next);
-            });
+            },
+        );
 
     userRouter.route('/join')
-        .post((req, res, next) => middleware.authenticateUser(req, res, next),
+        .post(
+            (req, res, next) => middleware.authenticateUser(req, res, next),
             (req, res, next) => userController.join(req, res)
-                .catch(next));
+                .catch(next),
+        );
 
     userRouter.route('/current')
-        .get((req, res, next) => middleware.authenticateUser(req, res, next),
+        .get(
+            (req, res, next) => middleware.authenticateUser(req, res, next),
             (req, res, next) => {
                 const { session: { displayName, membershipType } } = req;
 
@@ -148,10 +159,12 @@ const routes = ({
                         return res.status(HttpStatus.StatusCodes.UNAUTHORIZED).end();
                     })
                     .catch(next);
-            });
+            },
+        );
 
     userRouter.route('/')
-        .patch((req, res, next) => middleware.authenticateUser(req, res, next),
+        .patch(
+            (req, res, next) => middleware.authenticateUser(req, res, next),
             (req, res, next) => {
                 const { body: patches, session: { displayName, membershipType } } = req;
                 userController.update({ displayName, membershipType, patches })
@@ -159,10 +172,12 @@ const routes = ({
                         ? res.json(user)
                         : res.status(HttpStatus.StatusCodes.NOT_FOUND).send('user not found')))
                     .catch(next);
-            });
+            },
+        );
 
     userRouter.route('/:id/version/:version')
-        .get((req, res, next) => middleware.authenticateUser(req, res, next),
+        .get(
+            (req, res, next) => middleware.authenticateUser(req, res, next),
             (req, res, next) => roles.administrativeUser(req, res, next),
             (req, res, next) => {
                 const { params: { id, version } } = req;
@@ -176,7 +191,8 @@ const routes = ({
                         ? res.status(HttpStatus.StatusCodes.OK).json(user)
                         : res.status(HttpStatus.StatusCodes.NOT_FOUND).send('user not found')))
                     .catch(next);
-            });
+            },
+        );
 
     return userRouter;
 };

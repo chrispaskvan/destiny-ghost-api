@@ -172,7 +172,7 @@ describe('AuthenticationService', () => {
             beforeEach(async () => {
                 destinyService.getCurrentUser = jest.fn().mockRejectedValue();
                 destinyService.getAccessTokenFromRefreshToken = jest.fn().mockResolvedValue({
-                    access_token,
+                    access_token, // eslint-disable-line camelcase
                     expires_in: expiresIn,
                 });
                 userService.getCurrentUser = jest.fn().mockResolvedValue(mockUser);
@@ -192,7 +192,7 @@ describe('AuthenticationService', () => {
                     ...user1,
                     bungie: {
                         _ttl: now + expiresIn * 1000,
-                        access_token,
+                        access_token, // eslint-disable-line camelcase
                         expires_in: expiresIn,
                     },
                 });

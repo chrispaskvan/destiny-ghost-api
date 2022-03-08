@@ -41,8 +41,10 @@ class DestinyCache {
      */
     getManifest() {
         return new Promise((resolve, reject) => {
-            client.get(this.constructor.manifestKey,
-                (err, res) => (err ? reject(err) : resolve(res ? JSON.parse(res) : undefined)));
+            client.get(
+                this.constructor.manifestKey,
+                (err, res) => (err ? reject(err) : resolve(res ? JSON.parse(res) : undefined)),
+            );
         });
     }
 
@@ -54,8 +56,10 @@ class DestinyCache {
     // eslint-disable-next-line class-methods-use-this
     getVendor(vendorHash) {
         return new Promise((resolve, reject) => {
-            client.get(vendorHash,
-                (err, res) => (err ? reject(err) : resolve(res ? JSON.parse(res) : undefined)));
+            client.get(
+                vendorHash,
+                (err, res) => (err ? reject(err) : resolve(res ? JSON.parse(res) : undefined)),
+            );
         });
     }
 
@@ -67,14 +71,19 @@ class DestinyCache {
     setManifest(manifest) {
         if (manifest && typeof manifest === 'object') {
             return new Promise((resolve, reject) => {
-                client.set(this.constructor.manifestKey, JSON.stringify(manifest),
-                    'EX', this.constructor.secondsUntilDailyReset(), (err, success) => {
+                client.set(
+                    this.constructor.manifestKey,
+                    JSON.stringify(manifest),
+                    'EX',
+                    this.constructor.secondsUntilDailyReset(),
+                    (err, success) => {
                         if (err) {
                             reject(err);
                         } else {
                             resolve(success);
                         }
-                    });
+                    },
+                );
             });
         }
 
@@ -93,8 +102,13 @@ class DestinyCache {
         }
 
         return new Promise((resolve, reject) => {
-            client.set(hash,
-                JSON.stringify(vendor), 'EX', this.constructor.secondsUntilDailyReset(), (err, res) => (err ? reject(err) : resolve(res)));
+            client.set(
+                hash,
+                JSON.stringify(vendor),
+                'EX',
+                this.constructor.secondsUntilDailyReset(),
+                (err, res) => (err ? reject(err) : resolve(res)),
+            );
         });
     }
 }

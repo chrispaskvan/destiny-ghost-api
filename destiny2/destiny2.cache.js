@@ -42,8 +42,10 @@ class Destiny2Cache extends DestinyCache {
      */
     getManifest() {
         return new Promise((resolve, reject) => {
-            client.get(this.constructor.manifestKey,
-                (err, res) => (err ? reject(err) : resolve(res ? JSON.parse(res) : undefined)));
+            client.get(
+                this.constructor.manifestKey,
+                (err, res) => (err ? reject(err) : resolve(res ? JSON.parse(res) : undefined)),
+            );
         });
     }
 

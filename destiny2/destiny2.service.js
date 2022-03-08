@@ -49,8 +49,11 @@ class Destiny2Service extends DestinyService {
             return manifest;
         }
 
-        throw new DestinyError(responseBody.ErrorCode || -1,
-            responseBody.Message || '', responseBody.ErrorStatus || '');
+        throw new DestinyError(
+            responseBody.ErrorCode || -1,
+            responseBody.Message || '',
+            responseBody.ErrorStatus || '',
+        );
     }
 
     /**
@@ -91,8 +94,11 @@ class Destiny2Service extends DestinyService {
             return player;
         }
 
-        throw new DestinyError(responseBody.ErrorCode || -1,
-            responseBody.Message || '', responseBody.ErrorStatus || '');
+        throw new DestinyError(
+            responseBody.ErrorCode || -1,
+            responseBody.Message || '',
+            responseBody.ErrorStatus || '',
+        );
     }
 
     /**
@@ -127,8 +133,11 @@ class Destiny2Service extends DestinyService {
             return allTime;
         }
 
-        throw new DestinyError(responseBody.ErrorCode || -1,
-            responseBody.Message || '', responseBody.ErrorStatus || '');
+        throw new DestinyError(
+            responseBody.ErrorCode || -1,
+            responseBody.Message || '',
+            responseBody.ErrorStatus || '',
+        );
     }
 
     /**
@@ -165,8 +174,11 @@ class Destiny2Service extends DestinyService {
                 return characters;
             }
 
-            throw new DestinyError(responseBody.ErrorCode || -1,
-                responseBody.Message || '', responseBody.ErrorStatus || '');
+            throw new DestinyError(
+                responseBody.ErrorCode || -1,
+                responseBody.Message || '',
+                responseBody.ErrorStatus || '',
+            );
         } catch (err) {
             if (err instanceof DestinyError) throw err;
 
@@ -216,8 +228,11 @@ class Destiny2Service extends DestinyService {
             return itemHashes;
         }
 
-        throw new DestinyError(responseBody.ErrorCode || -1,
-            responseBody.Message || '', responseBody.ErrorStatus || '');
+        throw new DestinyError(
+            responseBody.ErrorCode || -1,
+            responseBody.Message || '',
+            responseBody.ErrorStatus || '',
+        );
     }
 }
 

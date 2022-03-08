@@ -1,15 +1,18 @@
 // eslint-disable-next-line import/no-extraneous-dependencies
-const redis = process.env.NODE_ENV === 'test' ? require('redis-mock') : require('redis');
+const Redis = require('ioredis');
 const { redis: redisConfig } = require('./config');
 
 /**
  * Cache Store
  */
-const client = redis.createClient(redisConfig.port, redisConfig.host, {
-    auth_pass: redisConfig.key, // jscs:ignore requireCamelCaseOrUpperCaseIdentifiers
+const configuration = {
+    host: redisConfig.host,
+    port: redisConfig.port,
+    password: redisConfig.key,
     tls: {
         servername: redisConfig.host,
     },
-});
+};
+const client = new Redis(configuration);
 
 module.exports = client;

@@ -22,9 +22,11 @@ const hook = asyncHooks.createHook({
 
             trackedResources.delete(id);
             performance.mark(`gjallarhorn-${id}-destroy`);
-            performance.measure(context,
+            performance.measure(
+                context,
                 `gjallarhorn-${id}-init`,
-                `gjallarhorn-${id}-destroy`);
+                `gjallarhorn-${id}-destroy`,
+            );
         }
     },
 });

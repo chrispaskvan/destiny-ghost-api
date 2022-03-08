@@ -10,17 +10,5 @@ module.exports = {
             url: 'https://choosealicense.com/licenses/mit',
         },
     },
-    servers: [
-        {
-            url: 'http://localhost:1100',
-        },
-        {
-            url: 'https://api2.destiny-ghost.com',
-        },
-        {
-            url: 'https://api.destiny-ghost.com',
-        },
-    ],
     apis: ['../**/*.routes.js'],
-    basePath: '/',
 };
