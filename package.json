@@ -9,7 +9,8 @@
         "start": "NODE_ENV=development node -r dotenv/config --trace-warnings server",
         "swagger": "swagger-jsdoc -d swaggerDef.js",
         "test": "NODE_ENV=test jest --config ./jest.config.js",
-        "test:watch": "npm run test -- --watchAll"
+        "test:watch": "npm run test -- --watchAll",
+        "prepare": "husky install"
     },
     "author": "Chris Paskvan",
     "license": "MIT",
@@ -21,18 +22,12 @@
         "node": ">=v16.11.1",
         "npm": ">=8.0.0"
     },
-    "husky": {
-        "hooks": {
-            "pre-commit": "npm run lint",
-            "pre-push": "npm run test"
-        }
-    },
     "dependencies": {
         "@azure/cosmos": "^3.15.1",
         "@godaddy/terminus": "^4.10.2",
         "agentkeepalive": "^4.2.1",
         "applicationinsights": "^2.2.2",
-        "axios": "^0.26.0",
+        "axios": "^0.26.1",
         "azure-common": "^0.9.27",
         "azure-sb": "^0.11.2",
         "base64url": "^3.0.1",
@@ -54,14 +49,14 @@
         "lodash": "^4.17.21",
         "nodemailer": "^6.6.3",
         "nodemailer-smtp-transport": "^2.7.4",
-        "pino": "^7.8.0",
+        "pino": "^7.8.1",
         "pino-http": "^6.6.0",
         "qs": "^6.10.3",
         "rate-limiter-flexible": "^2.2.4",
         "rfc6902": "^5.0.1",
-        "snyk": "^1.863.0",
+        "snyk": "^1.866.0",
         "swagger-ui-express": "^4.1.6",
-        "twilio": "^3.75.0",
+        "twilio": "^3.75.1",
         "yauzl": "^2.10.0"
     },
     "devDependencies": {
@@ -71,7 +66,7 @@
         "eslint-plugin-import": "^2.25.4",
         "eslint-plugin-jest": "^26.1.1",
         "eslint-plugin-security": "^1.4.0",
-        "husky": "^4.3.8",
+        "husky": "^7.0.4",
         "jest": "^27.5.1",
         "node-mocks-http": "^1.10.1",
         "pino-pretty": "^7.5.3",
