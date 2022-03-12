@@ -8,10 +8,16 @@
  */
 const pino = require('pino');
 
-const log = pino({
-    transport: {
-        target: 'pino-pretty',
-    },
-});
+let log;
+
+if (process.env.NODE_ENV === 'production') {
+    log = pino();
+} else {
+    log = pino({
+        transport: {
+            target: 'pino-pretty',
+        },
+    });
+}
 
 module.exports = log;

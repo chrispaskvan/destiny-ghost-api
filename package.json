@@ -10,7 +10,7 @@
         "swagger": "swagger-jsdoc -d swaggerDef.js",
         "test": "NODE_ENV=test jest --config ./jest.config.js",
         "test:watch": "npm run test -- --watchAll",
-        "prepare": "husky install"
+        "prepare": "node -e \"try { require('husky').install() } catch (e) {if (e.code !== 'MODULE_NOT_FOUND') throw e}\""
     },
     "author": "Chris Paskvan",
     "license": "MIT",
