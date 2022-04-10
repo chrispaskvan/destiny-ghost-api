@@ -54,7 +54,7 @@
         "qs": "^6.10.3",
         "rate-limiter-flexible": "^2.2.4",
         "rfc6902": "^5.0.1",
-        "snyk": "^1.869.0",
+        "snyk": "^1.878.0",
         "swagger-ui-express": "^4.1.6",
         "twilio": "^3.75.1",
         "yauzl": "^2.10.0"
