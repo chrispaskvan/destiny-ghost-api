@@ -8,6 +8,7 @@ const v8 = require('v8');
 
 const { get } = require('../helpers/request');
 const applicationInsights = require('../helpers/application-insights');
+const log = require('../helpers/log');
 
 /**
  * Not available
@@ -109,7 +110,7 @@ class HealthController {
                 itemName = notAvailable,
                 itemTypeAndTierDisplayName,
             } = {},
-        ] = await this.world2.getItemByName('Necrotic Grip');
+        ] = await this.world2.getItemByName('The Comedian');
 
         return `${itemName} ${itemTypeAndTierDisplayName}`;
     }
@@ -135,6 +136,7 @@ class HealthController {
             name: 'Percent of Available Memory Used',
             value: Math.round((memory.rss / memory.totalAvailableSize) * 100),
         });
+        log.info(`Memory Statistics: RSS is ${memory.rss} MB of Total Available Size ${memory.totalAvailableSize} MB`);
 
         return {
             failures,

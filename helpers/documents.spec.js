@@ -2,21 +2,48 @@
  * Document Tests
  */
 const QueryBuilder = require('./queryBuilder');
-const documentService = require('./documents');
+const Documents = require('./documents');
 
 jest.setTimeout(10000);
 
 describe('Documents', () => {
     const collectionId = 'Messages';
+    const document = {
+        DateTime: new Date().toISOString(),
+        SmsSid: 'SM11',
+        SmsStatus: 'queued',
+        MessageStatus: 'queued',
+        To: '+1234567890',
+        id: 1,
+    };
+    const deleteFn = jest.fn().mockResolvedValue({
+        resource: document,
+    });
+    const fetchAllFn = jest.fn().mockResolvedValue({
+        resources: [
+            document,
+        ],
+    });
+    const replaceFn = jest.fn().mockImplementation(document1 => Promise.resolve({
+        resource: document1,
+    }));
+    const container = {
+        item: jest.fn().mockReturnValue({ delete: deleteFn, replace: replaceFn }),
+        items: {
+            create: jest.fn().mockResolvedValue({
+                resource: document,
+            }),
+            query: jest.fn().mockReturnValue({ fetchAll: fetchAllFn }),
+        },
+    };
+    const containerFn = jest.fn().mockResolvedValue(container);
+    const documentService = new Documents({
+        client: {
+            database: jest.fn().mockReturnValue({ container: containerFn }),
+        },
+    });
 
     it('should create, read, update, and delete a document', async () => {
-        const document = {
-            DateTime: new Date().toISOString(),
-            SmsSid: 'SM11',
-            SmsStatus: 'queued',
-            MessageStatus: 'queued',
-            To: '+1234567890',
-        };
         const { id: createdDocumentId } = await documentService
             .createDocument(collectionId, document);
 

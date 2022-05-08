@@ -45,7 +45,7 @@ class TwilioController {
      * @returns {Promise}
      * @private
      */
-    async getItem(item) {
+    async #getItem(item) {
         const {
             defaultDamageTypeHash,
             displayProperties: {
@@ -294,13 +294,13 @@ class TwilioController {
                 const keys = Object.keys(groups);
 
                 if (keys.length === 1) {
-                    return this.getItem(items[0]);
+                    return this.#getItem(items[0]);
                 }
 
                 return items;
             }
 
-            return this.getItem(items[0]);
+            return this.#getItem(items[0]);
         }
 
         return [];

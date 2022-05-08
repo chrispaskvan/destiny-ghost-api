@@ -142,44 +142,4 @@ describe('DestinyService', () => {
                 }));
         });
     });
-
-    describe('getPreferredMembership', () => {
-        describe('when crossSaveOverride is defined', () => {
-            it('should return the matching membership type', async () => {
-                const memberships = [
-                    {
-                        crossSaveOverride: 2,
-                        membershipId: 1,
-                        membershipType: 1,
-                    },
-                    {
-                        crossSaveOverride: 2,
-                        membershipId: 2,
-                        membershipType: 2,
-                    },
-                ];
-                const membership = await destinyService.getPreferredMembership(memberships);
-
-                expect(membership).toEqual(memberships[1]);
-            });
-        });
-
-        describe('when crossSaveOverride is not defined', () => {
-            it('should return the first membership', async () => {
-                const memberships = [
-                    {
-                        membershipId: 1,
-                        membershipType: 1,
-                    },
-                    {
-                        membershipId: 2,
-                        membershipType: 2,
-                    },
-                ];
-                const membership = await destinyService.getPreferredMembership(memberships);
-
-                expect(membership).toEqual(memberships[0]);
-            });
-        });
-    });
 });

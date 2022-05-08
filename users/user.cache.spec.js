@@ -1,58 +1,17 @@
-const client = require('../helpers/cache');
 const UserCache = require('./user.cache');
 const mockUser = require('../mocks/users.json')[0];
 
-jest.mock('../helpers/cache');
-
 describe('UserCache', () => {
     let cacheService;
-
-    describe('deleteCache', () => {
-        const cacheKey = 'key';
-
-        describe('when client del operation succeeds', () => {
-            const clientResponse = 1;
-
-            beforeEach(() => {
-                client.del = jest.fn((key, callback) => callback(undefined, clientResponse));
-                client.quit = jest.fn();
-
-                cacheService = new UserCache();
-            });
-
-            it('resolves', async () => {
-                const res = await cacheService.deleteCache(cacheKey);
-
-                expect(res).toEqual(clientResponse);
-            });
-        });
-
-        describe('when client del operation fails', () => {
-            const errMessage = 'error';
-
-            beforeEach(() => {
-                client.del = jest.fn(() => {
-                    throw new Error(errMessage);
-                });
-                client.quit = jest.fn();
-
-                cacheService = new UserCache();
-            });
-
-            it('rejects', async () => {
-                await expect(cacheService.deleteCache(cacheKey))
-                    .rejects.toThrow(errMessage);
-            });
-        });
-    });
+    let client;
 
     describe('deleteUser', () => {
-        const del = jest.fn((key, callback) => callback(undefined, 1));
-
         beforeEach(() => {
-            client.del = del;
+            client = {
+                del: jest.fn((key, callback) => callback(undefined, 1)),
+            };
 
-            cacheService = new UserCache();
+            cacheService = new UserCache({ client });
         });
 
         describe('when phone number, display name, and membership type are given', () => {
@@ -60,7 +19,7 @@ describe('UserCache', () => {
                 const res = await cacheService.deleteUser(mockUser);
 
                 expect(res).toEqual([1, 1]);
-                expect(del).toHaveBeenCalledTimes(2);
+                expect(client.del).toHaveBeenCalledTimes(2);
             });
         });
 
@@ -82,9 +41,12 @@ describe('UserCache', () => {
         describe('when client get operation succeeds', () => {
             describe('when cache is found', () => {
                 it('resolves value', async () => {
-                    client.get = jest
-                        .fn((key, callback) => callback(undefined, JSON.stringify(mockUser)));
-                    cacheService = new UserCache();
+                    client = {
+                        get:
+                        jest.fn((key, callback) => callback(undefined, JSON.stringify(mockUser))),
+                    };
+
+                    cacheService = new UserCache({ client });
 
                     const res = await cacheService.getCache(cacheKey);
 
@@ -94,8 +56,11 @@ describe('UserCache', () => {
 
             describe('when cache is not found', () => {
                 it('resolves value', async () => {
-                    client.get = jest.fn((key, callback) => callback(undefined, undefined));
-                    cacheService = new UserCache();
+                    client = {
+                        get: jest.fn((key, callback) => callback(undefined, undefined)),
+                    };
+
+                    cacheService = new UserCache({ client });
 
                     const res = await cacheService.getCache(cacheKey);
 
@@ -108,11 +73,13 @@ describe('UserCache', () => {
             it('rejects', async () => {
                 const errMessage = 'error';
 
-                client.get = jest.fn(() => {
-                    throw new Error(errMessage);
-                });
+                client = {
+                    get: jest.fn(() => {
+                        throw new Error(errMessage);
+                    }),
+                };
 
-                cacheService = new UserCache();
+                cacheService = new UserCache({ client });
 
                 await expect(cacheService.getCache(cacheKey))
                     .rejects.toThrow(errMessage);
@@ -122,12 +89,14 @@ describe('UserCache', () => {
 
     describe('getUser', () => {
         beforeEach(() => {
-            client.del = jest.fn((key, callback) => callback(undefined, 1));
-            client.get = jest.fn((key, callback) => callback(undefined, JSON.stringify(mockUser)));
-            client.quit = jest.fn();
-            client.set = jest.fn((key, value, option, ttl, callback) => callback());
+            client = {
+                del: jest.fn((key, callback) => callback(undefined, 1)),
+                get: jest.fn((key, callback) => callback(undefined, JSON.stringify(mockUser))),
+                quit: jest.fn(),
+                set: jest.fn((key, value, option, ttl, callback) => callback()),
+            };
 
-            cacheService = new UserCache();
+            cacheService = new UserCache({ client });
         });
 
         describe('when cached user is found', () => {
@@ -173,12 +142,12 @@ describe('UserCache', () => {
 
     describe('setUser', () => {
         describe('when client set operation succeeds', () => {
-            const set = jest.fn((key, value, option, ttl, callback) => callback());
-
             beforeEach(() => {
-                client.set = set;
+                client = {
+                    set: jest.fn((key, value, option, ttl, callback) => callback()),
+                };
 
-                cacheService = new UserCache();
+                cacheService = new UserCache({ client });
             });
 
             describe('when display name is not found', () => {
@@ -202,7 +171,7 @@ describe('UserCache', () => {
                         const res = await cacheService.setUser(mockUser1);
 
                         expect(res).toEqual([undefined, undefined, undefined]);
-                        expect(set).toHaveBeenCalledTimes(2);
+                        expect(client.set).toHaveBeenCalledTimes(2);
                     });
                 });
 
@@ -212,7 +181,7 @@ describe('UserCache', () => {
                         const res = await cacheService.setUser(mockUser1);
 
                         expect(res).toEqual([undefined, undefined, undefined]);
-                        expect(set).toHaveBeenCalledTimes(2);
+                        expect(client.set).toHaveBeenCalledTimes(2);
                     });
                 });
 
@@ -221,7 +190,7 @@ describe('UserCache', () => {
                         const res = await cacheService.setUser(mockUser);
 
                         expect(res).toEqual([undefined, undefined, undefined]);
-                        expect(set).toHaveBeenCalledTimes(3);
+                        expect(client.set).toHaveBeenCalledTimes(3);
                     });
                 });
             });
@@ -232,10 +201,12 @@ describe('UserCache', () => {
             it('cache user', async () => {
                 const errMessage = 'error';
 
-                client.set = jest.fn(() => {
-                    throw new Error(errMessage);
-                });
-                cacheService = new UserCache();
+                client = {
+                    set: jest.fn(() => {
+                        throw new Error(errMessage);
+                    }),
+                };
+                cacheService = new UserCache({ client });
 
                 await expect(cacheService.setUser(mockUser))
                     .rejects.toThrow(errMessage);

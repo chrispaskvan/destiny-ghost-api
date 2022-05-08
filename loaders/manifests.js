@@ -14,12 +14,12 @@ class Manifests {
     /**
      * Download the latest and greatest manifest file if needed.
      *
-     * @private
      * @param destiny
      * @param world
      * @returns {Promise<void>}
+     * @private
      */
-    static async upsertManifest(destiny, world) {
+    static async #upsertManifest(destiny, world) {
         const manifest = await destiny.getManifest(true);
 
         await world.updateManifest(manifest);
@@ -33,8 +33,8 @@ class Manifests {
      */
     async upsertManifests() {
         await Promise.all([
-            this.constructor.upsertManifest(this.destinyService, this.worldRepository),
-            this.constructor.upsertManifest(this.destiny2Service, this.world2Repository),
+            this.constructor.#upsertManifest(this.destinyService, this.worldRepository),
+            this.constructor.#upsertManifest(this.destiny2Service, this.world2Repository),
         ]);
     }
 }

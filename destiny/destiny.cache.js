@@ -1,21 +1,15 @@
-const client = require('../helpers/cache');
-
-/**
- * Cache key for the latest Destiny Manifest cached.
- * @type {string}
- */
-const manifestKey = 'destiny-manifest';
-
 /**
  * Destiny Cache Class
  */
 class DestinyCache {
     /**
-     * Get manifest key.
-     * @returns {string}
+     * Cache key for the latest Destiny Manifest cached.
+     * @type {string}
      */
-    static get manifestKey() {
-        return manifestKey;
+    #manifestKey = 'destiny-manifest';
+
+    constructor(options = {}) {
+        this.client = options.client;
     }
 
     /**
@@ -41,8 +35,8 @@ class DestinyCache {
      */
     getManifest() {
         return new Promise((resolve, reject) => {
-            client.get(
-                this.constructor.manifestKey,
+            this.client.get(
+                this.#manifestKey,
                 (err, res) => (err ? reject(err) : resolve(res ? JSON.parse(res) : undefined)),
             );
         });
@@ -56,7 +50,7 @@ class DestinyCache {
     // eslint-disable-next-line class-methods-use-this
     getVendor(vendorHash) {
         return new Promise((resolve, reject) => {
-            client.get(
+            this.client.get(
                 vendorHash,
                 (err, res) => (err ? reject(err) : resolve(res ? JSON.parse(res) : undefined)),
             );
@@ -71,8 +65,8 @@ class DestinyCache {
     setManifest(manifest) {
         if (manifest && typeof manifest === 'object') {
             return new Promise((resolve, reject) => {
-                client.set(
-                    this.constructor.manifestKey,
+                this.client.set(
+                    this.#manifestKey,
                     JSON.stringify(manifest),
                     'EX',
                     this.constructor.secondsUntilDailyReset(),
@@ -102,7 +96,7 @@ class DestinyCache {
         }
 
         return new Promise((resolve, reject) => {
-            client.set(
+            this.client.set(
                 hash,
                 JSON.stringify(vendor),
                 'EX',

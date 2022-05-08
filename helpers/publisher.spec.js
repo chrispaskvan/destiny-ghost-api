@@ -5,7 +5,13 @@ const Chance = require('chance');
 const Publisher = require('./publisher');
 
 const chance = new Chance();
-const publisher = new Publisher();
+const serviceBusService = {
+    createTopicIfNotExists: jest.fn((queueName, callback) => callback()),
+    sendTopicMessage: jest.fn((queueName, message, callback) => callback(undefined, {
+        isSuccessful: true,
+    })),
+};
+const publisher = new Publisher({ serviceBusService });
 
 describe('Message delivery test', () => {
     it('Should return true for success', () => new Promise(done => {

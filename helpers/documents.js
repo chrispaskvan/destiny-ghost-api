@@ -5,19 +5,15 @@
  * @summary Helper class for interfacing with DocumentDB.
  * @author Chris Paskvan
  */
-const { CosmosClient } = require('@azure/cosmos');
-const { documents: { authenticationKey, databaseId, host } } = require('./config');
+const { documents: { databaseId } } = require('./config');
 
 class Documents {
-    constructor() {
+    constructor(options = {}) {
         /**
          * Initialize Client
          * @type {*|DocumentClient}
          */
-        this.client = new CosmosClient({
-            endpoint: host,
-            key: authenticationKey,
-        });
+        this.client = options.client;
     }
 
     /**
@@ -27,7 +23,7 @@ class Documents {
      * @returns {Promise}
      * @private
      */
-    getCollection(collectionId) {
+    #getCollection(collectionId) {
         return Promise.resolve(this.client
             .database(databaseId)
             .container(collectionId));
@@ -41,7 +37,7 @@ class Documents {
      * @returns {Promise}
      */
     async createDocument(collectionId, document) {
-        const container = await this.getCollection(collectionId);
+        const container = await this.#getCollection(collectionId);
         const { resource: createdDocument } = await container.items.create(document);
 
         return createdDocument;
@@ -56,7 +52,7 @@ class Documents {
      * @returns {Promise}
      */
     async deleteDocumentById(collectionId, documentId, partitionKey) {
-        const container = await this.getCollection(collectionId);
+        const container = await this.#getCollection(collectionId);
         const { resource: result } = await container.item(documentId, partitionKey).delete();
 
         return result;
@@ -70,7 +66,7 @@ class Documents {
      * @returns {Promise}
      */
     async getDocuments(collectionId, query, options) {
-        const container = await this.getCollection(collectionId);
+        const container = await this.#getCollection(collectionId);
         const { resources: items } = await container.items
             .query(query, options)
             .fetchAll();
@@ -85,7 +81,7 @@ class Documents {
      * @returns {Promise}
      */
     async updateDocument(collectionId, document, partitionKey) {
-        const container = await this.getCollection(collectionId);
+        const container = await this.#getCollection(collectionId);
         const options = {
             accessCondition: {
                 type: 'IfMatch',
@@ -100,4 +96,4 @@ class Documents {
     }
 }
 
-module.exports = new Documents();
+module.exports = Documents;

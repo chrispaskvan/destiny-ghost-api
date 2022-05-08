@@ -10,7 +10,9 @@ const pino = require('pino');
 
 let log;
 
-if (process.env.NODE_ENV === 'production') {
+if (process.env.NODE_ENV === 'test') {
+    log = console;
+} else if (process.env.NODE_ENV === 'production') {
     log = pino();
 } else {
     log = pino({

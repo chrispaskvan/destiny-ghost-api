@@ -1,14 +1,16 @@
-const client = require('../helpers/cache');
-
 /**
  *  User Cache Class
  */
 class UserCache {
+    constructor(options = {}) {
+        this.client = options.client;
+    }
+
     /**
      * @param teeth
      * @returns {string}
      */
-    static getCacheKey(...teeth) {
+    static #getCacheKey(...teeth) {
         return teeth.join('|');
     }
 
@@ -19,9 +21,9 @@ class UserCache {
      * @private
      */
     // eslint-disable-next-line class-methods-use-this
-    deleteCache(key) {
+    #deleteCache(key) {
         return new Promise((resolve, reject) => {
-            client.del(
+            this.client.del(
                 key,
                 (err, res) => (err ? reject(err) : resolve(res)),
             );
@@ -38,13 +40,14 @@ class UserCache {
         let promise2;
 
         if (phoneNumber) {
-            promise1 = this.deleteCache(this.constructor.getCacheKey(phoneNumber));
+            promise1 = this.#deleteCache(this.constructor.#getCacheKey(phoneNumber));
         } else {
             promise1 = Promise.resolve();
         }
 
         if (displayName && membershipType) {
-            promise2 = this.deleteCache(this.constructor.getCacheKey(displayName, membershipType));
+            // eslint-disable-next-line max-len
+            promise2 = this.#deleteCache(this.constructor.#getCacheKey(displayName, membershipType));
         } else {
             promise2 = Promise.resolve();
         }
@@ -61,7 +64,7 @@ class UserCache {
     // eslint-disable-next-line class-methods-use-this
     getCache(key) {
         return new Promise((resolve, reject) => {
-            client.get(key, (err, res) => {
+            this.client.get(key, (err, res) => {
                 if (err) {
                     return reject(err);
                 }
@@ -77,7 +80,7 @@ class UserCache {
      * @returns {Promise}
      */
     async getUser(...teeth) {
-        const key = this.constructor.getCacheKey(...teeth);
+        const key = this.constructor.#getCacheKey(...teeth);
 
         const user = await this.getCache(key);
         if (user) {
@@ -113,9 +116,9 @@ class UserCache {
             return Promise.reject(new Error('membershipType not found'));
         }
 
-        const key = this.constructor.getCacheKey(displayName, membershipType);
+        const key = this.constructor.#getCacheKey(displayName, membershipType);
         const promise1 = new Promise((resolve, reject) => {
-            client.set(
+            this.client.set(
                 key,
                 JSON.stringify(user),
                 'EX',
@@ -128,7 +131,7 @@ class UserCache {
 
         if (phoneNumber) {
             promise2 = new Promise((resolve, reject) => {
-                client.set(
+                this.client.set(
                     phoneNumber,
                     JSON.stringify({ displayName, membershipType }),
 
@@ -146,7 +149,7 @@ class UserCache {
 
         if (emailAddress) {
             promise3 = new Promise((resolve, reject) => {
-                client.set(
+                this.client.set(
                     emailAddress,
                     JSON.stringify({ displayName, membershipType }),
 

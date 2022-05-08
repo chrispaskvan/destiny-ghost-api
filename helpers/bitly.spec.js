@@ -3,7 +3,8 @@
  */
 const bitly = require('./bitly');
 
-describe('Bitly', () => {
+// eslint-disable-next-line jest/no-disabled-tests
+describe.skip('Bitly', () => {
     describe('getShortUrl', () => {
         it('should return a short URL', async () => bitly
             .getShortUrl('http://db.planetdestiny.com/items/view/3164616404')

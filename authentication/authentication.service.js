@@ -37,17 +37,16 @@ class AuthenticationService {
             ? this.userService.getUserByPhoneNumber(phoneNumber)
             : this.userService.getUserByDisplayName(displayName, membershipType));
 
-        return this.validateUser(user);
+        return this.#validateUser(user);
     }
 
     /**
      * Validate user access token with Bungie.
-     * @private
      * @param user
      * @returns {Promise}
      * @private
      */
-    async validateUser(user = {}) {
+    async #validateUser(user = {}) {
         const {
             bungie: {
                 access_token: accessToken,

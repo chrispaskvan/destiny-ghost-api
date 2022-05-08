@@ -2,22 +2,14 @@ const client = require('../helpers/cache');
 const DestinyCache = require('../destiny/destiny.cache');
 
 /**
- * Cache key for the latest Destiny Manifest cached.
- * @type {string}
- */
-const manifestKey = 'destiny2-manifest';
-
-/**
  * Destiny Cache Class
  */
 class Destiny2Cache extends DestinyCache {
     /**
-     * Get manifest key.
-     * @returns {string}
+     * Cache key for the latest Destiny Manifest cached.
+     * @type {string}
      */
-    static get manifestKey() {
-        return manifestKey;
-    }
+    #manifestKey = 'destiny2-manifest';
 
     /**
      * Get the cached list of characters for the user.
@@ -43,7 +35,7 @@ class Destiny2Cache extends DestinyCache {
     getManifest() {
         return new Promise((resolve, reject) => {
             client.get(
-                this.constructor.manifestKey,
+                this.#manifestKey,
                 (err, res) => (err ? reject(err) : resolve(res ? JSON.parse(res) : undefined)),
             );
         });

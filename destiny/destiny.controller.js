@@ -21,7 +21,7 @@ class DestinyController {
      * @returns {*}
      * @private
      */
-    static getRandomState() {
+    static #getRandomState() {
         return base64url(crypto.randomBytes(11));
     }
 
@@ -32,7 +32,7 @@ class DestinyController {
      * @param res
      */
     async getAuthorizationUrl() {
-        const state = this.constructor.getRandomState();
+        const state = this.constructor.#getRandomState();
         const url = await this.destiny.getAuthorizationUrl(state);
 
         return { state, url };
