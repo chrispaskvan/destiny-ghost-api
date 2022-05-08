@@ -161,7 +161,7 @@ class DestinyService {
             displayName,
             membershipId,
             membershipType,
-        } = this.getPreferredMembership(destinyMemberships);
+        } = this.#getPreferredMembership(destinyMemberships);
 
         return {
             displayName,
@@ -200,10 +200,10 @@ class DestinyService {
     }
 
     /**
-     * @private
      * @param memberships
+     * @private
      */
-    getPreferredMembership(memberships) { // eslint-disable-line class-methods-use-this
+    #getPreferredMembership(memberships) { // eslint-disable-line class-methods-use-this
         const [{ crossSaveOverride }] = memberships;
 
         return memberships.find(({ membershipType }) => membershipType === crossSaveOverride)

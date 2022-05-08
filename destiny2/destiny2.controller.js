@@ -92,7 +92,6 @@ class Destiny2Controller extends DestinyController {
      * Get Xur's inventory.
      *
      * @returns {*|Array}
-     * @private
      */
     async getXur(displayName, membershipType) {
         const currentUser = await this.users.getUserByDisplayName(displayName, membershipType);

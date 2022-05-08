@@ -1,6 +1,7 @@
 /**
  * Route Definitions
  */
+const { CosmosClient } = require('@azure/cosmos');
 const express = require('express');
 const swaggerUi = require('swagger-ui-express');
 const twilio = require('twilio');
@@ -17,8 +18,18 @@ const UserCache = require('../users/user.cache');
 const UserService = require('../users/user.service');
 const World = require('../helpers/world');
 const World2 = require('../helpers/world2');
-const documents = require('../helpers/documents');
-const { twilio: { accountSid, authToken } } = require('../helpers/config');
+const client = require('../helpers/cache');
+const Documents = require('../helpers/documents');
+const {
+    documents: {
+        authenticationKey,
+        host,
+    },
+    twilio: {
+        accountSid,
+        authToken,
+    },
+} = require('../helpers/config');
 
 const DestinyRouter = require('../destiny/destiny.routes');
 const Destiny2Router = require('../destiny2/destiny2.routes');
@@ -46,13 +57,17 @@ module.exports = () => {
     /**
      * Dependencies
      */
-    const destinyCache = new DestinyCache();
+    const destinyCache = new DestinyCache({ client });
     const destinyService = new DestinyService({
         cacheService: destinyCache,
     });
-
+    const cosmosClient = new CosmosClient({
+        endpoint: host,
+        key: authenticationKey,
+    });
+    const documents = new Documents({ client: cosmosClient });
     const messageClient = twilio(accountSid, authToken);
-    const userCache = new UserCache();
+    const userCache = new UserCache({ client });
     const userService = new UserService({
         cacheService: userCache,
         client: messageClient,
@@ -72,7 +87,7 @@ module.exports = () => {
     const world2 = new World2({
         directory: process.env.DESTINY2_DATABASE_DIR,
     });
-    const destiny2Cache = new Destiny2Cache();
+    const destiny2Cache = new Destiny2Cache({ client });
     const destiny2Service = new Destiny2Service({ cacheService: destiny2Cache });
     const destinyTrackerService = new DestinyTrackerService();
     const notificationService = new NotificationService({

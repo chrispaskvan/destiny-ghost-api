@@ -1,3 +1,7 @@
+const azure = require('azure-sb');
+const azureCommon = require('azure-common');
+
+const { serviceBus: { connectionString } } = require('../helpers/config');
 const Publisher = require('../helpers/publisher');
 const Subscriber = require('../helpers/subscriber');
 const notificationTypes = require('./notification.types');
@@ -8,26 +12,30 @@ const log = require('../helpers/log');
  */
 class NotificationController {
     constructor(options = {}) {
+        const retryOperations = new azureCommon.ExponentialRetryPolicyFilter();
+        const serviceBusService = azure.createServiceBusService(connectionString)
+            .withFilter(retryOperations);
         const subscriber = new Subscriber();
 
-        this.publisher = new Publisher();
         this.authentication = options.authenticationService;
         this.destiny = options.destinyService;
         this.notifications = options.notificationService;
+        this.publisher = new Publisher({
+            serviceBusService,
+        });
         this.users = options.userService;
         this.world = options.worldRepository;
 
-        subscriber.listen(this.send.bind(this));
+        subscriber.listen(this.#send.bind(this));
     }
 
     /**
-     * @private
      * @param user
      * @param notificationType
      * @returns {Promise<void>}
      * @private
      */
-    async send(user, notificationType) {
+    async #send(user, notificationType) {
         try {
             const { membershipId, membershipType, phoneNumber } = user;
 

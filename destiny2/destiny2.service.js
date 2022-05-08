@@ -32,7 +32,7 @@ class Destiny2Service extends DestinyService {
      * @returns {Promise}
      * @private
      */
-    async getManifestFromBungie() {
+    async #getManifestFromBungie() {
         const options = {
             headers: {
                 'x-api-key': apiKey,
@@ -70,7 +70,7 @@ class Destiny2Service extends DestinyService {
             return manifest;
         }
 
-        return this.getManifestFromBungie();
+        return this.#getManifestFromBungie();
     }
 
     /**

@@ -41,7 +41,7 @@ class UserController {
      * @returns {string}
      * @private
      */
-    static cleanPhoneNumber(phoneNumber) {
+    static #cleanPhoneNumber(phoneNumber) {
         const cleaned = phoneNumber.replace(/\D/g, '');
 
         return `+1${cleaned}`;
@@ -53,7 +53,7 @@ class UserController {
      * @returns {number}
      * @private
      */
-    static getEpoch() {
+    static #getEpoch() {
         return Math.floor((new Date()).getTime() / 1000);
     }
 
@@ -72,7 +72,7 @@ class UserController {
      * @returns {{displayName: *, membershipType: *, links: [null], profilePicturePath: *}}
      * @private
      */
-    static getUserResponse({
+    static #getUserResponse({
         dateRegistered,
         displayName,
         emailAddress,
@@ -117,7 +117,7 @@ class UserController {
      * @param patches
      * @private
      */
-    static scrubOperations(patches) {
+    static #scrubOperations(patches) {
         const mutable = new Set(['firstName', 'lastName']);
         const replacements = patches.filter(patch => patch.op === 'replace');
 
@@ -140,7 +140,7 @@ class UserController {
             .getUserByEmailAddressToken(user.tokens.emailAddress);
 
         if (!registeredUser
-            || this.constructor.getEpoch() > (registeredUser.membership.tokens.timeStamp + ttl)
+            || this.constructor.#getEpoch() > (registeredUser.membership.tokens.timeStamp + ttl)
             || !_.isEqual(user.tokens.phoneNumber, registeredUser.membership.tokens.code)) {
             return undefined;
         }
@@ -165,7 +165,7 @@ class UserController {
 
             const bungieUser = await this.destiny.getCurrentUser(accessToken);
 
-            return bungieUser ? this.constructor.getUserResponse(bungieUser) : undefined;
+            return bungieUser ? this.constructor.#getUserResponse(bungieUser) : undefined;
         }
 
         return undefined;
@@ -230,13 +230,13 @@ class UserController {
         const bungieUser = await this.users.getUserByDisplayName(displayName, membershipType);
 
         // eslint-disable-next-line no-param-reassign
-        user.phoneNumber = this.constructor.cleanPhoneNumber(user.phoneNumber);
+        user.phoneNumber = this.constructor.#cleanPhoneNumber(user.phoneNumber);
         Object.assign(user, bungieUser, {
             membership: {
                 tokens: {
                     blob: tokens.getBlob(),
                     code: tokens.getCode(),
-                    timeStamp: this.constructor.getEpoch(),
+                    timeStamp: this.constructor.#getEpoch(),
                 },
             },
         });
@@ -333,7 +333,7 @@ class UserController {
 
         const userCopy = JSON.parse(JSON.stringify(user));
 
-        jsonpatch.applyPatch(user, this.constructor.scrubOperations(patches));
+        jsonpatch.applyPatch(user, this.constructor.#scrubOperations(patches));
 
         const patch = jsonpatch.createPatch(user, userCopy);
         const version = user.version || 1;
