@@ -1,4 +1,4 @@
-const { administrators } = require('../helpers/config');
+import configuration from '../helpers/config';
 
 /**
  * User Authentication Middleware Class
@@ -24,7 +24,7 @@ class RoleMiddleware {
             const user = await this.authentication.authenticate(req);
 
             if (user) {
-                if (administrators
+                if (configuration.administrators
                     .find(administrator => administrator.displayName === user.displayName
                         && administrator.membershipType === user.membershipType)) {
                     next();
@@ -40,4 +40,4 @@ class RoleMiddleware {
     }
 }
 
-module.exports = RoleMiddleware;
+export default RoleMiddleware;

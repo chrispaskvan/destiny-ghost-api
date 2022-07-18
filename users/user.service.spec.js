@@ -1,20 +1,23 @@
 /**
  * User Service Tests
  */
-const { omit } = require('lodash');
-const Chance = require('chance');
-const { cloneDeep } = require('lodash');
-const UserService = require('./user.service');
+import {
+    afterEach, beforeEach, describe, expect, it, vi,
+} from 'vitest';
+import lodash from 'lodash';
+import Chance from 'chance';
+import UserService from './user.service';
 
+const { cloneDeep, omit } = lodash;
 const cacheService = {
-    getUser: jest.fn(),
-    setUser: jest.fn(),
+    getUser: vi.fn(),
+    setUser: vi.fn(),
 };
 const chance = new Chance();
 const documentService = {
-    createDocument: jest.fn(),
-    getDocuments: jest.fn(),
-    updateDocument: jest.fn(),
+    createDocument: vi.fn(),
+    getDocuments: vi.fn(),
+    updateDocument: vi.fn(),
 };
 
 /**
@@ -71,7 +74,7 @@ beforeEach(() => {
 
 describe('UserService', () => {
     beforeEach(() => {
-        jest.clearAllMocks();
+        vi.clearAllMocks();
     });
 
     describe('addUserMessage', () => {
@@ -92,7 +95,7 @@ describe('UserService', () => {
             };
 
             documentService.updateDocument.mockImplementation(() => Promise.resolve());
-            userService.getUserByDisplayName = jest.fn().mockResolvedValue(user);
+            userService.getUserByDisplayName = vi.fn().mockResolvedValue(user);
         });
         afterEach(() => {
             global.Date = realDate;
@@ -125,7 +128,7 @@ describe('UserService', () => {
 
         describe('when anonymous user is invalid', () => {
             it('should reject the anonymous user', async () => {
-                userService.getUserByDisplayName = jest.fn().mockResolvedValue(anonymousUser);
+                userService.getUserByDisplayName = vi.fn().mockResolvedValue(anonymousUser);
 
                 await expect(userService.createAnonymousUser(omit(anonymousUser, 'membershipId')))
                     .rejects.toThrow(undefined);
@@ -135,7 +138,7 @@ describe('UserService', () => {
         describe('when anonymous user is valid', () => {
             describe('when the anonymous user exists', () => {
                 it('should reject the anonymous user', async () => {
-                    userService.getUserByDisplayName = jest.fn().mockResolvedValue(anonymousUser);
+                    userService.getUserByDisplayName = vi.fn().mockResolvedValue(anonymousUser);
 
                     await expect(userService.createAnonymousUser(anonymousUser)).rejects.toThrow();
 
@@ -145,7 +148,7 @@ describe('UserService', () => {
 
             describe('when the anonymous user does not exists', () => {
                 it('should create the anonymous user', () => {
-                    userService.getUserByDisplayName = jest.fn().mockResolvedValue();
+                    userService.getUserByDisplayName = vi.fn().mockResolvedValue();
 
                     return userService.createAnonymousUser(anonymousUser)
                         .then(() => {
@@ -158,7 +161,7 @@ describe('UserService', () => {
 
     describe('createUser', () => {
         beforeEach(() => {
-            userService.getUserByDisplayName = jest.fn().mockResolvedValue(anonymousUser);
+            userService.getUserByDisplayName = vi.fn().mockResolvedValue(anonymousUser);
         });
 
         describe('when user is invalid', () => {
@@ -577,7 +580,7 @@ describe('UserService', () => {
 
                     user1.firstName = chance.first();
 
-                    userService.getUserByDisplayName = jest.fn().mockResolvedValue(user);
+                    userService.getUserByDisplayName = vi.fn().mockResolvedValue(user);
 
                     return userService.updateUser(user1)
                         .then(user2 => {
@@ -595,7 +598,7 @@ describe('UserService', () => {
                     };
 
                     documentService.updateDocument.mockImplementation(() => Promise.resolve());
-                    userService.getUserByDisplayName = jest.fn().mockResolvedValue();
+                    userService.getUserByDisplayName = vi.fn().mockResolvedValue();
 
                     await expect(userService.updateUser(user1))
                         .rejects.toThrow();
@@ -612,7 +615,7 @@ describe('UserService', () => {
                 documentService.updateDocument
                     .mockImplementation(() => Promise.resolve());
 
-                userService.getUserById = jest.fn().mockResolvedValue(user);
+                userService.getUserById = vi.fn().mockResolvedValue(user);
 
                 return userService.updateUserBungie(user.id, {})
                     .then(user1 => {
@@ -628,7 +631,7 @@ describe('UserService', () => {
                 documentService.updateDocument
                     .mockImplementation(() => Promise.resolve());
 
-                userService.getUserById = jest.fn().mockResolvedValue();
+                userService.getUserById = vi.fn().mockResolvedValue();
 
                 await expect(userService.updateUserBungie(user.id))
                     .rejects.toThrow();

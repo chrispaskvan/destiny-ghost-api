@@ -1,23 +1,28 @@
-const request = require('../helpers/request');
-const HealthController = require('./health.controller');
-const { Response: manifest } = require('../mocks/manifestResponse.json');
-const { Response: manifest2 } = require('../mocks/manifest2Response.json');
+import {
+    beforeEach, describe, expect, it, vi,
+} from 'vitest';
+import { get } from '../helpers/request';
+import HealthController from './health.controller';
+import manifestResponse from '../mocks/manifestResponse.json';
+import manifest2Response from '../mocks/manifest2Response.json';
 
-jest.mock('../helpers/request');
+vi.mock('../helpers/request');
 
+const { Response: manifest } = manifestResponse;
+const { Response: manifest2 } = manifest2Response;
 const destinyService = {
-    getManifest: jest.fn(),
+    getManifest: vi.fn(),
 };
 const destiny2Service = {
-    getManifest: jest.fn(),
+    getManifest: vi.fn(),
 };
 const documents = {
-    getDocuments: jest.fn(),
+    getDocuments: vi.fn(),
 };
 const store = {
-    del: jest.fn(),
-    get: jest.fn(),
-    set: jest.fn(),
+    del: vi.fn(),
+    get: vi.fn(),
+    set: vi.fn(),
 };
 
 let healthController;
@@ -38,7 +43,7 @@ describe('HealthController', () => {
             };
 
             beforeEach(() => {
-                request.get.mockImplementation(() => Promise.resolve({
+                get.mockImplementation(() => Promise.resolve({
                     status: {
                         description: 'All Systems Go',
                     },
@@ -55,12 +60,12 @@ describe('HealthController', () => {
             });
 
             it('should return a positive response', async () => {
-                destinyService.getManifest = jest.fn().mockResolvedValue(manifest);
-                destiny2Service.getManifest = jest.fn().mockResolvedValue(manifest2);
-                documents.getDocuments = jest.fn().mockResolvedValue([2]);
-                store.del = jest.fn().mockImplementation((key, callback) => callback(undefined, 1));
-                store.get = jest.fn().mockImplementation((key, callback) => callback(undefined, 'Thorn'));
-                store.set = jest.fn().mockImplementation((key, value, callback) => callback(undefined, 'OK'));
+                destinyService.getManifest = vi.fn().mockResolvedValue(manifest);
+                destiny2Service.getManifest = vi.fn().mockResolvedValue(manifest2);
+                documents.getDocuments = vi.fn().mockResolvedValue([2]);
+                store.del = vi.fn().mockImplementation((key, callback) => callback(undefined, 1));
+                store.get = vi.fn().mockImplementation((key, callback) => callback(undefined, 'Thorn'));
+                store.set = vi.fn().mockImplementation((key, value, callback) => callback(undefined, 'OK'));
 
                 const { failures, health } = await healthController.getHealth();
 
@@ -93,7 +98,7 @@ describe('HealthController', () => {
             };
 
             beforeEach(() => {
-                request.get.mockImplementation(() => Promise.rejects({
+                get.mockImplementation(() => Promise.rejects({
                     statusCode: 400,
                 }));
 
@@ -108,12 +113,12 @@ describe('HealthController', () => {
             });
 
             it('should return a negative response', async () => {
-                destinyService.getManifest = jest.fn().mockRejectedValue(new Error());
-                destiny2Service.getManifest = jest.fn().mockRejectedValue(new Error());
-                documents.getDocuments = jest.fn().mockRejectedValue(new Error());
-                store.del = jest.fn().mockImplementation((key, callback) => callback(undefined, 0));
-                store.get = jest.fn().mockImplementation((key, callback) => callback(undefined, 'Thorn'));
-                store.set = jest.fn().mockImplementation((key, value, callback) => callback(undefined, 'OK'));
+                destinyService.getManifest = vi.fn().mockRejectedValue(new Error());
+                destiny2Service.getManifest = vi.fn().mockRejectedValue(new Error());
+                documents.getDocuments = vi.fn().mockRejectedValue(new Error());
+                store.del = vi.fn().mockImplementation((key, callback) => callback(undefined, 0));
+                store.get = vi.fn().mockImplementation((key, callback) => callback(undefined, 'Thorn'));
+                store.set = vi.fn().mockImplementation((key, value, callback) => callback(undefined, 'OK'));
 
                 const { failures, health } = await healthController.getHealth();
 

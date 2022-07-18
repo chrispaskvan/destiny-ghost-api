@@ -2,14 +2,16 @@
 /**
  * A module for accessing the Destiny World database.
  */
-const { sampleSize } = require('lodash');
-const Database = require('better-sqlite3');
-const axios = require('axios');
-const fs = require('fs');
-const httpAdapter = require('axios/lib/adapters/http');
-const path = require('path');
-const yauzl = require('yauzl');
-const log = require('./log');
+import _ from 'lodash';
+import Database from 'better-sqlite3';
+import axios from 'axios';
+import {
+    readdirSync, statSync, existsSync, createWriteStream, unlinkSync,
+} from 'fs';
+import httpAdapter from 'axios/lib/adapters/http';
+import { join, basename } from 'path';
+import { open } from 'yauzl';
+import log from './log';
 
 /**
  * World Repository
@@ -19,10 +21,10 @@ class World {
         this.grimoireCards = [];
 
         if (directory) {
-            const [databaseFileName] = fs.readdirSync(directory)
+            const [databaseFileName] = readdirSync(directory)
                 .map(name => ({
                     name,
-                    time: fs.statSync(`${directory}/${name}`).mtime.getTime(),
+                    time: statSync(`${directory}/${name}`).mtime.getTime(),
                 }))
                 .sort((a, b) => b.time - a.time)
                 .map(file => file.name);
@@ -37,7 +39,7 @@ class World {
      */
     bootstrap(fileName) {
         const databasePath = fileName
-            ? path.join(this.directory, path.basename(fileName)) : undefined;
+            ? join(this.directory, basename(fileName)) : undefined;
 
         if (databasePath) {
             const database = new Database(databasePath, {
@@ -60,7 +62,7 @@ class World {
      * @returns {Promise}
      */
     getGrimoireCards(numberOfCards) {
-        return Promise.resolve(sampleSize(this.grimoireCards, numberOfCards));
+        return Promise.resolve(_.sampleSize(this.grimoireCards, numberOfCards));
     }
 
     /**
@@ -75,12 +77,12 @@ class World {
         const fileName = relativeUrl.substring(relativeUrl.lastIndexOf('/') + 1);
         const databasePath = `${databaseDirectory}/${fileName}`;
 
-        if (fs.existsSync(databasePath)) {
+        if (existsSync(databasePath)) {
             return Promise.resolve(manifest);
         }
 
         return new Promise((resolve, reject) => {
-            const file = fs.createWriteStream(`${databasePath}.zip`);
+            const file = createWriteStream(`${databasePath}.zip`);
 
             axios.get(`https://www.bungie.net${relativeUrl}`, {
                 responseType: 'stream',
@@ -93,7 +95,7 @@ class World {
                 stream.on('end', () => {
                     log.info(`content downloaded from ${relativeUrl}`);
 
-                    yauzl.open(`${databasePath}.zip`, (err, zipFile) => {
+                    open(`${databasePath}.zip`, (err, zipFile) => {
                         if (err) {
                             return reject(err);
                         }
@@ -107,8 +109,8 @@ class World {
                                 readStream.on('end', () => {
                                     this.bootstrap(fileName);
                                 });
-                                readStream.pipe(fs.createWriteStream(`${databaseDirectory}/${entry.fileName}`));
-                                fs.unlinkSync(`${databasePath}.zip`);
+                                readStream.pipe(createWriteStream(`${databaseDirectory}/${entry.fileName}`));
+                                unlinkSync(`${databasePath}.zip`);
 
                                 return resolve(manifest);
                             });
@@ -120,4 +122,4 @@ class World {
     }
 }
 
-module.exports = World;
+export default World;

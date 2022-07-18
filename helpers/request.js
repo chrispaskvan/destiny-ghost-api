@@ -1,14 +1,14 @@
-const Agent = require('agentkeepalive');
-const axios = require('axios');
-const RequestError = require('./request.error');
-const log = require('./log');
+import Agent, { HttpsAgent } from 'agentkeepalive';
+import axios from 'axios';
+import RequestError from './request.error';
+import log from './log';
 
 const axiosSingleton = (function singleton() {
     let instance;
 
     function createInstance() {
         const httpAgent = new Agent();
-        const httpsAgent = new Agent.HttpsAgent();
+        const httpsAgent = new HttpsAgent();
         const axiosInstance = axios.create({
             httpAgent,
             httpsAgent,
@@ -47,13 +47,18 @@ async function request(options) {
     }
 }
 
-module.exports = {
-    get: async options => request({
+async function get(options) {
+    return request({
         method: 'get',
         ...options,
-    }),
-    post: async options => request({
+    });
+}
+
+async function post(options) {
+    return request({
         method: 'post',
         ...options,
-    }),
-};
+    });
+}
+
+export { get, post };

@@ -39,4 +39,4 @@ class Manifests {
     }
 }
 
-module.exports = Manifests;
+export default Manifests;

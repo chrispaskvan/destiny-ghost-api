@@ -1,21 +1,24 @@
 /**
  * Destiny Service Tests
  */
-const Chance = require('chance');
-const request = require('../helpers/request');
-const DestinyError = require('./destiny.error');
-const DestinyService = require('./destiny.service');
-const mockManifestResponse = require('../mocks/manifestResponse.json');
+import {
+    beforeEach, describe, expect, it, vi,
+} from 'vitest';
+import Chance from 'chance';
+import { get } from '../helpers/request';
+import DestinyError from './destiny.error';
+import DestinyService from './destiny.service';
+import mockManifestResponse from '../mocks/manifestResponse.json';
 
-jest.mock('../helpers/request');
+vi.mock('../helpers/request');
 
 let destinyService;
 
 const cacheService = {
-    getManifest: jest.fn(),
-    getVendor: jest.fn(),
-    setManifest: jest.fn(),
-    setVendor: jest.fn(),
+    getManifest: vi.fn(),
+    getVendor: vi.fn(),
+    setManifest: vi.fn(),
+    setVendor: vi.fn(),
 };
 const chance = new Chance();
 
@@ -25,7 +28,7 @@ beforeEach(() => {
 
 describe('DestinyService', () => {
     beforeEach(() => {
-        jest.resetAllMocks();
+        vi.resetAllMocks();
     });
 
     describe('getCharacters', () => {
@@ -33,7 +36,7 @@ describe('DestinyService', () => {
             it('should return an array of characters', async () => {
                 const characters = [];
 
-                request.get.mockImplementation(() => Promise.resolve({
+                get.mockImplementation(() => Promise.resolve({
                     ErrorCode: 1,
                     Response: {
                         data: {
@@ -50,7 +53,7 @@ describe('DestinyService', () => {
 
         describe('when an error response is returned', () => {
             it('should throw', async () => {
-                request.get.mockImplementation(() => Promise.resolve({
+                get.mockImplementation(() => Promise.resolve({
                     ErrorCode: 2,
                 }));
 
@@ -68,7 +71,7 @@ describe('DestinyService', () => {
                     const membershipType = 2;
                     const profilePicturePath = '/img/profile/avatars/Destiny26.jpg';
 
-                    request.get.mockImplementation(() => Promise.resolve({
+                    get.mockImplementation(() => Promise.resolve({
                         ErrorCode: 1,
                         Response: {
                             destinyMemberships: [
@@ -98,7 +101,7 @@ describe('DestinyService', () => {
 
             describe('when ErrorCode is not 1', () => {
                 it('should throw', async () => {
-                    request.get.mockImplementation(() => Promise.resolve({
+                    get.mockImplementation(() => Promise.resolve({
                         ErrorCode: 0,
                         Message: 'Ok',
                         Response: {
@@ -117,7 +120,7 @@ describe('DestinyService', () => {
         const { Response: manifest1 } = mockManifestResponse;
 
         beforeEach(() => {
-            request.get.mockImplementation(() => Promise.resolve(mockManifestResponse));
+            get.mockImplementation(() => Promise.resolve(mockManifestResponse));
         });
 
         describe('when manifest is cached', () => {

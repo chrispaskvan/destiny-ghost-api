@@ -1,6 +1,6 @@
-const HttpStatus = require('http-status-codes');
-const { RateLimiterRedis } = require('rate-limiter-flexible');
-const client = require('./cache');
+import { StatusCodes } from 'http-status-codes';
+import { RateLimiterRedis } from 'rate-limiter-flexible';
+import client from './cache';
 
 const options = {
     redis: client,
@@ -32,8 +32,8 @@ const rateLimiterMiddleware = (req, res, next) => {
         })
         .catch(rateLimiterRes => {
             setRateLimitHeaders(rateLimiterRes, res);
-            res.status(HttpStatus.StatusCodes.TOO_MANY_REQUESTS).end();
+            res.status(StatusCodes.TOO_MANY_REQUESTS).end();
         });
 };
 
-module.exports = rateLimiterMiddleware;
+export default rateLimiterMiddleware;

@@ -4,13 +4,17 @@
  * for instructions on how to debug these routes locally. Remember
  * to update the DOMAIN environment variable.
  */
-const express = require('express');
-const { twiml: { MessagingResponse }, validateRequest } = require('twilio');
+import { Router } from 'express';
+import twilio from 'twilio';
 
-const AuthenticationMiddleWare = require('../authentication/authentication.middleware');
-const TwilioController = require('./twilio.controller');
+import AuthenticationMiddleWare from '../authentication/authentication.middleware';
+import TwilioController from './twilio.controller';
 
-const { twilio: { attributes, authToken } } = require('../helpers/config');
+import config from '../helpers/config';
+
+const { twiml: { MessagingResponse }, validateRequest } = twilio;
+
+const { twilio: { attributes, authToken } } = config;
 
 const routes = ({
     authenticationController,
@@ -21,7 +25,7 @@ const routes = ({
     worldRepository,
 }) => {
     const middleware = new AuthenticationMiddleWare({ authenticationController });
-    const twilioRouter = express.Router();
+    const twilioRouter = Router();
     const twilioController = new TwilioController({
         authenticationService, destinyService, destinyTrackerService, userService, worldRepository,
     });
@@ -124,4 +128,4 @@ const routes = ({
     return twilioRouter;
 };
 
-module.exports = routes;
+export default routes;

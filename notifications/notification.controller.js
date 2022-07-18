@@ -1,19 +1,21 @@
-const azure = require('azure-sb');
-const azureCommon = require('azure-common');
+import { createServiceBusService } from 'azure-sb';
+import { ExponentialRetryPolicyFilter } from 'azure-common';
 
-const { serviceBus: { connectionString } } = require('../helpers/config');
-const Publisher = require('../helpers/publisher');
-const Subscriber = require('../helpers/subscriber');
-const notificationTypes = require('./notification.types');
-const log = require('../helpers/log');
+import config from '../helpers/config';
+import Publisher from '../helpers/publisher';
+import Subscriber from '../helpers/subscriber';
+import notificationTypes from './notification.types';
+import log from '../helpers/log';
+
+const { serviceBus: { connectionString } } = config;
 
 /**
  * Controller class for Notification routes.
  */
 class NotificationController {
     constructor(options = {}) {
-        const retryOperations = new azureCommon.ExponentialRetryPolicyFilter();
-        const serviceBusService = azure.createServiceBusService(connectionString)
+        const retryOperations = new ExponentialRetryPolicyFilter();
+        const serviceBusService = createServiceBusService(connectionString)
             .withFilter(retryOperations);
         const subscriber = new Subscriber();
 
@@ -90,4 +92,4 @@ class NotificationController {
     }
 }
 
-module.exports = NotificationController;
+export default NotificationController;

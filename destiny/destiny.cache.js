@@ -107,4 +107,4 @@ class DestinyCache {
     }
 }
 
-module.exports = DestinyCache;
+export default DestinyCache;

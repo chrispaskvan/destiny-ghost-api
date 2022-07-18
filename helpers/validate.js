@@ -1,4 +1,4 @@
-const Joi = require('joi');
+import Joi from 'joi';
 
 /**
  * Validate a value against a Joi schema.
@@ -9,7 +9,7 @@ const Joi = require('joi');
  * @returns void
  * @throws {Error} value(s) that violate schema
  */
-module.exports = (value, schema, options = {}) => {
+export default (value, schema, options = {}) => {
     const finalOptions = {
         abortEarly: false,
         ...options,

@@ -1,17 +1,17 @@
 /**
  * Application Server
  */
-const express = require('express');
-const fs = require('fs');
-const http = require('http');
-const https = require('https');
-const os = require('os');
-const { createTerminus } = require('@godaddy/terminus');
+import express from 'express';
+import { readFileSync } from 'fs';
+import { createServer } from 'http';
+import { createServer as _createServer } from 'https';
+import { cpus } from 'os';
+import { createTerminus } from '@godaddy/terminus';
 
-const applicationInsights = require('./helpers/application-insights');
-const cache = require('./helpers/cache');
-const loaders = require('./loaders');
-const log = require('./helpers/log');
+import applicationInsights from './helpers/application-insights';
+import cache from './helpers/cache';
+import loaders from './loaders';
+import log from './helpers/log';
 
 async function startServer() {
     const start = Date.now();
@@ -31,10 +31,10 @@ async function startServer() {
 
     if (process.env.NODE_ENV === 'development') {
         const httpsOptions = {
-            key: fs.readFileSync('./security/_wildcard.destiny-ghost.com-key.pem'),
-            cert: fs.readFileSync('./security/_wildcard.destiny-ghost.com.pem'),
+            key: readFileSync('./security/_wildcard.destiny-ghost.com-key.pem'),
+            cert: readFileSync('./security/_wildcard.destiny-ghost.com.pem'),
         };
-        const server = https.createServer({
+        const server = _createServer({
             ...httpsOptions,
             ...serverOptions,
         }, app);
@@ -46,7 +46,7 @@ async function startServer() {
         );
     }
 
-    const insecureServer = http.createServer(app);
+    const insecureServer = createServer(app);
 
     createTerminus(insecureServer, {
         signals: ['SIGINT', 'SIGTERM'],
@@ -59,7 +59,7 @@ async function startServer() {
     });
 
     insecureServer.listen(port, () => {
-        const cpuCount = os.cpus().length;
+        const cpuCount = cpus().length;
         const duration = Date.now() - start;
 
         applicationInsights.trackMetric({ name: 'Startup Time', value: duration });

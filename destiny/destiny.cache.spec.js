@@ -1,4 +1,7 @@
-const DestinyCache = require('./destiny.cache');
+import {
+    afterEach, beforeEach, describe, expect, it,
+} from 'vitest';
+import DestinyCache from './destiny.cache';
 
 describe('AuthenticationService', () => {
     describe('secondsUntilDailyReset', () => {

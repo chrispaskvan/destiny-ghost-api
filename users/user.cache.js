@@ -167,4 +167,4 @@ class UserCache {
     }
 }
 
-module.exports = UserCache;
+export default UserCache;

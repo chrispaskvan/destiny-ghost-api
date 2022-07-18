@@ -1,11 +1,11 @@
-const HttpStatus = require('http-status-codes');
-const cors = require('cors');
-const express = require('express');
-const AuthenticationMiddleWare = require('../authentication/authentication.middleware');
-const RoleMiddleware = require('./role.middleware');
-const UserController = require('./user.controller');
+import { StatusCodes } from 'http-status-codes';
+import cors from 'cors';
+import { Router } from 'express';
+import AuthenticationMiddleWare from '../authentication/authentication.middleware';
+import RoleMiddleware from './role.middleware';
+import UserController from './user.controller';
 
-const { cors: corsConfig } = require('../helpers/config');
+import configuration from '../helpers/config';
 
 /**
  * Sign the user in by setting the session.
@@ -20,7 +20,7 @@ function signIn(req, res, user) {
     req.session.membershipType = user.membershipType;
     req.session.state = undefined;
 
-    return res.status(HttpStatus.StatusCodes.OK)
+    return res.status(StatusCodes.OK)
         .json({ displayName: user.displayName });
 }
 
@@ -32,9 +32,9 @@ const routes = ({
     const userController = new UserController({
         destinyService, notificationService, userService, worldRepository,
     });
-    const userRouter = express.Router();
+    const userRouter = Router();
 
-    userRouter.all('*', cors(corsConfig));
+    userRouter.all('*', cors(configuration.cors));
 
     userRouter.route('/signUp')
         .post(
@@ -43,13 +43,13 @@ const routes = ({
                 const { body: user, session: { displayName, membershipType } } = req;
 
                 if (!(user.firstName && user.lastName && user.phoneNumber && user.emailAddress)) {
-                    return res.status(HttpStatus.StatusCodes.UNPROCESSABLE_ENTITY).end();
+                    return res.status(StatusCodes.UNPROCESSABLE_ENTITY).end();
                 }
 
                 return userController.signUp({ displayName, membershipType, user })
                     .then(newUser => (newUser
-                        ? res.status(HttpStatus.StatusCodes.OK).end()
-                        : res.status(HttpStatus.StatusCodes.CONFLICT).end()))
+                        ? res.status(StatusCodes.OK).end()
+                        : res.status(StatusCodes.CONFLICT).end()))
                     .catch(next);
             },
         );
@@ -62,8 +62,8 @@ const routes = ({
 
                 userController.join(user)
                     .then(newUser => (newUser
-                        ? res.status(HttpStatus.StatusCodes.OK).end()
-                        : res.status(HttpStatus.StatusCodes.BAD_REQUEST).end()))
+                        ? res.status(StatusCodes.OK).end()
+                        : res.status(StatusCodes.BAD_REQUEST).end()))
                     .catch(next);
             },
         );
@@ -76,11 +76,11 @@ const routes = ({
             } = req;
 
             if (displayName) {
-                return res.status(HttpStatus.StatusCodes.OK)
+                return res.status(StatusCodes.OK)
                     .json({ displayName });
             }
             if (sessionState !== queryState) {
-                return res.sendStatus(HttpStatus.StatusCodes.FORBIDDEN);
+                return res.sendStatus(StatusCodes.FORBIDDEN);
             }
 
             return userController.signIn({
@@ -91,7 +91,7 @@ const routes = ({
             })
                 .then(user => {
                     if (!user) {
-                        return res.status(HttpStatus.StatusCodes.NOT_FOUND).end();
+                        return res.status(StatusCodes.NOT_FOUND).end();
                     }
 
                     return signIn(req, res, user);
@@ -102,7 +102,7 @@ const routes = ({
     userRouter.route('/signOut')
         .get((req, res) => {
             req.session.destroy();
-            res.status(HttpStatus.StatusCodes.UNAUTHORIZED).end();
+            res.status(StatusCodes.UNAUTHORIZED).end();
         });
 
     userRouter.route('/:emailAddress/emailAddress')
@@ -113,8 +113,8 @@ const routes = ({
 
                 return userController.getUserByEmailAddress(emailAddress)
                     .then(user => (user
-                        ? res.status(HttpStatus.StatusCodes.NO_CONTENT).end()
-                        : res.status(HttpStatus.StatusCodes.NOT_FOUND).end()))
+                        ? res.status(StatusCodes.NO_CONTENT).end()
+                        : res.status(StatusCodes.NOT_FOUND).end()))
                     .catch(next);
             },
         );
@@ -127,8 +127,8 @@ const routes = ({
 
                 return userController.getUserByPhoneNumber(phoneNumber)
                     .then(user => (user
-                        ? res.status(HttpStatus.StatusCodes.NO_CONTENT).end()
-                        : res.status(HttpStatus.StatusCodes.NOT_FOUND).end()))
+                        ? res.status(StatusCodes.NO_CONTENT).end()
+                        : res.status(StatusCodes.NOT_FOUND).end()))
                     .catch(next);
             },
         );
@@ -147,16 +147,16 @@ const routes = ({
                 const { session: { displayName, membershipType } } = req;
 
                 if (!displayName || !membershipType) {
-                    return res.status(HttpStatus.StatusCodes.NOT_FOUND).end();
+                    return res.status(StatusCodes.NOT_FOUND).end();
                 }
 
                 return userController.getCurrentUser(displayName, membershipType)
                     .then(user => {
                         if (user) {
-                            return res.status(HttpStatus.StatusCodes.OK).json(user);
+                            return res.status(StatusCodes.OK).json(user);
                         }
 
-                        return res.status(HttpStatus.StatusCodes.UNAUTHORIZED).end();
+                        return res.status(StatusCodes.UNAUTHORIZED).end();
                     })
                     .catch(next);
             },
@@ -170,7 +170,7 @@ const routes = ({
                 userController.update({ displayName, membershipType, patches })
                     .then(user => (user
                         ? res.json(user)
-                        : res.status(HttpStatus.StatusCodes.NOT_FOUND).send('user not found')))
+                        : res.status(StatusCodes.NOT_FOUND).send('user not found')))
                     .catch(next);
             },
         );
@@ -183,13 +183,13 @@ const routes = ({
                 const { params: { id, version } } = req;
 
                 if (!id) {
-                    return res.status(HttpStatus.StatusCodes.CONFLICT).send('phone number not found');
+                    return res.status(StatusCodes.CONFLICT).send('phone number not found');
                 }
 
                 return userController.getUserById(id, version)
                     .then(user => (user
-                        ? res.status(HttpStatus.StatusCodes.OK).json(user)
-                        : res.status(HttpStatus.StatusCodes.NOT_FOUND).send('user not found')))
+                        ? res.status(StatusCodes.OK).json(user)
+                        : res.status(StatusCodes.NOT_FOUND).send('user not found')))
                     .catch(next);
             },
         );
@@ -197,4 +197,4 @@ const routes = ({
     return userRouter;
 };
 
-module.exports = routes;
+export default routes;

@@ -1,19 +1,22 @@
-const httpMocks = require('node-mocks-http');
-const { notificationHeaders } = require('../helpers/config');
-const authorizeUser = require('./authorization.middleware');
+import {
+    beforeEach, describe, expect, it, vi,
+} from 'vitest';
+import { createResponse, createRequest } from 'node-mocks-http';
+import configuration from '../helpers/config';
+import authorizeUser from './authorization.middleware';
 
 describe('authorizeUser', () => {
-    const next = jest.fn().mockImplementation(() => {});
+    const next = vi.fn().mockImplementation(() => {});
     let res;
 
     beforeEach(() => {
-        jest.resetAllMocks();
-        res = httpMocks.createResponse();
+        vi.resetAllMocks();
+        res = createResponse();
     });
 
     describe('when the notification header is missing', () => {
         it('should return 403', () => {
-            const req = httpMocks.createRequest({
+            const req = createRequest({
                 headers: {},
             });
 
@@ -26,7 +29,7 @@ describe('authorizeUser', () => {
 
     describe('when the notification header is incorrect', () => {
         it('should return 403', () => {
-            const req = httpMocks.createRequest({
+            const req = createRequest({
                 headers: {
                     'x-destiny-': 'thorn',
                 },
@@ -41,8 +44,8 @@ describe('authorizeUser', () => {
 
     describe('when the notification header is correct', () => {
         it('should call next', () => {
-            const req = httpMocks.createRequest({
-                headers: notificationHeaders,
+            const req = createRequest({
+                headers: configuration.notificationHeaders,
             });
 
             authorizeUser(req, res, next);

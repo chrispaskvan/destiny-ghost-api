@@ -1,11 +1,11 @@
 .DS_store
 .artillery/
 .clinic/
-.coverage/
 .env
 .idea/
 .vscode/
+coverage/
 databases/
+node_modules/
 security/
 settings/
-node_modules/

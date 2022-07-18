@@ -1,10 +1,10 @@
-const { defaults, isEmpty } = require('lodash');
-const Joi = require('joi');
-const schemaDefaults = require('json-schema-defaults');
-const validator = require('is-my-json-valid');
-const QueryBuilder = require('../helpers/queryBuilder');
-const notificationTypes = require('../notifications/notification.types');
-const validate = require('../helpers/validate');
+import _ from 'lodash';
+import Joi from 'joi';
+import schemaDefaults from 'json-schema-defaults';
+import validator, { filter as _filter } from 'is-my-json-valid';
+import QueryBuilder from '../helpers/queryBuilder';
+import notificationTypes from '../notifications/notification.types';
+import validate from '../helpers/validate';
 
 /**
  * Users Table Name
@@ -254,7 +254,7 @@ class UserService {
 
         existingUser = await this.getUserByDisplayName(user.displayName, user.membershipType, true);
         const carrier = await this.getPhoneNumberType(user.phoneNumber);
-        const filter = validator.filter(userSchema);
+        const filter = _filter(userSchema);
 
         user.carrier = carrier.name; // eslint-disable-line no-param-reassign
         user.type = carrier.type; // eslint-disable-line no-param-reassign
@@ -262,7 +262,7 @@ class UserService {
 
         const filteredUser = filter(user);
 
-        defaults(filteredUser, schemaDefaults(userSchema));
+        _.defaults(filteredUser, schemaDefaults(userSchema));
         existingUser = { ...existingUser, ...filteredUser };
 
         return this.documents.updateDocument(userCollectionId, existingUser);
@@ -386,7 +386,7 @@ class UserService {
      * @returns {Promise}
      */
     async getUserByEmailAddress(emailAddress) {
-        if (typeof emailAddress !== 'string' || isEmpty(emailAddress)) {
+        if (typeof emailAddress !== 'string' || _.isEmpty(emailAddress)) {
             return Promise.reject(new Error('emailAddress string is required'));
         }
 
@@ -422,7 +422,7 @@ class UserService {
      * @returns {Promise}
      */
     async getUserByEmailAddressToken(emailAddressToken) {
-        if (typeof emailAddressToken !== 'string' || isEmpty(emailAddressToken)) {
+        if (typeof emailAddressToken !== 'string' || _.isEmpty(emailAddressToken)) {
             return Promise.reject(new Error('emailAddressToken string is required.'));
         }
 
@@ -451,7 +451,7 @@ class UserService {
      * @returns {Promise}
      */
     async getUserById(userId) {
-        if (typeof userId !== 'string' || isEmpty(userId)) {
+        if (typeof userId !== 'string' || _.isEmpty(userId)) {
             return Promise.reject(new Error('userId string is required'));
         }
 
@@ -480,7 +480,7 @@ class UserService {
      * @returns {Promise}
      */
     async getUserByMembershipId(membershipId) {
-        if (typeof membershipId !== 'string' || isEmpty(membershipId)) {
+        if (typeof membershipId !== 'string' || _.isEmpty(membershipId)) {
             return Promise.reject(new Error('membershipId string is required'));
         }
 
@@ -509,7 +509,7 @@ class UserService {
      * @returns {Promise}
      */
     async getUserByPhoneNumber(phoneNumber) {
-        if (typeof phoneNumber !== 'string' || isEmpty(phoneNumber)) {
+        if (typeof phoneNumber !== 'string' || _.isEmpty(phoneNumber)) {
             return Promise.reject(Error('phoneNumber string is required'));
         }
 
@@ -629,4 +629,4 @@ class UserService {
     }
 }
 
-module.exports = UserService;
+export default UserService;

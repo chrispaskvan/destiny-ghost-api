@@ -1,10 +1,10 @@
 /**
  * Created by chris on 9/25/15.
  */
-const HttpStatus = require('http-status-codes');
-const cors = require('cors');
-const express = require('express');
-const DestinyController = require('./destiny.controller');
+import { StatusCodes } from 'http-status-codes';
+import cors from 'cors';
+import { Router } from 'express';
+import DestinyController from './destiny.controller';
 
 /**
  * Destiny Routes
@@ -20,7 +20,7 @@ const routes = ({
     userService,
     worldRepository,
 }) => {
-    const destinyRouter = express.Router();
+    const destinyRouter = Router();
 
     /**
      * Set up routes and initialize the controller.
@@ -63,7 +63,7 @@ const routes = ({
             const { session: { displayName, membershipType } } = req;
 
             if (!displayName || !membershipType) {
-                return res.status(HttpStatus.StatusCodes.UNAUTHORIZED).end();
+                return res.status(StatusCodes.UNAUTHORIZED).end();
             }
 
             return destinyController.getCurrentUser(displayName, membershipType)
@@ -81,12 +81,12 @@ const routes = ({
                 const count = parseInt(numberOfCards, 10);
 
                 if (Number.isNaN(count)) {
-                    return res.status(HttpStatus.StatusCodes.UNPROCESSABLE_ENTITY).end();
+                    return res.status(StatusCodes.UNPROCESSABLE_ENTITY).end();
                 }
 
                 return destinyController.getGrimoireCards(count)
                     .then(grimoireCards => {
-                        res.status(HttpStatus.StatusCodes.OK).json(grimoireCards);
+                        res.status(StatusCodes.OK).json(grimoireCards);
                     })
                     .catch(next);
             },
@@ -110,7 +110,7 @@ const routes = ({
         .get((req, res, next) => {
             destinyController.getManifest(req, res)
                 .then(manifest => {
-                    res.status(HttpStatus.StatusCodes.OK).json(manifest);
+                    res.status(StatusCodes.OK).json(manifest);
                 })
                 .catch(next);
         });
@@ -119,7 +119,7 @@ const routes = ({
         .post((req, res, next) => {
             destinyController.upsertManifest()
                 .then(manifest => {
-                    res.status(HttpStatus.StatusCodes.OK).json(manifest);
+                    res.status(StatusCodes.OK).json(manifest);
                 })
                 .catch(next);
         });
@@ -127,4 +127,4 @@ const routes = ({
     return destinyRouter;
 };
 
-module.exports = routes;
+export default routes;

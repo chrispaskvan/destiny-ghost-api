@@ -1,18 +1,19 @@
 // eslint-disable-next-line import/no-extraneous-dependencies
-const Redis = require('ioredis');
-const { redis: redisConfig } = require('./config');
+import Redis from 'ioredis';
+import configuration from './config';
 
+const { redis } = configuration;
 /**
  * Cache Store
  */
-const configuration = {
-    host: redisConfig.host,
-    port: redisConfig.port,
-    password: redisConfig.key,
+const redisConfiguration = {
+    host: redis.host,
+    port: redis.port,
+    password: redis.key,
     tls: {
-        servername: redisConfig.host,
+        servername: redis.host,
     },
 };
-const client = new Redis(configuration);
+const client = new Redis(redisConfiguration);
 
-module.exports = client;
+export default client;

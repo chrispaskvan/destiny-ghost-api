@@ -1,6 +1,8 @@
-const mockTwilioCreateMessageResponse = require('../mocks/twilioCreateMessageResponse.json');
-
-const Notifications = require('./notification.service');
+import {
+    beforeEach, describe, expect, it,
+} from 'vitest';
+import mockTwilioCreateMessageResponse from '../mocks/twilioCreateMessageResponse.json';
+import Notifications from './notification.service';
 
 const client = {
     messages: {

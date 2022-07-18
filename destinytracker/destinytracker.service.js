@@ -6,7 +6,7 @@
  * @author Chris Paskvan
  * @requires request
  */
-const { get, post } = require('../helpers/request');
+import { get, post } from '../helpers/request';
 
 /**
  * @constant
@@ -110,4 +110,4 @@ class DestinyTrackerService {
     }
 }
 
-module.exports = DestinyTrackerService;
+export default DestinyTrackerService;

@@ -1,5 +1,5 @@
-const Joi = require('joi');
-const validate = require('../helpers/validate');
+import Joi from 'joi';
+import validate from '../helpers/validate';
 
 /**
  * User Authentication Service Class
@@ -93,4 +93,4 @@ class AuthenticationService {
     }
 }
 
-module.exports = AuthenticationService;
+export default AuthenticationService;

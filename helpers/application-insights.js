@@ -5,15 +5,21 @@
  * @author Chris Paskvan
  * @requires applicationinsights
  */
-const applicationInsights = require('applicationinsights');
-const { applicationInsights: { instrumentationKey } } = require('./config');
+import { setup, defaultClient } from 'applicationinsights';
+import configuration from './config';
+
+const { applicationInsights: { instrumentationKey } } = configuration;
+// eslint-disable-next-line import/no-mutable-exports
+let client;
 
 if (process.env.NODE_ENV === 'production') {
-    applicationInsights.setup(instrumentationKey).start();
+    setup(instrumentationKey).start();
+    client = defaultClient;
 } else {
-    applicationInsights.defaultClient = {
+    // eslint-disable-next-line no-import-assign
+    client = {
         trackMetric: () => undefined,
     };
 }
 
-module.exports = applicationInsights.defaultClient;
+export default client;

@@ -1,5 +1,5 @@
-const client = require('../helpers/cache');
-const DestinyCache = require('../destiny/destiny.cache');
+import cache from '../helpers/cache';
+import DestinyCache from '../destiny/destiny.cache';
 
 /**
  * Destiny Cache Class
@@ -18,7 +18,7 @@ class Destiny2Cache extends DestinyCache {
     // eslint-disable-next-line class-methods-use-this
     getCharacters(membershipId) {
         return new Promise((resolve, reject) => {
-            client.get(membershipId, (err, res) => {
+            cache.get(membershipId, (err, res) => {
                 if (err) {
                     reject(err);
                 } else {
@@ -34,7 +34,7 @@ class Destiny2Cache extends DestinyCache {
      */
     getManifest() {
         return new Promise((resolve, reject) => {
-            client.get(
+            cache.get(
                 this.#manifestKey,
                 (err, res) => (err ? reject(err) : resolve(res ? JSON.parse(res) : undefined)),
             );
@@ -57,7 +57,7 @@ class Destiny2Cache extends DestinyCache {
         }
 
         return new Promise((resolve, reject) => {
-            client.set(membershipId, JSON.stringify(characters), (err, success) => {
+            cache.set(membershipId, JSON.stringify(characters), (err, success) => {
                 if (err) {
                     reject(err);
                 } else {
@@ -68,4 +68,4 @@ class Destiny2Cache extends DestinyCache {
     }
 }
 
-module.exports = Destiny2Cache;
+export default Destiny2Cache;

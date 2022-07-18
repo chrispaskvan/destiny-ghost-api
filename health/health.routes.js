@@ -1,6 +1,6 @@
-const express = require('express');
-const HttpStatus = require('http-status-codes');
-const HealthController = require('./health.controller');
+import { Router } from 'express';
+import { StatusCodes } from 'http-status-codes';
+import HealthController from './health.controller';
 
 /**
  * Destiny Routes
@@ -18,7 +18,7 @@ const routes = ({
     worldRepository,
     world2Repository,
 }) => {
-    const healthRouter = express.Router();
+    const healthRouter = Router();
 
     /**
      * Set up routes and initialize the controller.
@@ -53,8 +53,8 @@ const routes = ({
             healthController.getHealth()
                 .then(({ failures, health }) => {
                     res.status(failures
-                        ? HttpStatus.StatusCodes.SERVICE_UNAVAILABLE
-                        : HttpStatus.StatusCodes.OK).json(health);
+                        ? StatusCodes.SERVICE_UNAVAILABLE
+                        : StatusCodes.OK).json(health);
                 })
                 .catch(next);
         });
@@ -89,4 +89,4 @@ const routes = ({
     return healthRouter;
 };
 
-module.exports = routes;
+export default routes;

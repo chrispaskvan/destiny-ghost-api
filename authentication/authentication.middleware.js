@@ -1,5 +1,5 @@
-const Joi = require('joi');
-const validate = require('../helpers/validate');
+import Joi from 'joi';
+import validate from '../helpers/validate';
 
 /**
  * User Authentication Middleware Class
@@ -39,4 +39,4 @@ class AuthenticationMiddleware {
     }
 }
 
-module.exports = AuthenticationMiddleware;
+export default AuthenticationMiddleware;

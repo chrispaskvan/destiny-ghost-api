@@ -9,11 +9,13 @@
  * the wiki at {@link http://bungienetplatform.wikia.com/wiki/Endpoints} or
  * the Bungie web API platform help page {@link https://www.bungie.net/platform/destiny/help/}.
  */
-const DestinyError = require('../destiny/destiny.error');
-const DestinyService = require('../destiny/destiny.service');
-const { bungie: { apiKey } } = require('../helpers/config');
-const { xurHash } = require('./destiny2.constants');
-const { get } = require('../helpers/request');
+import DestinyError from '../destiny/destiny.error';
+import DestinyService from '../destiny/destiny.service';
+import config from '../helpers/config';
+import { xurHash } from './destiny2.constants';
+import { get } from '../helpers/request';
+
+const { bungie: { apiKey } } = config;
 
 /**
  * @constant
@@ -236,4 +238,4 @@ class Destiny2Service extends DestinyService {
     }
 }
 
-module.exports = Destiny2Service;
+export default Destiny2Service;

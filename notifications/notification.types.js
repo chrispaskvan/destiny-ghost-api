@@ -9,4 +9,4 @@ const notificationTypes = {
     Xur: 'Xur',
 };
 
-module.exports = notificationTypes;
+export default notificationTypes;

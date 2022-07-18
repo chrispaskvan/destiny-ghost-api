@@ -1,14 +1,14 @@
-const bodyParser = require('body-parser');
-const compression = require('compression');
-const cookieParser = require('cookie-parser');
-const session = require('express-session');
+import bodyParser from 'body-parser';
+import compression from 'compression';
+import cookieParser from 'cookie-parser';
+import session from 'express-session';
 
-const httpLog = require('../helpers/httpLog');
-const rateLimiterMiddleware = require('../helpers/rate-limiter.middleware');
-const store = require('../helpers/store');
-const { session: sessionConfig } = require('../helpers/config');
+import httpLog from '../helpers/httpLog';
+import rateLimiterMiddleware from '../helpers/rate-limiter.middleware';
+import store from '../helpers/store';
+import configuration from '../helpers/config';
 
-module.exports = app => {
+export default app => {
     app.use(bodyParser.json());
     app.use(bodyParser.urlencoded({
         extended: true,
@@ -38,13 +38,13 @@ module.exports = app => {
         cookie: {
             domain: process.env.DOMAIN,
             httpOnly: true,
-            maxAge: sessionConfig.cookie.maxAge,
+            maxAge: configuration.session.cookie.maxAge,
             secure: false,
         },
-        name: sessionConfig.cookie.name,
+        name: configuration.session.cookie.name,
         resave: false,
         saveUninitialized: true,
-        secret: sessionConfig.secret,
+        secret: configuration.session.secret,
         store,
     });
 

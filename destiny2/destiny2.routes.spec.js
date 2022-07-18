@@ -1,16 +1,20 @@
-const HttpStatus = require('http-status-codes');
-const Chance = require('chance');
-const { EventEmitter } = require('events');
-const httpMocks = require('node-mocks-http');
+import {
+    beforeEach, describe, expect, it, vi,
+} from 'vitest';
+import { StatusCodes } from 'http-status-codes';
+import Chance from 'chance';
+import { EventEmitter } from 'events';
+import { createResponse, createRequest } from 'node-mocks-http';
 
-const Destiny2Router = require('./destiny2.routes');
-const { Response: manifest } = require('../mocks/manifest2Response.json');
+import Destiny2Router from './destiny2.routes';
+import manifest2Response from '../mocks/manifest2Response.json';
 
+const { Response: manifest } = manifest2Response;
 const chance = new Chance();
 const displayName = chance.name();
 const membershipType = chance.integer({ min: 1, max: 2 });
 const authenticationController = {
-    authenticate: jest.fn(() => ({
+    authenticate: vi.fn(() => ({
         displayName,
         membershipType,
     })),
@@ -20,14 +24,14 @@ const destiny2Service = {
     getProfile: () => Promise.resolve(),
 };
 const userService = {
-    getUserByDisplayName: jest.fn(() => Promise.resolve()),
+    getUserByDisplayName: vi.fn(() => Promise.resolve()),
 };
 
 let destiny2Router;
 
 beforeEach(() => {
     const world = {
-        getClassByHash: jest.fn(() => Promise.resolve({
+        getClassByHash: vi.fn(() => Promise.resolve({
             classType: 1,
             displayProperties: {
                 name: 'Hunter',
@@ -55,7 +59,7 @@ describe('Destiny2Router', () => {
     let res;
 
     beforeEach(() => {
-        res = httpMocks.createResponse({
+        res = createResponse({
             eventEmitter: EventEmitter,
         });
     });
@@ -64,7 +68,7 @@ describe('Destiny2Router', () => {
         describe('when session displayName and membershipType are defined', () => {
             describe('when user and destiny services return a user', () => {
                 it('should return list of characters', () => new Promise((done, reject) => {
-                    const req = httpMocks.createRequest({
+                    const req = createRequest({
                         method: 'GET',
                         url: '/characters',
                         session: {
@@ -73,7 +77,7 @@ describe('Destiny2Router', () => {
                         },
                     });
 
-                    destiny2Service.getProfile = jest.fn().mockResolvedValue([
+                    destiny2Service.getProfile = vi.fn().mockResolvedValue([
                         {
                             characterId: '1111111111111111111',
                             classHash: '671679327',
@@ -86,7 +90,7 @@ describe('Destiny2Router', () => {
                             ],
                         },
                     ]);
-                    userService.getUserByDisplayName = jest.fn().mockResolvedValue({
+                    userService.getUserByDisplayName = vi.fn().mockResolvedValue({
                         membershipId: '1',
                     });
 
@@ -95,7 +99,7 @@ describe('Destiny2Router', () => {
                         const data = JSON.parse(res._getData());
 
                         try {
-                            expect(res.statusCode).toEqual(HttpStatus.StatusCodes.OK);
+                            expect(res.statusCode).toEqual(StatusCodes.OK);
                             expect(data[0].className).toEqual('Hunter');
                             done();
                         } catch (err) {
@@ -110,16 +114,16 @@ describe('Destiny2Router', () => {
 
         describe('when session displayName and membershipType are not defined', () => {
             it('should respond with unauthorized', () => new Promise((done, reject) => {
-                const req = httpMocks.createRequest({
+                const req = createRequest({
                     method: 'GET',
                     url: '/characters',
                     session: {},
                 });
 
-                authenticationController.authenticate = jest.fn().mockResolvedValue(undefined);
+                authenticationController.authenticate = vi.fn().mockResolvedValue(undefined);
                 res.on('end', () => {
                     try {
-                        expect(res.statusCode).toEqual(HttpStatus.StatusCodes.UNAUTHORIZED);
+                        expect(res.statusCode).toEqual(StatusCodes.UNAUTHORIZED);
                         done();
                     } catch (err) {
                         reject(err);

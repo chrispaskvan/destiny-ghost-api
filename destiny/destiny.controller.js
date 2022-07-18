@@ -1,5 +1,5 @@
-const base64url = require('base64url');
-const crypto = require('crypto');
+import base64url from 'base64url';
+import { randomBytes } from 'crypto';
 
 /**
  * Controller class for Destiny routes.
@@ -22,7 +22,7 @@ class DestinyController {
      * @private
      */
     static #getRandomState() {
-        return base64url(crypto.randomBytes(11));
+        return base64url(randomBytes(11));
     }
 
     /**
@@ -83,4 +83,4 @@ class DestinyController {
     }
 }
 
-module.exports = DestinyController;
+export default DestinyController;

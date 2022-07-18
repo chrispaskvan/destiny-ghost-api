@@ -1,8 +1,13 @@
-const Chance = require('chance');
+import {
+    beforeEach, describe, expect, it, vi,
+} from 'vitest';
+import Chance from 'chance';
+import Destiny2Controller from './destiny2.controller';
+import manifest2Response from '../mocks/manifest2Response.json';
 
-const Destiny2Controller = require('./destiny2.controller');
-const { Response: manifest } = require('../mocks/manifest2Response.json');
+vi.mock('../helpers/request');
 
+const { Response: manifest } = manifest2Response;
 const chance = new Chance();
 const destiny2Service = {
     getManifest: () => Promise.resolve(manifest),
@@ -11,14 +16,14 @@ const destiny2Service = {
 const displayName = chance.name();
 const membershipType = chance.integer({ min: 1, max: 2 });
 const userService = {
-    getUserByDisplayName: jest.fn(() => Promise.resolve()),
+    getUserByDisplayName: vi.fn(() => Promise.resolve()),
 };
 
 let destiny2Controller;
 
 beforeEach(() => {
     const world = {
-        getClassByHash: jest.fn(() => Promise.resolve({
+        getClassByHash: vi.fn(() => Promise.resolve({
             classType: 1,
             displayProperties: {
                 name: 'Hunter',
@@ -32,7 +37,7 @@ beforeEach(() => {
             index: 1,
             redacted: false,
         })),
-        getItemByHash: jest.fn(() => Promise.resolve({
+        getItemByHash: vi.fn(() => Promise.resolve({
             displayProperties: {
                 name: 'Eyasluna',
             },
@@ -53,7 +58,7 @@ describe('Destiny2Controller', () => {
         describe('when session displayName and membershipType are defined', () => {
             describe('when user and destiny services return a user', () => {
                 it('should return user profile', async () => {
-                    destiny2Service.getProfile = jest.fn().mockResolvedValue([
+                    destiny2Service.getProfile = vi.fn().mockResolvedValue([
                         {
                             characterId,
                             classHash: '671679327',
@@ -66,7 +71,7 @@ describe('Destiny2Controller', () => {
                             ],
                         },
                     ]);
-                    userService.getUserByDisplayName = jest.fn().mockResolvedValue({
+                    userService.getUserByDisplayName = vi.fn().mockResolvedValue({
                         membershipId: '1',
                     });
 
@@ -86,7 +91,7 @@ describe('Destiny2Controller', () => {
                     const accessToken = 'some-access-token';
                     const membershipId = '1';
 
-                    destiny2Service.getProfile = jest.fn().mockResolvedValue([
+                    destiny2Service.getProfile = vi.fn().mockResolvedValue([
                         {
                             characterId,
                             classHash: '671679327',
@@ -99,10 +104,10 @@ describe('Destiny2Controller', () => {
                             ],
                         },
                     ]);
-                    destiny2Service.getXur = jest.fn().mockResolvedValue([
+                    destiny2Service.getXur = vi.fn().mockResolvedValue([
                         'some-item-hash',
                     ]);
-                    userService.getUserByDisplayName = jest.fn().mockResolvedValue({
+                    userService.getUserByDisplayName = vi.fn().mockResolvedValue({
                         bungie: {
                             access_token: accessToken,
                         },

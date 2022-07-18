@@ -1,10 +1,13 @@
 /**
  * Destiny Tracher Service Tests
  */
-const DestinyTrackerService = require('./destinytracker.service');
-const request = require('../helpers/request');
+import {
+    beforeEach, describe, expect, it, vi,
+} from 'vitest';
+import DestinyTrackerService from './destinytracker.service';
+import { post, get } from '../helpers/request';
 
-jest.mock('../helpers/request');
+vi.mock('../helpers/request');
 
 let destinyTrackerService;
 
@@ -22,7 +25,7 @@ describe('DestinyTrackerService', () => {
                 score: 32,
             };
 
-            request.post.mockImplementation(() => Promise.resolve({ votes: mockVotes }));
+            post.mockImplementationOnce(() => Promise.resolve({ votes: mockVotes }));
 
             const votes = await destinyTrackerService.getVotes('3628991658');
 
@@ -44,7 +47,7 @@ describe('DestinyTrackerService', () => {
                     },
                 };
 
-                request.get.mockImplementation(() => Promise.resolve(mockRanking));
+                get.mockImplementation(() => Promise.resolve(mockRanking));
 
                 const rank = await destinyTrackerService.getRank('3628991658');
 
@@ -60,7 +63,7 @@ describe('DestinyTrackerService', () => {
                     },
                 };
 
-                request.get.mockImplementation(() => Promise.resolve(mockRanking));
+                get.mockImplementation(() => Promise.resolve(mockRanking));
 
                 const rank = await destinyTrackerService.getRank('3628991658');
 

@@ -4,7 +4,7 @@
  * @module destinyController
  * @author Chris Paskvan
  */
-const DestinyController = require('../destiny/destiny.controller');
+import DestinyController from '../destiny/destiny.controller';
 
 /**
  * Destiny Controller Service
@@ -121,4 +121,4 @@ class Destiny2Controller extends DestinyController {
     }
 }
 
-module.exports = Destiny2Controller;
+export default Destiny2Controller;
