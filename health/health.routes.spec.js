@@ -1,21 +1,26 @@
-const { EventEmitter } = require('events');
-const HttpStatus = require('http-status-codes');
-const httpMocks = require('node-mocks-http');
-const request = require('../helpers/request');
-const HealthRouter = require('./health.routes');
-const { Response: manifest } = require('../mocks/manifestResponse.json');
-const { Response: manifest2 } = require('../mocks/manifest2Response.json');
+import {
+    beforeEach, describe, expect, it, vi,
+} from 'vitest';
+import { EventEmitter } from 'events';
+import { StatusCodes } from 'http-status-codes';
+import { createResponse, createRequest } from 'node-mocks-http';
+import { get } from '../helpers/request';
+import HealthRouter from './health.routes';
+import manifestResponse from '../mocks/manifestResponse.json';
+import manifest2Response from '../mocks/manifest2Response.json';
 
-jest.mock('../helpers/request');
+vi.mock('../helpers/request');
 
+const { Response: manifest } = manifestResponse;
+const { Response: manifest2 } = manifest2Response;
 const destinyService = {
-    getManifest: jest.fn(),
+    getManifest: vi.fn(),
 };
 const destiny2Service = {
-    getManifest: jest.fn(),
+    getManifest: vi.fn(),
 };
 const documents = {
-    getDocuments: jest.fn(),
+    getDocuments: vi.fn(),
 };
 
 let healthRouter;
@@ -24,7 +29,7 @@ describe('HealthRouter', () => {
     let res;
 
     beforeEach(() => {
-        res = httpMocks.createResponse({
+        res = createResponse({
             eventEmitter: EventEmitter,
         });
     });
@@ -44,7 +49,7 @@ describe('HealthRouter', () => {
             };
 
             beforeEach(() => {
-                request.get.mockImplementation(() => Promise.resolve({
+                get.mockImplementation(() => Promise.resolve({
                     status: {
                         description: 'All Systems Go',
                     },
@@ -60,18 +65,18 @@ describe('HealthRouter', () => {
             });
 
             it('should return a positive response', () => new Promise((done, reject) => {
-                const req = httpMocks.createRequest({
+                const req = createRequest({
                     method: 'GET',
                     url: '/',
                 });
 
-                destinyService.getManifest = jest.fn().mockResolvedValue(manifest);
-                destiny2Service.getManifest = jest.fn().mockResolvedValue(manifest2);
-                documents.getDocuments = jest.fn().mockResolvedValue([2]);
+                destinyService.getManifest = vi.fn().mockResolvedValue(manifest);
+                destiny2Service.getManifest = vi.fn().mockResolvedValue(manifest2);
+                documents.getDocuments = vi.fn().mockResolvedValue([2]);
 
                 res.on('end', () => {
                     try {
-                        expect(res.statusCode).toEqual(HttpStatus.StatusCodes.OK);
+                        expect(res.statusCode).toEqual(StatusCodes.OK);
 
                         // eslint-disable-next-line no-underscore-dangle
                         const body = JSON.parse(res._getData());
@@ -112,8 +117,8 @@ describe('HealthRouter', () => {
             };
 
             beforeEach(() => {
-                request.get.mockImplementation(() => Promise.rejects({
-                    statusCode: HttpStatus.StatusCodes.BAD_REQUEST,
+                get.mockImplementation(() => Promise.rejects({
+                    statusCode: StatusCodes.BAD_REQUEST,
                 }));
 
                 healthRouter = HealthRouter({
@@ -126,18 +131,18 @@ describe('HealthRouter', () => {
             });
 
             it('should return a negative response', () => new Promise((done, reject) => {
-                const req = httpMocks.createRequest({
+                const req = createRequest({
                     method: 'GET',
                     url: '/',
                 });
 
-                destinyService.getManifest = jest.fn().mockRejectedValue(new Error());
-                destiny2Service.getManifest = jest.fn().mockRejectedValue(new Error());
-                documents.getDocuments = jest.fn().mockRejectedValue(new Error());
+                destinyService.getManifest = vi.fn().mockRejectedValue(new Error());
+                destiny2Service.getManifest = vi.fn().mockRejectedValue(new Error());
+                documents.getDocuments = vi.fn().mockRejectedValue(new Error());
 
                 res.on('end', () => {
                     try {
-                        expect(res.statusCode).toEqual(HttpStatus.StatusCodes.SERVICE_UNAVAILABLE);
+                        expect(res.statusCode).toEqual(StatusCodes.SERVICE_UNAVAILABLE);
 
                         // eslint-disable-next-line no-underscore-dangle
                         const body = JSON.parse(res._getData());
@@ -167,14 +172,14 @@ describe('HealthRouter', () => {
 
     describe('liveness', () => {
         it('should return up', () => new Promise((done, reject) => {
-            const req = httpMocks.createRequest({
+            const req = createRequest({
                 method: 'GET',
                 url: '/live',
             });
 
             res.on('end', () => {
                 try {
-                    expect(res.statusCode).toEqual(HttpStatus.StatusCodes.OK);
+                    expect(res.statusCode).toEqual(StatusCodes.OK);
 
                     // eslint-disable-next-line no-underscore-dangle
                     const body = JSON.parse(res._getData());

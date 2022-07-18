@@ -1,7 +1,7 @@
 /**
  * User Authorization Middleware
  */
-const { notificationHeaders } = require('../helpers/config');
+import configuration from '../helpers/config';
 
 /**
  * Check for expected notification headers.
@@ -9,7 +9,7 @@ const { notificationHeaders } = require('../helpers/config');
  * @param {*} headers
  */
 const authorized = headers => {
-    const notificationEntries = Object.entries(notificationHeaders);
+    const notificationEntries = Object.entries(configuration.notificationHeaders);
     const headerEntries = Object.entries(headers)
         .filter(([key1, value1]) => notificationEntries
             .find(([key2, value2]) => key1 === key2 && value1 === value2));
@@ -37,4 +37,4 @@ function authorizeUser(req, res, next) {
     next();
 }
 
-module.exports = authorizeUser;
+export default authorizeUser;

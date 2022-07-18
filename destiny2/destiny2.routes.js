@@ -1,14 +1,14 @@
 /**
  * Created by chris on 9/25/15.
  */
-const HttpStatus = require('http-status-codes');
-const cors = require('cors');
-const express = require('express');
-const AuthenticationMiddleWare = require('../authentication/authentication.middleware');
-const Destiny2Controller = require('./destiny2.controller');
-const authorizeUser = require('../authorization/authorization.middleware');
+import { StatusCodes } from 'http-status-codes';
+import cors from 'cors';
+import { Router } from 'express';
+import AuthenticationMiddleWare from '../authentication/authentication.middleware';
+import Destiny2Controller from './destiny2.controller';
+import authorizeUser from '../authorization/authorization.middleware';
 
-const { cors: corsConfig } = require('../helpers/config');
+import configuration from '../helpers/config';
 
 /**
  * Destiny Routes
@@ -21,7 +21,7 @@ const { cors: corsConfig } = require('../helpers/config');
 const routes = ({
     authenticationController, destiny2Service, userService, worldRepository,
 }) => {
-    const destiny2Router = express.Router();
+    const destiny2Router = Router();
 
     /**
      * Set up routes and initialize the controller.
@@ -97,7 +97,7 @@ const routes = ({
                         first = false;
                     });
                     res.write(']');
-                    res.status(HttpStatus.StatusCodes.OK).end();
+                    res.status(StatusCodes.OK).end();
                 })
                 .catch(next);
         });
@@ -120,7 +120,7 @@ const routes = ({
         .get((req, res, next) => {
             destiny2Controller.getManifest()
                 .then(manifest => {
-                    res.status(HttpStatus.StatusCodes.OK).json(manifest);
+                    res.status(StatusCodes.OK).json(manifest);
                 })
                 .catch(next);
         });
@@ -129,7 +129,7 @@ const routes = ({
         .post((req, res, next) => authorizeUser(req, res, next), (req, res, next) => {
             destiny2Controller.upsertManifest()
                 .then(manifest => {
-                    res.status(HttpStatus.StatusCodes.OK).json(manifest);
+                    res.status(StatusCodes.OK).json(manifest);
                 })
                 .catch(next);
         });
@@ -144,7 +144,7 @@ const routes = ({
                         return res.status(200).json(statistics);
                     }
 
-                    return res.status(HttpStatus.StatusCodes.UNAUTHORIZED).end();
+                    return res.status(StatusCodes.UNAUTHORIZED).end();
                 })
                 .catch(next);
         });
@@ -167,7 +167,7 @@ const routes = ({
      */
     destiny2Router.route('/xur')
         .get(
-            cors(corsConfig),
+            cors(configuration.cors),
             (req, res, next) => middleware.authenticateUser(req, res, next),
             (req, res, next) => {
                 const { session: { displayName, membershipType } } = req;
@@ -175,10 +175,10 @@ const routes = ({
                 destiny2Controller.getXur(displayName, membershipType)
                     .then(items => {
                         if (items) {
-                            return res.status(HttpStatus.StatusCodes.OK).json(items);
+                            return res.status(StatusCodes.OK).json(items);
                         }
 
-                        return res.status(HttpStatus.StatusCodes.NOT_FOUND);
+                        return res.status(StatusCodes.NOT_FOUND);
                     })
                     .catch(next);
             },
@@ -187,4 +187,4 @@ const routes = ({
     return destiny2Router;
 };
 
-module.exports = routes;
+export default routes;

@@ -1,13 +1,16 @@
 /**
  * Publish Messages
  */
-const Chance = require('chance');
-const Publisher = require('./publisher');
+import {
+    describe, expect, it, vi,
+} from 'vitest';
+import Chance from 'chance';
+import Publisher from './publisher';
 
 const chance = new Chance();
 const serviceBusService = {
-    createTopicIfNotExists: jest.fn((queueName, callback) => callback()),
-    sendTopicMessage: jest.fn((queueName, message, callback) => callback(undefined, {
+    createTopicIfNotExists: vi.fn((queueName, callback) => callback()),
+    sendTopicMessage: vi.fn((queueName, message, callback) => callback(undefined, {
         isSuccessful: true,
     })),
 };

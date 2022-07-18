@@ -1,5 +1,10 @@
-const UserCache = require('./user.cache');
-const mockUser = require('../mocks/users.json')[0];
+import {
+    afterEach, beforeEach, describe, expect, it, vi,
+} from 'vitest';
+import UserCache from './user.cache';
+import mockUsers from '../mocks/users.json';
+
+const [mockUser] = mockUsers;
 
 describe('UserCache', () => {
     let cacheService;
@@ -8,7 +13,7 @@ describe('UserCache', () => {
     describe('deleteUser', () => {
         beforeEach(() => {
             client = {
-                del: jest.fn((key, callback) => callback(undefined, 1)),
+                del: vi.fn((key, callback) => callback(undefined, 1)),
             };
 
             cacheService = new UserCache({ client });
@@ -32,7 +37,7 @@ describe('UserCache', () => {
             });
         });
 
-        afterEach(() => jest.clearAllMocks());
+        afterEach(() => vi.clearAllMocks());
     });
 
     describe('getCache', () => {
@@ -43,7 +48,7 @@ describe('UserCache', () => {
                 it('resolves value', async () => {
                     client = {
                         get:
-                        jest.fn((key, callback) => callback(undefined, JSON.stringify(mockUser))),
+                        vi.fn((key, callback) => callback(undefined, JSON.stringify(mockUser))),
                     };
 
                     cacheService = new UserCache({ client });
@@ -57,7 +62,7 @@ describe('UserCache', () => {
             describe('when cache is not found', () => {
                 it('resolves value', async () => {
                     client = {
-                        get: jest.fn((key, callback) => callback(undefined, undefined)),
+                        get: vi.fn((key, callback) => callback(undefined, undefined)),
                     };
 
                     cacheService = new UserCache({ client });
@@ -74,7 +79,7 @@ describe('UserCache', () => {
                 const errMessage = 'error';
 
                 client = {
-                    get: jest.fn(() => {
+                    get: vi.fn(() => {
                         throw new Error(errMessage);
                     }),
                 };
@@ -90,10 +95,10 @@ describe('UserCache', () => {
     describe('getUser', () => {
         beforeEach(() => {
             client = {
-                del: jest.fn((key, callback) => callback(undefined, 1)),
-                get: jest.fn((key, callback) => callback(undefined, JSON.stringify(mockUser))),
-                quit: jest.fn(),
-                set: jest.fn((key, value, option, ttl, callback) => callback()),
+                del: vi.fn((key, callback) => callback(undefined, 1)),
+                get: vi.fn((key, callback) => callback(undefined, JSON.stringify(mockUser))),
+                quit: vi.fn(),
+                set: vi.fn((key, value, option, ttl, callback) => callback()),
             };
 
             cacheService = new UserCache({ client });
@@ -102,7 +107,7 @@ describe('UserCache', () => {
         describe('when cached user is found', () => {
             describe('when membershipId is found', () => {
                 it('returns user', async () => {
-                    jest.spyOn(cacheService, 'getCache')
+                    vi.spyOn(cacheService, 'getCache')
                         .mockResolvedValueOnce(mockUser);
 
                     const user = await cacheService.getUser();
@@ -116,7 +121,7 @@ describe('UserCache', () => {
                 it('returns user', async () => {
                     const { membershipId, ...mockUser1 } = mockUser;
 
-                    jest.spyOn(cacheService, 'getCache')
+                    vi.spyOn(cacheService, 'getCache')
                         .mockResolvedValueOnce(mockUser1)
                         .mockResolvedValueOnce(mockUser);
 
@@ -130,7 +135,7 @@ describe('UserCache', () => {
 
         describe('when cached user is not found', () => {
             it('return undefined', async () => {
-                cacheService.getCache = jest.fn()
+                cacheService.getCache = vi.fn()
                     .mockImplementation(() => Promise.resolve());
 
                 const user = await cacheService.getUser();
@@ -144,7 +149,7 @@ describe('UserCache', () => {
         describe('when client set operation succeeds', () => {
             beforeEach(() => {
                 client = {
-                    set: jest.fn((key, value, option, ttl, callback) => callback()),
+                    set: vi.fn((key, value, option, ttl, callback) => callback()),
                 };
 
                 cacheService = new UserCache({ client });
@@ -194,7 +199,7 @@ describe('UserCache', () => {
                     });
                 });
             });
-            afterEach(() => jest.clearAllMocks());
+            afterEach(() => vi.clearAllMocks());
         });
 
         describe('when client set operation fails', () => {
@@ -202,7 +207,7 @@ describe('UserCache', () => {
                 const errMessage = 'error';
 
                 client = {
-                    set: jest.fn(() => {
+                    set: vi.fn(() => {
                         throw new Error(errMessage);
                     }),
                 };

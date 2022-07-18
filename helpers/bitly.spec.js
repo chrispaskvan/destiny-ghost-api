@@ -1,9 +1,11 @@
 /**
  * Bitly Tests
  */
-const bitly = require('./bitly');
+import {
+    describe, expect, it,
+} from 'vitest';
+import bitly from './bitly';
 
-// eslint-disable-next-line jest/no-disabled-tests
 describe.skip('Bitly', () => {
     describe('getShortUrl', () => {
         it('should return a short URL', async () => bitly

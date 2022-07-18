@@ -1,29 +1,32 @@
-const { EventEmitter } = require('events');
-const HttpStatus = require('http-status-codes');
-const Chance = require('chance');
-const httpMocks = require('node-mocks-http');
-const UserRouter = require('./user.routes');
+import {
+    beforeEach, describe, expect, it, vi,
+} from 'vitest';
+import { EventEmitter } from 'events';
+import { StatusCodes } from 'http-status-codes';
+import Chance from 'chance';
+import { createResponse, createRequest } from 'node-mocks-http';
+import UserRouter from './user.routes';
 
 const chance = new Chance();
 const displayName = chance.name();
 const membershipType = chance.integer({ min: 1, max: 2 });
 const authenticationController = {
-    authenticate: jest.fn(() => ({
+    authenticate: vi.fn(() => ({
         displayName,
         membershipType,
     })),
 };
 const destinyService = {
-    getCurrentUser: jest.fn(),
+    getCurrentUser: vi.fn(),
 };
 const notificationService = {
-    sendMessage: jest.fn(),
+    sendMessage: vi.fn(),
 };
 const userService = {
-    getUserByDisplayName: jest.fn(),
-    getUserByEmailAddress: jest.fn(),
-    getUserByPhoneNumber: jest.fn(),
-    updateUser: jest.fn(),
+    getUserByDisplayName: vi.fn(),
+    getUserByEmailAddress: vi.fn(),
+    getUserByPhoneNumber: vi.fn(),
+    updateUser: vi.fn(),
 };
 
 let userRouter;
@@ -41,7 +44,7 @@ describe('UserRouter', () => {
     let res;
 
     beforeEach(() => {
-        res = httpMocks.createResponse({
+        res = createResponse({
             eventEmitter: EventEmitter,
         });
     });
@@ -49,7 +52,7 @@ describe('UserRouter', () => {
     describe('getCurrentUser', () => {
         describe('when session displayName is undefined', () => {
             it('should not return a user', () => new Promise((done, reject) => {
-                const req = httpMocks.createRequest({
+                const req = createRequest({
                     method: 'GET',
                     url: '/current',
                     session: {
@@ -77,7 +80,7 @@ describe('UserRouter', () => {
 
                 res.on('end', () => {
                     try {
-                        expect(res.statusCode).toEqual(HttpStatus.StatusCodes.NOT_FOUND);
+                        expect(res.statusCode).toEqual(StatusCodes.NOT_FOUND);
                         done();
                     } catch (err) {
                         reject(err);
@@ -90,7 +93,7 @@ describe('UserRouter', () => {
 
         describe('when session membershipType is undefined', () => {
             it('should not return a user', () => new Promise((done, reject) => {
-                const req = httpMocks.createRequest({
+                const req = createRequest({
                     method: 'GET',
                     url: '/current',
                     session: {
@@ -118,7 +121,7 @@ describe('UserRouter', () => {
 
                 res.on('end', () => {
                     try {
-                        expect(res.statusCode).toEqual(HttpStatus.StatusCodes.NOT_FOUND);
+                        expect(res.statusCode).toEqual(StatusCodes.NOT_FOUND);
                         done();
                     } catch (err) {
                         reject(err);
@@ -132,7 +135,7 @@ describe('UserRouter', () => {
         describe('when session displayName and membershipType are defined', () => {
             describe('when user and destiny services return a user', () => {
                 it('should return the current user', () => new Promise((done, reject) => {
-                    const req = httpMocks.createRequest({
+                    const req = createRequest({
                         method: 'GET',
                         url: '/current',
                         session: {
@@ -161,7 +164,7 @@ describe('UserRouter', () => {
 
                     res.on('end', () => {
                         try {
-                            expect(res.statusCode).toEqual(HttpStatus.StatusCodes.OK);
+                            expect(res.statusCode).toEqual(StatusCodes.OK);
 
                             // eslint-disable-next-line no-underscore-dangle
                             const body = JSON.parse(res._getData());
@@ -190,7 +193,7 @@ describe('UserRouter', () => {
 
             describe('when destiny service returns undefined', () => {
                 it('should not return a user', () => new Promise((done, reject) => {
-                    const req = httpMocks.createRequest({
+                    const req = createRequest({
                         method: 'GET',
                         url: '/current',
                         session: {
@@ -210,7 +213,7 @@ describe('UserRouter', () => {
 
                     res.on('end', () => {
                         try {
-                            expect(res.statusCode).toEqual(HttpStatus.StatusCodes.UNAUTHORIZED);
+                            expect(res.statusCode).toEqual(StatusCodes.UNAUTHORIZED);
                             done();
                         } catch (err) {
                             reject(err);
@@ -223,7 +226,7 @@ describe('UserRouter', () => {
 
             describe('when user service returns undefined', () => {
                 it('should not return a user', () => new Promise((done, reject) => {
-                    const req = httpMocks.createRequest({
+                    const req = createRequest({
                         method: 'GET',
                         url: '/current',
                         session: {
@@ -262,7 +265,7 @@ describe('UserRouter', () => {
     describe('getUserByEmailAddress', () => {
         describe('when user is found', () => {
             it('should return no content', () => new Promise((done, reject) => {
-                const req = httpMocks.createRequest({
+                const req = createRequest({
                     method: 'GET',
                     url: '/cayde%40destiny-ghost.com/emailAddress',
                 });
@@ -277,7 +280,7 @@ describe('UserRouter', () => {
 
                 res.on('end', () => {
                     try {
-                        expect(res.statusCode).toEqual(HttpStatus.StatusCodes.NO_CONTENT);
+                        expect(res.statusCode).toEqual(StatusCodes.NO_CONTENT);
                         done();
                     } catch (err) {
                         reject(err);
@@ -290,7 +293,7 @@ describe('UserRouter', () => {
 
         describe('when user is not found', () => {
             it('should return not found', () => new Promise((done, reject) => {
-                const req = httpMocks.createRequest({
+                const req = createRequest({
                     method: 'GET',
                     url: '/cayde%40destiny-ghost.com/emailAddress',
                 });
@@ -299,7 +302,7 @@ describe('UserRouter', () => {
 
                 res.on('end', () => {
                     try {
-                        expect(res.statusCode).toEqual(HttpStatus.StatusCodes.NOT_FOUND);
+                        expect(res.statusCode).toEqual(StatusCodes.NOT_FOUND);
                         done();
                     } catch (err) {
                         reject(err);
@@ -314,7 +317,7 @@ describe('UserRouter', () => {
     describe('getUserByPhoneNumber', () => {
         describe('when user is found', () => {
             it('should return no content', () => new Promise((done, reject) => {
-                const req = httpMocks.createRequest({
+                const req = createRequest({
                     method: 'GET',
                     url: '/+12345678901/phoneNumber',
                 });
@@ -329,7 +332,7 @@ describe('UserRouter', () => {
 
                 res.on('end', () => {
                     try {
-                        expect(res.statusCode).toEqual(HttpStatus.StatusCodes.NO_CONTENT);
+                        expect(res.statusCode).toEqual(StatusCodes.NO_CONTENT);
                         done();
                     } catch (err) {
                         reject(err);
@@ -342,7 +345,7 @@ describe('UserRouter', () => {
 
         describe('when user is not found', () => {
             it('should return not found', () => new Promise((done, reject) => {
-                const req = httpMocks.createRequest({
+                const req = createRequest({
                     method: 'GET',
                     url: '/+12345678901/phoneNumber',
                 });
@@ -351,7 +354,7 @@ describe('UserRouter', () => {
 
                 res.on('end', () => {
                     try {
-                        expect(res.statusCode).toEqual(HttpStatus.StatusCodes.NOT_FOUND);
+                        expect(res.statusCode).toEqual(StatusCodes.NOT_FOUND);
                         done();
                     } catch (err) {
                         reject(err);
@@ -366,7 +369,7 @@ describe('UserRouter', () => {
     describe('update', () => {
         describe('when user is undefined', () => {
             it('should not return a user', () => new Promise((done, reject) => {
-                const req = httpMocks.createRequest({
+                const req = createRequest({
                     method: 'PATCH',
                     url: '/',
                     session: {},
@@ -390,7 +393,7 @@ describe('UserRouter', () => {
         describe('when user is defined', () => {
             it('should patch the user', () => new Promise((done, reject) => {
                 const firstName = '11';
-                const req = httpMocks.createRequest({
+                const req = createRequest({
                     method: 'PATCH',
                     url: '/',
                     body: [

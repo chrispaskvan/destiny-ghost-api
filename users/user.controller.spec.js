@@ -1,5 +1,8 @@
-const Chance = require('chance');
-const UserController = require('./user.controller');
+import {
+    beforeEach, describe, expect, it, vi,
+} from 'vitest';
+import Chance from 'chance';
+import UserController from './user.controller';
 
 const chance = new Chance();
 const displayName = chance.name();
@@ -12,16 +15,16 @@ const mockUser = {
     profilePicturePath: 'some-profile-picture-path',
 };
 const destinyService = {
-    getAccessTokenFromCode: jest.fn(),
-    getCurrentUser: jest.fn(),
+    getAccessTokenFromCode: vi.fn(),
+    getCurrentUser: vi.fn(),
 };
 const userService = {
-    createAnonymousUser: jest.fn().mockImplementation(user => Promise.resolve(user)),
-    getCurrentUser: jest.fn(),
-    getUserByDisplayName: jest.fn(),
-    getUserByMembershipId: jest.fn(),
-    updateAnonymousUser: jest.fn().mockImplementation(user => Promise.resolve(user)),
-    updateUser: jest.fn().mockImplementation(user => Promise.resolve(user)),
+    createAnonymousUser: vi.fn().mockImplementation(user => Promise.resolve(user)),
+    getCurrentUser: vi.fn(),
+    getUserByDisplayName: vi.fn(),
+    getUserByMembershipId: vi.fn(),
+    updateAnonymousUser: vi.fn().mockImplementation(user => Promise.resolve(user)),
+    updateUser: vi.fn().mockImplementation(user => Promise.resolve(user)),
 };
 
 let userController;

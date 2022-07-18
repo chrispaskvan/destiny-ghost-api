@@ -4,11 +4,11 @@
  * @module healthController
  * @author Chris Paskvan
  */
-const v8 = require('v8');
+import { getHeapStatistics } from 'v8';
 
-const { get } = require('../helpers/request');
-const applicationInsights = require('../helpers/application-insights');
-const log = require('../helpers/log');
+import { get } from '../helpers/request';
+import applicationInsights from '../helpers/application-insights';
+import log from '../helpers/log';
 
 /**
  * Not available
@@ -74,7 +74,7 @@ class HealthController {
             heapUsed,
             external,
         } = process.memoryUsage();
-        const { total_available_size: totalAvailableSize } = v8.getHeapStatistics();
+        const { total_available_size: totalAvailableSize } = getHeapStatistics();
 
         return {
             rss: convertBytesToMegaBytes(rss),
@@ -156,4 +156,4 @@ class HealthController {
     }
 }
 
-module.exports = HealthController;
+export default HealthController;

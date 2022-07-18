@@ -12,10 +12,10 @@
  * @requires pino
  * @requires cuid
  */
-const PinoHttp = require('pino-http');
-const cuid = require('cuid');
-const pino = require('pino');
-const log = require('./log');
+import PinoHttp from 'pino-http';
+import cuid from 'cuid';
+import { stdSerializers } from 'pino';
+import log from './log';
 
 class HttpLog extends PinoHttp {
     constructor() {
@@ -25,9 +25,9 @@ class HttpLog extends PinoHttp {
             logger: log,
 
             serializers: {
-                err: pino.stdSerializers.err,
-                req: pino.stdSerializers.req,
-                res: pino.stdSerializers.res,
+                err: stdSerializers.err,
+                req: stdSerializers.req,
+                res: stdSerializers.res,
             },
 
             useLevel: 'info',
@@ -35,4 +35,4 @@ class HttpLog extends PinoHttp {
     }
 }
 
-module.exports = new HttpLog();
+export default new HttpLog();

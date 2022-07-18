@@ -1,13 +1,10 @@
-const asyncHooks = require('async_hooks');
-const {
-    performance,
-    PerformanceObserver,
-} = require('perf_hooks');
+import { createHook } from 'async_hooks';
+import { performance, PerformanceObserver } from 'perf_hooks';
 
-const log = require('./log');
+import log from './log';
 
 const trackedResources = new Map();
-const hook = asyncHooks.createHook({
+const hook = createHook({
     init(id, type, triggerID, resource) {
         if (['GETADDRINFOREQWRAP', 'HTTPCLIENTREQUEST'].includes(type)) {
             performance.mark(`gjallarhorn-${id}-init`);
@@ -39,4 +36,4 @@ const obs = new PerformanceObserver(list => {
 
 obs.observe({ entryTypes: ['measure'], buffered: false });
 
-module.exports = hook;
+export default hook;

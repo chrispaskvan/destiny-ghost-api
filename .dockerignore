@@ -1,6 +1,4 @@
-.DS_Store
 .artillery
-.coverage
 .clinic
 .dockerignore
 .eslintrc
@@ -13,8 +11,8 @@
 .snyk
 .vscode
 ToDo.md
+coverage
 databases
-jest.config.js
 mocks
 node_modules
 references.txt

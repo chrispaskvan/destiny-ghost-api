@@ -6,8 +6,9 @@
  * @requires cuid
  * @requires pino
  */
-const pino = require('pino');
+import pino from 'pino';
 
+// eslint-disable-next-line import/no-mutable-exports
 let log;
 
 if (process.env.NODE_ENV === 'test') {
@@ -22,4 +23,4 @@ if (process.env.NODE_ENV === 'test') {
     });
 }
 
-module.exports = log;
+export default log;

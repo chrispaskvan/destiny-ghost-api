@@ -1,14 +1,15 @@
 /* eslint-disable security/detect-non-literal-fs-filename */
-const HttpStatus = require('http-status-codes');
-const fs = require('fs');
-const path = require('path');
+import { StatusCodes } from 'http-status-codes';
+import { existsSync, mkdirSync } from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-const DestinyError = require('../destiny/destiny.error');
-const RequestError = require('../helpers/request.error');
-const Routes = require('./routes');
-const expressLoader = require('./express');
-const hook = require('../helpers/performance');
-const log = require('../helpers/log');
+import DestinyError from '../destiny/destiny.error';
+import RequestError from '../helpers/request.error';
+import Routes from './routes';
+import expressLoader from './express';
+import hook from '../helpers/performance';
+import log from '../helpers/log';
 
 const loaders = {
     init: async ({ app }) => {
@@ -24,8 +25,8 @@ const loaders = {
             directories.reduce((directory, folder) => {
                 const directoryPath = directory + folder;
 
-                if (!fs.existsSync(directoryPath)) {
-                    fs.mkdirSync(directoryPath);
+                if (!existsSync(directoryPath)) {
+                    mkdirSync(directoryPath);
                 }
 
                 return `${directoryPath}/`;
@@ -60,7 +61,10 @@ const loaders = {
                 return;
             }
 
-            res.sendFile(path.join(`${__dirname}/../signIn.html`));
+            const fileName = fileURLToPath(import.meta.url);
+            const directory = path.dirname(fileName);
+
+            res.sendFile(path.join(`${directory}/../signIn.html`));
         });
 
         app.get('/ping', (req, res) => {
@@ -78,7 +82,7 @@ const loaders = {
 
             if (res.status) {
                 if (err instanceof DestinyError) {
-                    res.status(HttpStatus.StatusCodes.NOT_FOUND).json({
+                    res.status(StatusCodes.NOT_FOUND).json({
                         errors: [{
                             code,
                             message,
@@ -86,14 +90,14 @@ const loaders = {
                         }],
                     });
                 } else if (err instanceof RequestError) {
-                    res.status(HttpStatus.StatusCodes.INTERNAL_SERVER_ERROR).json({
+                    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
                         errors: [{
                             status,
                             statusText,
                         }],
                     });
                 } else {
-                    res.status(HttpStatus.StatusCodes.INTERNAL_SERVER_ERROR).json({
+                    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
                         errors: [{
                             message,
                         }],
@@ -106,4 +110,4 @@ const loaders = {
     },
 };
 
-module.exports = loaders;
+export default loaders;

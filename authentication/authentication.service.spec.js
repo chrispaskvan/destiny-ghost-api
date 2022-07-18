@@ -1,24 +1,28 @@
 /**
  * Destiny Service Tests
  */
-const Chance = require('chance');
-const { cloneDeep } = require('lodash');
+import {
+    beforeEach, describe, expect, it, vi,
+} from 'vitest';
+import Chance from 'chance';
+import cloneDeep from 'lodash/cloneDeep';
+import AuthenticationService from './authentication.service';
+import usersJson from '../mocks/users.json';
 
-const AuthenticationService = require('./authentication.service');
-const [mockUser] = require('../mocks/users.json');
+const [mockUser] = usersJson;
 
 const cacheService = {
-    setUser: jest.fn().mockResolvedValue(),
+    setUser: vi.fn().mockResolvedValue(),
 };
 const chance = new Chance();
 const destinyService = {
-    getAccessTokenFromRefreshToken: jest.fn(),
-    getCurrentUser: jest.fn(),
+    getAccessTokenFromRefreshToken: vi.fn(),
+    getCurrentUser: vi.fn(),
 };
 const userService = {
-    getUserByDisplayName: jest.fn(),
-    getUserByPhoneNumber: jest.fn(),
-    updateUserBungie: jest.fn(),
+    getUserByDisplayName: vi.fn(),
+    getUserByPhoneNumber: vi.fn(),
+    updateUserBungie: vi.fn(),
 };
 
 let authenticationService;
@@ -56,15 +60,15 @@ describe('AuthenticationService', () => {
 
         describe('when current user is fresh', () => {
             beforeEach(async () => {
-                destinyService.getCurrentUser = jest.fn().mockResolvedValue(mockUser);
+                destinyService.getCurrentUser = vi.fn().mockResolvedValue(mockUser);
             });
 
             describe('when displayName and membershipType exist', () => {
                 describe('when user exists', () => {
                     describe('when token is fresh', () => {
                         beforeEach(async () => {
-                            userService.getCurrentUser = jest.fn().mockResolvedValue(mockUser);
-                            userService.getUserByDisplayName = jest.fn()
+                            userService.getCurrentUser = vi.fn().mockResolvedValue(mockUser);
+                            userService.getUserByDisplayName = vi.fn()
                                 .mockResolvedValue(mockUser);
                         });
 
@@ -75,15 +79,15 @@ describe('AuthenticationService', () => {
                             });
 
                             expect(user).toEqual(user1);
-                            // eslint-disable-next-line jest/valid-expect, no-unused-expressions
+                            // eslint-disable-next-line no-unused-expressions
                             expect(cacheService.setUser).toHaveBeenCalledOnce;
                         });
                     });
 
                     describe('when token is not fresh', () => {
                         beforeEach(async () => {
-                            userService.getCurrentUser = jest.fn().mockRejectedValue();
-                            userService.getUserByDisplayName = jest.fn()
+                            userService.getCurrentUser = vi.fn().mockRejectedValue();
+                            userService.getUserByDisplayName = vi.fn()
                                 .mockResolvedValue(mockUser);
                         });
 
@@ -94,7 +98,7 @@ describe('AuthenticationService', () => {
                             });
 
                             expect(user).toEqual(user1);
-                            // eslint-disable-next-line no-unused-expressions, jest/valid-expect
+                            // eslint-disable-next-line no-unused-expressions
                             expect(userService.updateUserBungie).toHaveBeenCalledOnce;
                         });
                     });
@@ -102,7 +106,7 @@ describe('AuthenticationService', () => {
 
                 describe('when user does not exist', () => {
                     beforeEach(async () => {
-                        userService.getUserByDisplayName = jest.fn().mockResolvedValue();
+                        userService.getUserByDisplayName = vi.fn().mockResolvedValue();
                     });
 
                     it('should return undefined', async () => {
@@ -121,8 +125,8 @@ describe('AuthenticationService', () => {
 
                 describe('when user exists', () => {
                     beforeEach(async () => {
-                        userService.getCurrentUser = jest.fn().mockResolvedValue(mockUser);
-                        userService.getUserByPhoneNumber = jest.fn().mockResolvedValue(mockUser);
+                        userService.getCurrentUser = vi.fn().mockResolvedValue(mockUser);
+                        userService.getUserByPhoneNumber = vi.fn().mockResolvedValue(mockUser);
                     });
 
                     describe('when token is fresh', () => {
@@ -132,7 +136,7 @@ describe('AuthenticationService', () => {
                             });
 
                             expect(user).toEqual(user1);
-                            // eslint-disable-next-line jest/valid-expect, no-unused-expressions
+                            // eslint-disable-next-line no-unused-expressions
                             expect(cacheService.getUserByPhoneNumber).toHaveBeenCalledOnce;
                         });
                     });
@@ -140,7 +144,7 @@ describe('AuthenticationService', () => {
 
                 describe('when user does not exist', () => {
                     beforeEach(async () => {
-                        userService.getUserByDisplayName = jest.fn().mockResolvedValue();
+                        userService.getUserByDisplayName = vi.fn().mockResolvedValue();
                     });
 
                     it('should return undefined', async () => {
@@ -170,17 +174,17 @@ describe('AuthenticationService', () => {
             const now = 11;
 
             beforeEach(async () => {
-                destinyService.getCurrentUser = jest.fn().mockRejectedValue();
-                destinyService.getAccessTokenFromRefreshToken = jest.fn().mockResolvedValue({
+                destinyService.getCurrentUser = vi.fn().mockRejectedValue();
+                destinyService.getAccessTokenFromRefreshToken = vi.fn().mockResolvedValue({
                     access_token, // eslint-disable-line camelcase
                     expires_in: expiresIn,
                 });
-                userService.getCurrentUser = jest.fn().mockResolvedValue(mockUser);
-                userService.getUserByDisplayName = jest.fn().mockResolvedValue(mockUser);
+                userService.getCurrentUser = vi.fn().mockResolvedValue(mockUser);
+                userService.getUserByDisplayName = vi.fn().mockResolvedValue(mockUser);
             });
 
             it('refreshes Bungie token', async () => {
-                jest.spyOn(global.Date, 'now')
+                vi.spyOn(global.Date, 'now')
                     .mockImplementationOnce(() => now);
 
                 const user = await authenticationService.authenticate({

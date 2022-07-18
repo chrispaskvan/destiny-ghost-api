@@ -3,13 +3,14 @@
     "version": "2.3.0",
     "description": "Node.js API for querying the Destiny database via SMS messages.",
     "main": "server.js",
+    "type": "module",
     "scripts": {
-        "coverage": "npm run test -- --coverage",
+        "coverage": "npm run test:watch -- --coverage --run",
         "lint": "eslint --ignore-path .gitignore .",
-        "start": "NODE_ENV=development node --no-experimental-fetch -r dotenv/config --trace-warnings server",
+        "start": "NODE_ENV=development node --experimental-specifier-resolution=node --no-experimental-fetch -r dotenv/config --trace-warnings server",
         "swagger": "swagger-jsdoc -d swaggerDef.js",
-        "test": "NODE_ENV=test jest  --runInBand --detectOpenHandles --config ./jest.config.js",
-        "test:watch": "npm run test -- --watchAll",
+        "test": "npm run test:watch -- --run",
+        "test:watch": "NODE_ENV=test node node_modules/vitest/vitest.mjs",
         "prepare": "node -e \"try { require('husky').install() } catch (e) {if (e.code !== 'MODULE_NOT_FOUND') throw e}\""
     },
     "author": "Chris Paskvan",
@@ -60,18 +61,18 @@
         "yauzl": "^2.10.0"
     },
     "devDependencies": {
+        "c8": "^7.11.3",
         "chance": "^1.1.7",
         "eslint": "^8.15.0",
         "eslint-config-airbnb-base": "^15.0.0",
         "eslint-plugin-import": "^2.26.0",
-        "eslint-plugin-jest": "^26.1.5",
         "eslint-plugin-security": "^1.5.0",
         "husky": "^7.0.4",
-        "jest": "^28.1.0",
         "node-mocks-http": "^1.10.1",
         "pino-pretty": "^7.6.1",
         "redis-mock": "^0.56.3",
-        "swagger-jsdoc": "^4.3.2"
+        "swagger-jsdoc": "^4.3.2",
+        "vitest": "^0.18.1"
     },
     "snyk": true
 }

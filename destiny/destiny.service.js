@@ -9,14 +9,16 @@
  * the wiki at {@link http://bungienetplatform.wikia.com/wiki/Endpoints} or
  * the Bungie web API platform help page {@link https://www.bungie.net/platform/destiny/help/}.
  */
-const qs = require('qs');
-const DestinyError = require('./destiny.error');
+import { stringify } from 'qs';
+import { get, post } from '../helpers/request';
+import DestinyError from './destiny.error';
+import config from '../helpers/config';
+
 const {
     bungie: {
         apiKey, authorizationUrl, clientId, clientSecret,
     },
-} = require('../helpers/config');
-const { get, post } = require('../helpers/request');
+} = config;
 
 /**
  * @constant
@@ -52,7 +54,7 @@ class DestinyService {
             ...grant,
         };
         const options = {
-            data: qs.stringify(data),
+            data: stringify(data),
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
                 'x-api-key': apiKey,
@@ -211,4 +213,4 @@ class DestinyService {
     }
 }
 
-module.exports = DestinyService;
+export default DestinyService;

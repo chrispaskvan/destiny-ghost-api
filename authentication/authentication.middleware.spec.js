@@ -1,18 +1,21 @@
-const httpMocks = require('node-mocks-http');
-const AuthenticationMiddleware = require('./authentication.middleware');
+import {
+    describe, expect, it, vi,
+} from 'vitest';
+import { createRequest, createResponse } from 'node-mocks-http';
+import AuthenticationMiddleware from './authentication.middleware';
 
 describe('authorizeUser', () => {
     describe('when authenticate throws', () => {
         it('should call next with err', () => {
-            const req = httpMocks.createRequest({
+            const req = createRequest({
                 headers: {},
             });
-            const res = httpMocks.createResponse();
-            const next = jest.fn().mockImplementation(() => {});
+            const res = createResponse();
+            const next = vi.fn().mockImplementation(() => {});
 
             const err = new Error('some-error');
             const authenticationController = {
-                authenticate: jest.fn().mockImplementation(() => { throw err; }),
+                authenticate: vi.fn().mockImplementation(() => { throw err; }),
             };
             const authenticationMiddleware = new AuthenticationMiddleware({
                 authenticationController,

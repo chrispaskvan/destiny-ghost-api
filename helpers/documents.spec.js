@@ -1,10 +1,11 @@
 /**
  * Document Tests
  */
-const QueryBuilder = require('./queryBuilder');
-const Documents = require('./documents');
-
-jest.setTimeout(10000);
+import {
+    describe, expect, it, vi,
+} from 'vitest';
+import QueryBuilder from './queryBuilder';
+import Documents from './documents';
 
 describe('Documents', () => {
     const collectionId = 'Messages';
@@ -16,30 +17,30 @@ describe('Documents', () => {
         To: '+1234567890',
         id: 1,
     };
-    const deleteFn = jest.fn().mockResolvedValue({
+    const deleteFn = vi.fn().mockResolvedValue({
         resource: document,
     });
-    const fetchAllFn = jest.fn().mockResolvedValue({
+    const fetchAllFn = vi.fn().mockResolvedValue({
         resources: [
             document,
         ],
     });
-    const replaceFn = jest.fn().mockImplementation(document1 => Promise.resolve({
+    const replaceFn = vi.fn().mockImplementation(document1 => Promise.resolve({
         resource: document1,
     }));
     const container = {
-        item: jest.fn().mockReturnValue({ delete: deleteFn, replace: replaceFn }),
+        item: vi.fn().mockReturnValue({ delete: deleteFn, replace: replaceFn }),
         items: {
-            create: jest.fn().mockResolvedValue({
+            create: vi.fn().mockResolvedValue({
                 resource: document,
             }),
-            query: jest.fn().mockReturnValue({ fetchAll: fetchAllFn }),
+            query: vi.fn().mockReturnValue({ fetchAll: fetchAllFn }),
         },
     };
-    const containerFn = jest.fn().mockResolvedValue(container);
+    const containerFn = vi.fn().mockResolvedValue(container);
     const documentService = new Documents({
         client: {
-            database: jest.fn().mockReturnValue({ container: containerFn }),
+            database: vi.fn().mockReturnValue({ container: containerFn }),
         },
     });
 

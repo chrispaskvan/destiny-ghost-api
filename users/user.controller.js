@@ -4,10 +4,10 @@
  * @module User Controller
  * @author Chris Paskvan
  */
-const _ = require('lodash');
-const jsonpatch = require('rfc6902');
-const Postmaster = require('../helpers/postmaster');
-const tokens = require('../helpers/tokens');
+import _ from 'lodash';
+import { applyPatch, createPatch } from 'rfc6902';
+import Postmaster from '../helpers/postmaster';
+import { getBlob, getCode } from '../helpers/tokens';
 
 /**
  * @constant
@@ -234,8 +234,8 @@ class UserController {
         Object.assign(user, bungieUser, {
             membership: {
                 tokens: {
-                    blob: tokens.getBlob(),
-                    code: tokens.getCode(),
+                    blob: getBlob(),
+                    code: getCode(),
                     timeStamp: this.constructor.#getEpoch(),
                 },
             },
@@ -333,9 +333,9 @@ class UserController {
 
         const userCopy = JSON.parse(JSON.stringify(user));
 
-        jsonpatch.applyPatch(user, this.constructor.#scrubOperations(patches));
+        applyPatch(user, this.constructor.#scrubOperations(patches));
 
-        const patch = jsonpatch.createPatch(user, userCopy);
+        const patch = createPatch(user, userCopy);
         const version = user.version || 1;
 
         user.version = version + 1;
@@ -353,4 +353,4 @@ class UserController {
     }
 }
 
-module.exports = UserController;
+export default UserController;

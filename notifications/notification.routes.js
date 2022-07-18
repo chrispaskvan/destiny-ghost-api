@@ -1,7 +1,7 @@
-const express = require('express');
-const notificationTypes = require('./notification.types');
-const NotificationController = require('./notification.controller');
-const authorizeUser = require('../authorization/authorization.middleware');
+import { Router } from 'express';
+import notificationTypes from './notification.types';
+import NotificationController from './notification.controller';
+import authorizeUser from '../authorization/authorization.middleware';
 
 /**
  * Notification Routes
@@ -20,7 +20,7 @@ const routes = ({
     userService,
     worldRepository,
 }) => {
-    const notificationRouter = express.Router();
+    const notificationRouter = Router();
 
     /**
      * Set up routes and initialize the controller.
@@ -61,4 +61,4 @@ const routes = ({
     return notificationRouter;
 };
 
-module.exports = routes;
+export default routes;

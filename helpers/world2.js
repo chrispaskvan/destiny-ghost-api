@@ -10,9 +10,9 @@
  * @requires S
  * @requires sqlite3
  */
-const Database = require('better-sqlite3');
-const path = require('path');
-const World = require('./world');
+import Database from 'better-sqlite3';
+import { join, basename } from 'path';
+import World from './world';
 
 /**
  * World2 Repository
@@ -29,7 +29,7 @@ class World2 extends World {
      */
     bootstrap(fileName) {
         const databasePath = fileName
-            ? path.join(this.directory, path.basename(fileName)) : undefined;
+            ? join(this.directory, basename(fileName)) : undefined;
 
         if (databasePath) {
             const database = new Database(databasePath, {
@@ -143,4 +143,4 @@ class World2 extends World {
     }
 }
 
-module.exports = World2;
+export default World2;

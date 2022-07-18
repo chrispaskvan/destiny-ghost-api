@@ -1,7 +1,10 @@
 /**
  * QueryBuilder Tests
  */
-const QueryBuilder = require('./queryBuilder');
+import {
+    describe, expect, it,
+} from 'vitest';
+import QueryBuilder from './queryBuilder';
 
 describe('QueryBuilder', () => {
     it('should select all fields from root where userName matches criteria', () => {

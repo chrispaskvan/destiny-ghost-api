@@ -1,7 +1,8 @@
-const nodemailer = require('nodemailer');
-const smtpTransport = require('nodemailer-smtp-transport');
-const { smtp: smtpConfiguration } = require('./config');
+import { createTransport } from 'nodemailer';
+import smtpTransport from 'nodemailer-smtp-transport';
+import configuration from './config';
 
+const { smtp: smtpConfiguration } = configuration;
 const mailOptions = {};
 const website = process.env.WEBSITE;
 
@@ -10,7 +11,7 @@ const website = process.env.WEBSITE;
  */
 class Postmaster {
     constructor() {
-        this.transporter = nodemailer.createTransport(smtpTransport(smtpConfiguration));
+        this.transporter = createTransport(smtpTransport(smtpConfiguration));
     }
 
     /**
@@ -62,4 +63,4 @@ class Postmaster {
     }
 }
 
-module.exports = Postmaster;
+export default Postmaster;

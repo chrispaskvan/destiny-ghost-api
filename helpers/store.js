@@ -1,6 +1,6 @@
-const RedisSession = require('connect-redis');
-const session = require('express-session');
-const client = require('./cache');
+import RedisSession from 'connect-redis';
+import session from 'express-session';
+import client from './cache';
 
 /**
  * Cache Store
@@ -10,4 +10,4 @@ const store = new RedisStore({
     client,
 });
 
-module.exports = store;
+export default store;

@@ -6,7 +6,9 @@
  * @author Chris Paskvan
  * @requires azure
  */
-const { serviceBus: { queueName } } = require('./config');
+import configuration from './config';
+
+const { serviceBus: { queueName } } = configuration;
 
 /**
  * Message Publisher
@@ -94,4 +96,4 @@ class Publisher {
     }
 }
 
-module.exports = Publisher;
+export default Publisher;

@@ -5,7 +5,9 @@
  * @summary Helper class for interfacing with DocumentDB.
  * @author Chris Paskvan
  */
-const { documents: { databaseId } } = require('./config');
+import configuration from './config';
+
+const { documents: { databaseId } } = configuration;
 
 class Documents {
     constructor(options = {}) {
@@ -96,4 +98,4 @@ class Documents {
     }
 }
 
-module.exports = Documents;
+export default Documents;

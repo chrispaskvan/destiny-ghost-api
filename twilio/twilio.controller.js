@@ -4,10 +4,10 @@
  * @module twilioController
  * @author Chris Paskvan
  */
-const { groupBy, sortBy } = require('lodash');
+import _ from 'lodash';
 
-const bitly = require('../helpers/bitly');
-const log = require('../helpers/log');
+import getShortUrl from '../helpers/bitly';
+import log from '../helpers/log';
 
 /**
  * Maximum number of characters Twilio supports in an SMS message.
@@ -64,7 +64,7 @@ class TwilioController {
             .getItemCategory(itemCategoryHash));
         const itemCategories = await Promise.all(promises);
         const filteredCategories = itemCategories.filter(({ hash1 }) => hash1 > 1);
-        const sortedCategories = sortBy(
+        const sortedCategories = _.sortBy(
             filteredCategories,
             itemCategory => itemCategory.hash,
         );
@@ -89,7 +89,7 @@ class TwilioController {
 
     static async getMore(itemHash, cookies = {}) {
         if (itemHash) {
-            const shortURL = await bitly.getShortUrl(`http://db.destinytracker.com/d2/en/items/${itemHash}`);
+            const shortURL = await getShortUrl(`http://db.destinytracker.com/d2/en/items/${itemHash}`);
 
             return {
                 cookies,
@@ -290,7 +290,7 @@ class TwilioController {
 
         if (items.length > 0) {
             if (items.length > 1) {
-                const groups = groupBy(items, item => item.itemName);
+                const groups = _.groupBy(items, item => item.itemName);
                 const keys = Object.keys(groups);
 
                 if (keys.length === 1) {
@@ -377,7 +377,7 @@ class TwilioController {
             };
         }
         default: {
-            const groups = groupBy(items, item => item.itemName);
+            const groups = _.groupBy(items, item => item.itemName);
             const keys = Object.keys(groups);
             // eslint-disable-next-line security/detect-object-injection
             const result = keys.reduce((memo, key) => `${memo}\n${key} ${groups[key][0].itemCategory}`, ' ').trim();
@@ -405,4 +405,4 @@ class TwilioController {
     }
 }
 
-module.exports = TwilioController;
+export default TwilioController;

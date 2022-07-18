@@ -1,55 +1,53 @@
 /**
  * Route Definitions
  */
-const { CosmosClient } = require('@azure/cosmos');
-const express = require('express');
-const swaggerUi = require('swagger-ui-express');
-const twilio = require('twilio');
+import { CosmosClient } from '@azure/cosmos';
+import { Router } from 'express';
+import { readFileSync } from 'fs';
+import { serve, setup } from 'swagger-ui-express';
+import twilio from 'twilio';
 
-const AuthenticationController = require('../authentication/authentication.controller');
-const AuthenticationService = require('../authentication/authentication.service');
-const Destiny2Cache = require('../destiny2/destiny2.cache');
-const Destiny2Service = require('../destiny2/destiny2.service');
-const DestinyCache = require('../destiny/destiny.cache');
-const DestinyService = require('../destiny/destiny.service');
-const DestinyTrackerService = require('../destinytracker/destinytracker.service');
-const NotificationService = require('../notifications/notification.service');
-const UserCache = require('../users/user.cache');
-const UserService = require('../users/user.service');
-const World = require('../helpers/world');
-const World2 = require('../helpers/world2');
-const client = require('../helpers/cache');
-const Documents = require('../helpers/documents');
+import AuthenticationController from '../authentication/authentication.controller';
+import AuthenticationService from '../authentication/authentication.service';
+import Destiny2Cache from '../destiny2/destiny2.cache';
+import Destiny2Service from '../destiny2/destiny2.service';
+import DestinyCache from '../destiny/destiny.cache';
+import DestinyService from '../destiny/destiny.service';
+import DestinyTrackerService from '../destinytracker/destinytracker.service';
+import NotificationService from '../notifications/notification.service';
+import UserCache from '../users/user.cache';
+import UserService from '../users/user.service';
+import World from '../helpers/world';
+import World2 from '../helpers/world2';
+import client from '../helpers/cache';
+import Documents from '../helpers/documents';
+import config from '../helpers/config';
+import DestinyRouter from '../destiny/destiny.routes';
+import Destiny2Router from '../destiny2/destiny2.routes';
+import HealthRouter from '../health/health.routes';
+import Manifests from './manifests';
+import NotificationRouter from '../notifications/notification.routes';
+import TwilioRouter from '../twilio/twilio.routes';
+import UserRouter from '../users/user.routes';
+
 const {
     documents: {
-        authenticationKey,
-        host,
+        authenticationKey, host,
+    }, twilio: {
+        accountSid, authToken,
     },
-    twilio: {
-        accountSid,
-        authToken,
-    },
-} = require('../helpers/config');
+} = config;
 
-const DestinyRouter = require('../destiny/destiny.routes');
-const Destiny2Router = require('../destiny2/destiny2.routes');
-const HealthRouter = require('../health/health.routes');
-const Manifests = require('./manifests');
-const NotificationRouter = require('../notifications/notification.routes');
-const TwilioRouter = require('../twilio/twilio.routes');
-const UserRouter = require('../users/user.routes');
-const swaggerDocument = require('../swagger.json');
-
-module.exports = () => {
-    const routes = express.Router();
+export default () => {
+    const routes = Router();
 
     /**
      * Swagger
      */
-    routes.use('/docs', swaggerUi.serve);
+    routes.use('/docs', serve);
     routes.get(
         '/docs',
-        swaggerUi.setup(swaggerDocument, {
+        setup(JSON.parse(readFileSync('./swagger.json')), {
             explorer: false,
         }),
     );
