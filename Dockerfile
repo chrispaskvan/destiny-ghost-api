@@ -1,4 +1,4 @@
-FROM node:16.11.1-buster-slim
+FROM node:18.6.0-buster-slim
 
 # labels
 LABEL org.opencontainers.image.created=$CREATED_DATE
@@ -22,12 +22,6 @@ ENV DESTINY2_DATABASE_DIR=$DESTINY2_DATABASE_DIR
 ARG DOMAIN=https://api.destiny-ghost.com
 ENV DOMAIN=$DOMAIN
 
-ARG NODE_ENV=production
-ENV NODE_ENV=$NODE_ENV
-
-ARG NODE_OPTIONS="--max-old-space-size=8192 --unhandled-rejections=strict"
-ENV NODE_OPTIONS=$NODE_OPTIONS
-
 ARG PORT=1100
 ENV PORT=$PORT
 
@@ -45,4 +39,4 @@ RUN npm config list && npm ci && npm cache clean --force
 
 COPY --chown=node:node . /destiny-ghost-api/
 
-CMD ["sh", "-c", "node  ${NODE_OPTIONS} server.js"]
+CMD ["sh", "-c", "npm run start:dev"]

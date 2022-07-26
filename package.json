@@ -7,7 +7,9 @@
     "scripts": {
         "coverage": "npm run test:watch -- --coverage --run",
         "lint": "eslint --ignore-path .gitignore .",
-        "start": "NODE_ENV=development node --experimental-specifier-resolution=node --no-experimental-fetch -r dotenv/config --trace-warnings server",
+        "start:production": "NODE_ENV=production npm start",
+        "start:dev": "NODE_ENV=development npm start",
+        "start": "node --experimental-specifier-resolution=node --no-experimental-fetch -r dotenv/config --trace-warnings --max-old-space-size=8192 --unhandled-rejections=strict server",
         "swagger": "swagger-jsdoc -d swaggerDef.js",
         "test": "npm run test:watch -- --run",
         "test:watch": "NODE_ENV=test node node_modules/vitest/vitest.mjs",
@@ -20,7 +22,7 @@
         "url": "git+https://github.com/chrispaskvan/destiny-ghost-api"
     },
     "engines": {
-        "node": ">=v16.11.1",
+        "node": ">=v18.0.0",
         "npm": ">=8.0.0"
     },
     "dependencies": {
