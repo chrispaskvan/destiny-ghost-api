@@ -20,14 +20,13 @@ const routes = ({
     authenticationController,
     authenticationService,
     destinyService,
-    destinyTrackerService,
     userService,
     worldRepository,
 }) => {
     const middleware = new AuthenticationMiddleWare({ authenticationController });
     const twilioRouter = Router();
     const twilioController = new TwilioController({
-        authenticationService, destinyService, destinyTrackerService, userService, worldRepository,
+        authenticationService, destinyService, userService, worldRepository,
     });
 
     twilioRouter.route('/destiny/r')

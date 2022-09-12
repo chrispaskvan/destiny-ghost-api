@@ -13,7 +13,6 @@ import Destiny2Cache from '../destiny2/destiny2.cache';
 import Destiny2Service from '../destiny2/destiny2.service';
 import DestinyCache from '../destiny/destiny.cache';
 import DestinyService from '../destiny/destiny.service';
-import DestinyTrackerService from '../destinytracker/destinytracker.service';
 import NotificationService from '../notifications/notification.service';
 import UserCache from '../users/user.cache';
 import UserService from '../users/user.service';
@@ -87,7 +86,6 @@ export default () => {
     });
     const destiny2Cache = new Destiny2Cache({ client });
     const destiny2Service = new Destiny2Service({ cacheService: destiny2Cache });
-    const destinyTrackerService = new DestinyTrackerService();
     const notificationService = new NotificationService({
         client: messageClient,
     });
@@ -133,7 +131,6 @@ export default () => {
         authenticationController,
         authenticationService,
         destinyService: destiny2Service,
-        destinyTrackerService,
         userService,
         worldRepository: world2,
     });
