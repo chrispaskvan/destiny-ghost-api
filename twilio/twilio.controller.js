@@ -27,7 +27,6 @@ class TwilioController {
     constructor(options = {}) {
         this.authentication = options.authenticationService;
         this.destiny = options.destinyService;
-        this.destinyTracker = options.destinyTrackerService;
         this.users = options.userService;
         this.world = options.worldRepository;
 
@@ -119,26 +118,6 @@ class TwilioController {
         return responses[Math.floor(Math.random() * responses.length)];
     }
 
-    async getRank(itemHash, cookies = {}) {
-        if (itemHash) {
-            const rank = await this.destinyTracker.getRank(itemHash);
-
-            if (rank) {
-                const suffixes = ['th', 'st', 'nd', 'rd'];
-                const mod = rank % 100;
-
-                return {
-                    cookies,
-                    message: `${rank + (suffixes[(mod - 20) % 10] || suffixes.findIndex(suffix => suffix === mod) || suffixes[0])} in PVP`,
-                };
-            }
-        }
-
-        return {
-            message: 'Hm, I didn\'t find a PVP ranking for that item.',
-        };
-    }
-
     /**
      * Get a random response to reply when nothing was found.
      * @returns {string}
@@ -152,77 +131,6 @@ class TwilioController {
         ];
 
         return responses[Math.floor(Math.random() * responses.length)];
-    }
-
-    /**
-     * Get the Top 10 used weapons in PVP.
-     *
-     * @param {*} cookies
-     * @returns
-     * @memberof TwilioController
-     */
-    async getTop10(cookies) {
-        const itemHashes = await this.destinyTracker.getTop10();
-        const items = await Promise.all(itemHashes
-            .map(itemHash1 => this.world.getItemByHash(itemHash1)));
-        const result = items.reduce((memo, { displayProperties }) => (`${memo + displayProperties.name}\n`), ' ').trim();
-
-        return {
-            cookies: { ...cookies, itemHash: undefined },
-            message: result.substr(0, MAX_SMS_MESSAGE_LENGTH),
-        };
-    }
-
-    /**
-     * Get the 5 stars review for the requested item.
-     *
-     * @param {*} itemHash
-     * @param {*} [cookies={}]
-     * @returns
-     * @memberof TwilioController
-     */
-    async getStars(itemHash, cookies = {}) {
-        if (itemHash) {
-            const stars = await this.destinyTracker.getStars(itemHash);
-
-            if (stars) {
-                return {
-                    cookies,
-                    message: `${stars} stars out of 5`,
-                };
-            }
-        }
-
-        return {
-            cookies,
-            message: 'The reviews aren\'t in yet.',
-        };
-    }
-
-    /**
-     * Get the vote tally for the requested item.
-     *
-     * @param {*} itemHash
-     * @param {*} [cookies={}]
-     * @returns
-     * @memberof TwilioController
-     */
-    async getVotes(itemHash, cookies = {}) {
-        if (itemHash) {
-            const { upvotes, total } = await this.destinyTracker.getVotes(itemHash) || {};
-
-            if (upvotes && total) {
-                return {
-                    cookies,
-                    message: `${upvotes} of ${total} 👍`,
-                };
-            }
-        }
-
-        return {
-            cookies,
-            message: 'Strange. They must still be counting.',
-        };
     }
 
     /**
