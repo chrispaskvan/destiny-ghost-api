@@ -29,3 +29,4 @@ Finally, Jest does not support ESM imports with its 'mock' function. The feature
 ## References
 * [NodeJS API Reference](https://nodejs.org/api/cli.html#--input-typetype)
 * [Missing ESM Support for jest.mock](https://github.com/facebook/jest/issues/10025)
+* [node --experimental-modules, requested module does not provide an export named](https://stackoverflow.com/questions/47277887/node-experimental-modules-requested-module-does-not-provide-an-export-named)
