@@ -24,7 +24,7 @@
         "npm": ">=8.0.0"
     },
     "dependencies": {
-        "@azure/cosmos": "^3.15.1",
+        "@azure/cosmos": "^3.17.0",
         "@godaddy/terminus": "^4.10.2",
         "agentkeepalive": "^4.2.1",
         "applicationinsights": "^2.3.2",
