@@ -27,7 +27,7 @@
         "@azure/cosmos": "^3.17.0",
         "@godaddy/terminus": "^4.10.2",
         "agentkeepalive": "^4.2.1",
-        "applicationinsights": "^2.3.2",
+        "applicationinsights": "^2.3.3",
         "axios": "^0.27.2",
         "azure-common": "^0.9.27",
         "azure-sb": "^0.11.2",
