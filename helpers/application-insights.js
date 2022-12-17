@@ -5,7 +5,7 @@
  * @author Chris Paskvan
  * @requires applicationinsights
  */
-import { setup, defaultClient } from 'applicationinsights';
+import applicationinsights from 'applicationinsights';
 import configuration from './config';
 
 const { applicationInsights: { instrumentationKey } } = configuration;
@@ -13,8 +13,8 @@ const { applicationInsights: { instrumentationKey } } = configuration;
 let client;
 
 if (process.env.NODE_ENV === 'production') {
-    setup(instrumentationKey).start();
-    client = defaultClient;
+    applicationinsights.setup(instrumentationKey).start();
+    client = applicationinsights.defaultClient;
 } else {
     // eslint-disable-next-line no-import-assign
     client = {
