@@ -39,4 +39,4 @@ RUN npm config list && npm ci && npm cache clean --force
 
 COPY --chown=node:node . /destiny-ghost-api/
 
-CMD ["sh", "-c", "npm run start:dev"]
+CMD ["sh", "-c", "npm run start:production"]
