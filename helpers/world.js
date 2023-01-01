@@ -8,7 +8,6 @@ import axios from 'axios';
 import {
     readdirSync, statSync, existsSync, createWriteStream, unlinkSync,
 } from 'fs';
-import httpAdapter from 'axios/lib/adapters/http';
 import { join, basename } from 'path';
 import { open } from 'yauzl';
 import log from './log';
@@ -86,7 +85,6 @@ class World {
 
             axios.get(`https://www.bungie.net${relativeUrl}`, {
                 responseType: 'stream',
-                adapter: httpAdapter,
             }).then(({ data: stream }) => {
                 stream.on('data', chunk => {
                     // eslint-disable-next-line new-cap
