@@ -34,7 +34,7 @@ const routes = ({
 
     /**
      * @swagger
-     * path:
+     * paths:
      *  /health/:
      *    get:
      *      summary: Get a summary of the status of the Destiny Ghost API and its dependencies.
@@ -61,7 +61,7 @@ const routes = ({
 
     /**
      * @swagger
-     * path:
+     * paths:
      *  /health/live:
      *    get:
      *      summary: Check if the server is up and responsive.

@@ -1,156 +1,159 @@
 {
-    "openapi": "3.0.0",
-    "info": {
-        "title": "Destiny-Ghost API",
-        "version": "2.3.0",
-        "description": "A Node Express application for receiving SMS/MMS Notifications around changes to the vendor wares in Bungie's Destiny and make ad-hoc queries in the database.",
-        "license": {
-            "name": "MIT",
-            "url": "https://choosealicense.com/licenses/mit"
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Destiny-Ghost API",
+    "version": "2.3.0",
+    "description": "A Node Express application for receiving SMS/MMS Notifications around changes to the vendor wares in Bungie's Destiny and make ad-hoc queries in the database.",
+    "license": {
+      "name": "MIT",
+      "url": "https://choosealicense.com/licenses/mit"
+    }
+  },
+  "paths": {
+    "/destiny/currentUser/": {
+      "get": {
+        "summary": "Get the currently authenticated user.",
+        "tags": [
+          "Destiny"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns current user details."
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
         }
+      }
     },
-    "paths": {
-        "/destiny/currentUser/": {
-            "get": {
-                "summary": "Get the currently authenticated user.",
-                "tags": [
-                    "Destiny"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Returns current user details."
-                    },
-                    "401": {
-                        "description": "Unauthorized"
-                    }
-                }
-            }
-        },
-        "/destiny/manifest/": {
-            "get": {
-                "summary": "Get details about the latest and greatest Destiny manifest definition.",
-                "tags": [
-                    "Destiny"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Returns the Destiny Manifest definition."
-                    }
-                }
-            }
-        },
-        "/destiny2/characters/": {
-            "get": {
-                "summary": "Get a list of the user's characters.",
-                "tags": [
-                    "Destiny 2"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Returns the current user's list of characters."
-                    },
-                    "401": {
-                        "description": "Unauthorized"
-                    }
-                }
-            }
-        },
-        "/destiny2/inventory/": {
-            "get": {
-                "summary": "Get the complete inventory of items.",
-                "tags": [
-                    "Destiny 2"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Returns the complete Destiny 2 item inventory."
-                    }
-                }
-            }
-        },
-        "/destiny2/manifest/": {
-            "get": {
-                "summary": "Get details about the latest and greatest Destiny manifest definition.",
-                "tags": [
-                    "Destiny 2"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Returns the Destiny Manifest definition."
-                    }
-                }
-            }
-        },
-        "/destiny2/xur/": {
-            "get": {
-                "summary": "Get Xur's inventory if available.",
-                "tags": [
-                    "Destiny 2"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Returns Xur's inventory."
-                    },
-                    "404": {
-                        "description": "Xur could not be found."
-                    }
-                }
-            }
-        },
-        "/health/": {
-            "get": {
-                "summary": "Get a summary of the status of the Destiny Ghost API and its dependencies.",
-                "tags": [
-                    "Health"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Returns the status reports of underlying dependencies."
-                    },
-                    "503": {
-                        "description": "Service is unavailable."
-                    }
-                }
-            }
-        },
-        "/health/live": {
-            "get": {
-                "summary": "Check if the server is up and responsive.",
-                "tags": [
-                    "Health"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Check to determine whether the server is alive and running."
-                    }
-                }
-            }
+    "/destiny/manifest/": {
+      "get": {
+        "summary": "Get details about the latest and greatest Destiny manifest definition.",
+        "tags": [
+          "Destiny"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns the Destiny Manifest definition."
+          }
         }
+      }
     },
-    "components": {},
-    "tags": []
+    "/destiny2/characters/": {
+      "get": {
+        "summary": "Get a list of the user's characters.",
+        "tags": [
+          "Destiny 2"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns the current user's list of characters."
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/destiny2/inventory/": {
+      "get": {
+        "summary": "Get the complete inventory of items.",
+        "tags": [
+          "Destiny 2"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns the complete Destiny 2 item inventory."
+          }
+        }
+      }
+    },
+    "/destiny2/manifest/": {
+      "get": {
+        "summary": "Get details about the latest and greatest Destiny manifest definition.",
+        "tags": [
+          "Destiny 2"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns the Destiny Manifest definition."
+          }
+        }
+      }
+    },
+    "/destiny2/xur/": {
+      "get": {
+        "summary": "Get Xur's inventory if available.",
+        "tags": [
+          "Destiny 2"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns Xur's inventory."
+          },
+          "404": {
+            "description": "Xur could not be found."
+          }
+        }
+      }
+    },
+    "/health/": {
+      "get": {
+        "summary": "Get a summary of the status of the Destiny Ghost API and its dependencies.",
+        "tags": [
+          "Health"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns the status reports of underlying dependencies."
+          },
+          "503": {
+            "description": "Service is unavailable."
+          }
+        }
+      }
+    },
+    "/health/live": {
+      "get": {
+        "summary": "Check if the server is up and responsive.",
+        "tags": [
+          "Health"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Check to determine whether the server is alive and running."
+          }
+        }
+      }
+    }
+  },
+  "definitions": {},
+  "responses": {},
+  "parameters": {},
+  "securityDefinitions": {},
+  "tags": []
 }

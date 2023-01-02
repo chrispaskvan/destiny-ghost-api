@@ -41,7 +41,7 @@ const routes = ({
 
     /**
      * @swagger
-     * path:
+     * paths:
      *  /destiny2/characters/:
      *    get:
      *      summary: Get a list of the user's characters.
@@ -71,7 +71,7 @@ const routes = ({
 
     /**
      * @swagger
-     * path:
+     * paths:
      *  /destiny2/inventory/:
      *    get:
      *      summary: Get the complete inventory of items.
@@ -104,7 +104,7 @@ const routes = ({
 
     /**
      * @swagger
-     * path:
+     * paths:
      *  /destiny2/manifest/:
      *    get:
      *      summary: Get details about the latest and greatest Destiny manifest definition.
@@ -151,7 +151,7 @@ const routes = ({
 
     /**
      * @swagger
-     * path:
+     * paths:
      *  /destiny2/xur/:
      *    get:
      *      summary: Get Xur's inventory if available.
