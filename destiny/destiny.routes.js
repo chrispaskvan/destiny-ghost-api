@@ -44,7 +44,7 @@ const routes = ({
 
     /**
      * @swagger
-     * path:
+     * paths:
      *  /destiny/currentUser/:
      *    get:
      *      summary: Get the currently authenticated user.
@@ -94,7 +94,7 @@ const routes = ({
 
     /**
      * @swagger
-     * path:
+     * paths:
      *  /destiny/manifest/:
      *    get:
      *      summary: Get details about the latest and greatest Destiny manifest definition.

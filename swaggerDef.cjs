@@ -1,5 +1,5 @@
 module.exports = {
-    openapi: '3.0.0',
+    swagger: '2.0.0',
     info: {
         title: 'Destiny-Ghost API',
         version: '2.3.0',
@@ -10,5 +10,4 @@ module.exports = {
             url: 'https://choosealicense.com/licenses/mit',
         },
     },
-    apis: ['../**/*.routes.js'],
 };

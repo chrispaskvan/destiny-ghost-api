@@ -10,7 +10,7 @@
         "start:production": "NODE_ENV=production npm start",
         "start:dev": "NODE_ENV=development npm start",
         "start": "node --loader=./loader.js --no-experimental-fetch -r dotenv/config --max-old-space-size=8192 --unhandled-rejections=strict server",
-        "swagger": "swagger-jsdoc -d swaggerDef.js",
+        "swagger": "swagger-jsdoc -d swaggerDef.cjs ./**/*.routes.js",
         "test": "npm run test:watch -- --run",
         "test:watch": "NODE_ENV=test node node_modules/vitest/vitest.mjs",
         "prepare": "node -e \"try { require('husky').install() } catch (e) {if (e.code !== 'MODULE_NOT_FOUND') throw e}\""
@@ -75,7 +75,7 @@
         "node-mocks-http": "^1.12.1",
         "pino-pretty": "^9.1.1",
         "redis-mock": "^0.56.3",
-        "swagger-jsdoc": "^4.3.2",
+        "swagger-jsdoc": "^6.2.7",
         "vitest": "^0.26.3"
     },
     "snyk": true
