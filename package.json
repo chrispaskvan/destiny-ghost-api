@@ -60,7 +60,7 @@
         "rfc6902": "^5.0.1",
         "snyk": "^1.1080.0",
         "swagger-ui-express": "^4.6.0",
-        "twilio": "^3.84.0",
+        "twilio": "^4.0.0",
         "yauzl": "^2.10.0"
     },
     "devDependencies": {
