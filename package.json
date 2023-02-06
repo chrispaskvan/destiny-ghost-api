@@ -50,7 +50,7 @@
         "joi": "^17.7.0",
         "json-schema-defaults": "^0.4.0",
         "lodash": "^4.17.21",
-        "nodemailer": "^6.8.0",
+        "nodemailer": "^6.9.0",
         "nodemailer-smtp-transport": "^2.7.4",
         "pino": "^8.8.0",
         "pino-http": "^8.3.1",
