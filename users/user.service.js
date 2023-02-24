@@ -1,7 +1,8 @@
-import _ from 'lodash';
+import defaults from 'lodash/defaults';
+import isEmpty from 'lodash/isEmpty';
 import Joi from 'joi';
 import schemaDefaults from 'json-schema-defaults';
-import validator, { filter as _filter } from 'is-my-json-valid';
+import validator, { filter } from 'is-my-json-valid';
 import QueryBuilder from '../helpers/queryBuilder';
 import notificationTypes from '../notifications/notification.types';
 import validate from '../helpers/validate';
@@ -254,15 +255,15 @@ class UserService {
 
         existingUser = await this.getUserByDisplayName(user.displayName, user.membershipType, true);
         const carrier = await this.getPhoneNumberType(user.phoneNumber);
-        const filter = _filter(userSchema);
+        const filterUser = filter(userSchema);
 
         user.carrier = carrier.name; // eslint-disable-line no-param-reassign
         user.type = carrier.type; // eslint-disable-line no-param-reassign
         userSchema.additionalProperties = false;
 
-        const filteredUser = filter(user);
+        const filteredUser = filterUser(user);
 
-        _.defaults(filteredUser, schemaDefaults(userSchema));
+        defaults(filteredUser, schemaDefaults(userSchema));
         existingUser = { ...existingUser, ...filteredUser };
 
         return this.documents.updateDocument(userCollectionId, existingUser);
@@ -353,7 +354,7 @@ class UserService {
             return Promise.reject(messages.join(','));
         }
 
-        const user = await this.cacheService.getUser(displayName, membershipType);
+        let user = await this.cacheService.getUser(displayName, membershipType);
 
         if (!skipCache && user) {
             return user;
@@ -365,19 +366,17 @@ class UserService {
             qb.where('displayName', displayName).where('membershipType', membershipType).getQuery(),
         );
 
-        if (documents) {
-            if (documents.length) {
-                if (documents.length > 1) {
-                    throw new Error(`more than 1 document found for displayName ${displayName} and membershipType ${membershipType}`);
-                }
-
-                await this.cacheService.setUser(documents[0]);
+        if (documents.length) {
+            if (documents.length > 1) {
+                throw new Error(`more than 1 document found for displayName ${displayName} and membershipType ${membershipType}`);
             }
 
-            return documents[0];
+            await this.cacheService.setUser(documents[0]);
+
+            [user] = documents;
         }
 
-        throw new Error('documents undefined');
+        return user;
     }
 
     /**
@@ -386,11 +385,11 @@ class UserService {
      * @returns {Promise}
      */
     async getUserByEmailAddress(emailAddress) {
-        if (typeof emailAddress !== 'string' || _.isEmpty(emailAddress)) {
+        if (typeof emailAddress !== 'string' || isEmpty(emailAddress)) {
             return Promise.reject(new Error('emailAddress string is required'));
         }
 
-        const user = await this.cacheService.getUser(emailAddress);
+        let user = await this.cacheService.getUser(emailAddress);
 
         if (user) {
             return user;
@@ -404,16 +403,16 @@ class UserService {
                 enableCrossPartitionQuery: true,
             },
         );
-        if (documents) {
+        if (documents.length) {
             if (documents.length > 1) {
                 throw new Error(`more than 1 document found for emailAddress ${emailAddress}`);
             }
             this.cacheService.setUser(documents[0]);
 
-            return documents[0];
+            [user] = documents;
         }
 
-        throw new Error('documents undefined');
+        return user;
     }
 
     /**
@@ -422,7 +421,7 @@ class UserService {
      * @returns {Promise}
      */
     async getUserByEmailAddressToken(emailAddressToken) {
-        if (typeof emailAddressToken !== 'string' || _.isEmpty(emailAddressToken)) {
+        if (typeof emailAddressToken !== 'string' || isEmpty(emailAddressToken)) {
             return Promise.reject(new Error('emailAddressToken string is required.'));
         }
 
@@ -451,7 +450,9 @@ class UserService {
      * @returns {Promise}
      */
     async getUserById(userId) {
-        if (typeof userId !== 'string' || _.isEmpty(userId)) {
+        let user;
+
+        if (typeof userId !== 'string' || isEmpty(userId)) {
             return Promise.reject(new Error('userId string is required'));
         }
 
@@ -468,10 +469,10 @@ class UserService {
                 throw new Error(`more than 1 document found for userId ${userId}`);
             }
 
-            return documents[0];
+            [user] = documents;
         }
 
-        throw new Error('documents undefined');
+        return user;
     }
 
     /**
@@ -480,7 +481,9 @@ class UserService {
      * @returns {Promise}
      */
     async getUserByMembershipId(membershipId) {
-        if (typeof membershipId !== 'string' || _.isEmpty(membershipId)) {
+        let user;
+
+        if (typeof membershipId !== 'string' || isEmpty(membershipId)) {
             return Promise.reject(new Error('membershipId string is required'));
         }
 
@@ -497,10 +500,10 @@ class UserService {
                 throw new Error(`more than 1 document found for membershipId ${membershipId}`);
             }
 
-            return documents[0];
+            [user] = documents;
         }
 
-        throw new Error('documents undefined');
+        return user;
     }
 
     /**
@@ -509,11 +512,12 @@ class UserService {
      * @returns {Promise}
      */
     async getUserByPhoneNumber(phoneNumber) {
-        if (typeof phoneNumber !== 'string' || _.isEmpty(phoneNumber)) {
+        if (typeof phoneNumber !== 'string' || isEmpty(phoneNumber)) {
             return Promise.reject(Error('phoneNumber string is required'));
         }
 
-        const user = await this.cacheService.getUser(phoneNumber);
+        let user = await this.cacheService.getUser(phoneNumber);
+
         if (user) {
             return user;
         }
@@ -526,16 +530,16 @@ class UserService {
                 enableCrossPartitionQuery: true,
             },
         );
-        if (documents) {
+        if (documents.length) {
             if (documents.length > 1) {
                 throw new Error(`more than 1 document found for phoneNumber ${phoneNumber}`);
             }
             this.cacheService.setUser(documents[0]);
 
-            return documents[0];
+            [user] = documents;
         }
 
-        throw new Error('documents undefined');
+        return user;
     }
 
     /**

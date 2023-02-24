@@ -4,7 +4,8 @@
  * @module twilioController
  * @author Chris Paskvan
  */
-import _ from 'lodash';
+import groupBy from 'lodash/groupBy';
+import sortBy from 'lodash/sortBy';
 
 import getShortUrl from '../helpers/bitly';
 import log from '../helpers/log';
@@ -63,7 +64,7 @@ class TwilioController {
             .getItemCategory(itemCategoryHash));
         const itemCategories = await Promise.all(promises);
         const filteredCategories = itemCategories.filter(({ hash1 }) => hash1 > 1);
-        const sortedCategories = _.sortBy(
+        const sortedCategories = sortBy(
             filteredCategories,
             itemCategory => itemCategory.hash,
         );
@@ -88,7 +89,7 @@ class TwilioController {
 
     static async getMore(itemHash, cookies = {}) {
         if (itemHash) {
-            const shortURL = await getShortUrl(`http://db.destinytracker.com/d2/en/items/${itemHash}`);
+            const shortURL = await getShortUrl(`https://destinytracker.com/destiny-2/db/items/${itemHash}`);
 
             return {
                 cookies,
@@ -198,7 +199,7 @@ class TwilioController {
 
         if (items.length > 0) {
             if (items.length > 1) {
-                const groups = _.groupBy(items, item => item.itemName);
+                const groups = groupBy(items, item => item.itemName);
                 const keys = Object.keys(groups);
 
                 if (keys.length === 1) {
@@ -285,7 +286,7 @@ class TwilioController {
             };
         }
         default: {
-            const groups = _.groupBy(items, item => item.itemName);
+            const groups = groupBy(items, item => item.itemName);
             const keys = Object.keys(groups);
             // eslint-disable-next-line security/detect-object-injection
             const result = keys.reduce((memo, key) => `${memo}\n${key} ${groups[key][0].itemCategory}`, ' ').trim();

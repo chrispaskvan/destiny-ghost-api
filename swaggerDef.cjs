@@ -1,5 +1,5 @@
 module.exports = {
-    swagger: '2.0.0',
+    openapi: '3.0.0',
     info: {
         title: 'Destiny-Ghost API',
         version: '2.3.0',

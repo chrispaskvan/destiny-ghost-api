@@ -4,7 +4,8 @@
  * @module User Controller
  * @author Chris Paskvan
  */
-import _ from 'lodash';
+import chain from 'lodash/chain';
+import isEqual from 'lodash/isEqual';
 import { applyPatch, createPatch } from 'rfc6902';
 import Postmaster from '../helpers/postmaster';
 import { getBlob, getCode } from '../helpers/tokens';
@@ -104,7 +105,7 @@ class UserController {
             links: [
                 {
                     rel: 'characters',
-                    href: '/destiny/characters',
+                    href: '/destiny2/characters',
                 },
             ],
             profilePicturePath,
@@ -141,7 +142,7 @@ class UserController {
 
         if (!registeredUser
             || this.constructor.#getEpoch() > (registeredUser.membership.tokens.timeStamp + ttl)
-            || !_.isEqual(user.tokens.phoneNumber, registeredUser.membership.tokens.code)) {
+            || !isEqual(user.tokens.phoneNumber, registeredUser.membership.tokens.code)) {
             return undefined;
         }
 
@@ -198,7 +199,7 @@ class UserController {
                 const patches = user.patches.filter(patch => patch.version >= versionNumber) || [];
 
                 if (patches.length > 0) {
-                    return this.constructor.applyPatches(_.chain(patches)
+                    return this.constructor.applyPatches(chain(patches)
                         .sortBy(patch => -1 * patch.version)
                         .value(), user);
                 }

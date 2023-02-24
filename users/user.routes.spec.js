@@ -173,7 +173,7 @@ describe('UserRouter', () => {
                                 displayName: 'l',
                                 links: [
                                     {
-                                        href: '/destiny/characters',
+                                        href: '/destiny2/characters',
                                         rel: 'characters',
                                     },
                                 ],
