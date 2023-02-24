@@ -2,6 +2,9 @@ NodeJS Best Practices
 http://justbuildsomething.com/node-js-best-practices/
 https://www.airpair.com/node.js/posts/top-10-mistakes-node-developers-make
 https://blog.risingstack.com/node-js-best-practices-part-2/
+https://github.com/nodeshift/nodejs-reference-architecture
+https://github.com/testjavascript/nodejs-integration-tests-best-practices
+
 
 NodeJS Examples
 http://scottksmith.com/blog/2014/05/29/beer-locker-building-a-restful-api-with-node-passport/

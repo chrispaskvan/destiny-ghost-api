@@ -29,9 +29,56 @@
         }
       }
     },
+    "/destiny/grimoireCards/{numberOfCards}/": {
+      "get": {
+        "summary": "Get a random selection of Grimoire Cards.",
+        "tags": [
+          "Destiny"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "numberOfCards",
+            "schema": {
+              "type": "number"
+            },
+            "required": true,
+            "description": "The number of cards to return. (Max. 10)"
+          }
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns a random selection of Grimoire Cards."
+          },
+          "400": {
+            "description": "Invalid whole number between 1 and 10."
+          },
+          "422": {
+            "description": "Unrecognized whole number."
+          }
+        }
+      }
+    },
     "/destiny/manifest/": {
       "get": {
-        "summary": "Get details about the latest and greatest Destiny manifest definition.",
+        "summary": "Get details about the latest Destiny manifest definition.",
+        "tags": [
+          "Destiny"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns the Destiny Manifest definition."
+          }
+        }
+      },
+      "post": {
+        "summary": "Download the latest Destiny manifest if the local copy is outdated.",
         "tags": [
           "Destiny"
         ],
@@ -82,7 +129,7 @@
     },
     "/destiny2/manifest/": {
       "get": {
-        "summary": "Get details about the latest and greatest Destiny manifest definition.",
+        "summary": "Get details about the latest Destiny 2 manifest definition.",
         "tags": [
           "Destiny 2"
         ],
@@ -92,6 +139,23 @@
         "responses": {
           "200": {
             "description": "Returns the Destiny Manifest definition."
+          }
+        }
+      },
+      "post": {
+        "summary": "Download the latest Destiny2 manifest if the local copy is outdated.",
+        "tags": [
+          "Destiny 2"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns the Destiny Manifest definition."
+          },
+          "403": {
+            "description": "Forbidden"
           }
         }
       }
@@ -108,6 +172,9 @@
         "responses": {
           "200": {
             "description": "Returns Xur's inventory."
+          },
+          "401": {
+            "description": "Unauthorized"
           },
           "404": {
             "description": "Xur could not be found."
@@ -149,11 +216,90 @@
           }
         }
       }
+    },
+    "/users/{emailAddress}/emailAddress/": {
+      "get": {
+        "summary": "Get the Destiny Ghost user by email address.",
+        "tags": [
+          "Users"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "emailAddress",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "The email address of the Destiny Ghost user."
+          }
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "204": {
+            "description": "Destiny Ghost user found."
+          },
+          "404": {
+            "description": "No Destiny Ghost user found."
+          }
+        }
+      }
+    },
+    "/users/{phoneNumber}/phoneNumber/": {
+      "get": {
+        "summary": "Get the Destiny Ghost user by phone number.",
+        "tags": [
+          "Users"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "phoneNumber",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "The phone number of the Destiny Ghost user."
+          }
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "204": {
+            "description": "Destiny Ghost user found."
+          },
+          "404": {
+            "description": "No Destiny Ghost user found."
+          }
+        }
+      }
+    },
+    "/users/current/": {
+      "get": {
+        "summary": "Get the current Destiny Ghost user.",
+        "tags": [
+          "Users"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns the current Destiny Ghost user's profile."
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Destiny Ghost profile for the current user was not found."
+          }
+        }
+      }
     }
   },
-  "definitions": {},
-  "responses": {},
-  "parameters": {},
-  "securityDefinitions": {},
+  "components": {},
   "tags": []
 }

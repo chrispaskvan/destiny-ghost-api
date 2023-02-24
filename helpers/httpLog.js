@@ -13,14 +13,14 @@
  * @requires cuid
  */
 import PinoHttp from 'pino-http';
-import cuid from 'cuid';
+import { createId } from '@paralleldrive/cuid2';
 import { stdSerializers } from 'pino';
 import log from './log';
 
 class HttpLog extends PinoHttp {
     constructor() {
         super({
-            genReqId: () => cuid(),
+            genReqId: () => createId(),
 
             logger: log,
 

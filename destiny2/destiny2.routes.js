@@ -4,7 +4,7 @@
 import { StatusCodes } from 'http-status-codes';
 import cors from 'cors';
 import { Router } from 'express';
-import AuthenticationMiddleWare from '../authentication/authentication.middleware';
+import AuthenticationMiddleware from '../authentication/authentication.middleware';
 import Destiny2Controller from './destiny2.controller';
 import authorizeUser from '../authorization/authorization.middleware';
 
@@ -25,7 +25,7 @@ const routes = ({
 
     /**
      * Set up routes and initialize the controller.
-     * @type {DestinyController}
+     * @type {Destiny2Controller}
      */
     const destiny2Controller = new Destiny2Controller({
         destinyService: destiny2Service,
@@ -37,7 +37,7 @@ const routes = ({
      * Authentication controller when needed.
      * @type {AuthenticationMiddleware}
      */
-    const middleware = new AuthenticationMiddleWare({ authenticationController });
+    const middleware = new AuthenticationMiddleware({ authenticationController });
 
     /**
      * @swagger
@@ -107,7 +107,7 @@ const routes = ({
      * paths:
      *  /destiny2/manifest/:
      *    get:
-     *      summary: Get details about the latest and greatest Destiny manifest definition.
+     *      summary: Get details about the latest Destiny 2 manifest definition.
      *      tags:
      *        - Destiny 2
      *      produces:
@@ -125,26 +125,27 @@ const routes = ({
                 .catch(next);
         });
 
+    /**
+     * @swagger
+     * paths:
+     *  /destiny2/manifest/:
+     *    post:
+     *      summary: Download the latest Destiny2 manifest if the local copy is outdated.
+     *      tags:
+     *        - Destiny 2
+     *      produces:
+     *        - application/json
+     *      responses:
+     *        200:
+     *          description: Returns the Destiny Manifest definition.
+     *        403:
+     *          description: Forbidden
+     */
     destiny2Router.route('/manifest')
         .post((req, res, next) => authorizeUser(req, res, next), (req, res, next) => {
             destiny2Controller.upsertManifest()
                 .then(manifest => {
                     res.status(StatusCodes.OK).json(manifest);
-                })
-                .catch(next);
-        });
-
-    destiny2Router.route('/player/:displayName')
-        .get((req, res, next) => {
-            const { params: { displayName } } = req;
-
-            destiny2Controller.getPlayer(displayName)
-                .then(statistics => {
-                    if (statistics) {
-                        return res.status(200).json(statistics);
-                    }
-
-                    return res.status(StatusCodes.UNAUTHORIZED).end();
                 })
                 .catch(next);
         });
@@ -162,6 +163,8 @@ const routes = ({
      *      responses:
      *        200:
      *          description: Returns Xur's inventory.
+     *        401:
+     *          description: Unauthorized
      *        404:
      *          description: Xur could not be found.
      */

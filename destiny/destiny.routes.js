@@ -73,6 +73,31 @@ const routes = ({
                 .catch(next);
         });
 
+    /**
+     * @swagger
+     * paths:
+     *  /destiny/grimoireCards/{numberOfCards}/:
+     *    get:
+     *      summary: Get a random selection of Grimoire Cards.
+     *      tags:
+     *        - Destiny
+     *      parameters:
+     *        - in: path
+     *          name: numberOfCards
+     *          schema:
+     *            type: number
+     *          required: true
+     *          description: The number of cards to return. (Max. 10)
+     *      produces:
+     *        - application/json
+     *      responses:
+     *        200:
+     *          description: Returns a random selection of Grimoire Cards.
+     *        400:
+     *          description: Invalid whole number between 1 and 10.
+     *        422:
+     *          description: Unrecognized whole number.
+     */
     destinyRouter.route('/grimoireCards/:numberOfCards')
         .get(
             cors(),
@@ -82,6 +107,11 @@ const routes = ({
 
                 if (Number.isNaN(count)) {
                     return res.status(StatusCodes.UNPROCESSABLE_ENTITY).end();
+                }
+
+                if (count < 1 || count > 10) {
+                    return res.status(StatusCodes.BAD_REQUEST)
+                        .send('Must be a whole number less than or equal to 10.');
                 }
 
                 return destinyController.getGrimoireCards(count)
@@ -97,7 +127,7 @@ const routes = ({
      * paths:
      *  /destiny/manifest/:
      *    get:
-     *      summary: Get details about the latest and greatest Destiny manifest definition.
+     *      summary: Get details about the latest Destiny manifest definition.
      *      tags:
      *        - Destiny
      *      produces:
@@ -115,6 +145,20 @@ const routes = ({
                 .catch(next);
         });
 
+    /**
+     * @swagger
+     * paths:
+     *  /destiny/manifest/:
+     *    post:
+     *      summary: Download the latest Destiny manifest if the local copy is outdated.
+     *      tags:
+     *        - Destiny
+     *      produces:
+     *        - application/json
+     *      responses:
+     *        200:
+     *          description: Returns the Destiny Manifest definition.
+     */
     destinyRouter.route('/manifest')
         .post((req, res, next) => {
             destinyController.upsertManifest()

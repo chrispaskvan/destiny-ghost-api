@@ -4,11 +4,11 @@
 import {
     afterEach, beforeEach, describe, expect, it, vi,
 } from 'vitest';
-import lodash from 'lodash';
 import Chance from 'chance';
+import cloneDeep from 'lodash/cloneDeep';
+import omit from 'lodash/omit';
 import UserService from './user.service';
 
-const { cloneDeep, omit } = lodash;
 const cacheService = {
     getUser: vi.fn(),
     setUser: vi.fn(),
@@ -391,12 +391,12 @@ describe('UserService', () => {
                 expect(documentService.getDocuments).not.toHaveBeenCalled();
             });
 
-            it('should fail when no documents are found', async () => {
+            it('should return undefined when no documents are found', async () => {
                 documentService.getDocuments.mockImplementation(() => Promise.resolve());
 
-                await expect(userService.getUserByMembershipId(user.membershipId))
-                    .rejects.toThrow();
+                const user1 = await userService.getUserByMembershipId(user.membershipId);
 
+                expect(user1).toBeUndefined();
                 expect(documentService.getDocuments).toHaveBeenCalled();
             });
         });
@@ -563,9 +563,9 @@ describe('UserService', () => {
             it('should fail when no documents are found', async () => {
                 documentService.getDocuments.mockImplementation(() => Promise.resolve());
 
-                await expect(userService.getUserById(user.id))
-                    .rejects.toThrow();
+                const user1 = await userService.getUserById(user.id);
 
+                expect(user1).toBeUndefined();
                 expect(documentService.getDocuments).toHaveBeenCalled();
             });
         });

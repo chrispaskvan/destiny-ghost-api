@@ -72,23 +72,6 @@ class Destiny2Controller extends DestinyController {
     }
 
     /**
-     * Search for the Destiny player.
-     *
-     * @param {*} displayName
-     * @returns Promise
-     * @memberof Destiny2Controller
-     */
-    async getPlayer(displayName) {
-        const { membershipId, membershipType } = await this.destiny.getPlayer(displayName);
-
-        if (!membershipId || !membershipType) {
-            return undefined;
-        }
-
-        return this.destiny.getPlayerStats(membershipId, membershipType);
-    }
-
-    /**
      * Get Xur's inventory.
      *
      * @returns {*|Array}

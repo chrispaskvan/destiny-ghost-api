@@ -2,7 +2,7 @@
 /**
  * A module for accessing the Destiny World database.
  */
-import _ from 'lodash';
+import sampleSize from 'lodash/sampleSize';
 import Database from 'better-sqlite3';
 import axios from 'axios';
 import {
@@ -61,7 +61,7 @@ class World {
      * @returns {Promise}
      */
     getGrimoireCards(numberOfCards) {
-        return Promise.resolve(_.sampleSize(this.grimoireCards, numberOfCards));
+        return Promise.resolve(sampleSize(this.grimoireCards, numberOfCards));
     }
 
     /**

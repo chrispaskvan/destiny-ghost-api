@@ -105,6 +105,29 @@ const routes = ({
             res.status(StatusCodes.UNAUTHORIZED).end();
         });
 
+    /**
+     * @swagger
+     * paths:
+     *  /users/{emailAddress}/emailAddress/:
+     *    get:
+     *      summary: Get the Destiny Ghost user by email address.
+     *      tags:
+     *        - Users
+     *      parameters:
+     *        - in: path
+     *          name: emailAddress
+     *          schema:
+     *            type: string
+     *          required: true
+     *          description: The email address of the Destiny Ghost user.
+     *      produces:
+     *        - application/json
+     *      responses:
+     *        204:
+     *          description: Destiny Ghost user found.
+     *        404:
+     *          description: No Destiny Ghost user found.
+     */
     userRouter.route('/:emailAddress/emailAddress')
         .get(
             (req, res, next) => middleware.authenticateUser(req, res, next),
@@ -119,6 +142,29 @@ const routes = ({
             },
         );
 
+    /**
+     * @swagger
+     * paths:
+     *  /users/{phoneNumber}/phoneNumber/:
+     *    get:
+     *      summary: Get the Destiny Ghost user by phone number.
+     *      tags:
+     *        - Users
+     *      parameters:
+     *        - in: path
+     *          name: phoneNumber
+     *          schema:
+     *            type: string
+     *          required: true
+     *          description: The phone number of the Destiny Ghost user.
+     *      produces:
+     *        - application/json
+     *      responses:
+     *        204:
+     *          description: Destiny Ghost user found.
+     *        404:
+     *          description: No Destiny Ghost user found.
+     */
     userRouter.route('/:phoneNumber/phoneNumber')
         .get(
             (req, res, next) => middleware.authenticateUser(req, res, next),
@@ -140,6 +186,24 @@ const routes = ({
                 .catch(next),
         );
 
+    /**
+     * @swagger
+     * paths:
+     *  /users/current/:
+     *    get:
+     *      summary: Get the current Destiny Ghost user.
+     *      tags:
+     *        - Users
+     *      produces:
+     *        - application/json
+     *      responses:
+     *        200:
+     *          description: Returns the current Destiny Ghost user's profile.
+     *        401:
+     *          description: Unauthorized
+     *        404:
+     *          description: Destiny Ghost profile for the current user was not found.
+     */
     userRouter.route('/current')
         .get(
             (req, res, next) => middleware.authenticateUser(req, res, next),
