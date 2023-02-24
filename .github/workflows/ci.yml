@@ -21,5 +21,5 @@ jobs:
           token: ${{ secrets.USE_SPRKL_CI_TOKEN }}
           setenv: false
 
-      - run: yarn install
-      - run: yarn test:e2e:sprkl
+      - run: npm install
+      - run: npm run test:sprkl

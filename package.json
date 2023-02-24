@@ -12,6 +12,7 @@
         "start": "node --loader=./loader.js --no-experimental-fetch -r dotenv/config --max-old-space-size=8192 --unhandled-rejections=strict server",
         "swagger": "swagger-jsdoc -d swaggerDef.cjs ./**/*.routes.js",
         "test": "npm run test:watch -- --run",
+        "test:sprkl": "sprkl -- npm run test",
         "test:watch": "NODE_ENV=test node node_modules/vitest/vitest.mjs",
         "prepare": "node -e \"try { require('husky').install() } catch (e) {if (e.code !== 'MODULE_NOT_FOUND') throw e}\""
     },
