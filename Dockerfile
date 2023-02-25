@@ -7,10 +7,9 @@ LABEL org.opencontainers.image.licenses=MIT
 LABEL com.destiny-ghost.nodeversion=$NODE_VERSION
 
 # Install python 3
-RUN apt-get update && \
-    apt-get install -y make && \
-    apt-get install -y build-essential && \
-    apt-get install -y python3
+RUN apt-get update && apt-get install --no-install-recommends -y python \
+&& apt-get clean \
+&& rm -rf /var/lib/apt/lists/*
 
 # arguments with default values and expected environment variables
 ARG DESTINY_DATABASE_DIR=./databases/destiny
