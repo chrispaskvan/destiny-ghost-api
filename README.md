@@ -6,7 +6,6 @@
 [![Maintainability](https://api.codeclimate.com/v1/badges/da028fbc47cd8718e45b/maintainability)](https://codeclimate.com/github/chrispaskvan/destiny-ghost-api/maintainability)
 [![Known Vulnerabilities](https://snyk.io/test/github/chrispaskvan/destiny-ghost-api/badge.svg)](https://snyk.io/test/github/chrispaskvan/destiny-ghost-api)
 
-
 Node App for SMS/MMS Notifications of Changes to the Vendor Wares in Bungie's Destiny and On-Demand Database Queries
 
 ## Description

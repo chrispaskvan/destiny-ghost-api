@@ -31,8 +31,8 @@ class QueryBuilder {
         }
 
         if (typeof selections === 'string') {
-            // eslint-disable-next-line no-param-reassign, no-unused-expressions
-            selections.indexOf(',') === -1 ? selections = selections.split(',') : selections = [selections];
+            // eslint-disable-next-line no-param-reassign
+            selections = selections.split(',');
         }
 
         selections.forEach(selection => {

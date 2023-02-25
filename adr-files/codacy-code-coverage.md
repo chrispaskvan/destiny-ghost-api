@@ -17,5 +17,5 @@ The coverage file 'clover.xml' must be copied manually and commited. The decisio
 In order to update the code coverage reported by Codacy, the required file must be updated.
 
 ## References
-* [Error using the action](https://github.com/codacy/codacy-coverage-reporter-action/issues/8)
-* [Codacy Coverage Reporter](https://github.com/codacy/codacy-coverage-reporter)
+*[Error using the action](https://github.com/codacy/codacy-coverage-reporter-action/issues/8)
+*[Codacy Coverage Reporter](https://github.com/codacy/codacy-coverage-reporter)
