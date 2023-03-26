@@ -20,16 +20,23 @@ import log from './log';
 class HttpLog extends PinoHttp {
     constructor() {
         super({
+            customReceivedObject: req => {
+                // eslint-disable-next-line max-len
+                const { session: { displayName, membershipType }, body: { From: phoneNumber } } = req;
+
+                return {
+                    displayName,
+                    membershipType,
+                    phoneNumber,
+                };
+            },
             genReqId: () => createId(),
-
             logger: log,
-
             serializers: {
                 err: stdSerializers.err,
                 req: stdSerializers.req,
                 res: stdSerializers.res,
             },
-
             useLevel: 'info',
         });
     }
