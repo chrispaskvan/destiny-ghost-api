@@ -34,7 +34,7 @@ USER node
 
 COPY --chown=node:node package.json package-lock.json* ./
 
-RUN npm config list && npm ci && npm cache clean --force
+RUN npm config list && npm ci --production && npm cache clean --force
 
 COPY --chown=node:node . /destiny-ghost-api/
 

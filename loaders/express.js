@@ -2,6 +2,7 @@ import bodyParser from 'body-parser';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import session from 'express-session';
+import helmet from 'helmet';
 
 import httpLog from '../helpers/httpLog';
 import rateLimiterMiddleware from '../helpers/rate-limiter.middleware';
@@ -15,6 +16,9 @@ export default app => {
     }));
     app.use(compression());
     app.use(cookieParser());
+    app.use(helmet.crossOriginResourcePolicy({
+        policy: 'cross-origin',
+    }));
 
     /**
      * Disable etag and x-powered-by headers.
