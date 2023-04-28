@@ -59,33 +59,6 @@ const routes = ({
                 .catch(next);
         });
 
-    /**
-     * @swagger
-     * paths:
-     *  /health/live:
-     *    get:
-     *      summary: Check if the server is up and responsive.
-     *      tags:
-     *        - Health
-     *      produces:
-     *        - application/json
-     *      responses:
-     *        200:
-     *          description: Check to determine whether the server is alive and running.
-     */
-    healthRouter.route('/live')
-        .get((req, res) => {
-            res.json({
-                status: 'UP',
-                checks: [
-                    {
-                        name: 'liveliness',
-                        state: 'UP',
-                    },
-                ],
-            });
-        });
-
     return healthRouter;
 };
 
