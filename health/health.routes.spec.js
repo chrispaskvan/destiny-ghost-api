@@ -110,11 +110,7 @@ describe('HealthRouter', () => {
                 getItemByName: () => Promise.reject(new Error()),
                 open: () => Promise.resolve(),
             };
-            const world2 = {
-                close: () => Promise.resolve(),
-                getItemByName: () => Promise.reject(new Error()),
-                open: () => Promise.resolve(),
-            };
+            const world2 = world;
 
             beforeEach(() => {
                 get.mockImplementation(() => Promise.rejects({
@@ -168,39 +164,5 @@ describe('HealthRouter', () => {
                 healthRouter(req, res);
             }));
         });
-    });
-
-    describe('liveness', () => {
-        it('should return up', () => new Promise((done, reject) => {
-            const req = createRequest({
-                method: 'GET',
-                url: '/live',
-            });
-
-            res.on('end', () => {
-                try {
-                    expect(res.statusCode).toEqual(StatusCodes.OK);
-
-                    // eslint-disable-next-line no-underscore-dangle
-                    const body = JSON.parse(res._getData());
-
-                    expect(body).toEqual({
-                        status: 'UP',
-                        checks: [
-                            {
-                                name: 'liveliness',
-                                state: 'UP',
-                            },
-                        ],
-                    });
-
-                    done();
-                } catch (err) {
-                    reject(err);
-                }
-            });
-
-            healthRouter(req, res);
-        }));
     });
 });

@@ -9,12 +9,26 @@ vi.mock('../helpers/request');
 
 const { Response: manifest } = manifest2Response;
 const chance = new Chance();
-const destiny2Service = {
-    getManifest: () => Promise.resolve(manifest),
-    getProfile: () => Promise.resolve(),
-};
+const characterId = '11';
 const displayName = chance.name();
 const membershipType = chance.integer({ min: 1, max: 2 });
+
+const destiny2Service = {
+    getManifest: () => Promise.resolve(manifest),
+    getProfile: vi.fn().mockResolvedValue([
+        {
+            characterId,
+            classHash: '671679327',
+            light: 284,
+            links: [
+                {
+                    rel: 'Character',
+                    href: `/characters/${characterId}`,
+                },
+            ],
+        },
+    ]),
+};
 const userService = {
     getUserByDisplayName: vi.fn(() => Promise.resolve()),
 };
@@ -52,25 +66,10 @@ beforeEach(() => {
 });
 
 describe('Destiny2Controller', () => {
-    const characterId = '11';
-
     describe('getProfile', () => {
         describe('when session displayName and membershipType are defined', () => {
             describe('when user and destiny services return a user', () => {
                 it('should return user profile', async () => {
-                    destiny2Service.getProfile = vi.fn().mockResolvedValue([
-                        {
-                            characterId,
-                            classHash: '671679327',
-                            light: 284,
-                            links: [
-                                {
-                                    rel: 'Character',
-                                    href: `/characters/${characterId}`,
-                                },
-                            ],
-                        },
-                    ]);
                     userService.getUserByDisplayName = vi.fn().mockResolvedValue({
                         membershipId: '1',
                     });
@@ -91,19 +90,6 @@ describe('Destiny2Controller', () => {
                     const accessToken = 'some-access-token';
                     const membershipId = '1';
 
-                    destiny2Service.getProfile = vi.fn().mockResolvedValue([
-                        {
-                            characterId,
-                            classHash: '671679327',
-                            light: 284,
-                            links: [
-                                {
-                                    rel: 'Character',
-                                    href: `/characters/${characterId}`,
-                                },
-                            ],
-                        },
-                    ]);
                     destiny2Service.getXur = vi.fn().mockResolvedValue([
                         'some-item-hash',
                     ]);

@@ -11,9 +11,7 @@ import pino from 'pino';
 // eslint-disable-next-line import/no-mutable-exports
 let log;
 
-if (process.env.NODE_ENV === 'test') {
-    log = console;
-} else if (process.env.NODE_ENV === 'production') {
+if (process.env.NODE_ENV === 'production') {
     log = pino();
 } else {
     log = pino({

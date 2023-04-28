@@ -33,9 +33,15 @@ class AuthenticationService {
             return Promise.resolve();
         }
 
-        const user = await (phoneNumber
-            ? this.userService.getUserByPhoneNumber(phoneNumber)
-            : this.userService.getUserByDisplayName(displayName, membershipType));
+        let user = await (phoneNumber
+            ? this.cacheService.getUser(phoneNumber)
+            : this.cacheService.getUser(displayName, membershipType));
+
+        if (!user) {
+            user = await (phoneNumber
+                ? this.userService.getUserByPhoneNumber(phoneNumber)
+                : this.userService.getUserByDisplayName(displayName, membershipType));
+        }
 
         return this.#validateUser(user);
     }

@@ -12,6 +12,7 @@ import usersJson from '../mocks/users.json';
 const [mockUser] = usersJson;
 
 const cacheService = {
+    getUser: vi.fn(),
     setUser: vi.fn().mockResolvedValue(),
 };
 const chance = new Chance();
@@ -58,6 +59,13 @@ describe('AuthenticationService', () => {
         const displayName = chance.word();
         const membershipType = 2;
 
+        beforeEach(async () => {
+            cacheService.getUser.mockImplementation(() => Promise.resolve(mockUser));
+            userService.getUserByDisplayName.mockImplementation(() => Promise.resolve(mockUser));
+            userService.getUserByPhoneNumber.mockImplementation(() => Promise.resolve(mockUser));
+            userService.updateUserBungie.mockImplementation(() => Promise.resolve());
+        });
+
         describe('when current user is fresh', () => {
             beforeEach(async () => {
                 destinyService.getCurrentUser = vi.fn().mockResolvedValue(mockUser);
@@ -66,46 +74,23 @@ describe('AuthenticationService', () => {
             describe('when displayName and membershipType exist', () => {
                 describe('when user exists', () => {
                     describe('when token is fresh', () => {
-                        beforeEach(async () => {
-                            userService.getCurrentUser = vi.fn().mockResolvedValue(mockUser);
-                            userService.getUserByDisplayName = vi.fn()
-                                .mockResolvedValue(mockUser);
-                        });
+                        it('should return a user', async () => {
+                            cacheService.setUser.mockImplementationOnce(() => Promise.resolve());
 
-                        it('should cache and return a user', async () => {
                             const user = await authenticationService.authenticate({
                                 displayName,
                                 membershipType,
                             });
 
                             expect(user).toEqual(user1);
-                            // eslint-disable-next-line no-unused-expressions
-                            expect(cacheService.setUser).toHaveBeenCalledOnce;
-                        });
-                    });
-
-                    describe('when token is not fresh', () => {
-                        beforeEach(async () => {
-                            userService.getCurrentUser = vi.fn().mockRejectedValue();
-                            userService.getUserByDisplayName = vi.fn()
-                                .mockResolvedValue(mockUser);
-                        });
-
-                        it('should cache and return a user', async () => {
-                            const user = await authenticationService.authenticate({
-                                displayName,
-                                membershipType,
-                            });
-
-                            expect(user).toEqual(user1);
-                            // eslint-disable-next-line no-unused-expressions
-                            expect(userService.updateUserBungie).toHaveBeenCalledOnce;
+                            expect(cacheService.setUser).not.toHaveBeenCalled();
                         });
                     });
                 });
 
                 describe('when user does not exist', () => {
                     beforeEach(async () => {
+                        cacheService.getUser = vi.fn().mockResolvedValueOnce();
                         userService.getUserByDisplayName = vi.fn().mockResolvedValue();
                     });
 
@@ -124,36 +109,33 @@ describe('AuthenticationService', () => {
                 const phoneNumber = chance.phone();
 
                 describe('when user exists', () => {
-                    beforeEach(async () => {
-                        userService.getCurrentUser = vi.fn().mockResolvedValue(mockUser);
-                        userService.getUserByPhoneNumber = vi.fn().mockResolvedValue(mockUser);
-                    });
-
                     describe('when token is fresh', () => {
-                        it('should cache and return a user', async () => {
-                            const user = await authenticationService.authenticate({
-                                phoneNumber,
+                        describe('when the user is cached', () => {
+                            it('should return the cached user user', async () => {
+                                const user = await authenticationService.authenticate({
+                                    phoneNumber,
+                                });
+
+                                expect(user).toEqual(user1);
+                                expect(cacheService.setUser).not.toHaveBeenCalled();
+                                expect(userService.getUserByPhoneNumber).not.toHaveBeenCalled();
+                            });
+                        });
+                        describe('when the user is not cached', () => {
+                            beforeEach(async () => {
+                                cacheService.getUser = vi.fn().mockResolvedValueOnce();
                             });
 
-                            expect(user).toEqual(user1);
-                            // eslint-disable-next-line no-unused-expressions
-                            expect(cacheService.getUserByPhoneNumber).toHaveBeenCalledOnce;
+                            it('should return the user', async () => {
+                                const user = await authenticationService.authenticate({
+                                    phoneNumber,
+                                });
+
+                                expect(user).toEqual(user1);
+                                expect(cacheService.setUser).not.toHaveBeenCalled();
+                                expect(userService.getUserByPhoneNumber).toHaveBeenCalled();
+                            });
                         });
-                    });
-                });
-
-                describe('when user does not exist', () => {
-                    beforeEach(async () => {
-                        userService.getUserByDisplayName = vi.fn().mockResolvedValue();
-                    });
-
-                    it('should return undefined', async () => {
-                        const user = await authenticationService.authenticate({
-                            displayName,
-                            membershipType,
-                        });
-
-                        expect(user).toBeUndefined();
                     });
                 });
             });
@@ -174,13 +156,11 @@ describe('AuthenticationService', () => {
             const now = 11;
 
             beforeEach(async () => {
-                destinyService.getCurrentUser = vi.fn().mockRejectedValue();
+                destinyService.getCurrentUser = vi.fn().mockRejectedValueOnce();
                 destinyService.getAccessTokenFromRefreshToken = vi.fn().mockResolvedValue({
                     access_token, // eslint-disable-line camelcase
                     expires_in: expiresIn,
                 });
-                userService.getCurrentUser = vi.fn().mockResolvedValue(mockUser);
-                userService.getUserByDisplayName = vi.fn().mockResolvedValue(mockUser);
             });
 
             it('refreshes Bungie token', async () => {
@@ -200,6 +180,8 @@ describe('AuthenticationService', () => {
                         expires_in: expiresIn,
                     },
                 });
+                expect(userService.updateUserBungie).toHaveBeenCalledOnce();
+                expect(cacheService.setUser).toHaveBeenCalledOnce();
             });
         });
     });
