@@ -13,7 +13,10 @@ import cache from './helpers/cache';
 import loaders from './loaders';
 import log from './helpers/log';
 
-async function startServer() {
+let insecureConnection;
+let secureConnection;
+
+const startServer = async () => {
     const start = Date.now();
     const app = express();
 
@@ -39,7 +42,7 @@ async function startServer() {
             ...serverOptions,
         }, app);
 
-        server.listen(
+        secureConnection = server.listen(
             443,
             // eslint-disable-next-line no-console
             () => console.log('HTTPS server listening on port 443.'),
@@ -58,7 +61,7 @@ async function startServer() {
         logger: log,
     });
 
-    insecureServer.listen(port, () => {
+    insecureConnection = insecureServer.listen(port, () => {
         const cpuCount = cpus().length;
         const duration = Date.now() - start;
 
@@ -70,11 +73,22 @@ async function startServer() {
 
     insecureServer.headersTimeout = serverOptions.headersTimeout;
     insecureServer.keepAliveTimeout = serverOptions.keepAliveTimeout;
-}
 
-startServer()
-    .catch(err => {
-        // eslint-disable-next-line no-console
-        console.log(err);
-        process.exit(1);
-    });
+    return insecureServer.address();
+};
+
+const stopServer = () => new Promise(resolve => {
+    if (insecureConnection) {
+        insecureConnection.close();
+    }
+    if (secureConnection) {
+        secureConnection.close();
+    }
+
+    resolve();
+});
+
+export {
+    startServer,
+    stopServer,
+};
