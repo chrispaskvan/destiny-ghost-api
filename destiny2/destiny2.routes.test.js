@@ -27,7 +27,7 @@ beforeAll(async () => {
     nock.enableNetConnect(ipAddress);
 });
 
-describe('/destiny2', () => {
+describe.concurrent('/destiny2', () => {
     describe('GET /destiny2/inventory', () => {
         describe('when requesting the inventory of items', () => {
             test('should receive a response with an array of items', async () => {

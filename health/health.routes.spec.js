@@ -110,11 +110,7 @@ describe('HealthRouter', () => {
                 getItemByName: () => Promise.reject(new Error()),
                 open: () => Promise.resolve(),
             };
-            const world2 = {
-                close: () => Promise.resolve(),
-                getItemByName: () => Promise.reject(new Error()),
-                open: () => Promise.resolve(),
-            };
+            const world2 = world;
 
             beforeEach(() => {
                 get.mockImplementation(() => Promise.rejects({

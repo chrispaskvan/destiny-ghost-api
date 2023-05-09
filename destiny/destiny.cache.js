@@ -47,7 +47,6 @@ class DestinyCache {
      * @param vendorHash
      * @returns {Promise}
      */
-    // eslint-disable-next-line class-methods-use-this
     getVendor(vendorHash) {
         return new Promise((resolve, reject) => {
             this.client.get(
