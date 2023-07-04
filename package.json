@@ -41,7 +41,7 @@
         "connect-redis": "^7.0.1",
         "cookie-parser": "^1.4.5",
         "cors": "^2.8.5",
-        "dotenv": "^16.0.3",
+        "dotenv": "^16.1.4",
         "express": "^4.18.2",
         "express-session": "^1.17.2",
         "helmet": "^6.0.1",
