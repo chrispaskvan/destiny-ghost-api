@@ -59,7 +59,7 @@
         "rate-limiter-flexible": "^2.4.1",
         "resolve": "^1.22.1",
         "rfc6902": "^5.0.1",
-        "snyk": "^1.1127.0",
+        "snyk": "^1.1179.0",
         "swagger-ui-express": "^4.6.2",
         "twilio": "^4.9.0",
         "yauzl": "^2.10.0"
