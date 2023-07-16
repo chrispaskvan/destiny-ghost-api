@@ -38,11 +38,12 @@ class Publisher {
 
         try {
             await serviceBusAdministratorService.createTopic(queueName);
-            await serviceBusAdministratorService.close();
         } catch (err) {
             if (err.statusCode !== 409) {
                 throw new Error('Failed to create topic.', { cause: err });
             }
+        } finally {
+            await serviceBusAdministratorService.close();
         }
 
         this.#serviceBusService = new ServiceBusClient(connectionString);
