@@ -7,7 +7,7 @@ LABEL org.opencontainers.image.licenses=MIT
 LABEL com.destiny-ghost.nodeversion=$NODE_VERSION
 
 # Install python 3
-RUN apt-get update && apt-get install --no-install-recommends -y python \
+RUN apt-get update && apt-get install --no-install-recommends -y gcc g++ libc6-dev make python3 \
 && apt-get clean \
 && rm -rf /var/lib/apt/lists/*
 
@@ -34,7 +34,7 @@ USER node
 
 COPY --chown=node:node package.json package-lock.json* ./
 
-RUN npm config list && npm ci --production && npm cache clean --force
+RUN npm config list && npm ci --omit=dev && npm cache clean --force
 
 COPY --chown=node:node . /destiny-ghost-api/
 
