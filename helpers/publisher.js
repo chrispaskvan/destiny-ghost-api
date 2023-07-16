@@ -6,55 +6,48 @@
  * @author Chris Paskvan
  * @requires azure
  */
+import { ServiceBusAdministrationClient, ServiceBusClient } from '@azure/service-bus';
 import configuration from './config';
 
-const { serviceBus: { queueName } } = configuration;
+const { serviceBus: { connectionString, queueName } } = configuration;
 
 /**
- * Message Publisher
+ * @class Message Publisher
  */
 class Publisher {
     /**
-     * @constructor
+     * Azure Service Bus Client
+     * @private
      */
-    constructor(options = {}) {
-        this.serviceBusService = options.serviceBusService;
-    }
+    #serviceBusService;
+
+    /**
+     * Azure Service Bus Message Sender
+     * @private
+     */
+    #sender;
 
     /**
      * Create topic for message.
      *
      * @returns {Request|Promise}
+     * @private
      */
-    static createTopic(serviceBusService) {
-        return new Promise((resolve, reject) => {
-            serviceBusService.createTopicIfNotExists(queueName, err => {
-                if (err) {
-                    return reject(err);
-                }
+    async #createTopicAndSender() {
+        const serviceBusAdministratorService = new ServiceBusAdministrationClient(connectionString);
 
-                return resolve(true);
-            });
-        });
-    }
+        try {
+            await serviceBusAdministratorService.createTopic(queueName);
+        } catch (err) {
+            if (err.statusCode !== 409) {
+                throw new Error('Failed to create topic.', { cause: err });
+            }
+        } finally {
+            await serviceBusAdministratorService.close();
+        }
 
-    /**
-     * Put a message on the topic queue.
-     *
-     * @param message
-     * @param serviceBusService
-     * @returns {Promise}
-     */
-    static sendTopicMessage(message, serviceBusService) {
-        return new Promise((resolve, reject) => {
-            serviceBusService.sendTopicMessage(queueName, message, (err, res) => {
-                if (err) {
-                    return reject(err);
-                }
-
-                return resolve(res);
-            });
-        });
+        this.#serviceBusService = new ServiceBusClient(connectionString);
+        this.#sender = await this.#serviceBusService.createSender(queueName);
     }
 
     /**
@@ -62,6 +55,21 @@ class Publisher {
      */
     static throwIfMissingNotificationType() {
         throw new Error('notification type is required');
+    }
+
+    /**
+     * Clean up resources.
+     */
+    async close() {
+        try {
+            if (this.#sender) {
+                await this.#sender.close();
+            }
+        } finally {
+            if (this.#serviceBusService) {
+                await this.#serviceBusService.close();
+            }
+        }
     }
 
     /**
@@ -77,23 +85,19 @@ class Publisher {
     ) {
         const message = {
             body: JSON.stringify(user),
-            customProperties: {
+            applicationProperties: {
                 notificationType,
             },
         };
-        const success = await this.constructor.createTopic(this.serviceBusService);
 
-        if (!success) {
-            return false;
+        if (!this.#sender) {
+            await this.#createTopicAndSender();
         }
 
-        const { isSuccessful = false } = await this.constructor.sendTopicMessage(
-            message,
-            this.serviceBusService,
-        );
-
-        return isSuccessful;
+        return this.#sender.sendMessages(message);
     }
 }
 
-export default Publisher;
+const publisher = new Publisher();
+
+export default publisher;

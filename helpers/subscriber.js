@@ -7,8 +7,7 @@
  * @requires azure
  * {@link https://docs.microsoft.com/en-us/azure/service-bus-messaging/service-bus-nodejs-how-to-use-topics-subscriptions}
  */
-import { createServiceBusService } from 'azure-sb';
-import { ExponentialRetryPolicyFilter } from 'azure-common';
+import { ServiceBusClient } from '@azure/service-bus';
 import configuration from './config';
 import log from './log';
 
@@ -16,61 +15,67 @@ const { serviceBus: settings } = configuration;
 
 class Subscriber {
     /**
+     * Azure Service Bus Client
+     * @private
+     */
+    #serviceBusService;
+
+    /**
+     * Azure Service Bus Message Receiver
+     * @private
+     */
+    #receiver;
+
+    /**
      * @constructor
      */
     constructor() {
-        const retryOperations = new ExponentialRetryPolicyFilter();
-
-        this.serviceBusService = createServiceBusService(settings.connectionString)
-            .withFilter(retryOperations);
+        // eslint-disable-next-line max-len
+        this.#serviceBusService = new ServiceBusClient(settings.connectionString);
     }
 
+    /**
+     * Clean up resources.
+     */
+    async close() {
+        try {
+            if (this.#receiver) {
+                await this.#receiver.close();
+            }
+        } finally {
+            await this.#serviceBusService.close();
+        }
+    }
+
+    /**
+     * Receive streaming messages.
+     * @param {function} callback
+     */
     listen(callback) {
-        this.serviceBusService
-            .createSubscription(settings.queueName, settings.subscriptionName, err => {
-                if (err && err.code !== '409') {
-                    throw err;
-                }
+        this.#receiver = this.#serviceBusService
+            .createReceiver(settings.queueName, settings.subscriptionName);
 
-                this.getFromTheBus(callback);
-            });
-    }
+        // function to handle messages
+        const myMessageHandler = async messageReceived => {
+            const { body, applicationProperties: { notificationType } } = messageReceived;
+            const user = JSON.parse(body);
 
-    getFromTheBus(callback) {
-        this.serviceBusService
-            .receiveSubscriptionMessage(settings.queueName, settings.subscriptionName, {
-                isPeekLock: true,
-            }, (err1, lockedMessage) => {
-                if (err1) {
-                    if (err1 !== 'No messages to receive') {
-                        throw err1;
-                    }
+            callback(user, notificationType);
+        };
 
-                    setTimeout(() => this.getFromTheBus(callback), 1000);
-                } else {
-                    const {
-                        body,
-                        customProperties: {
-                            notificationtype: notificationType,
-                        },
-                    } = lockedMessage;
-                    const user = JSON.parse(body);
+        // function to handle any errors
+        const myErrorHandler = async error => {
+            log.error(error);
+        };
 
-                    callback(user, notificationType);
-
-                    this.serviceBusService.deleteMessage(lockedMessage, err2 => {
-                        if (err2) {
-                            log.error({
-                                msg: 'message deletion failed: ',
-                                obj: err2,
-                            });
-                        }
-
-                        setTimeout(() => this.getFromTheBus(callback), 1);
-                    });
-                }
-            });
+        // subscribe and specify the message and error handlers
+        this.#receiver.subscribe({
+            processMessage: myMessageHandler,
+            processError: myErrorHandler,
+        });
     }
 }
 
-export default Subscriber;
+const subscriber = new Subscriber();
+
+export default subscriber;

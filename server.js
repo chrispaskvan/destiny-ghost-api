@@ -12,6 +12,8 @@ import applicationInsights from './helpers/application-insights';
 import cache from './helpers/cache';
 import loaders from './loaders';
 import log from './helpers/log';
+import publisher from './helpers/publisher';
+import subscriber from './helpers/subscriber';
 
 let insecureConnection;
 let secureConnection;
@@ -53,11 +55,17 @@ const startServer = async () => {
 
     createTerminus(insecureServer, {
         signals: ['SIGINT', 'SIGTERM'],
-        onSignal: () => (new Promise(resolve => {
-            cache.quit(err => {
-                resolve(err);
+        onSignal: async () => {
+            await Promise.all([
+                cache.quit(),
+                publisher.close(),
+                subscriber.close(),
+            ]);
+            insecureServer.close(() => {
+                // eslint-disable-next-line no-console
+                console.log('HTTP Server closed.');
             });
-        })),
+        },
         logger: log,
     });
 

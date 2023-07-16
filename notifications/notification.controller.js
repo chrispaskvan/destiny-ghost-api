@@ -1,30 +1,17 @@
-import { createServiceBusService } from 'azure-sb';
-import { ExponentialRetryPolicyFilter } from 'azure-common';
-
-import config from '../helpers/config';
-import Publisher from '../helpers/publisher';
-import Subscriber from '../helpers/subscriber';
+import publisher from '../helpers/publisher';
+import subscriber from '../helpers/subscriber';
 import notificationTypes from './notification.types';
 import log from '../helpers/log';
-
-const { serviceBus: { connectionString } } = config;
 
 /**
  * Controller class for Notification routes.
  */
 class NotificationController {
     constructor(options = {}) {
-        const retryOperations = new ExponentialRetryPolicyFilter();
-        const serviceBusService = createServiceBusService(connectionString)
-            .withFilter(retryOperations);
-        const subscriber = new Subscriber();
-
         this.authentication = options.authenticationService;
         this.destiny = options.destinyService;
         this.notifications = options.notificationService;
-        this.publisher = new Publisher({
-            serviceBusService,
-        });
+        this.publisher = publisher;
         this.users = options.userService;
         this.world = options.worldRepository;
 
