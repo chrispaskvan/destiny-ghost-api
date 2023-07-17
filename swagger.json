@@ -201,22 +201,6 @@
         }
       }
     },
-    "/health/live": {
-      "get": {
-        "summary": "Check if the server is up and responsive.",
-        "tags": [
-          "Health"
-        ],
-        "produces": [
-          "application/json"
-        ],
-        "responses": {
-          "200": {
-            "description": "Check to determine whether the server is alive and running."
-          }
-        }
-      }
-    },
     "/users/{emailAddress}/emailAddress/": {
       "get": {
         "summary": "Get the Destiny Ghost user by email address.",
