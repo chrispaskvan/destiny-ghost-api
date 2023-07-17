@@ -42,8 +42,6 @@ class Publisher {
             if (err.statusCode !== 409) {
                 throw new Error('Failed to create topic.', { cause: err });
             }
-        } finally {
-            await serviceBusAdministratorService.close();
         }
 
         this.#serviceBusService = new ServiceBusClient(connectionString);
