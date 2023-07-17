@@ -1,5 +1,5 @@
-import { createHook } from 'async_hooks';
-import { performance, PerformanceObserver } from 'perf_hooks';
+import { createHook } from 'node:async_hooks';
+import { performance, PerformanceObserver } from 'node:perf_hooks';
 
 import log from './log';
 
