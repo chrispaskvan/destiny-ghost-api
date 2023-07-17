@@ -1,4 +1,4 @@
-FROM node:18.6.0-buster-slim
+FROM node:20.4.0-buster-slim
 
 # labels
 LABEL org.opencontainers.image.created=$CREATED_DATE
