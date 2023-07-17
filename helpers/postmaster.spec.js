@@ -9,7 +9,7 @@ import users from '../mocks/users.json';
 
 const postmaster = new Postmaster();
 
-describe.skip('Postmaster delivery test', () => {
+describe('Postmaster delivery test', () => {
     const image = 'https://www.bungie.net/common/destiny_content/icons/31a1c9d954b69c41733b2fda109aa27c.png';
     const url = '/register';
 

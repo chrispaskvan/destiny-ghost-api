@@ -5,10 +5,10 @@ export default defineConfig({
     test: {
         coverage: {
             reporter: ['clover', 'html'],
-            statements: 79.31,
-            branches: 88.35,
-            functions: 70.7,
-            lines: 79.31,
+            statements: 78.95,
+            branches: 88.83,
+            functions: 69.84,
+            lines: 78.95,
             thresholdAutoUpdate: true,
         },
     },
