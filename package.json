@@ -57,7 +57,7 @@
         "pino-http": "^8.3.3",
         "qs": "^6.11.2",
         "rate-limiter-flexible": "^2.4.1",
-        "resolve": "^1.22.2",
+        "resolve": "^1.22.3",
         "rfc6902": "^5.0.1",
         "suppress-experimental-warnings": "^1.1.17",
         "swagger-ui-express": "^5.0.0",
