@@ -8,6 +8,7 @@
  */
 import { ServiceBusAdministrationClient, ServiceBusClient } from '@azure/service-bus';
 import configuration from './config';
+import context from './async-context';
 
 const { serviceBus: { connectionString, queueName } } = configuration;
 
@@ -81,10 +82,12 @@ class Publisher {
         user,
         notificationType = this.constructor.throwIfMissingNotificationType(),
     ) {
+        const { traceId } = context.getStore()?.get('logger')?.bindings() || {};
         const message = {
             body: JSON.stringify(user),
             applicationProperties: {
                 notificationType,
+                traceId,
             },
         };
 

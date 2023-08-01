@@ -20,7 +20,7 @@ import World from '../helpers/world';
 import World2 from '../helpers/world2';
 import client from '../helpers/cache';
 import Documents from '../helpers/documents';
-import config from '../helpers/config';
+import configuration from '../helpers/config';
 import DestinyRouter from '../destiny/destiny.routes';
 import Destiny2Router from '../destiny2/destiny2.routes';
 import HealthRouter from '../health/health.routes';
@@ -35,7 +35,7 @@ const {
     }, twilio: {
         accountSid, authToken,
     },
-} = config;
+} = configuration;
 
 export default () => {
     const routes = Router();

@@ -56,17 +56,16 @@ const startServer = async () => {
     createTerminus(insecureServer, {
         signals: ['SIGINT', 'SIGTERM'],
         onSignal: async () => {
+            // eslint-disable-next-line no-console
+            console.log('Interuption or termination signal received. Shutting down the server ...');
             await Promise.all([
                 cache.quit(),
                 publisher.close(),
                 subscriber.close(),
             ]);
-            insecureServer.close(() => {
-                // eslint-disable-next-line no-console
-                console.log('HTTP Server closed.');
-            });
+            insecureServer.close();
         },
-        logger: log,
+        logger: log.error,
     });
 
     insecureConnection = insecureServer.listen(port, () => {

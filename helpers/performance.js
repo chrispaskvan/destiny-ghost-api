@@ -29,9 +29,13 @@ const hook = createHook({
 });
 
 const obs = new PerformanceObserver(list => {
-    const entry = list.getEntries()[0];
+    const entries = list.getEntries()[0];
+    const { duration, name: entry } = entries;
 
-    log.info(`${entry.name}: ${entry.duration}`);
+    log.info({
+        entry,
+        duration,
+    }, 'Performance Measurement');
 });
 
 obs.observe({ entryTypes: ['measure'], buffered: false });

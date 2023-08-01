@@ -4,10 +4,11 @@ import cookieParser from 'cookie-parser';
 import session from 'express-session';
 import helmet from 'helmet';
 
+import configuration from '../helpers/config';
 import httpLog from '../helpers/httpLog';
+import { contextMiddleware } from '../helpers/log';
 import rateLimiterMiddleware from '../helpers/rate-limiter.middleware';
 import store from '../helpers/store';
-import configuration from '../helpers/config';
 
 export default app => {
     app.use(bodyParser.json());
@@ -75,6 +76,11 @@ export default app => {
 
         lookupSession();
     });
+
+    /**
+     * Attach Context
+     */
+    app.use(contextMiddleware);
 
     /**
      * Request/Response and Error Loggers

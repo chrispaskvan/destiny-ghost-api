@@ -136,7 +136,9 @@ class HealthController {
             name: 'Percent of Available Memory Used',
             value: Math.round((memory.rss / memory.totalAvailableSize) * 100),
         });
-        log.info(`Memory Statistics: RSS is ${memory.rss} MB of Total Available Size ${memory.totalAvailableSize} MB`);
+        log.info({
+            memory,
+        }, 'Memory Statistics');
 
         return {
             failures,

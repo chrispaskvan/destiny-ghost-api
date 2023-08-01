@@ -15,22 +15,51 @@
 import PinoHttp from 'pino-http';
 import { createId } from '@paralleldrive/cuid2';
 import { stdSerializers } from 'pino';
+import context from './async-context';
 import log from './log';
 
 class HttpLog extends PinoHttp {
     constructor() {
         super({
-            customReceivedObject: req => {
+            customErrorObject: (_req, _res, _err, loggableObject) => {
+                const { traceId } = context.getStore()?.get('logger')?.bindings() || {};
+
+                return {
+                    traceId,
+                    ...loggableObject,
+                };
+            },
+            customReceivedObject: (req, res, loggableObject) => {
                 // eslint-disable-next-line max-len
                 const { session: { displayName, membershipType }, body: { From: phoneNumber } } = req;
+                const { traceId } = context.getStore()?.get('logger')?.bindings() || {};
+
+                res.setHeader('X-Trace-Id', traceId);
 
                 return {
                     displayName,
                     membershipType,
                     phoneNumber,
+                    traceId,
+                    ...loggableObject,
                 };
             },
-            genReqId: () => createId(),
+            customSuccessObject: (_req, _res, loggableObject) => {
+                const { traceId } = context.getStore()?.get('logger')?.bindings() || {};
+
+                return {
+                    traceId,
+                    ...loggableObject,
+                };
+            },
+            genReqId: (req, res) => {
+                let requestId = req.id ?? req.headers['X-Request-Id'];
+
+                if (!requestId) requestId = createId();
+                res.setHeader('X-Request-Id', requestId);
+
+                return requestId;
+            },
             logger: log,
             serializers: {
                 err: stdSerializers.err,

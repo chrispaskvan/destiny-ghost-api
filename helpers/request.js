@@ -1,6 +1,6 @@
 import Agent, { HttpsAgent } from 'agentkeepalive';
 import axios from 'axios';
-import RequestError from './request.error';
+import ResponseError from './response.error';
 import log from './log';
 
 const axiosSingleton = (function singleton() {
@@ -28,6 +28,12 @@ const axiosSingleton = (function singleton() {
     };
 }());
 
+/**
+ * HTTP Request Client
+ *
+ * @param {*} options {@link https://axios-http.com/docs/req_config}
+ * @returns {@link https://axios-http.com/docs/res_schema} | {@link https://axios-http.com/docs/handling_errors}
+ */
 async function request(options) {
     try {
         const axiosInstance = axiosSingleton.getInstance();
@@ -35,15 +41,17 @@ async function request(options) {
 
         return responseBody;
     } catch (err) {
-        const requestError = new RequestError(err);
+        if (err.response) {
+            const responseError = new ResponseError(err);
 
-        log.error({
-            message: 'HTTP request failed!',
-            err,
-            requestError,
-        });
+            log.error({
+                err: responseError,
+            }, 'HTTP request failed!');
 
-        throw requestError;
+            throw responseError;
+        }
+
+        throw err;
     }
 }
 

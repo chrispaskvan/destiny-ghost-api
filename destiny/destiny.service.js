@@ -12,13 +12,13 @@
 import { stringify } from 'qs';
 import { get, post } from '../helpers/request';
 import DestinyError from './destiny.error';
-import config from '../helpers/config';
+import configuration from '../helpers/config';
 
 const {
     bungie: {
         apiKey, authorizationUrl, clientId, clientSecret,
     },
-} = config;
+} = configuration;
 
 /**
  * @constant

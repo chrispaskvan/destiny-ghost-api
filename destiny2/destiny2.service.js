@@ -11,11 +11,12 @@
  */
 import DestinyError from '../destiny/destiny.error';
 import DestinyService from '../destiny/destiny.service';
-import config from '../helpers/config';
+import configuration from '../helpers/config';
+import log from '../helpers/log';
 import { xurHash } from './destiny2.constants';
 import { get } from '../helpers/request';
 
-const { bungie: { apiKey } } = config;
+const { bungie: { apiKey } } = configuration;
 
 /**
  * @constant
@@ -140,6 +141,12 @@ class Destiny2Service extends DestinyService {
      */
     async getXur(membershipId, membershipType, characterId, accessToken) {
         const vendor = await this.cacheService.getVendor(xurHash);
+
+        log.info({
+            membershipId,
+            membershipType,
+            characterId,
+        }, 'Fetching Xur\'s inventory ...');
 
         if (vendor) {
             return vendor;
