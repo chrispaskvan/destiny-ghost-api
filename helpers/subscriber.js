@@ -57,9 +57,14 @@ class Subscriber {
 
         // function to handle messages
         const myMessageHandler = async messageReceived => {
-            const { body, applicationProperties: { notificationType } } = messageReceived;
+            const { body, applicationProperties: { notificationType, traceId } } = messageReceived;
             const user = JSON.parse(body);
 
+            log.info({
+                notificationType,
+                traceId,
+                ...user,
+            }, 'Sending Message');
             callback(user, notificationType);
         };
 
