@@ -5,7 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 import DestinyError from '../destiny/destiny.error';
-import RequestError from '../helpers/request.error';
+import ResponseError from '../helpers/response.error';
 import Routes from './routes';
 import expressLoader from './express';
 import hook from '../helpers/performance';
@@ -45,7 +45,7 @@ const loaders = {
         /**
          * Performance Hook
          */
-        if (process.env.NODE_DEBUG) {
+        if (process.env.NODE_ENV === 'development') {
             hook.enable();
         }
 
@@ -89,7 +89,7 @@ const loaders = {
                             status,
                         }],
                     });
-                } else if (err instanceof RequestError) {
+                } else if (err instanceof ResponseError) {
                     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
                         errors: [{
                             status,

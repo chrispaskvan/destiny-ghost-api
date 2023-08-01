@@ -10,11 +10,11 @@ import twilio from 'twilio';
 import AuthenticationMiddleWare from '../authentication/authentication.middleware';
 import TwilioController from './twilio.controller';
 
-import config from '../helpers/config';
+import configuration from '../helpers/config';
 
 const { twiml: { MessagingResponse }, validateRequest } = twilio;
 
-const { twilio: { attributes, authToken } } = config;
+const { twilio: { attributes, authToken } } = configuration;
 
 const routes = ({
     authenticationController,

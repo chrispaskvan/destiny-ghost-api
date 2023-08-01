@@ -1,7 +1,7 @@
 /**
  * Destiny Error Class
  */
-class RequestError extends Error {
+class ResponseError extends Error {
     /**
      * Create a new error from an error response to a Destiny web API request.
      */
@@ -17,4 +17,4 @@ class RequestError extends Error {
     }
 }
 
-export default RequestError;
+export default ResponseError;
