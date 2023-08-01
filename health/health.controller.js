@@ -87,7 +87,7 @@ class HealthController {
 
     static async twilio() {
         const options = {
-            url: 'https://gpkpyklzq55q.statuspage.io/api/v2/status.json',
+            url: 'https://status.twilio.com/api/v2/status.json',
         };
         const responseBody = await get(options);
 
@@ -110,7 +110,7 @@ class HealthController {
                 itemName = notAvailable,
                 itemTypeAndTierDisplayName,
             } = {},
-        ] = await this.world2.getItemByName('Seventh Seraph Officer Revolver');
+        ] = await this.world2.getItemByName('Malfeasance');
 
         return `${itemName} ${itemTypeAndTierDisplayName}`;
     }

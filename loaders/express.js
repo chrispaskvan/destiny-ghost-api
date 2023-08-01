@@ -44,7 +44,7 @@ export default app => {
             domain: process.env.DOMAIN,
             httpOnly: true,
             maxAge: configuration.session.cookie.maxAge,
-            secure: false,
+            secure: true,
         },
         name: configuration.session.cookie.name,
         resave: false,
