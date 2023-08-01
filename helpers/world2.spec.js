@@ -1,10 +1,10 @@
 /**
  * World Model Tests
  */
+import { existsSync } from 'fs';
 import {
     beforeEach, describe, expect,
 } from 'vitest';
-import { existsSync } from 'fs';
 import World from './world2';
 import itif from './itif';
 import { xurHash } from '../destiny2/destiny2.constants';

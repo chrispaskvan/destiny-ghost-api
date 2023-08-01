@@ -1,8 +1,8 @@
 /* eslint-disable security/detect-non-literal-fs-filename */
-import { StatusCodes } from 'http-status-codes';
 import { existsSync, mkdirSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { StatusCodes } from 'http-status-codes';
 
 import DestinyError from '../destiny/destiny.error';
 import ResponseError from '../helpers/response.error';

@@ -1,5 +1,5 @@
-import base64url from 'base64url';
 import { randomBytes } from 'crypto';
+import base64url from 'base64url';
 
 /**
  * Controller class for Destiny routes.

@@ -1,7 +1,7 @@
+import { EventEmitter } from 'events';
 import {
     beforeEach, describe, expect, it, vi,
 } from 'vitest';
-import { EventEmitter } from 'events';
 import { StatusCodes } from 'http-status-codes';
 import { createResponse, createRequest } from 'node-mocks-http';
 import { get } from '../helpers/request';

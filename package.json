@@ -6,7 +6,7 @@
     "type": "module",
     "scripts": {
         "coverage": "npm run test:watch -- --coverage --run",
-        "lint": "eslint --ignore-path .gitignore .",
+        "lint": "eslint --fix --ignore-path .gitignore .",
         "start:production": "NODE_ENV=production npm start",
         "start:dev": "NODE_ENV=development npm start",
         "start": "node --require=suppress-experimental-warnings --loader=./loader.js --no-experimental-fetch -r dotenv/config --max-old-space-size=8192 --unhandled-rejections=strict start",

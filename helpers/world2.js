@@ -10,8 +10,8 @@
  * @requires S
  * @requires sqlite3
  */
-import Database from 'better-sqlite3';
 import { join, basename } from 'path';
+import Database from 'better-sqlite3';
 import World from './world';
 
 /**

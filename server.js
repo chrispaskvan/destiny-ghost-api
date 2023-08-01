@@ -1,11 +1,11 @@
 /**
  * Application Server
  */
-import express from 'express';
 import { readFileSync } from 'fs';
 import { createServer } from 'http';
 import { createServer as _createServer } from 'https';
 import { cpus } from 'os';
+import express from 'express';
 import { createTerminus } from '@godaddy/terminus';
 
 import applicationInsights from './helpers/application-insights';

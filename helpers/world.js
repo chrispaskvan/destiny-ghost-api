@@ -2,13 +2,13 @@
 /**
  * A module for accessing the Destiny World database.
  */
-import sampleSize from 'lodash/sampleSize';
-import Database from 'better-sqlite3';
-import axios from 'axios';
 import {
     readdirSync, statSync, existsSync, createWriteStream, unlinkSync,
 } from 'fs';
 import { join, basename } from 'path';
+import sampleSize from 'lodash/sampleSize';
+import Database from 'better-sqlite3';
+import axios from 'axios';
 import { open } from 'yauzl';
 import log from './log';
 

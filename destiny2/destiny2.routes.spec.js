@@ -1,9 +1,9 @@
+import { EventEmitter } from 'events';
 import {
     beforeEach, describe, expect, it, vi,
 } from 'vitest';
 import { StatusCodes } from 'http-status-codes';
 import Chance from 'chance';
-import { EventEmitter } from 'events';
 import { createResponse, createRequest } from 'node-mocks-http';
 
 import Destiny2Router from './destiny2.routes';

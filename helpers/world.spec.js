@@ -1,10 +1,10 @@
 /**
  * World Model Tests
  */
+import { existsSync } from 'fs';
 import {
     describe, expect,
 } from 'vitest';
-import { existsSync } from 'fs';
 import World from './world';
 import itif from './itif';
 

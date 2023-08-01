@@ -1,9 +1,9 @@
 /**
  * Route Definitions
  */
+import { readFileSync } from 'fs';
 import { CosmosClient } from '@azure/cosmos';
 import { Router } from 'express';
-import { readFileSync } from 'fs';
 import { serve, setup } from 'swagger-ui-express';
 import twilio from 'twilio';
 
