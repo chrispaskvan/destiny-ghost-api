@@ -3,7 +3,6 @@ import axios from 'axios';
 import ResponseError from './response.error';
 import log from './log';
 
-const failureMessage = 'HTTP request failed!';
 const axiosSingleton = (function singleton() {
     let instance;
 
@@ -47,22 +46,12 @@ async function request(options) {
 
             log.error({
                 err: responseError,
-            }, failureMessage);
+            }, 'HTTP request failed!');
 
             throw responseError;
-        } else if (err.request) {
-            log.error({
-                err: err.request,
-            }, failureMessage);
-
-            throw err;
-        } else {
-            log.error({
-                err: err.message,
-            }, failureMessage);
-
-            throw err;
         }
+
+        throw err;
     }
 }
 
