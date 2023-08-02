@@ -73,7 +73,7 @@ class Destiny2Service extends DestinyService {
             return manifest;
         }
 
-        return this.#getManifestFromBungie();
+        return await this.#getManifestFromBungie();
     }
 
     /**

@@ -177,8 +177,8 @@ class UserController {
      * @param req
      * @param res
      */
-    getUserByEmailAddress(emailAddress) {
-        return this.users.getUserByEmailAddress(emailAddress);
+    async getUserByEmailAddress(emailAddress) {
+        return await this.users.getUserByEmailAddress(emailAddress);
     }
 
     /**
@@ -218,8 +218,8 @@ class UserController {
      * @param req
      * @param res
      */
-    getUserByPhoneNumber(phoneNumber) {
-        return this.users.getUserByPhoneNumber(phoneNumber);
+    async getUserByPhoneNumber(phoneNumber) {
+        return await this.users.getUserByPhoneNumber(phoneNumber);
     }
 
     /**
@@ -306,7 +306,7 @@ class UserController {
         const destinyGhostUser = await this.users.getUserByMembershipId(user.membershipId);
 
         if (!destinyGhostUser) {
-            return this.users.createAnonymousUser(user)
+            return await this.users.createAnonymousUser(user)
                 .then(() => user);
         }
 

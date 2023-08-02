@@ -43,7 +43,7 @@ class AuthenticationService {
                 : this.userService.getUserByDisplayName(displayName, membershipType));
         }
 
-        return this.#validateUser(user);
+        return await this.#validateUser(user);
     }
 
     /**

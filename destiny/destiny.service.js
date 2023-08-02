@@ -47,7 +47,7 @@ class DestinyService {
      * @returns
      * @memberof DestinyService
      */
-    static getAccessToken(grant) {
+    static async getAccessToken(grant) {
         const data = {
             client_id: clientId,
             client_secret: clientSecret,
@@ -62,7 +62,7 @@ class DestinyService {
             url: `${servicePlatform}/app/oauth/token/`,
         };
 
-        return post(options);
+        return await post(options);
     }
 
     /**
@@ -71,8 +71,8 @@ class DestinyService {
      * @param code
      * @returns {Promise}
      */
-    getAccessTokenFromCode(code) {
-        return this.constructor.getAccessToken({
+    async getAccessTokenFromCode(code) {
+        return await this.constructor.getAccessToken({
             code,
             grant_type: 'authorization_code',
         });
@@ -83,8 +83,8 @@ class DestinyService {
      *
      * @param refreshToken
      */
-    getAccessTokenFromRefreshToken(refreshToken) {
-        return this.constructor.getAccessToken({
+    async getAccessTokenFromRefreshToken(refreshToken) {
+        return await this.constructor.getAccessToken({
             grant_type: 'refresh_token',
             refresh_token: refreshToken,
         });

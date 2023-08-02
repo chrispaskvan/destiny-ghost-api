@@ -95,7 +95,7 @@ class Publisher {
             await this.#createTopicAndSender();
         }
 
-        return this.#sender.sendMessages(message);
+        return await this.#sender.sendMessages(message);
     }
 }
 
