@@ -18,3 +18,13 @@
 ## Local SSL Certificate
 -https://github.com/FiloSottile/mkcert
 -https://stackoverflow.com/questions/21397809/create-a-trusted-self-signed-ssl-cert-for-localhost-for-use-with-express-node
+
+Health versus Metrics
+OpenTelemetry
+Circuit Breaker
+
+New User Workflow w/Intergration Tests
+User Interface
+
+Docker Compose file for CI Testing
+Improve Use of Application Insights

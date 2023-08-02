@@ -66,7 +66,7 @@ class NotificationController {
             const user = this.users.getUserByPhoneNumber(phoneNumber);
 
             if (user && user.phoneNumber) {
-                return this.publisher.sendNotification(user, subscription);
+                return await this.publisher.sendNotification(user, subscription);
             }
         } else {
             const users = await this.users.getSubscribedUsers(subscription);

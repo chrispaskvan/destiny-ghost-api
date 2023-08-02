@@ -67,8 +67,8 @@ class Destiny2Controller extends DestinyController {
      * @returns Promise
      * @memberof Destiny2Controller
      */
-    getManifest() {
-        return this.destiny.getManifest();
+    async getManifest() {
+        return await this.destiny.getManifest();
     }
 
     /**

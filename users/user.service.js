@@ -184,8 +184,8 @@ class UserService {
      * @param message
      * @returns {Promise}
      */
-    addUserMessage(message) {
-        return this.documents.createDocument(messageCollectionId, {
+    async addUserMessage(message) {
+        return await this.documents.createDocument(messageCollectionId, {
             DateTime: new Date().toISOString(),
             ...message,
         });
@@ -216,7 +216,7 @@ class UserService {
             return Promise.reject(new Error('Anonymous user already signed in.'));
         }
 
-        return this.documents.createDocument(userCollectionId, user);
+        return await this.documents.createDocument(userCollectionId, user);
     }
 
     /**
@@ -266,7 +266,7 @@ class UserService {
         defaults(filteredUser, schemaDefaults(userSchema));
         existingUser = { ...existingUser, ...filteredUser };
 
-        return this.documents.updateDocument(userCollectionId, existingUser);
+        return await this.documents.updateDocument(userCollectionId, existingUser);
     }
 
     /**
@@ -305,7 +305,7 @@ class UserService {
      * @param notificationType
      * @returns {*|Array.User}
      */
-    getSubscribedUsers(notificationType) {
+    async getSubscribedUsers(notificationType) {
         const notification = Object.values(notificationTypes)
             .find(type => notificationType === type);
 
@@ -325,7 +325,7 @@ class UserService {
             .where('type', notification)
             .where('enabled', true);
 
-        return this.documents.getDocuments(userCollectionId, qb.getQuery(), {
+        return await this.documents.getDocuments(userCollectionId, qb.getQuery(), {
             enableCrossPartitionQuery: true,
         });
     }
@@ -587,7 +587,7 @@ class UserService {
             .getUserByDisplayName(anonymousUser.displayName, anonymousUser.membershipType);
 
         if (user) {
-            return this.documents.updateDocument(userCollectionId, anonymousUser)
+            return await this.documents.updateDocument(userCollectionId, anonymousUser)
                 .then(() => this.cacheService.setUser(anonymousUser));
         }
 
@@ -609,7 +609,7 @@ class UserService {
         const userDocument = await this.getUserByDisplayName(user.displayName, user.membershipType);
         Object.assign(userDocument, user);
 
-        return this.documents.updateDocument(userCollectionId, userDocument)
+        return await this.documents.updateDocument(userCollectionId, userDocument)
             .then(() => this.cacheService.setUser(userDocument));
     }
 
@@ -628,7 +628,7 @@ class UserService {
 
         userDocument.bungie = bungie;
 
-        return this.documents.updateDocument(userCollectionId, userDocument)
+        return await this.documents.updateDocument(userCollectionId, userDocument)
             .then(() => undefined);
     }
 }

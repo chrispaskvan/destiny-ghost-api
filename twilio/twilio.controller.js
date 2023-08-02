@@ -203,13 +203,13 @@ class TwilioController {
                 const keys = Object.keys(groups);
 
                 if (keys.length === 1) {
-                    return this.#getItem(items[0]);
+                    return await this.#getItem(items[0]);
                 }
 
                 return items;
             }
 
-            return this.#getItem(items[0]);
+            return await this.#getItem(items[0]);
         }
 
         return [];
@@ -254,15 +254,15 @@ class TwilioController {
          * @ToDo: Handle STOP and HELP
          */
         if (this.itemKeywords.has(message)) {
-            return this.itemKeywords.get(message).bind(this)(itemHash, responseCookies);
+            return await this.itemKeywords.get(message).bind(this)(itemHash, responseCookies);
         }
 
         if (message === 'xur') {
-            return this.getXur(user, responseCookies);
+            return await this.getXur(user, responseCookies);
         }
 
         if (message === 'top 10') {
-            return this.getTop10(responseCookies);
+            return await this.getTop10(responseCookies);
         }
 
         const searchTerm = body.Body.trim().toLowerCase();

@@ -49,7 +49,7 @@ class DestinyController {
         const currentUser = await this.users.getUserByDisplayName(displayName, membershipType);
         const { bungie: { access_token: accessToken } } = currentUser;
 
-        return this.destiny.getCurrentUser(accessToken);
+        return await this.destiny.getCurrentUser(accessToken);
     }
 
     /**
@@ -59,8 +59,8 @@ class DestinyController {
      * @param res
      * @returns {*}
      */
-    getGrimoireCards(numberOfCards) {
-        return this.world.getGrimoireCards(numberOfCards);
+    async getGrimoireCards(numberOfCards) {
+        return await this.world.getGrimoireCards(numberOfCards);
     }
 
     /**
@@ -69,8 +69,8 @@ class DestinyController {
      * @param req
      * @param res
      */
-    getManifest() {
-        return this.destiny.getManifest();
+    async getManifest() {
+        return await this.destiny.getManifest();
     }
 
     /**
@@ -79,7 +79,7 @@ class DestinyController {
     async upsertManifest() {
         const manifest = await this.destiny.getManifest(true);
 
-        return this.world.updateManifest(manifest);
+        return await this.world.updateManifest(manifest);
     }
 }
 
