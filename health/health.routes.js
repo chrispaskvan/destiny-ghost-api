@@ -35,7 +35,7 @@ const routes = ({
     /**
      * @swagger
      * paths:
-     *  /health/:
+     *  /health:
      *    get:
      *      summary: Get a summary of the status of the Destiny Ghost API and its dependencies.
      *      tags:
@@ -55,6 +55,29 @@ const routes = ({
                     res.status(failures
                         ? StatusCodes.SERVICE_UNAVAILABLE
                         : StatusCodes.OK).json(health);
+                })
+                .catch(next);
+        });
+
+    /**
+     * @swagger
+     * paths:
+     *  /health/metrics:
+     *    get:
+     *      summary: Get metrics on the health of the Destiny Ghost API.
+     *      tags:
+     *        - Health
+     *      produces:
+     *        - application/json
+     *      responses:
+     *        200:
+     *          description: Returns measurements.
+     */
+    healthRouter.route('/metrics')
+        .get((req, res, next) => {
+            healthController.getMetrics()
+                .then(metrics => {
+                    res.status(StatusCodes.OK).json(metrics);
                 })
                 .catch(next);
         });

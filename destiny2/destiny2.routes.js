@@ -42,7 +42,7 @@ const routes = ({
     /**
      * @swagger
      * paths:
-     *  /destiny2/characters/:
+     *  /destiny2/characters:
      *    get:
      *      summary: Get a list of the user's characters.
      *      tags:
@@ -72,7 +72,7 @@ const routes = ({
     /**
      * @swagger
      * paths:
-     *  /destiny2/inventory/:
+     *  /destiny2/inventory:
      *    get:
      *      summary: Get the complete inventory of items.
      *      tags:
@@ -105,7 +105,7 @@ const routes = ({
     /**
      * @swagger
      * paths:
-     *  /destiny2/manifest/:
+     *  /destiny2/manifest:
      *    get:
      *      summary: Get details about the latest Destiny 2 manifest definition.
      *      tags:
@@ -128,7 +128,7 @@ const routes = ({
     /**
      * @swagger
      * paths:
-     *  /destiny2/manifest/:
+     *  /destiny2/manifest:
      *    post:
      *      summary: Download the latest Destiny2 manifest if the local copy is outdated.
      *      tags:
@@ -153,7 +153,7 @@ const routes = ({
     /**
      * @swagger
      * paths:
-     *  /destiny2/xur/:
+     *  /destiny2/xur:
      *    get:
      *      summary: Get Xur's inventory if available.
      *      tags:

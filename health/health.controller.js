@@ -85,6 +85,21 @@ class HealthController {
         };
     }
 
+    async getMetrics() {
+        const memory = await this.constructor.getMemoryUsage();
+
+        applicationInsights.trackMetric({
+            name: 'Ratio of RSS Memory to Total Available Size',
+            value: Math.round(memory.rss / memory.totalAvailableSize),
+        });
+
+        log.info({
+            memory,
+        }, 'Memory Statistics');
+
+        return { memory };
+    }
+
     static async twilio() {
         const options = {
             url: 'https://status.twilio.com/api/v2/status.json',
@@ -110,7 +125,7 @@ class HealthController {
                 itemName = notAvailable,
                 itemTypeAndTierDisplayName,
             } = {},
-        ] = await this.world2.getItemByName('Malfeasance');
+        ] = await this.world2.getItemByName('Malfeasance ');
 
         return `${itemName} ${itemTypeAndTierDisplayName}`;
     }
@@ -130,15 +145,6 @@ class HealthController {
             .catch(err => HealthController.unhealthy(err)) || notAvailable;
         const world2 = await this.getWorld2Item()
             .catch(err => HealthController.unhealthy(err)) || notAvailable;
-        const memory = this.constructor.getMemoryUsage();
-
-        applicationInsights.trackMetric({
-            name: 'Percent of Available Memory Used',
-            value: Math.round((memory.rss / memory.totalAvailableSize) * 100),
-        });
-        log.info({
-            memory,
-        }, 'Memory Statistics');
 
         return {
             failures,
