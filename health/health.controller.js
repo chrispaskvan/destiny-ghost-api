@@ -5,6 +5,7 @@
  * @author Chris Paskvan
  */
 import { getHeapStatistics } from 'v8';
+import { convert } from 'html-to-text';
 
 import { get } from '../helpers/request';
 import applicationInsights from '../helpers/application-insights';
@@ -116,7 +117,7 @@ class HealthController {
     async getWorldItem() {
         const [{ cardName } = {}] = await this.world.getGrimoireCards(1);
 
-        return cardName;
+        return convert(cardName);
     }
 
     async getWorld2Item() {
@@ -125,7 +126,7 @@ class HealthController {
                 itemName = notAvailable,
                 itemTypeAndTierDisplayName,
             } = {},
-        ] = await this.world2.getItemByName('Malfeasance ');
+        ] = await this.world2.getItemByName('The Hothead');
 
         return `${itemName} ${itemTypeAndTierDisplayName}`;
     }
