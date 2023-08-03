@@ -108,7 +108,7 @@ const routes = ({
     /**
      * @swagger
      * paths:
-     *  /users/{emailAddress}/emailAddress/:
+     *  /users/{emailAddress}/emailAddress:
      *    get:
      *      summary: Get the Destiny Ghost user by email address.
      *      tags:
@@ -145,7 +145,7 @@ const routes = ({
     /**
      * @swagger
      * paths:
-     *  /users/{phoneNumber}/phoneNumber/:
+     *  /users/{phoneNumber}/phoneNumber:
      *    get:
      *      summary: Get the Destiny Ghost user by phone number.
      *      tags:
@@ -189,7 +189,7 @@ const routes = ({
     /**
      * @swagger
      * paths:
-     *  /users/current/:
+     *  /users/current:
      *    get:
      *      summary: Get the current Destiny Ghost user.
      *      tags:

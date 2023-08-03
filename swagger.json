@@ -10,7 +10,7 @@
     }
   },
   "paths": {
-    "/destiny/currentUser/": {
+    "/destiny/currentUser": {
       "get": {
         "summary": "Get the currently authenticated user.",
         "tags": [
@@ -29,7 +29,7 @@
         }
       }
     },
-    "/destiny/grimoireCards/{numberOfCards}/": {
+    "/destiny/grimoireCards/{numberOfCards}": {
       "get": {
         "summary": "Get a random selection of Grimoire Cards.",
         "tags": [
@@ -62,7 +62,7 @@
         }
       }
     },
-    "/destiny/manifest/": {
+    "/destiny/manifest": {
       "get": {
         "summary": "Get details about the latest Destiny manifest definition.",
         "tags": [
@@ -92,7 +92,7 @@
         }
       }
     },
-    "/destiny2/characters/": {
+    "/destiny2/characters": {
       "get": {
         "summary": "Get a list of the user's characters.",
         "tags": [
@@ -111,7 +111,7 @@
         }
       }
     },
-    "/destiny2/inventory/": {
+    "/destiny2/inventory": {
       "get": {
         "summary": "Get the complete inventory of items.",
         "tags": [
@@ -127,7 +127,7 @@
         }
       }
     },
-    "/destiny2/manifest/": {
+    "/destiny2/manifest": {
       "get": {
         "summary": "Get details about the latest Destiny 2 manifest definition.",
         "tags": [
@@ -160,7 +160,7 @@
         }
       }
     },
-    "/destiny2/xur/": {
+    "/destiny2/xur": {
       "get": {
         "summary": "Get Xur's inventory if available.",
         "tags": [
@@ -182,7 +182,7 @@
         }
       }
     },
-    "/health/": {
+    "/health": {
       "get": {
         "summary": "Get a summary of the status of the Destiny Ghost API and its dependencies.",
         "tags": [
@@ -201,7 +201,23 @@
         }
       }
     },
-    "/users/{emailAddress}/emailAddress/": {
+    "/health/metrics": {
+      "get": {
+        "summary": "Get metrics on the health of the Destiny Ghost API.",
+        "tags": [
+          "Health"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns measurements."
+          }
+        }
+      }
+    },
+    "/users/{emailAddress}/emailAddress": {
       "get": {
         "summary": "Get the Destiny Ghost user by email address.",
         "tags": [
@@ -231,7 +247,7 @@
         }
       }
     },
-    "/users/{phoneNumber}/phoneNumber/": {
+    "/users/{phoneNumber}/phoneNumber": {
       "get": {
         "summary": "Get the Destiny Ghost user by phone number.",
         "tags": [
@@ -261,7 +277,7 @@
         }
       }
     },
-    "/users/current/": {
+    "/users/current": {
       "get": {
         "summary": "Get the current Destiny Ghost user.",
         "tags": [

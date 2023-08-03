@@ -45,7 +45,7 @@ const routes = ({
     /**
      * @swagger
      * paths:
-     *  /destiny/currentUser/:
+     *  /destiny/currentUser:
      *    get:
      *      summary: Get the currently authenticated user.
      *      tags:
@@ -76,7 +76,7 @@ const routes = ({
     /**
      * @swagger
      * paths:
-     *  /destiny/grimoireCards/{numberOfCards}/:
+     *  /destiny/grimoireCards/{numberOfCards}:
      *    get:
      *      summary: Get a random selection of Grimoire Cards.
      *      tags:
@@ -125,7 +125,7 @@ const routes = ({
     /**
      * @swagger
      * paths:
-     *  /destiny/manifest/:
+     *  /destiny/manifest:
      *    get:
      *      summary: Get details about the latest Destiny manifest definition.
      *      tags:
@@ -148,7 +148,7 @@ const routes = ({
     /**
      * @swagger
      * paths:
-     *  /destiny/manifest/:
+     *  /destiny/manifest:
      *    post:
      *      summary: Download the latest Destiny manifest if the local copy is outdated.
      *      tags:
