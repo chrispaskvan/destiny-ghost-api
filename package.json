@@ -30,7 +30,7 @@
         "@azure/service-bus": "^7.9.0",
         "@godaddy/terminus": "^4.12.1",
         "@paralleldrive/cuid2": "^2.2.1",
-        "@snyk/protect": "^1.1198.0",
+        "@snyk/protect": "^1.1199.0",
         "agentkeepalive": "^4.3.0",
         "applicationinsights": "^2.7.0",
         "axios": "^1.4.0",
