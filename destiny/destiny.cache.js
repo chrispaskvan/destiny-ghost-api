@@ -4,9 +4,10 @@
 class DestinyCache {
     /**
      * Cache key for the latest Destiny Manifest cached.
+     * @protected
      * @type {string}
      */
-    #manifestKey = 'destiny-manifest';
+    _manifestKey = 'destiny-manifest';
 
     constructor(options = {}) {
         this.client = options.client;
@@ -33,13 +34,11 @@ class DestinyCache {
      * Get the cached Destiny Manifest.
      * @returns {Promise}
      */
-    getManifest() {
-        return new Promise((resolve, reject) => {
-            this.client.get(
-                this.#manifestKey,
-                (err, res) => (err ? reject(err) : resolve(res ? JSON.parse(res) : undefined)),
-            );
-        });
+    async getManifest() {
+        // eslint-disable-next-line no-underscore-dangle
+        const res = await this.client.get(this._manifestKey);
+
+        return res ? JSON.parse(res) : undefined;
     }
 
     /**
@@ -47,13 +46,10 @@ class DestinyCache {
      * @param vendorHash
      * @returns {Promise}
      */
-    getVendor(vendorHash) {
-        return new Promise((resolve, reject) => {
-            this.client.get(
-                vendorHash,
-                (err, res) => (err ? reject(err) : resolve(res ? JSON.parse(res) : undefined)),
-            );
-        });
+    async getVendor(vendorHash) {
+        const res = await this.client.get(vendorHash);
+
+        return res ? JSON.parse(res) : undefined;
     }
 
     /**
@@ -61,26 +57,18 @@ class DestinyCache {
      * @param manifest
      * @returns {Promise}
      */
-    setManifest(manifest) {
+    async setManifest(manifest) {
         if (manifest && typeof manifest === 'object') {
-            return new Promise((resolve, reject) => {
-                this.client.set(
-                    this.#manifestKey,
-                    JSON.stringify(manifest),
-                    'EX',
-                    this.constructor.secondsUntilDailyReset(),
-                    (err, success) => {
-                        if (err) {
-                            reject(err);
-                        } else {
-                            resolve(success);
-                        }
-                    },
-                );
-            });
+            return await this.client.set(
+                // eslint-disable-next-line no-underscore-dangle
+                this._manifestKey,
+                JSON.stringify(manifest),
+                'EX',
+                this.constructor.secondsUntilDailyReset(),
+            );
         }
 
-        return Promise.reject(new Error('Manifest object is required.'));
+        throw new Error('Manifest object is required.');
     }
 
     /**
@@ -89,20 +77,17 @@ class DestinyCache {
      * @param vendor
      * @returns {Promise}
      */
-    setVendor(hash, vendor) {
+    async setVendor(hash, vendor) {
         if (!hash || typeof hash !== 'number') {
-            return Promise.reject(new Error('Vendor hash number is required.'));
+            throw new Error('Vendor hash number is required.');
         }
 
-        return new Promise((resolve, reject) => {
-            this.client.set(
-                hash,
-                JSON.stringify(vendor),
-                'EX',
-                this.constructor.secondsUntilDailyReset(),
-                (err, res) => (err ? reject(err) : resolve(res)),
-            );
-        });
+        return await this.client.set(
+            hash,
+            JSON.stringify(vendor),
+            'EX',
+            this.constructor.secondsUntilDailyReset(),
+        );
     }
 }
 
