@@ -7,38 +7,31 @@ import DestinyCache from '../destiny/destiny.cache';
 class Destiny2Cache extends DestinyCache {
     /**
      * Cache key for the latest Destiny Manifest cached.
+     * @protected
      * @type {string}
      */
-    #manifestKey = 'destiny2-manifest';
+    _manifestKey = 'destiny2-manifest';
 
     /**
      * Get the cached list of characters for the user.
      * @param {*} membershipId
      */
     // eslint-disable-next-line class-methods-use-this
-    getCharacters(membershipId) {
-        return new Promise((resolve, reject) => {
-            cache.get(membershipId, (err, res) => {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve(res ? JSON.parse(res) : undefined);
-                }
-            });
-        });
+    async getCharacters(membershipId) {
+        const res = await cache.get(membershipId);
+
+        return res ? JSON.parse(res) : undefined;
     }
 
     /**
      * Get the cached Destiny Manifest.
      * @returns {Promise}
      */
-    getManifest() {
-        return new Promise((resolve, reject) => {
-            cache.get(
-                this.#manifestKey,
-                (err, res) => (err ? reject(err) : resolve(res ? JSON.parse(res) : undefined)),
-            );
-        });
+    async getManifest() {
+        // eslint-disable-next-line no-underscore-dangle
+        const res = await cache.get(this._manifestKey);
+
+        return res ? JSON.parse(res) : undefined;
     }
 
     /**
@@ -47,24 +40,16 @@ class Destiny2Cache extends DestinyCache {
      * @param {*} characters
      */
     // eslint-disable-next-line class-methods-use-this
-    setCharacters(membershipId, characters) {
+    async setCharacters(membershipId, characters) {
         if (!(membershipId && typeof membershipId === 'string')) {
-            return Promise.reject(new Error('membershipId is a required string.'));
+            throw new Error('membershipId is a required string.');
         }
 
         if (!(characters && characters.length)) {
-            return Promise.reject(new Error('characters is a required and must be a nonempty array.'));
+            throw new Error('characters is a required and must be a nonempty array.');
         }
 
-        return new Promise((resolve, reject) => {
-            cache.set(membershipId, JSON.stringify(characters), (err, success) => {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve(success);
-                }
-            });
-        });
+        return await cache.set(membershipId, JSON.stringify(characters));
     }
 }
 
