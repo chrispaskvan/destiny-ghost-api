@@ -3,8 +3,8 @@ import { RateLimiterRedis } from 'rate-limiter-flexible';
 import client from './cache';
 
 const options = {
-    redis: client,
-    keyPrefix: 'middleware',
+    storeClient: client,
+    keyPrefix: 'austringer',
     points: 100, // 100 requests
     duration: 1, // per 1 second
 };
