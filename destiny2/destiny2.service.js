@@ -42,14 +42,24 @@ class Destiny2Service extends DestinyService {
             },
             url: `${servicePlatform}/Destiny2/Manifest`,
         };
-        const responseBody = await get(options);
+        const {
+            data: responseBody,
+            headers,
+        } = await get(options, true);
+        const matches = headers['cache-control'].match(/max-age=(\d+)/);
+        const maxAge = matches ? parseInt(matches[1], 10) : 0;
 
         if (responseBody.ErrorCode === 1) {
             const { Response: manifest } = responseBody;
+            const result = {
+                lastModified: headers['last-modified'],
+                manifest,
+                maxAge,
+            };
 
-            this.cacheService.setManifest(manifest);
+            await this.cacheService.setManifest(result);
 
-            return manifest;
+            return result;
         }
 
         throw new DestinyError(
@@ -70,7 +80,7 @@ class Destiny2Service extends DestinyService {
         const manifest = await this.cacheService.getManifest();
 
         if (!skipCache && manifest) {
-            return manifest;
+            return { wasCached: true, ...manifest };
         }
 
         return await this.#getManifestFromBungie();

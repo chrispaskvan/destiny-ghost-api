@@ -24,17 +24,6 @@ class Destiny2Cache extends DestinyCache {
     }
 
     /**
-     * Get the cached Destiny Manifest.
-     * @returns {Promise}
-     */
-    async getManifest() {
-        // eslint-disable-next-line no-underscore-dangle
-        const res = await cache.get(this._manifestKey);
-
-        return res ? JSON.parse(res) : undefined;
-    }
-
-    /**
      * Set the list of characters for the user.
      * @param {*} membershipId
      * @param {*} characters

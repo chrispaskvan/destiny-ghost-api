@@ -16,9 +16,13 @@ const loaders = {
         /**
          * Check that the database directories exist.
          */
-        const databases = [process.env.DESTINY_DATABASE_DIR, process.env.DESTINY2_DATABASE_DIR];
+        const databases = [path.normalize(process.env.DESTINY_DATABASE_DIR),
+            path.normalize(process.env.DESTINY2_DATABASE_DIR)];
 
         log.info(`DESTINY_DATABASE_DIR=${databases[0]},DESTINY2_DATABASE_DIR=${databases[1]}`);
+        if (databases.map(database => database[0]).includes('.')) {
+            throw new Error('Illegal path supplied.');
+        }
         databases.forEach(database => {
             const directories = database.split('/');
 

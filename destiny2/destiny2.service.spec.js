@@ -39,24 +39,43 @@ describe('Destiny2Service', () => {
     });
 
     describe('getManifest', () => {
+        const lastModified = 'Mon,11 Sep 2023 02:13:47 GMT';
+        const maxAge = 90;
+        const headers = {
+            'cache-control': `public, max-age=${maxAge}`,
+            'last-modified': lastModified,
+        };
+
         describe('when ErrorCode equals 1', () => {
             it('should return the latest manifest', async () => {
-                get.mockImplementation(() => Promise.resolve(mockManifestResponse));
+                const { Response: manifest1 } = mockManifestResponse;
+                const result1 = {
+                    lastModified,
+                    manifest: manifest1,
+                    maxAge,
+                };
 
-                const { Response: mockManifest } = mockManifestResponse;
-                const manifest = await destiny2Service.getManifest();
+                get.mockImplementation(() => Promise.resolve({
+                    data: mockManifestResponse,
+                    headers,
+                }));
 
-                expect(manifest).toEqual(mockManifest);
+                const result = await destiny2Service.getManifest();
+
+                expect(result).toEqual(result1);
             });
         });
 
         describe('when ErrorCode does not equal 1', () => {
             it('should throw', async () => {
                 get.mockImplementation(() => Promise.resolve({
-                    ErrorCode: 0,
-                    Message: 'Ok',
-                    Response: {},
-                    Status: 'Failed',
+                    data: {
+                        ErrorCode: 0,
+                        Message: 'Ok',
+                        Response: {},
+                        Status: 'Failed',
+                    },
+                    headers,
                 }));
 
                 await expect(destiny2Service.getManifest()).rejects.toThrow(DestinyError);
