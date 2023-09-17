@@ -118,18 +118,31 @@ describe('DestinyService', () => {
 
     describe('getManifest', () => {
         const { Response: manifest1 } = mockManifestResponse;
+        const lastModified = 'Mon,11 Sep 2023 02:13:47 GMT';
+        const maxAge = 90;
 
         beforeEach(() => {
-            get.mockImplementation(() => Promise.resolve(mockManifestResponse));
+            get.mockImplementation(() => Promise.resolve({
+                data: mockManifestResponse,
+                headers: {
+                    'cache-control': `public, max-age=${maxAge}`,
+                    'last-modified': lastModified,
+                },
+            }));
         });
 
         describe('when manifest is cached', () => {
             it('should return the cached manifest', () => {
-                cacheService.getManifest.mockImplementation(() => Promise.resolve(manifest1));
+                const result1 = {
+                    wasCached: true,
+                    ...manifest1,
+                };
+
+                cacheService.getManifest.mockImplementation(() => Promise.resolve(result1));
 
                 return destinyService.getManifest()
-                    .then(manifest => {
-                        expect(manifest).toEqual(manifest1);
+                    .then(result => {
+                        expect(result).toEqual(result1);
                         expect(cacheService.getManifest).toBeCalledTimes(1);
                         expect(cacheService.setManifest).not.toBeCalled();
                     });
@@ -137,12 +150,20 @@ describe('DestinyService', () => {
         });
 
         describe('when manifest is not cached', () => {
-            it('should return the latest manifest', () => destinyService.getManifest()
-                .then(manifest => {
-                    expect(manifest).toEqual(manifest1);
-                    expect(cacheService.getManifest).toBeCalledTimes(1);
-                    expect(cacheService.setManifest).toBeCalledTimes(1);
-                }));
+            it('should return the latest manifest', () => {
+                const result1 = {
+                    lastModified,
+                    manifest: manifest1,
+                    maxAge,
+                };
+
+                return destinyService.getManifest()
+                    .then(result => {
+                        expect(result).toEqual(result1);
+                        expect(cacheService.getManifest).toBeCalledTimes(1);
+                        expect(cacheService.setManifest).toBeCalledTimes(1);
+                    });
+            });
         });
     });
 });

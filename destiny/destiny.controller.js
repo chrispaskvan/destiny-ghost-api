@@ -27,9 +27,6 @@ class DestinyController {
 
     /**
      * Get the authorization URL for Bungie application.
-     *
-     * @param req
-     * @param res
      */
     async getAuthorizationUrl() {
         const state = this.constructor.#getRandomState();
@@ -41,9 +38,7 @@ class DestinyController {
     /**
      * Get the current user from Bungie.
      *
-     * @param req
-     * @param res
-     * @returns {Promise<void>}
+     * @returns {Promise}
      */
     async getCurrentUser(displayName, membershipType) {
         const currentUser = await this.users.getUserByDisplayName(displayName, membershipType);
@@ -55,9 +50,7 @@ class DestinyController {
     /**
      * Get a random selection of Grimoire Cards.
      *
-     * @param req
-     * @param res
-     * @returns {*}
+     * @returns {Promise}
      */
     async getGrimoireCards(numberOfCards) {
         return await this.world.getGrimoireCards(numberOfCards);
@@ -66,11 +59,10 @@ class DestinyController {
     /**
      * Get the current manifest definition from Bungie.
      *
-     * @param req
-     * @param res
+     * @param {boolean} skipCache
      */
-    async getManifest() {
-        return await this.destiny.getManifest();
+    async getManifest(skipCache) {
+        return await this.destiny.getManifest(skipCache);
     }
 
     /**

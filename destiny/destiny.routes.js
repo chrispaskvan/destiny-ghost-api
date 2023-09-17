@@ -5,6 +5,8 @@ import { StatusCodes } from 'http-status-codes';
 import cors from 'cors';
 import { Router } from 'express';
 import DestinyController from './destiny.controller';
+import authorizeUser from '../authorization/authorization.middleware';
+import getMaxAgeFromCacheControl from '../helpers/get-max-age-from-cache-control';
 
 /**
  * Destiny Routes
@@ -138,9 +140,32 @@ const routes = ({
      */
     destinyRouter.route('/manifest')
         .get((req, res, next) => {
-            destinyController.getManifest(req, res)
-                .then(manifest => {
-                    res.status(StatusCodes.OK).json(manifest);
+            const cacheControl = req.headers['cache-control'];
+            const skipCache = cacheControl && (getMaxAgeFromCacheControl(cacheControl) === 0
+                || cacheControl.split(',').includes('no-cache'));
+
+            res.locals.skipCache = skipCache;
+            if (skipCache) {
+                authorizeUser(req, res, next);
+            } else {
+                next();
+            }
+        }, (req, res, next) => {
+            destinyController.getManifest(res.locals.skipCache)
+                .then(result => {
+                    const {
+                        lastModified,
+                        manifest,
+                        maxAge,
+                        wasCached,
+                    } = result;
+
+                    res.set({
+                        'Last-Modified': lastModified,
+                        'Cache-Control': `max-age=${maxAge}`,
+                    });
+                    res.status(wasCached ? StatusCodes.NOT_MODIFIED : StatusCodes.OK)
+                        .json(manifest);
                 })
                 .catch(next);
         });

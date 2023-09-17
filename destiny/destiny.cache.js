@@ -34,11 +34,19 @@ class DestinyCache {
      * Get the cached Destiny Manifest.
      * @returns {Promise}
      */
-    async getManifest() {
+    async getManifest(manifestKey) {
         // eslint-disable-next-line no-underscore-dangle
-        const res = await this.client.get(this._manifestKey);
+        const res = await this.client.get(manifestKey ?? this._manifestKey);
+        const manifest = res ? JSON.parse(res) : undefined;
 
-        return res ? JSON.parse(res) : undefined;
+        if (manifest) {
+            // eslint-disable-next-line no-underscore-dangle
+            const ttl = await this.client.ttl(this._manifestKey);
+
+            return { maxAge: ttl, ...manifest };
+        }
+
+        return undefined;
     }
 
     /**
@@ -57,14 +65,18 @@ class DestinyCache {
      * @param manifest
      * @returns {Promise}
      */
-    async setManifest(manifest) {
+    async setManifest({
+        lastModified,
+        manifest,
+        maxAge,
+    }) {
         if (manifest && typeof manifest === 'object') {
             return await this.client.set(
                 // eslint-disable-next-line no-underscore-dangle
                 this._manifestKey,
-                JSON.stringify(manifest),
+                JSON.stringify({ lastModified, manifest }),
                 'EX',
-                this.constructor.secondsUntilDailyReset(),
+                maxAge,
             );
         }
 

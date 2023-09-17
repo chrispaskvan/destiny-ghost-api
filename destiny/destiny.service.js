@@ -183,7 +183,7 @@ class DestinyService {
         let manifest = await this.cacheService.getManifest();
 
         if (!skipCache && manifest) {
-            return manifest;
+            return { wasCached: true, ...manifest };
         }
 
         const options = {
@@ -192,13 +192,24 @@ class DestinyService {
             },
             url: `${servicePlatform}/Destiny/Manifest`,
         };
-        const responseBody = await get(options);
+        const {
+            data: responseBody,
+            headers,
+        } = await get(options, true);
+        const matches = headers['cache-control'].match(/max-age=(\d+)/);
+        const maxAge = matches ? parseInt(matches[1], 10) : 0;
 
         ({ Response: manifest } = responseBody);
 
-        this.cacheService.setManifest(manifest);
+        const result = {
+            lastModified: headers['last-modified'],
+            manifest,
+            maxAge,
+        };
 
-        return manifest;
+        await this.cacheService.setManifest(result);
+
+        return result;
     }
 
     /**

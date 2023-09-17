@@ -261,10 +261,6 @@ class TwilioController {
             return await this.getXur(user, responseCookies);
         }
 
-        if (message === 'top 10') {
-            return await this.getTop10(responseCookies);
-        }
-
         const searchTerm = body.Body.trim().toLowerCase();
         const items = await this.queryItem(searchTerm);
 

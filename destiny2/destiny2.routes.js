@@ -7,6 +7,7 @@ import { Router } from 'express';
 import AuthenticationMiddleware from '../authentication/authentication.middleware';
 import Destiny2Controller from './destiny2.controller';
 import authorizeUser from '../authorization/authorization.middleware';
+import getMaxAgeFromCacheControl from '../helpers/get-max-age-from-cache-control';
 
 import configuration from '../helpers/config';
 
@@ -118,9 +119,32 @@ const routes = ({
      */
     destiny2Router.route('/manifest')
         .get((req, res, next) => {
-            destiny2Controller.getManifest()
-                .then(manifest => {
-                    res.status(StatusCodes.OK).json(manifest);
+            const cacheControl = req.headers['cache-control'];
+            const skipCache = cacheControl && (getMaxAgeFromCacheControl(cacheControl) === 0
+                || cacheControl.split(',').includes('no-cache'));
+
+            res.locals.skipCache = skipCache;
+            if (skipCache) {
+                authorizeUser(req, res, next);
+            } else {
+                next();
+            }
+        }, (req, res, next) => {
+            destiny2Controller.getManifest(res.locals.skipCache)
+                .then(result => {
+                    const {
+                        lastModified,
+                        manifest,
+                        maxAge,
+                        wasCached,
+                    } = result;
+
+                    res.set({
+                        'Last-Modified': lastModified,
+                        'Cache-Control': `max-age=${maxAge}`,
+                    });
+                    res.status(wasCached ? StatusCodes.NOT_MODIFIED : StatusCodes.OK)
+                        .json(manifest);
                 })
                 .catch(next);
         });

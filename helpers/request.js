@@ -37,9 +37,9 @@ const axiosSingleton = (function singleton() {
 async function request(options) {
     try {
         const axiosInstance = axiosSingleton.getInstance();
-        const { data: responseBody } = await axiosInstance(options);
+        const { data, headers } = await axiosInstance(options);
 
-        return responseBody;
+        return { data, headers };
     } catch (err) {
         if (err.response) {
             const responseError = new ResponseError(err);
@@ -55,18 +55,22 @@ async function request(options) {
     }
 }
 
-async function get(options) {
-    return request({
+async function get(options, includeHeaders = false) {
+    const { data, headers } = await request({
         method: 'get',
         ...options,
     });
+
+    return includeHeaders ? { data, headers } : data;
 }
 
 async function post(options) {
-    return request({
+    const { data } = await request({
         method: 'post',
         ...options,
     });
+
+    return data;
 }
 
 export { get, post };
