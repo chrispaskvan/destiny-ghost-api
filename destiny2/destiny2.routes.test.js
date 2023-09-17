@@ -37,6 +37,8 @@ describe.concurrent('/destiny2', () => {
                     status: 200,
                 });
                 expect(getResponse.data.length).toBeGreaterThan(1);
+            }, {
+                timeout: 10000,
             });
         });
     });

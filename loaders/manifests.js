@@ -33,8 +33,8 @@ class Manifests {
      */
     async upsertManifests() {
         await Promise.allSettled([
-            this.constructor.#upsertManifest(this.destinyService, this.worldRepository),
-            this.constructor.#upsertManifest(this.destiny2Service, this.world2Repository),
+            Manifests.#upsertManifest(this.destinyService, this.worldRepository),
+            Manifests.#upsertManifest(this.destiny2Service, this.world2Repository),
         ]);
     }
 }

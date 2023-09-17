@@ -29,7 +29,7 @@ class DestinyController {
      * Get the authorization URL for Bungie application.
      */
     async getAuthorizationUrl() {
-        const state = this.constructor.#getRandomState();
+        const state = DestinyController.#getRandomState();
         const url = await this.destiny.getAuthorizationUrl(state);
 
         return { state, url };
