@@ -141,7 +141,7 @@ export default () => {
         destinyService,
         notificationService,
         userService,
-        worldRepository: world2,
+        worldRepository: world,
     });
     routes.use('/users', userRouter);
 

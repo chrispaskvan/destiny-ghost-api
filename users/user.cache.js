@@ -40,14 +40,14 @@ class UserCache {
         let promise2;
 
         if (phoneNumber) {
-            promise1 = this.#deleteCache(this.constructor.#getCacheKey(phoneNumber));
+            promise1 = this.#deleteCache(UserCache.#getCacheKey(phoneNumber));
         } else {
             promise1 = Promise.resolve();
         }
 
         if (displayName && membershipType) {
             // eslint-disable-next-line max-len
-            promise2 = this.#deleteCache(this.constructor.#getCacheKey(displayName, membershipType));
+            promise2 = this.#deleteCache(UserCache.#getCacheKey(displayName, membershipType));
         } else {
             promise2 = Promise.resolve();
         }
@@ -80,7 +80,7 @@ class UserCache {
      * @returns {Promise}
      */
     async getUser(...teeth) {
-        const key = this.constructor.#getCacheKey(...teeth);
+        const key = UserCache.#getCacheKey(...teeth);
 
         const user = await this.getCache(key);
         if (user) {
@@ -116,7 +116,7 @@ class UserCache {
             return Promise.reject(new Error('membershipType not found'));
         }
 
-        const key = this.constructor.#getCacheKey(displayName, membershipType);
+        const key = UserCache.#getCacheKey(displayName, membershipType);
         const promise1 = new Promise((resolve, reject) => {
             this.client.set(
                 key,

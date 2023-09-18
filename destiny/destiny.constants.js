@@ -5,7 +5,7 @@
 
 /**
  * @constant
- * @type {number}
- * @description Xur's Vendor Number
+ * @type {string}
+ * @description Postmaster Vendor Number
  */
-export const xurHash = 2190858386;
+export const postmasterHash = 2762206170;

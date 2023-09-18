@@ -131,15 +131,10 @@ class World2 extends World {
      * @returns {Promise}
      */
     getVendorIcon(vendorHash) {
-        return new Promise((resolve, reject) => {
-            try {
-                const [vendor] = this.vendors.filter(vendor1 => vendor1.hash === vendorHash);
+        const vendor1 = this.vendors.find(vendor => vendor.hash === vendorHash);
+        const icon = vendor1?.displayProperties?.icon;
 
-                resolve(`https://www.bungie.net${vendor.displayProperties.icon}`);
-            } catch (err) {
-                reject(err);
-            }
-        });
+        return icon ? Promise.resolve(`https://www.bungie.net${icon}`) : Promise.resolve(undefined);
     }
 }
 

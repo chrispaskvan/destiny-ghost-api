@@ -9,13 +9,7 @@ import isEqual from 'lodash/isEqual';
 import { applyPatch, createPatch } from 'rfc6902';
 import Postmaster from '../helpers/postmaster';
 import { getBlob, getCode } from '../helpers/tokens';
-
-/**
- * @constant
- * @type {string}
- * @description Postmaster Vendor Number
- */
-const postmasterHash = '2021251983';
+import { postmasterHash } from '../destiny/destiny.constants';
 
 /**
  * Time To Live for Tokens
@@ -141,7 +135,7 @@ class UserController {
             .getUserByEmailAddressToken(user.tokens.emailAddress);
 
         if (!registeredUser
-            || this.constructor.#getEpoch() > (registeredUser.membership.tokens.timeStamp + ttl)
+            || UserController.#getEpoch() > (registeredUser.membership.tokens.timeStamp + ttl)
             || !isEqual(user.tokens.phoneNumber, registeredUser.membership.tokens.code)) {
             return undefined;
         }
@@ -166,7 +160,7 @@ class UserController {
 
             const bungieUser = await this.destiny.getCurrentUser(accessToken);
 
-            return bungieUser ? this.constructor.#getUserResponse(bungieUser) : undefined;
+            return bungieUser ? UserController.#getUserResponse(bungieUser) : undefined;
         }
 
         return undefined;
@@ -231,13 +225,13 @@ class UserController {
         const bungieUser = await this.users.getUserByDisplayName(displayName, membershipType);
 
         // eslint-disable-next-line no-param-reassign
-        user.phoneNumber = this.constructor.#cleanPhoneNumber(user.phoneNumber);
+        user.phoneNumber = UserController.#cleanPhoneNumber(user.phoneNumber);
         Object.assign(user, bungieUser, {
             membership: {
                 tokens: {
                     blob: getBlob(),
                     code: getCode(),
-                    timeStamp: this.constructor.#getEpoch(),
+                    timeStamp: UserController.#getEpoch(),
                 },
             },
         });
@@ -334,7 +328,7 @@ class UserController {
 
         const userCopy = JSON.parse(JSON.stringify(user));
 
-        applyPatch(user, this.constructor.#scrubOperations(patches));
+        applyPatch(user, UserController.#scrubOperations(patches));
 
         const patch = createPatch(user, userCopy);
         const version = user.version || 1;
