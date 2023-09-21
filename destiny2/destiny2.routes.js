@@ -90,15 +90,17 @@ const routes = ({
                 .then(items => {
                     let first = true;
 
-                    res.setHeader('Content-Type', 'application/json');
-                    res.setHeader('Transfer-Encoding', 'chunked');
+                    res.writeHead(StatusCodes.OK, {
+                        'Content-Type': 'application/json',
+                        'Transfer-Encoding': 'chunked',
+                    });
 
                     items.forEach(value => {
                         res.write(first ? `[${JSON.stringify(value)}` : `,${JSON.stringify(value)}`);
                         first = false;
                     });
                     res.write(']');
-                    res.status(StatusCodes.OK).end();
+                    res.end();
                 })
                 .catch(next);
         });

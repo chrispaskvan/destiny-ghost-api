@@ -1,5 +1,6 @@
 import axios from 'axios';
 import nock from 'nock';
+import { StatusCodes } from 'http-status-codes';
 import {
     afterAll, afterEach, beforeAll, describe, expect, test, vi,
 } from 'vitest';
@@ -36,7 +37,7 @@ describe('/destiny', () => {
                 const getResponse = await axiosAPIClient.get(`/destiny/grimoireCards/${numberOfCards}`);
 
                 expect(getResponse).toMatchObject({
-                    status: 200,
+                    status: StatusCodes.OK,
                 });
                 expect(getResponse.data.length).toEqual(numberOfCards);
             });
