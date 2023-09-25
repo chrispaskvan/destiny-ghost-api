@@ -35,7 +35,7 @@
         "applicationinsights": "^2.7.3",
         "axios": "^1.5.0",
         "base64url": "^3.0.1",
-        "better-sqlite3": "^8.5.2",
+        "better-sqlite3": "^8.6.0",
         "body-parser": "^1.20.2",
         "compression": "^1.7.4",
         "connect-redis": "^7.1.0",
