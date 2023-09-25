@@ -30,14 +30,60 @@ beforeAll(async () => {
     nock.enableNetConnect(ipAddress);
 });
 
-/**
- * The intent of this test is to successfully parse objects from an array delivered by a JSON
- * stream. The test deliberately aborts before processing the entire stream in order to finish
- * before the default 5 second timeout.
- */
 describe.concurrent('/destiny2', () => {
     describe('GET /destiny2/inventory', () => {
-        describe('when requesting the inventory of items', () => {
+        describe('when requesting the inventory of items with pagination', () => {
+            test('should receive a response with an array of items, HATEOAS links, and pagination statistics', async () => {
+                const items = [];
+                const limit = 15;
+
+                async function* pageThrough(url) {
+                    async function* get(_url) {
+                        const res = await axiosAPIClient.get(_url);
+                        const page = res.data;
+
+                        yield page;
+
+                        if (res.data.links.next) {
+                            const { pathname, search } = new URL(res.data.links.next);
+
+                            yield* get(`${pathname}${search}`);
+                        }
+                    }
+
+                    yield* get(url);
+                }
+
+                async function* loadItems(url) {
+                    const result = pageThrough(url);
+
+                    // eslint-disable-next-line no-restricted-syntax
+                    for await (const page of result) {
+                        // eslint-disable-next-line no-restricted-syntax
+                        for (const item of page.data) {
+                            yield item;
+                        }
+                    }
+                }
+
+                // eslint-disable-next-line no-restricted-syntax
+                for await (const item of loadItems('/destiny2/inventory?page=1&size=11')) {
+                    items.push(item);
+                    if (items.length >= limit) {
+                        break;
+                    }
+                }
+
+                expect(items.length).toEqual(limit);
+            });
+        });
+
+        /**
+         * The intent of this test is to successfully parse objects from an array delivered by a
+         * JSON stream. The test deliberately exits before processing the entire stream in order to
+         * finish before the default 5 second timeout.
+         */
+        describe('when requesting the inventory of items without pagination', () => {
             test('should receive a response with an array of items', async () => {
                 const getResponse = await axiosAPIClient.get('/destiny2/inventory', {
                     responseType: 'stream',
