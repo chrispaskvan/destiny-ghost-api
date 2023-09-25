@@ -88,19 +88,43 @@ const routes = ({
         .get((req, res, next) => {
             destiny2Controller.getInventory()
                 .then(items => {
-                    let first = true;
+                    let page = parseInt(req.query.page, 10);
+                    let size = parseInt(req.query.size, 10);
 
-                    res.writeHead(StatusCodes.OK, {
-                        'Content-Type': 'application/json',
-                        'Transfer-Encoding': 'chunked',
-                    });
+                    if (Number.isNaN(page) && Number.isNaN(size)) {
+                        let first = true;
 
-                    items.forEach(value => {
-                        res.write(first ? `[${JSON.stringify(value)}` : `,${JSON.stringify(value)}`);
-                        first = false;
-                    });
-                    res.write(']');
-                    res.end();
+                        res.writeHead(StatusCodes.OK, {
+                            'Content-Type': 'application/json',
+                            'Transfer-Encoding': 'chunked',
+                        });
+
+                        items.forEach(value => {
+                            res.write(first ? `[${JSON.stringify(value)}` : `,${JSON.stringify(value)}`);
+                            first = false;
+                        });
+                        res.write(']');
+                        res.end();
+                    } else {
+                        if (Number.isNaN(page)) page = 1;
+                        if (Number.isNaN(size)) size = 11;
+
+                        const data = items.slice(0, size);
+                        const pages = Math.ceil(items.length / size);
+
+                        res.status(StatusCodes.OK).json({
+                            data,
+                            links: {
+                                next: page === pages ? undefined : `${process.env.PROTOCOL}://${process.env.DOMAIN}/destiny2/inventory?page=${page + 1}&size=${size}`,
+                            },
+                            page: {
+                                size,
+                                total: items.length,
+                                pages,
+                                number: page,
+                            },
+                        });
+                    }
                 })
                 .catch(next);
         });

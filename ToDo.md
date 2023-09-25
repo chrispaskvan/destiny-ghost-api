@@ -33,3 +33,7 @@ Include Last-Modified time in cache manifest object
 Return Time Stamp in Last-Modified header
 Allow Cache-Control: max-age=0 to bust cache by admin header
 CRON job to refresh manifest
+
+[Testing the dark scenarios of your Node.js application](https://practica.dev/blog/testing-the-dark-scenarios-of-your-nodejs-application/)
+[The EventSource interface is web content's interface to server-sent events.](https://developer.mozilla.org/en-US/docs/Web/API/EventSource)
+[Testing Automation, What are Pyramids and Diamonds?](https://ritesh-kapoor.medium.com/testing-automation-what-are-pyramids-and-diamonds-67494fec7c55)
