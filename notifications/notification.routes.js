@@ -34,12 +34,21 @@ const routes = ({
         worldRepository,
     });
 
+    notificationRouter.route('/claimChecks/:claimCheck')
+        .get((req, res, next) => authorizeUser(req, res, next), (req, res, next) => {
+            const { params: { claimCheck } } = req;
+
+            notificationController.getClaimCheck(claimCheck)
+                .then(() => res.status(200).end())
+                .catch(next);
+        });
+
     notificationRouter.route('/:subscription')
         .post((req, res, next) => authorizeUser(req, res, next), (req, res, next) => {
             const { params: { subscription } } = req;
 
             notificationController.create(subscription)
-                .then(() => res.status(200).end())
+                .then(({ claimCheck }) => res.status(200).json({ claimCheck }))
                 .catch(next);
         });
 
@@ -54,7 +63,7 @@ const routes = ({
             }
 
             notificationController.create(subscription, phoneNumber)
-                .then(() => res.status(200).end())
+                .then(({ claimCheck }) => res.status(200).json({ claimCheck }))
                 .catch(next);
         });
 
