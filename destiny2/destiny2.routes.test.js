@@ -32,6 +32,10 @@ beforeAll(async () => {
 
 describe.concurrent('/destiny2', () => {
     describe('GET /destiny2/inventory', () => {
+        /**
+         * The intent of this test is to use async iterators to load a complete set of results by
+         * fetching page after page.
+         */
         describe('when requesting the inventory of items with pagination', () => {
             test('should receive a response with an array of items, HATEOAS links, and pagination statistics', async () => {
                 const items = [];

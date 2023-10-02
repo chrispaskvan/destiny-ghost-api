@@ -1,7 +1,9 @@
 import publisher from '../helpers/publisher';
 import subscriber from '../helpers/subscriber';
+import NotificationError from './notification.error';
 import notificationTypes from './notification.types';
 import log from '../helpers/log';
+import throttle from '../helpers/throttle';
 
 /**
  * Controller class for Notification routes.
@@ -63,19 +65,19 @@ class NotificationController {
      */
     async create(subscription, phoneNumber) {
         if (phoneNumber) {
-            const user = this.users.getUserByPhoneNumber(phoneNumber);
+            const user = await this.users.getUserByPhoneNumber(phoneNumber);
 
             if (user && user.phoneNumber) {
                 return await this.publisher.sendNotification(user, subscription);
             }
+
+            throw new NotificationError('user not found');
         } else {
             const users = await this.users.getSubscribedUsers(subscription);
 
-            return Promise.all(users.map(user => this.publisher
-                .sendNotification(user, subscription)));
+            return throttle(users.map(user => this.publisher
+                .sendNotification(user, subscription)), 2, 500);
         }
-
-        return undefined;
     }
 }
 
