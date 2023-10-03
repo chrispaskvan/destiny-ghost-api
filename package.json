@@ -27,7 +27,7 @@
     },
     "dependencies": {
         "@azure/cosmos": "^3.17.3",
-        "@azure/service-bus": "^7.9.0",
+        "@azure/service-bus": "^7.9.1",
         "@godaddy/terminus": "^4.12.1",
         "@paralleldrive/cuid2": "^2.2.2",
         "@snyk/protect": "^1.1216.0",
