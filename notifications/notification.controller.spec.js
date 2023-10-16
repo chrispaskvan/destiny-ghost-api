@@ -2,20 +2,19 @@ import {
     beforeEach, describe, expect, it, vi,
 } from 'vitest';
 import Chance from 'chance';
+import publisher from '../helpers/publisher';
 import NotificationController from './notification.controller';
+
+vi.mock('../helpers/publisher');
 
 const chance = new Chance();
 const phoneNumber = chance.phone();
 const mockUser = {
     phoneNumber,
 };
-
 const authenticationService = {};
 const destinyService = {};
 const notificationService = {};
-const publisher = {
-    sendNotification: vi.fn(),
-};
 const userService = {
     getSubscribedUsers: vi.fn(),
 };

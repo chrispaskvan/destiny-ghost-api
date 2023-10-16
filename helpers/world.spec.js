@@ -3,7 +3,7 @@
  */
 import { existsSync } from 'fs';
 import {
-    beforeEach, describe, expect,
+    beforeAll, describe, expect,
 } from 'vitest';
 import World from './world';
 import itif from './itif';
@@ -12,7 +12,7 @@ import { postmasterHash } from '../destiny/destiny.constants';
 const directory = process.env.DESTINY_DATABASE_DIR;
 let world;
 
-beforeEach(() => {
+beforeAll(() => {
     world = new World({
         directory,
     });

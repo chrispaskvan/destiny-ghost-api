@@ -137,6 +137,9 @@ const routes = ({
      *      summary: Get details about the latest Destiny 2 manifest definition.
      *      tags:
      *        - Destiny 2
+     *      parameters:
+     *        - name: If-Modified-Since
+     *          in: head
      *      produces:
      *        - application/json
      *      responses:
@@ -159,17 +162,22 @@ const routes = ({
             destiny2Controller.getManifest(res.locals.skipCache)
                 .then(result => {
                     const {
-                        lastModified,
-                        manifest,
-                        maxAge,
-                        wasCached,
+                        data: {
+                            manifest,
+                        },
+                        meta: {
+                            lastModified,
+                            maxAge,
+                        },
                     } = result;
+                    const ifModifiedSince = new Date(req.headers['if-modified-since'] ?? null);
 
                     res.set({
                         'Last-Modified': lastModified,
                         'Cache-Control': `max-age=${maxAge}`,
                     });
-                    res.status(wasCached ? StatusCodes.NOT_MODIFIED : StatusCodes.OK)
+                    res.status(ifModifiedSince > new Date(lastModified)
+                        ? StatusCodes.NOT_MODIFIED : StatusCodes.OK)
                         .json(manifest);
                 })
                 .catch(next);
@@ -194,7 +202,7 @@ const routes = ({
     destiny2Router.route('/manifest')
         .post((req, res, next) => authorizeUser(req, res, next), (req, res, next) => {
             destiny2Controller.upsertManifest()
-                .then(manifest => {
+                .then(({ data: { manifest } }) => {
                     res.status(StatusCodes.OK).json(manifest);
                 })
                 .catch(next);

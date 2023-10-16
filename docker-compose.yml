@@ -1,0 +1,13 @@
+services:
+  redis:
+    image: 'redis:latest'
+    ports:
+      - '6379:6379'
+  web1:
+    restart: on-failure
+    build: ./
+    volumes:
+      - ${PWD}/settings:/destiny-ghost-api/settings
+      - ${PWD}/databases:/destiny-ghost-api/databases
+    ports:
+      - '1100:1100'

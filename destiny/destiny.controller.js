@@ -69,7 +69,7 @@ class DestinyController {
      * Insert or update the Destiny manifest if needed.
      */
     async upsertManifest() {
-        const manifest = await this.destiny.getManifest(true);
+        const { data: { manifest } } = await this.destiny.getManifest(true);
 
         return await this.world.updateManifest(manifest);
     }

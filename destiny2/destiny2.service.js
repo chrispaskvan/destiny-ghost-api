@@ -30,61 +30,10 @@ const servicePlatform = 'https://www.bungie.net/Platform';
  */
 class Destiny2Service extends DestinyService {
     /**
-     * Get the latest Destiny Manifest definition.
-     *
-     * @returns {Promise}
-     * @private
+     * @protected
+     * @type {string}
      */
-    async #getManifestFromBungie() {
-        const options = {
-            headers: {
-                'x-api-key': apiKey,
-            },
-            url: `${servicePlatform}/Destiny2/Manifest`,
-        };
-        const {
-            data: responseBody,
-            headers,
-        } = await get(options, true);
-        const matches = headers['cache-control'].match(/max-age=(\d+)/);
-        const maxAge = matches ? parseInt(matches[1], 10) : 0;
-
-        if (responseBody.ErrorCode === 1) {
-            const { Response: manifest } = responseBody;
-            const result = {
-                lastModified: headers['last-modified'],
-                manifest,
-                maxAge,
-            };
-
-            await this.cacheService.setManifest(result);
-
-            return result;
-        }
-
-        throw new DestinyError(
-            responseBody.ErrorCode || -1,
-            responseBody.Message || '',
-            responseBody.ErrorStatus || '',
-        );
-    }
-
-    /**
-     * Get the cached Destiny Manifest definition if available,
-     *   otherwise get the latest from Bungie.
-     *
-     * @param skipCache
-     * @returns {Promise}
-     */
-    async getManifest(skipCache) {
-        const manifest = await this.cacheService.getManifest();
-
-        if (!skipCache && manifest) {
-            return { wasCached: true, ...manifest };
-        }
-
-        return await this.#getManifestFromBungie();
-    }
+    _api = 'Destiny2';
 
     /**
      * Get user profile.

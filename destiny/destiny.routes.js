@@ -132,6 +132,9 @@ const routes = ({
      *      summary: Get details about the latest Destiny manifest definition.
      *      tags:
      *        - Destiny
+     *      parameters:
+     *        - name: If-Modified-Since
+     *          in: head
      *      produces:
      *        - application/json
      *      responses:
@@ -154,17 +157,22 @@ const routes = ({
             destinyController.getManifest(res.locals.skipCache)
                 .then(result => {
                     const {
-                        lastModified,
-                        manifest,
-                        maxAge,
-                        wasCached,
+                        data: {
+                            manifest,
+                        },
+                        meta: {
+                            lastModified,
+                            maxAge,
+                        },
                     } = result;
+                    const ifModifiedSince = new Date(req.headers['if-modified-since'] ?? null);
 
                     res.set({
                         'Last-Modified': lastModified,
                         'Cache-Control': `max-age=${maxAge}`,
                     });
-                    res.status(wasCached ? StatusCodes.NOT_MODIFIED : StatusCodes.OK)
+                    res.status(ifModifiedSince > new Date(lastModified)
+                        ? StatusCodes.NOT_MODIFIED : StatusCodes.OK)
                         .json(manifest);
                 })
                 .catch(next);
