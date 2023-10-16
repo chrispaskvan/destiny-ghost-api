@@ -11,9 +11,13 @@ import rateLimiterMiddleware from '../helpers/rate-limiter.middleware';
 import store from '../helpers/store';
 
 export default app => {
-    app.use(bodyParser.json());
+    app.use(bodyParser.json({
+        limit: '1mb',
+    }));
     app.use(bodyParser.urlencoded({
+        limit: '1mb',
         extended: true,
+        parameterLimit: 11,
     }));
     app.use(compression());
     app.use(cookieParser());
