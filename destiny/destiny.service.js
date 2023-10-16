@@ -32,11 +32,63 @@ const servicePlatform = 'https://www.bungie.net/platform';
  */
 class DestinyService {
     /**
+     * @protected
+     * @type {string}
+     */
+    _api = 'Destiny';
+
+    /**
      * @constructor
      * @param options
      */
     constructor(options = {}) {
         this.cacheService = options.cacheService;
+    }
+
+    /**
+     * Get the latest Destiny Manifest definition.
+     *
+     * @returns {Promise}
+     * @protected
+     */
+    async getManifestFromBungie() {
+        const options = {
+            headers: {
+                'x-api-key': apiKey,
+            },
+            // eslint-disable-next-line no-underscore-dangle
+            url: `${servicePlatform}/${this._api}/Manifest`,
+        };
+        const {
+            data: responseBody,
+            headers,
+        } = await get(options, true);
+        const lastModified = headers['last-modified'];
+        const matches = headers['cache-control'].match(/max-age=(\d+)/);
+        const maxAge = matches ? parseInt(matches[1], 10) : 0;
+
+        if (responseBody.ErrorCode === 1) {
+            const { Response: manifest } = responseBody;
+            const result = {
+                data: {
+                    manifest,
+                },
+                meta: {
+                    lastModified,
+                    maxAge,
+                },
+            };
+
+            await this.cacheService.setManifest({ lastModified, manifest, maxAge });
+
+            return result;
+        }
+
+        throw new DestinyError(
+            responseBody.ErrorCode || -1,
+            responseBody.Message || '',
+            responseBody.ErrorStatus || '',
+        );
     }
 
     /**
@@ -174,42 +226,21 @@ class DestinyService {
     }
 
     /**
-     * Get the lastest Destiny Manifest definition.
-     *
-     * @param skipCache
+     * Get the cached Destiny Manifest definition if available,
+     *   otherwise get the latest from Bungie.
+     * @param {boolean} skipCache
      * @returns {Promise}
      */
     async getManifest(skipCache) {
-        let manifest = await this.cacheService.getManifest();
+        const cache = await this.cacheService.getManifest();
 
-        if (!skipCache && manifest) {
-            return { wasCached: true, ...manifest };
+        if (!skipCache && cache) {
+            cache.meta.wasCached = true;
+
+            return cache;
         }
 
-        const options = {
-            headers: {
-                'x-api-key': apiKey,
-            },
-            url: `${servicePlatform}/Destiny/Manifest`,
-        };
-        const {
-            data: responseBody,
-            headers,
-        } = await get(options, true);
-        const matches = headers['cache-control'].match(/max-age=(\d+)/);
-        const maxAge = matches ? parseInt(matches[1], 10) : 0;
-
-        ({ Response: manifest } = responseBody);
-
-        const result = {
-            lastModified: headers['last-modified'],
-            manifest,
-            maxAge,
-        };
-
-        await this.cacheService.setManifest(result);
-
-        return result;
+        return await this.getManifestFromBungie();
     }
 
     /**

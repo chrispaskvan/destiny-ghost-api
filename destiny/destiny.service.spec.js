@@ -26,7 +26,7 @@ beforeEach(() => {
     destinyService = new DestinyService({ cacheService });
 });
 
-describe('DestinyService', () => {
+describe.concurrent('DestinyService', () => {
     beforeEach(() => {
         vi.resetAllMocks();
     });
@@ -134,8 +134,15 @@ describe('DestinyService', () => {
         describe('when manifest is cached', () => {
             it('should return the cached manifest', () => {
                 const result1 = {
-                    wasCached: true,
-                    ...manifest1,
+                    data: {
+                        manifest: manifest1,
+                    },
+                    meta: {
+                        lastModified,
+                        maxAge,
+                        wasCached: true,
+
+                    },
                 };
 
                 cacheService.getManifest.mockImplementation(() => Promise.resolve(result1));
@@ -152,14 +159,19 @@ describe('DestinyService', () => {
         describe('when manifest is not cached', () => {
             it('should return the latest manifest', () => {
                 const result1 = {
-                    lastModified,
-                    manifest: manifest1,
-                    maxAge,
+                    data: {
+                        manifest: manifest1,
+                    },
+                    meta: {
+                        lastModified,
+                        maxAge,
+                    },
                 };
 
                 return destinyService.getManifest()
                     .then(result => {
                         expect(result).toEqual(result1);
+                        expect(result.meta.wasCached).toBeFalsy();
                         expect(cacheService.getManifest).toBeCalledTimes(1);
                         expect(cacheService.setManifest).toBeCalledTimes(1);
                     });

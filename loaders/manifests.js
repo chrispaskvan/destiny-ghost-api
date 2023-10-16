@@ -20,7 +20,7 @@ class Manifests {
      * @private
      */
     static async #upsertManifest(destiny, world) {
-        const manifest = await destiny.getManifest(true);
+        const { data: { manifest } } = await destiny.getManifest(true);
 
         await world.updateManifest(manifest);
     }

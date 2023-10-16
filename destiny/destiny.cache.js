@@ -1,3 +1,6 @@
+import RedisErrors from 'redis-errors';
+import log from '../helpers/log';
+
 /**
  * Destiny Cache Class
  */
@@ -34,16 +37,29 @@ class DestinyCache {
      * Get the cached Destiny Manifest.
      * @returns {Promise}
      */
-    async getManifest(manifestKey) {
-        // eslint-disable-next-line no-underscore-dangle
-        const res = await this.client.get(manifestKey ?? this._manifestKey);
-        const manifest = res ? JSON.parse(res) : undefined;
+    // eslint-disable-next-line no-underscore-dangle
+    async getManifest(manifestKey = this._manifestKey) {
+        try {
+            const res = await this.client.get(manifestKey);
+            const { lastModified, manifest } = res ? JSON.parse(res) : {};
 
-        if (manifest) {
-            // eslint-disable-next-line no-underscore-dangle
-            const ttl = await this.client.ttl(this._manifestKey);
+            if (manifest) {
+                const ttl = await this.client.ttl(manifestKey);
 
-            return { maxAge: ttl, ...manifest };
+                return {
+                    data: {
+                        manifest,
+                    },
+                    meta: {
+                        lastModified,
+                        maxAge: ttl,
+                    },
+                };
+            }
+        } catch (err) {
+            if (!(err instanceof RedisErrors.RedisError)) throw err;
+
+            log.error(err);
         }
 
         return undefined;
@@ -55,9 +71,17 @@ class DestinyCache {
      * @returns {Promise}
      */
     async getVendor(vendorHash) {
-        const res = await this.client.get(vendorHash);
+        try {
+            const res = await this.client.get(vendorHash);
 
-        return res ? JSON.parse(res) : undefined;
+            return res ? JSON.parse(res) : undefined;
+        } catch (err) {
+            if (!(err instanceof RedisErrors.RedisError)) throw err;
+
+            log.error(err);
+        }
+
+        return undefined;
     }
 
     /**
@@ -71,13 +95,21 @@ class DestinyCache {
         maxAge,
     }) {
         if (manifest && typeof manifest === 'object') {
-            return await this.client.set(
-                // eslint-disable-next-line no-underscore-dangle
-                this._manifestKey,
-                JSON.stringify({ lastModified, manifest }),
-                'EX',
-                maxAge,
-            );
+            try {
+                return await this.client.set(
+                    // eslint-disable-next-line no-underscore-dangle
+                    this._manifestKey,
+                    JSON.stringify({ lastModified, manifest }),
+                    'EX',
+                    maxAge,
+                );
+            } catch (err) {
+                if (!(err instanceof RedisErrors.RedisError)) throw err;
+
+                log.error(err);
+
+                return 'Error';
+            }
         }
 
         throw new Error('Manifest object is required.');
@@ -94,12 +126,20 @@ class DestinyCache {
             throw new Error('Vendor hash number is required.');
         }
 
-        return await this.client.set(
-            hash,
-            JSON.stringify(vendor),
-            'EX',
-            this.constructor.secondsUntilDailyReset(),
-        );
+        try {
+            return await this.client.set(
+                hash,
+                JSON.stringify(vendor),
+                'EX',
+                this.constructor.secondsUntilDailyReset(),
+            );
+        } catch (err) {
+            if (!(err instanceof RedisErrors.RedisError)) throw err;
+
+            log.error(err);
+
+            return 'Error';
+        }
     }
 }
 

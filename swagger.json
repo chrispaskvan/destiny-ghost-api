@@ -68,6 +68,12 @@
         "tags": [
           "Destiny"
         ],
+        "parameters": [
+          {
+            "name": "If-Modified-Since",
+            "in": "head"
+          }
+        ],
         "produces": [
           "application/json"
         ],
@@ -132,6 +138,12 @@
         "summary": "Get details about the latest Destiny 2 manifest definition.",
         "tags": [
           "Destiny 2"
+        ],
+        "parameters": [
+          {
+            "name": "If-Modified-Since",
+            "in": "head"
+          }
         ],
         "produces": [
           "application/json"

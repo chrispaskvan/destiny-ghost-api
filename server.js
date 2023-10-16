@@ -65,7 +65,7 @@ const startServer = async () => {
             ]);
             insecureServer.close();
         },
-        logger: log.error,
+        logger: log.error.bind(log),
     });
 
     insecureConnection = insecureServer.listen(port, () => {

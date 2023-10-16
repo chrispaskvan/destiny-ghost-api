@@ -33,7 +33,7 @@ beforeEach(() => {
     destiny2Service = new Destiny2Service({ cacheService });
 });
 
-describe('Destiny2Service', () => {
+describe.concurrent('Destiny2Service', () => {
     beforeEach(() => {
         vi.resetAllMocks();
     });
@@ -50,9 +50,13 @@ describe('Destiny2Service', () => {
             it('should return the latest manifest', async () => {
                 const { Response: manifest1 } = mockManifestResponse;
                 const result1 = {
-                    lastModified,
-                    manifest: manifest1,
-                    maxAge,
+                    data: {
+                        manifest: manifest1,
+                    },
+                    meta: {
+                        lastModified,
+                        maxAge,
+                    },
                 };
 
                 get.mockImplementation(() => Promise.resolve({

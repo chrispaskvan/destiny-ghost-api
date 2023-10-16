@@ -9,12 +9,8 @@ const { redis } = configuration;
  * @description Client includes built-in reconnect strategy. {@link https://github.com/redis/ioredis#auto-reconnect}
  */
 const redisConfiguration = {
-    host: redis.host,
-    port: redis.port,
-    password: redis.key,
-    tls: {
-        servername: redis.host,
-    },
+    maxRetriesPerRequest: 0,
+    ...redis,
 };
 const client = new Redis(redisConfiguration);
 
