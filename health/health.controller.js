@@ -126,7 +126,7 @@ class HealthController {
                 itemName = notAvailable,
                 itemTypeAndTierDisplayName,
             } = {},
-        ] = await this.world2.getItemByName('The Hothead');
+        ] = await this.world2.getItemByName('Heliocentric QSc');
 
         return `${itemName} ${itemTypeAndTierDisplayName}`;
     }

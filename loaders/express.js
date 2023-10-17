@@ -17,7 +17,7 @@ export default app => {
     app.use(bodyParser.urlencoded({
         limit: '1mb',
         extended: true,
-        parameterLimit: 11,
+        parameterLimit: 51,
     }));
     app.use(compression());
     app.use(cookieParser());

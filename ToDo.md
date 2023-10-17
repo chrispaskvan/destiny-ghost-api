@@ -29,9 +29,6 @@ User Interface
 Docker Compose file for CI Testing
 Improve Use of Application Insights
 
-Include Last-Modified time in cache manifest object
-Return Time Stamp in Last-Modified header
-Allow Cache-Control: max-age=0 to bust cache by admin header
 CRON job to refresh manifest
 
 [Testing the dark scenarios of your Node.js application](https://practica.dev/blog/testing-the-dark-scenarios-of-your-nodejs-application/)

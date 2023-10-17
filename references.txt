@@ -42,3 +42,6 @@ https://docs.microsoft.com/en-us/azure/application-insights/app-insights-monitor
 https://bungie-net.github.io/
 http://goldbergyoni.com/checklist-best-practices-of-node-js-error-handling/
 https://www.diycode.cc/projects/trentm/node-bunyan
+
+JavaScript Memory Stats Definitions
+https://docs.nodesource.com/nsolid/3.0/docs#javascript-memory-stats
