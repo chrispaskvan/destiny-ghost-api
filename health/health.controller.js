@@ -36,15 +36,15 @@ class HealthController {
     }
 
     async getDestinyManifestVersion() {
-        const { version } = await this.destinyService.getManifest();
+        const { data: { manifest } } = await this.destinyService.getManifest();
 
-        return version;
+        return manifest?.version;
     }
 
     async getDestiny2ManifestVersion() {
-        const { version } = await this.destiny2Service.getManifest();
+        const { data: { manifest } } = await this.destiny2Service.getManifest();
 
-        return version;
+        return manifest?.version;
     }
 
     async getDocumentCount() {
