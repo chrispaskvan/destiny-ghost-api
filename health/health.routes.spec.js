@@ -70,8 +70,12 @@ describe('HealthRouter', () => {
                     url: '/',
                 });
 
-                destinyService.getManifest = vi.fn().mockResolvedValue(manifest);
-                destiny2Service.getManifest = vi.fn().mockResolvedValue(manifest2);
+                destinyService.getManifest = vi.fn().mockResolvedValue({ data: { manifest } });
+                destiny2Service.getManifest = vi.fn().mockResolvedValue({
+                    data: {
+                        manifest: manifest2,
+                    },
+                });
                 documents.getDocuments = vi.fn().mockResolvedValue([2]);
 
                 res.on('end', () => {

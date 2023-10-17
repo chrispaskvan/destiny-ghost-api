@@ -60,8 +60,12 @@ describe('HealthController', () => {
             });
 
             it('should return a positive response', async () => {
-                destinyService.getManifest = vi.fn().mockResolvedValue(manifest);
-                destiny2Service.getManifest = vi.fn().mockResolvedValue(manifest2);
+                destinyService.getManifest = vi.fn().mockResolvedValue({ data: { manifest } });
+                destiny2Service.getManifest = vi.fn().mockResolvedValue({
+                    data: {
+                        manifest: manifest2,
+                    },
+                });
                 documents.getDocuments = vi.fn().mockResolvedValue([2]);
                 store.del = vi.fn().mockImplementation((key, callback) => callback(undefined, 1));
                 store.get = vi.fn().mockImplementation((key, callback) => callback(undefined, 'Thorn'));
