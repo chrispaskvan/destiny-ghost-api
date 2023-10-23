@@ -48,7 +48,7 @@ describe('/destiny', () => {
                 });
                 expect(getResponse.data.length).toEqual(numberOfCards);
                 expect(getResponse.headers['x-request-id']).toEqual(requestId);
-                expect(getResponse.headers['x-request-id']).toBeDefined();
+                expect(getResponse.headers['x-trace-id']).toBeDefined();
             });
         });
     });
