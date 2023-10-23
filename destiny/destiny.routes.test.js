@@ -33,13 +33,22 @@ describe('/destiny', () => {
         describe('when requesting X number of grimoire cards', () => {
             test('should receive a response with X number of grimoire cards', async () => {
                 const numberOfCards = 2;
+                const requestId = 'Incandescent';
 
-                const getResponse = await axiosAPIClient.get(`/destiny/grimoireCards/${numberOfCards}`);
+                const getResponse = await axiosAPIClient({
+                    method: 'get',
+                    url: `/destiny/grimoireCards/${numberOfCards}`,
+                    headers: {
+                        'X-Request-Id': requestId,
+                    },
+                });
 
                 expect(getResponse).toMatchObject({
                     status: StatusCodes.OK,
                 });
                 expect(getResponse.data.length).toEqual(numberOfCards);
+                expect(getResponse.headers['x-request-id']).toEqual(requestId);
+                expect(getResponse.headers['x-request-id']).toBeDefined();
             });
         });
     });
