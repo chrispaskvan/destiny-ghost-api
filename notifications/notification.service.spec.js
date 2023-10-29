@@ -1,14 +1,12 @@
 import {
-    beforeEach, describe, expect, it,
+    beforeEach, describe, expect, it, vi,
 } from 'vitest';
 import mockTwilioCreateMessageResponse from '../mocks/twilioCreateMessageResponse.json';
 import Notifications from './notification.service';
 
 const client = {
     messages: {
-        create: (message, callback) => {
-            callback(null, mockTwilioCreateMessageResponse);
-        },
+        create: vi.fn(() => Promise.resolve(mockTwilioCreateMessageResponse)),
     },
 };
 
@@ -19,12 +17,11 @@ beforeEach(() => {
 });
 
 describe('Notifications', () => {
-    it('sendMessage', () => {
-        const { sid, dateCreated, status } = mockTwilioCreateMessageResponse;
+    it('sendMessage', async () => {
+        const { sid, dateCreated, status } = await notificationService.sendMessage('Aegis of the Reef', '+11111111111');
 
-        return notificationService.sendMessage('Aegis of the Reef', '+11111111111')
-            .then(response => {
-                expect(response).toEqual({ sid, dateCreated, status });
-            });
+        expect(sid).toEqual(mockTwilioCreateMessageResponse.sid);
+        expect(dateCreated).toEqual(mockTwilioCreateMessageResponse.dateCreated);
+        expect(status).toEqual(mockTwilioCreateMessageResponse.status);
     });
 });

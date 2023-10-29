@@ -18,6 +18,12 @@ import World from './world';
  * World2 Repository
  */
 class World2 extends World {
+    /**
+     * Weapon Category
+     * @private
+     */
+    #weaponCategory;
+
     constructor(options = {}) {
         super(options);
 
@@ -54,6 +60,14 @@ class World2 extends World {
             this.loreDefinitions = loreDefinitions.map(({ json: lore }) => JSON.parse(lore));
             this.vendors = vendors.map(({ json: vendor }) => JSON.parse(vendor));
         }
+    }
+
+    get weaponCategory() {
+        if (!this.#weaponCategory) {
+            this.#weaponCategory = this.categories.find(category => category?.displayProperties?.name === 'Weapon').hash;
+        }
+
+        return this.#weaponCategory;
     }
 
     /**

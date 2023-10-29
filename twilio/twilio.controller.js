@@ -10,13 +10,7 @@ import sortBy from 'lodash/sortBy';
 import ClaimCheck from '../helpers/claim-check';
 import getShortUrl from '../helpers/bitly';
 import log from '../helpers/log';
-
-/**
- * Maximum number of characters Twilio supports in an SMS message.
- * {@link https://www.twilio.com/docs/glossary/what-sms-character-limit}
- * @type {number}
- */
-const MAX_SMS_MESSAGE_LENGTH = 160;
+import { MAX_SMS_MESSAGE_LENGTH } from './twilio.constants';
 
 /**
  * Twilio Controller
@@ -158,12 +152,14 @@ class TwilioController {
                 const itemHashes = await this.destiny
                     .getXur(membershipId, membershipType, characters[0].characterId, accessToken);
                 const items = await Promise.all(itemHashes
-                    .map(itemHash1 => this.world.getItemByHash(itemHash1)));
-                const result = items.reduce((memo, { displayProperties }) => (`${memo + displayProperties.name}\n`), ' ').trim();
+                    .map(itemHash => this.world.getItemByHash(itemHash)));
+                const weapons = items
+                    .filter(({ itemCategoryHashes }) => itemCategoryHashes.includes(this.world.weaponCategory)); // eslint-disable-line max-len
+                const result = weapons.reduce((memo, { displayProperties }) => (`${memo + displayProperties.name}\n`), ' ').trim();
 
                 return {
                     cookies: { ...cookies, itemHash: undefined },
-                    message: result.substr(0, MAX_SMS_MESSAGE_LENGTH),
+                    message: result.substring(0, MAX_SMS_MESSAGE_LENGTH),
                 };
             }
 
@@ -175,7 +171,7 @@ class TwilioController {
             if (err.name === 'DestinyError') {
                 return {
                     cookies,
-                    message: err.message.substr(0, MAX_SMS_MESSAGE_LENGTH),
+                    message: err.message.substring(0, MAX_SMS_MESSAGE_LENGTH),
                 };
             }
 
@@ -278,7 +274,7 @@ class TwilioController {
 
             return {
                 cookies: responseCookies,
-                message: `${items[0].itemName} ${items[0].itemCategory}`.substr(0, MAX_SMS_MESSAGE_LENGTH),
+                message: `${items[0].itemName} ${items[0].itemCategory}`.substring(0, MAX_SMS_MESSAGE_LENGTH),
                 media: user.type === 'landline' ? undefined : items[0].icon,
             };
         }
@@ -290,7 +286,7 @@ class TwilioController {
 
             return {
                 cookies: { itemHash: undefined, ...responseCookies },
-                message: result.substr(0, MAX_SMS_MESSAGE_LENGTH),
+                message: result.substring(0, MAX_SMS_MESSAGE_LENGTH),
             };
         }
         }
