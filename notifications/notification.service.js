@@ -23,12 +23,18 @@ class Notifications {
      * @param mediaUrl {string}
      * @returns {*}
      */
-    sendMessage(body, to, mediaUrl) {
+    sendMessage(body, to, mediaUrl, {
+        claimCheckNumber,
+        notificationType,
+    } = {}) {
+        const query = claimCheckNumber && notificationType
+            ? `?claim-check-number=${claimCheckNumber}&notification-type=${notificationType}`
+            : '';
         const message = {
             to,
             from: configuration.twilio.phoneNumber,
             body,
-            statusCallback: `${process.env.PROTOCOL}://${process.env.DOMAIN}/twilio/destiny/s`,
+            statusCallback: `${process.env.PROTOCOL}://${process.env.DOMAIN}/twilio/destiny/s${query}`,
         };
 
         if (mediaUrl) {

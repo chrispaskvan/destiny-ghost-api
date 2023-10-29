@@ -87,8 +87,11 @@ const routes = ({
             const header = req.headers['x-twilio-signature'];
             const {
                 body,
+                query = {},
                 originalUrl,
             } = req;
+            const claimCheck = query['claim-check-number'];
+            const notificationType = query['notification-type'];
 
             if (!validateRequest(authToken, header, `${process.env.PROTOCOL}://${process.env.DOMAIN}${originalUrl}`, body)) {
                 res.writeHead(403);
@@ -96,7 +99,11 @@ const routes = ({
                 return res.end();
             }
 
-            return twilioController.statusCallback(body)
+            return twilioController.statusCallback({
+                ...body,
+                ...(claimCheck && { ClaimCheck: claimCheck }),
+                ...(notificationType && { NotificationType: notificationType }),
+            })
                 .then(() => {
                     const twiml = new MessagingResponse();
 

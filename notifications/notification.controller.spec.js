@@ -44,9 +44,10 @@ describe('NotificationController', () => {
                     new Array(numberOfSubscribedUsers).fill(mockUser),
                 ));
 
-                const results = await notificationController.create('some-subscription');
+                const claimCheck = await notificationController.create('some-subscription');
 
-                expect(results.length).toEqual(numberOfSubscribedUsers);
+                expect(claimCheck).toBeDefined();
+                expect(publisher.sendNotification).toBeCalledTimes(numberOfSubscribedUsers);
             });
         });
     });

@@ -20,7 +20,6 @@ class UserCache {
      * @returns {Promise}
      * @private
      */
-    // eslint-disable-next-line class-methods-use-this
     #deleteCache(key) {
         return new Promise((resolve, reject) => {
             this.client.del(
@@ -61,7 +60,6 @@ class UserCache {
      * @returns {Promise}
      * @private
      */
-    // eslint-disable-next-line class-methods-use-this
     getCache(key) {
         return new Promise((resolve, reject) => {
             this.client.get(key, (err, res) => {

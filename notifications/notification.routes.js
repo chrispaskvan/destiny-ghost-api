@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { StatusCodes } from 'http-status-codes';
 import notificationTypes from './notification.types';
 import NotificationController from './notification.controller';
 import authorizeUser from '../authorization/authorization.middleware';
@@ -36,10 +37,16 @@ const routes = ({
 
     notificationRouter.route('/claimChecks/:claimCheck')
         .get((req, res, next) => authorizeUser(req, res, next), (req, res, next) => {
-            const { params: { claimCheck } } = req;
+            const { params: { claimCheck: number } } = req;
 
-            notificationController.getClaimCheck(claimCheck)
-                .then(() => res.status(200).end())
+            notificationController.getClaimCheck(number)
+                .then(claimCheck => {
+                    if (claimCheck) {
+                        res.status(StatusCodes.OK).json(claimCheck);
+                    } else {
+                        res.status(StatusCodes.NOT_FOUND).end();
+                    }
+                })
                 .catch(next);
         });
 
@@ -48,7 +55,13 @@ const routes = ({
             const { params: { subscription } } = req;
 
             notificationController.create(subscription)
-                .then(({ claimCheck }) => res.status(200).json({ claimCheck }))
+                .then(claimCheck => {
+                    const headers = {
+                        'Destiny-Ghost-Postmaster': claimCheck,
+                    };
+
+                    res.set(headers).status(StatusCodes.ACCEPTED).end();
+                })
                 .catch(next);
         });
 
@@ -57,13 +70,19 @@ const routes = ({
             const { params: { subscription, phoneNumber } } = req;
 
             if (!Object.keys(notificationTypes).find(key => key === subscription)) {
-                res.status(404).json('That subscription is not recognized.');
+                res.status(StatusCodes.NOT_FOUND).json('That subscription is not recognized.');
 
                 return;
             }
 
             notificationController.create(subscription, phoneNumber)
-                .then(({ claimCheck }) => res.status(200).json({ claimCheck }))
+                .then(claimCheck => {
+                    const headers = {
+                        'Destiny-Ghost-Postmaster': claimCheck,
+                    };
+
+                    res.set(headers).status(StatusCodes.ACCEPTED).end();
+                })
                 .catch(next);
         });
 
