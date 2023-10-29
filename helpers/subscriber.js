@@ -57,15 +57,26 @@ class Subscriber {
 
         // function to handle messages
         const myMessageHandler = async messageReceived => {
-            const { body, applicationProperties: { notificationType, traceId } } = messageReceived;
+            const {
+                body,
+                applicationProperties: {
+                    claimCheckNumber,
+                    notificationType,
+                    traceId,
+                },
+            } = messageReceived;
             const user = JSON.parse(body);
 
             log.info({
+                claimCheckNumber,
                 notificationType,
                 traceId,
                 ...user,
             }, 'Sending Message');
-            callback(user, notificationType);
+            callback(user, {
+                claimCheckNumber,
+                notificationType,
+            });
         };
 
         // function to handle any errors

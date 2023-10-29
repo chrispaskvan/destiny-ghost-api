@@ -159,8 +159,7 @@ class DestinyService {
      * @param membershipType
      * @returns {Promise}
      */
-    // eslint-disable-next-line class-methods-use-this
-    async getCharacters(membershipId, membershipType) {
+    async getCharacters(membershipId, membershipType) { // eslint-disable-line class-methods-use-this, max-len
         const options = {
             headers: {
                 'x-api-key': apiKey,

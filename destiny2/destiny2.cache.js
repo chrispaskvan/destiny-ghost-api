@@ -16,8 +16,7 @@ class Destiny2Cache extends DestinyCache {
      * Get the cached list of characters for the user.
      * @param {*} membershipId
      */
-    // eslint-disable-next-line class-methods-use-this
-    async getCharacters(membershipId) {
+    async getCharacters(membershipId) { // eslint-disable-line class-methods-use-this
         const res = await cache.get(membershipId);
 
         return res ? JSON.parse(res) : undefined;
@@ -28,8 +27,7 @@ class Destiny2Cache extends DestinyCache {
      * @param {*} membershipId
      * @param {*} characters
      */
-    // eslint-disable-next-line class-methods-use-this
-    async setCharacters(membershipId, characters) {
+    async setCharacters(membershipId, characters) { // eslint-disable-line class-methods-use-this
         if (!(membershipId && typeof membershipId === 'string')) {
             throw new Error('membershipId is a required string.');
         }

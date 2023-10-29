@@ -7,6 +7,7 @@
 import groupBy from 'lodash/groupBy';
 import sortBy from 'lodash/sortBy';
 
+import ClaimCheck from '../helpers/claim-check';
 import getShortUrl from '../helpers/bitly';
 import log from '../helpers/log';
 
@@ -301,11 +302,18 @@ class TwilioController {
      * @param res
      */
     async statusCallback(message) {
-        const { To: phoneNumber } = message;
+        const {
+            ClaimCheck: claimCheck,
+            MessageStatus: status,
+            To: phoneNumber,
+        } = message;
         const user = await this.users.getUserByPhoneNumber(phoneNumber);
 
         if (user) {
             await this.users.addUserMessage(message);
+            if (claimCheck) {
+                await ClaimCheck.updatePhoneNumber(claimCheck, phoneNumber, status);
+            }
         }
     }
 }

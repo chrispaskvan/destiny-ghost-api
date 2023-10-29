@@ -6,11 +6,19 @@
  * @author Chris Paskvan
  * @requires azure
  */
+// eslint-disable-next-line max-classes-per-file
 import { ServiceBusAdministrationClient, ServiceBusClient } from '@azure/service-bus';
 import configuration from './config';
 import context from './async-context';
 
 const { serviceBus: { connectionString, queueName } } = configuration;
+
+class PublisherError extends Error {
+    constructor(message) {
+        super(message);
+        this.name = 'PublisherError';
+    }
+}
 
 /**
  * @class Message Publisher
@@ -53,7 +61,14 @@ class Publisher {
      * Missing Notification Type Error
      */
     static throwIfMissingNotificationType() {
-        throw new Error('notification type is required');
+        throw new PublisherError('notification type is required');
+    }
+
+    /**
+     * Missing Claim Check Number Error
+     */
+    static throwIfMissingClaimCheckNumber() {
+        throw new PublisherError('claim check number is required');
     }
 
     /**
@@ -80,12 +95,16 @@ class Publisher {
      */
     async sendNotification(
         user,
-        notificationType = this.constructor.throwIfMissingNotificationType(),
+        {
+            notificationType = this.constructor.throwIfMissingNotificationType(),
+            claimCheckNumber = this.constructor.throwIfMissingClaimCheckNumber(),
+        },
     ) {
         const { traceId } = context.getStore()?.get('logger')?.bindings() || {};
         const message = {
             body: JSON.stringify(user),
             applicationProperties: {
+                claimCheckNumber,
                 notificationType,
                 traceId,
             },

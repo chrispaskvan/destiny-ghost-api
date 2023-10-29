@@ -1,7 +1,7 @@
 /**
  * User Authorization Middleware
  */
-import { HttpStatusCode } from 'axios';
+import { StatusCodes } from 'http-status-codes';
 import configuration from '../helpers/config';
 
 /**
@@ -29,7 +29,7 @@ function authorizeUser(req, res, next) {
     const { headers } = req;
 
     if (!authorized(headers)) {
-        res.writeHead(HttpStatusCode.Forbidden);
+        res.writeHead(StatusCodes.FORBIDDEN);
         res.end();
 
         return;
