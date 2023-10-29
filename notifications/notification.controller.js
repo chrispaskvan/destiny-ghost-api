@@ -48,7 +48,9 @@ class NotificationController {
                     );
                     const items = await Promise.all(itemHashes
                         .map(itemHash => this.world.getItemByHash(itemHash)));
-                    const message = items.map(({ displayProperties: { name } }) => name).join('\n');
+                    const message = items
+                        .filter(({ itemCategoryHashes }) => itemCategoryHashes.includes(this.world.weaponCategory)) // eslint-disable-line max-len
+                        .map(({ displayProperties: { name } }) => name).join('\n');
                     // eslint-disable-next-line max-len
                     const { status } = await this.notifications.sendMessage(message, phoneNumber, null, {
                         claimCheckNumber,

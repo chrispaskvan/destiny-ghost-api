@@ -8,6 +8,7 @@
  * recording the message, and updating the message status.
  */
 import configuration from '../helpers/config';
+import { MAX_SMS_MESSAGE_LENGTH } from '../twilio/twilio.constants';
 
 /**
  * Notifications Class
@@ -23,7 +24,7 @@ class Notifications {
      * @param mediaUrl {string}
      * @returns {*}
      */
-    sendMessage(body, to, mediaUrl, {
+    async sendMessage(body, to, mediaUrl, {
         claimCheckNumber,
         notificationType,
     } = {}) {
@@ -33,7 +34,7 @@ class Notifications {
         const message = {
             to,
             from: configuration.twilio.phoneNumber,
-            body,
+            body: body.substring(0, MAX_SMS_MESSAGE_LENGTH),
             statusCallback: `${process.env.PROTOCOL}://${process.env.DOMAIN}/twilio/destiny/s${query}`,
         };
 
@@ -41,15 +42,7 @@ class Notifications {
             message.mediaUrl = mediaUrl;
         }
 
-        return new Promise((resolve, reject) => {
-            this.client.messages.create(message, (err, { sid, dateCreated, status }) => {
-                if (err) {
-                    reject(err);
-                }
-
-                resolve({ sid, dateCreated, status });
-            });
-        });
+        return await this.client.messages.create(message);
     }
 }
 
