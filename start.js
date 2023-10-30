@@ -1,4 +1,5 @@
 import { startServer } from './server';
+import { startServer as grpcStart } from './grpc';
 
 function exitOnError(err) {
     // eslint-disable-next-line no-console
@@ -8,6 +9,7 @@ function exitOnError(err) {
 
 async function start() {
     await startServer();
+    await grpcStart();
 }
 
 process.on('unhandledRejection', reason => {
