@@ -85,7 +85,7 @@ const routes = ({
      *          description: Returns the complete Destiny 2 item inventory.
      */
     destiny2Router.route('/inventory')
-        .get((req, res, next) => {
+        .get((req, res, next) => authorizeUser(req, res, next), (req, res, next) => {
             destiny2Controller.getInventory()
                 .then(items => {
                     let page = parseInt(req.query.page, 10);

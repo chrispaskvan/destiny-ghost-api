@@ -7,6 +7,7 @@ import {
     afterAll, afterEach, beforeAll, describe, expect, test, vi,
 } from 'vitest';
 import { startServer, stopServer } from '../server';
+import configuration from '../helpers/config';
 
 vi.mock('../helpers/subscriber');
 
@@ -43,7 +44,9 @@ describe.concurrent('/destiny2', () => {
 
                 async function* pageThrough(url) {
                     async function* get(_url) {
-                        const res = await axiosAPIClient.get(_url);
+                        const res = await axiosAPIClient.get(_url, {
+                            headers: configuration.notificationHeaders,
+                        });
                         const page = res.data;
 
                         yield page;
@@ -90,6 +93,7 @@ describe.concurrent('/destiny2', () => {
         describe('when requesting the inventory of items without pagination', () => {
             test('should receive a response with an array of items', async () => {
                 const getResponse = await axiosAPIClient.get('/destiny2/inventory', {
+                    headers: configuration.notificationHeaders,
                     responseType: 'stream',
                 });
                 const stream = getResponse.data;

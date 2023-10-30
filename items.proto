@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+service ItemService {
+    rpc GetAll (Empty) returns (ItemList) {}
+}
+
+message Empty {}
+
+message Item {
+    message DisplayProperties {
+        string description = 1;
+        string name = 2;
+        string icon = 3;
+        bool hasIcon = 4;
+    }
+    DisplayProperties displayProperties = 1;
+    string screenshot = 2;
+    string itemTypeDisplayName = 3;
+    string flavorText = 4;
+    string itemTypeAndTierDisplayName = 5;
+    message Inventory {
+        int32 tierTypeHash = 1;
+        string tierTypeName = 2;
+    }
+    Inventory inventory = 6;
+    repeated int32 itemCategoryHashes = 7;
+    int32 specialItemType = 8;
+    int32 itemType = 9;
+    int32 itemSubType = 10;
+    int32 classType = 11;
+    repeated int32 damageTypeHashes = 12;
+    repeated int32 damageTypes = 13;
+    int32 defaultDamageType = 14;
+    int32 defaultDamageTypeHash = 15;
+    repeated string traitIds = 16;
+    repeated int32 traitHashes = 17;
+    int32 hash = 18;
+}
+
+message ItemList {
+    repeated Item items = 1;
+}
