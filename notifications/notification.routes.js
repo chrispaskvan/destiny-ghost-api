@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { StatusCodes } from 'http-status-codes';
+import { getIdempotencyKey, setIdempotencyKey } from '../helpers/idempotency-keys';
 import notificationTypes from './notification.types';
 import NotificationController from './notification.controller';
 import authorizeUser from '../authorization/authorization.middleware';
@@ -51,18 +52,31 @@ const routes = ({
         });
 
     notificationRouter.route('/:subscription')
-        .post((req, res, next) => authorizeUser(req, res, next), (req, res, next) => {
-            const { params: { subscription } } = req;
+        .post((req, res, next) => authorizeUser(req, res, next), async (req, res, next) => {
+            try {
+                const { params: { subscription } } = req;
+                const idempotencyKey = req.headers['idempotency-key'];
 
-            notificationController.create(subscription)
-                .then(claimCheck => {
+                if (idempotencyKey) {
+                    let claimCheck = await getIdempotencyKey(idempotencyKey);
+
+                    if (!claimCheck) {
+                        claimCheck = await notificationController
+                            .create(subscription, null);
+                        await setIdempotencyKey(idempotencyKey, claimCheck);
+                    }
+
                     const headers = {
                         'Destiny-Ghost-Postmaster': claimCheck,
                     };
 
                     res.set(headers).status(StatusCodes.ACCEPTED).end();
-                })
-                .catch(next);
+                } else {
+                    res.status(StatusCodes.BAD_REQUEST).end();
+                }
+            } catch (err) {
+                next(err);
+            }
         });
 
     notificationRouter.route('/:subscription/:phoneNumber')
