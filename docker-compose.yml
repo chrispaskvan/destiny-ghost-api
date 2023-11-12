@@ -3,11 +3,28 @@ services:
     image: 'redis:latest'
     ports:
       - '6379:6379'
-  web1:
-    restart: on-failure
+  api1:
     build: ./
+    hostname: api1
+    ports:
+      - '81:1100'
+    restart: on-failure
     volumes:
       - ${PWD}/settings:/destiny-ghost-api/settings
       - ${PWD}/databases:/destiny-ghost-api/databases
+  api2:
+    build: ./
+    hostname: api2
     ports:
-      - '1100:1100'
+      - '82:1100'
+    restart: on-failure
+    volumes:
+      - ${PWD}/settings:/destiny-ghost-api/settings
+      - ${PWD}/databases:/destiny-ghost-api/databases
+  nginx:
+    build: ./nginx
+    ports:
+    - '80:80'
+    depends_on:
+    - api1
+    - api2
