@@ -15,13 +15,17 @@ import configuration from '../helpers/config';
  * @param user
  * @private
  */
-function signIn(req, res, user) {
-    req.session.displayName = user.displayName;
-    req.session.membershipType = user.membershipType;
-    req.session.state = undefined;
+function signIn(req, res, user, next) {
+    req.session.regenerate(err => {
+        if (err) next(err);
 
-    return res.status(StatusCodes.OK)
-        .json({ displayName: user.displayName });
+        req.session.displayName = user.displayName;
+        req.session.membershipType = user.membershipType;
+        req.session.state = undefined;
+
+        res.status(StatusCodes.OK)
+            .json({ displayName: user.displayName });
+    });
 }
 
 const routes = ({
@@ -94,7 +98,7 @@ const routes = ({
                         return res.status(StatusCodes.NOT_FOUND).end();
                     }
 
-                    return signIn(req, res, user);
+                    return signIn(req, res, user, next);
                 })
                 .catch(next);
         });
