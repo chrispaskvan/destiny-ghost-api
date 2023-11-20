@@ -17,4 +17,4 @@ The benefits of leveraging an ORM are minor. The SQLite database is used as a re
 Interactions with the SQLite database are done using SQL.
 
 ## References
-*[Why you should avoid ORMs (with examples in Node.js)](https://blog.logrocket.com/why-you-should-avoid-orms-with-examples-in-node-js-e0baab73fa5/)
+* [Why you should avoid ORMs (with examples in Node.js)](https://blog.logrocket.com/why-you-should-avoid-orms-with-examples-in-node-js-e0baab73fa5/)

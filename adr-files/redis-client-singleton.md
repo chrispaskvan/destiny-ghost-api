@@ -23,5 +23,5 @@ The way Jest caches a required module causes this behavior. The solution was to 
 There's a condition require based on NODE_ENV in './helpers/cache.js' which is not ideal. The unit tests will report memory leaks if NODE_ENV does not equal "test" when running Jest.
 
 ## References
-*[Unable to reuse Redis connections](https://github.com/OptimalBits/bull/issues/841)
-*[Jest memory problems in node environment](https://github.com/facebook/jest/issues/6399)
+* [Unable to reuse Redis connections](https://github.com/OptimalBits/bull/issues/841)
+* [Jest memory problems in node environment](https://github.com/facebook/jest/issues/6399)

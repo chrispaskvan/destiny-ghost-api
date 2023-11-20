@@ -17,6 +17,6 @@ Rather than upserting the status sent to the callback, persist every status sent
 Storage in the database will grow 3 times more since all statuses are persisted instead of only the final status. A separate process can run on a schedule to clean out intermediate statuses. Unique key on SmsSid cannot be used.
 
 ## References
-*[What are the Possible SMS and MMS Message Statuses, and What do They Mean?](https://support.twilio.com/hc/en-us/articles/223134347-What-are-the-Possible-SMS-and-MMS-Message-Statuses-and-What-do-They-Mean-)
-*[@azure/cosmos package](https://docs.microsoft.com/en-us/javascript/api/@azure/cosmos/?view=azure-node-latest)
-*[Tutorial: Build a Node.js console app with the JavaScript SDK to manage Azure Cosmos DB SQL API data](https://docs.microsoft.com/en-us/azure/cosmos-db/sql-api-nodejs-get-started)
+* [What are the Possible SMS and MMS Message Statuses, and What do They Mean?](https://support.twilio.com/hc/en-us/articles/223134347-What-are-the-Possible-SMS-and-MMS-Message-Statuses-and-What-do-They-Mean-)
+* [@azure/cosmos package](https://docs.microsoft.com/en-us/javascript/api/@azure/cosmos/?view=azure-node-latest)
+* [Tutorial: Build a Node.js console app with the JavaScript SDK to manage Azure Cosmos DB SQL API data](https://docs.microsoft.com/en-us/azure/cosmos-db/sql-api-nodejs-get-started)
