@@ -65,7 +65,7 @@
         "rfc6902": "^5.0.1",
         "suppress-experimental-warnings": "^1.1.17",
         "swagger-ui-express": "^5.0.0",
-        "twilio": "^4.19.0",
+        "twilio": "^4.19.3",
         "yauzl": "^2.10.0"
     },
     "overrides": {
