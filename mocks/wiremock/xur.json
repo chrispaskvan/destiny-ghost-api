@@ -1,0 +1,15 @@
+{
+    "request": {
+        "method": "GET",
+        "url": "/destiny2/xur"
+    },
+    "response": {
+        "status": 200,
+        "jsonBody": {
+            "message": "Hello, World!"
+        },
+        "headers": {
+            "Content-Type": "application/json"
+        }
+    }
+}

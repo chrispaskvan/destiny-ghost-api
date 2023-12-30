@@ -16,7 +16,7 @@ import configuration from '../helpers/config';
 
 const {
     bungie: {
-        apiKey, authorizationUrl, clientId, clientSecret,
+        apiKey, host, clientId, clientSecret,
     },
 } = configuration;
 
@@ -25,7 +25,7 @@ const {
  * @type {string}
  * @description Base URL for all of the Bungie API services.
  */
-const servicePlatform = 'https://www.bungie.net/platform';
+const servicePlatform = `${host}/platform`;
 
 /**
  * Destiny Service Class
@@ -149,7 +149,7 @@ class DestinyService {
      * @returns {Promise}
      */
     getAuthorizationUrl(state) { // eslint-disable-line class-methods-use-this
-        return Promise.resolve(`${authorizationUrl}?client_id=${clientId}&response_type=code&state=${state}`);
+        return Promise.resolve(`${host}/en/Oauth/Authorize?client_id=${clientId}&response_type=code&state=${state}`);
     }
 
     /**

@@ -1,3 +1,4 @@
+import { StatusCodes } from 'http-status-codes';
 import configuration from '../helpers/config';
 
 /**
@@ -29,10 +30,10 @@ class RoleMiddleware {
                         && administrator.membershipType === user.membershipType)) {
                     next();
                 } else {
-                    res.status(401).end();
+                    res.status(StatusCodes.UNAUTHORIZED).end();
                 }
             } else {
-                res.status(401).end();
+                res.status(StatusCodes.UNAUTHORIZED).end();
             }
         } catch (err) {
             next(err);

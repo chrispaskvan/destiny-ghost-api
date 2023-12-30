@@ -125,6 +125,18 @@ class UserController {
     }
 
     /**
+     * Delete inconsequential message documents for the given user.
+     * @param {Object} user
+     */
+    async deleteUserMessages(user) {
+        if (user?.phoneNumber) {
+            return await this.users.deleteUserMessages(user.phoneNumber);
+        }
+
+        throw new Error('User is corrupted.');
+    }
+
+    /**
      * Confirm registration request by creating an account if appropriate.
      *
      * @param req

@@ -19,7 +19,7 @@ class QueryBuilder {
             // eslint-disable-next-line no-param-reassign
             selections = selections.trim();
             if (selections.length === 0) {
-                throw Error('select string is empty');
+                throw new Error('select string is empty');
             }
         } else if (Object.prototype.toString
             .call(selections) === Object.prototype.toString.call([])) {

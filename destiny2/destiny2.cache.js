@@ -1,4 +1,3 @@
-import cache from '../helpers/cache';
 import DestinyCache from '../destiny/destiny.cache';
 
 /**
@@ -12,12 +11,16 @@ class Destiny2Cache extends DestinyCache {
      */
     _manifestKey = 'destiny2-manifest';
 
+    constructor(options = {}) {
+        super(options);
+    }
+
     /**
      * Get the cached list of characters for the user.
      * @param {*} membershipId
      */
     async getCharacters(membershipId) { // eslint-disable-line class-methods-use-this
-        const res = await cache.get(membershipId);
+        const res = await this.client.get(membershipId);
 
         return res ? JSON.parse(res) : undefined;
     }
@@ -36,7 +39,7 @@ class Destiny2Cache extends DestinyCache {
             throw new Error('characters is a required and must be a nonempty array.');
         }
 
-        return await cache.set(membershipId, JSON.stringify(characters));
+        return await this.client.set(membershipId, JSON.stringify(characters));
     }
 }
 

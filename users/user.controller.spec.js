@@ -8,6 +8,7 @@ const chance = new Chance();
 const displayName = chance.name();
 const membershipId = chance.integer().toString();
 const membershipType = chance.integer({ min: 1, max: 2 });
+const phoneNumber = chance.phone();
 const mockUser = {
     displayName,
     membershipId,
@@ -20,6 +21,7 @@ const destinyService = {
 };
 const userService = {
     createAnonymousUser: vi.fn().mockImplementation(user => Promise.resolve(user)),
+    deleteUserMessages: vi.fn().mockResolvedValue(),
     getCurrentUser: vi.fn(),
     getUserByDisplayName: vi.fn(),
     getUserByMembershipId: vi.fn(),
@@ -34,6 +36,26 @@ beforeEach(() => {
 });
 
 describe('UserController', () => {
+    describe('deleteMessages', () => {
+        describe('when user is given', () => {
+            it('should call deleteUserMessages when the user has a phone number', async () => {
+                await userController.deleteUserMessages({ phoneNumber });
+
+                expect(userService.deleteUserMessages).toHaveBeenCalled();
+            });
+
+            it('should throw if the user is missing', async () => {
+                await expect(userController.deleteUserMessages())
+                    .rejects.toThrow();
+            });
+
+            it('should throw if the user is missing a phone number', async () => {
+                await expect(userController.deleteUserMessages({}))
+                    .rejects.toThrow();
+            });
+        });
+    });
+
     describe('getCurrentUser', () => {
         describe('when session displayName and membershipType are defined', () => {
             describe('when user and destiny services return a user', () => {

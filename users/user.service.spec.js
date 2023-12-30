@@ -16,6 +16,7 @@ const cacheService = {
 const chance = new Chance();
 const documentService = {
     createDocument: vi.fn(),
+    deleteDocumentById: vi.fn(),
     getDocuments: vi.fn(),
     updateDocument: vi.fn(),
 };
@@ -167,6 +168,50 @@ describe('UserService', () => {
         describe('when user is invalid', () => {
             it('should reject the user', async () => {
                 await expect(userService.createUser(omit(user, 'phoneNumber'))).rejects.toThrow(undefined);
+            });
+        });
+    });
+
+    describe('deleteUserMessages', () => {
+        describe('when intermediary user messages are found', () => {
+            it('should delete intermediary messages only if delivered', async () => {
+                const phoneNumber = '+12345678901';
+                const messages = [
+                    {
+                        id: 1,
+                        SmsSid: 'A',
+                        SmsStatus: 'queued',
+                        To: phoneNumber,
+                    },
+                    {
+                        id: 2,
+                        SmsSid: 'A',
+                        SmsStatus: 'sent',
+                        To: phoneNumber,
+                    },
+                    {
+                        id: 3,
+                        SmsSid: 'A',
+                        SmsStatus: 'delivered',
+                        To: phoneNumber,
+                    },
+                    {
+                        id: 4,
+                        SmsSid: 'B',
+                        SmsStatus: 'queued',
+                        To: phoneNumber,
+                    },
+                ];
+                documentService.deleteDocumentById.mockResolvedValue();
+                documentService.getDocuments
+                    .mockImplementationOnce(() => Promise.resolve(messages.filter(({ SmsStatus }) => SmsStatus !== 'delivered')));
+                documentService.getDocuments
+                    .mockImplementation(() => Promise.resolve(messages.filter(({ SmsStatus }) => SmsStatus === 'delivered')));
+
+                await userService.deleteUserMessages(phoneNumber);
+
+                expect(documentService.getDocuments).toHaveBeenCalledTimes(3);
+                expect(documentService.deleteDocumentById).toHaveBeenCalledTimes(2);
             });
         });
     });
