@@ -16,14 +16,14 @@ import log from '../helpers/log';
 import { xurHash } from './destiny2.constants';
 import { get } from '../helpers/request';
 
-const { bungie: { apiKey } } = configuration;
+const { bungie: { apiKey, host } } = configuration;
 
 /**
  * @constant
  * @type {string}
  * @description Base URL for all of the Bungie API services.
  */
-const servicePlatform = 'https://www.bungie.net/Platform';
+const servicePlatform = `${host}/Platform`;
 
 /**
  * Destiny2 Service Class

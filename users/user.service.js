@@ -4,6 +4,7 @@ import Joi from 'joi';
 import schemaDefaults from 'json-schema-defaults';
 import validator, { filter } from 'is-my-json-valid';
 import QueryBuilder from '../helpers/queryBuilder';
+import log from '../helpers/log';
 import notificationTypes from '../notifications/notification.types';
 import validate from '../helpers/validate';
 
@@ -270,14 +271,52 @@ class UserService {
     }
 
     /**
-     * Delete a user.
-     * @param documentId
-     * @param membershipType
+     * Delete a message.
+     * @param {string} messageId
+     * @param {string} phoneNumber
      * @returns {Promise.<T>}
      */
-    deleteUser(documentId, membershipType) {
-        this.documents.deleteDocumentById(userCollectionId, documentId, membershipType);
-        return Promise.resolve();
+    async #deleteMessage(messageId, phoneNumber) {
+        return await this.documents
+            .deleteDocumentById(messageCollectionId, messageId, phoneNumber);
+    }
+
+    /**
+     * Delete a user.
+     * @param {string} documentId
+     * @param {number} membershipType
+     * @returns {Promise.<T>}
+     */
+    async #deleteUser(documentId, membershipType) {
+        return await this.documents
+            .deleteDocumentById(userCollectionId, documentId, membershipType);
+    }
+
+    /**
+     * Delete messages with the status 'queued' or 'sent' given the message was 'delivered'.
+     * @param {string} phoneNumber
+     */
+    async deleteUserMessages(phoneNumber) {
+        const messages = await this.documents.getDocuments(
+            messageCollectionId,
+            `SELECT * FROM c WHERE c.SmsStatus != 'delivered' AND c.To = '${phoneNumber}'`,
+        );
+        const delivered = new Set();
+
+        // eslint-disable-next-line no-restricted-syntax
+        for (const message of messages) {
+            // eslint-disable-next-line no-await-in-loop
+            const received = delivered.has(message.SmsSid) || await this.documents.getDocuments(
+                messageCollectionId,
+                `SELECT * FROM c WHERE c.SmsSid = '${message.SmsSid}' AND c.SmsStatus = 'delivered'`,
+            );
+
+            if (received.length) {
+                delivered.add(message.SmsSid);
+                this.#deleteMessage(message.id, message.To);
+                log.warn(message, 'Deleted message.');
+            }
+        }
     }
 
     /**

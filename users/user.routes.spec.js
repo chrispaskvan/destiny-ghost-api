@@ -23,6 +23,7 @@ const notificationService = {
     sendMessage: vi.fn(),
 };
 const userService = {
+    deleteUserMessages: vi.fn(),
     getUserByDisplayName: vi.fn(),
     getUserByEmailAddress: vi.fn(),
     getUserByPhoneNumber: vi.fn(),
@@ -438,6 +439,76 @@ describe('UserRouter', () => {
                                 },
                             ],
                         });
+                        done();
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
+
+                userRouter(req, res);
+            }));
+        });
+    });
+
+    describe('delete intermediary messages for a user', () => {
+        describe('when phone number is invalid', () => {
+            it('should return conflict', () => new Promise((done, reject) => {
+                const req = createRequest({
+                    method: 'DELETE',
+                    url: '/%20/phoneNumber/messages',
+                });
+
+                res.on('end', () => {
+                    try {
+                        expect(res.statusCode).toEqual(409);
+                        done();
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
+
+                userRouter(req, res);
+            }));
+        });
+
+        describe('when user is not found', () => {
+            it('should return not found', () => new Promise((done, reject) => {
+                const req = createRequest({
+                    method: 'DELETE',
+                    url: '/+12345678901/phoneNumber/messages',
+                });
+
+                userService.getUserByPhoneNumber.mockImplementation(() => Promise.resolve());
+
+                res.on('end', () => {
+                    try {
+                        expect(res.statusCode).toEqual(404);
+                        done();
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
+
+                userRouter(req, res);
+            }));
+        });
+
+        describe('when user is found', () => {
+            it('should return success', () => new Promise((done, reject) => {
+                const phoneNumber = '+12345678901';
+                const req = createRequest({
+                    method: 'DELETE',
+                    url: `/${phoneNumber}/phoneNumber/messages`,
+                });
+
+                userService.getUserByPhoneNumber.mockImplementation(() => Promise.resolve({
+                    phoneNumber,
+                }));
+                userService.deleteUserMessages.mockImplementation(() => Promise.resolve());
+
+                res.on('end', () => {
+                    try {
+                        expect(res.statusCode).toEqual(200);
                         done();
                     } catch (err) {
                         reject(err);

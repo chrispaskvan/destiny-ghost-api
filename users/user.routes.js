@@ -4,7 +4,6 @@ import { Router } from 'express';
 import AuthenticationMiddleWare from '../authentication/authentication.middleware';
 import RoleMiddleware from './role.middleware';
 import UserController from './user.controller';
-
 import configuration from '../helpers/config';
 
 /**
@@ -26,6 +25,15 @@ function signIn(req, res, user, next) {
         res.status(StatusCodes.OK)
             .json({ displayName: user.displayName });
     });
+}
+
+/**
+ * Validate the given phone number
+ * @param {*} phoneNumber
+ * @returns boolean
+ */
+function isPhoneNumber(phoneNumber) {
+    return !!phoneNumber.trim().length;
 }
 
 const routes = ({
@@ -251,7 +259,7 @@ const routes = ({
                 const { params: { id, version } } = req;
 
                 if (!id) {
-                    return res.status(StatusCodes.CONFLICT).send('phone number not found');
+                    return res.status(StatusCodes.CONFLICT).send('user id not found');
                 }
 
                 return userController.getUserById(id, version)
@@ -259,6 +267,53 @@ const routes = ({
                         ? res.status(StatusCodes.OK).json(user)
                         : res.status(StatusCodes.NOT_FOUND).send('user not found')))
                     .catch(next);
+            },
+        );
+
+    /**
+     * @swagger
+     * paths:
+     *  /users/{phoneNumber}/phoneNumber/messages:
+     *    delete:
+     *      summary: Delete intermediary messages for a given user.
+     *      tags:
+     *        - Users
+     *      produces:
+     *        - application/json
+     *      responses:
+     *        200:
+     *          description: Success
+     *        401:
+     *          description: Unauthorized
+     *        404:
+     *          description: User was not found.
+     *        409:
+     *          description: Phone Number not given.
+     */
+    userRouter.route('/:phoneNumber/phoneNumber/messages')
+        .delete(
+            // (req, res, next) => middleware.authenticateUser(req, res, next),
+            // (req, res, next) => roles.administrativeUser(req, res, next),
+            async (req, res, next) => {
+                try {
+                    const { params: { phoneNumber } } = req;
+
+                    if (!isPhoneNumber(phoneNumber)) {
+                        return res.status(StatusCodes.CONFLICT).send('phone number not found');
+                    }
+
+                    const user = await userController.getUserByPhoneNumber(phoneNumber);
+
+                    if (!user) {
+                        return res.status(StatusCodes.NOT_FOUND).send('user not found');
+                    }
+
+                    await userController.deleteUserMessages(user);
+
+                    return res.status(StatusCodes.OK).end();
+                } catch (err) {
+                    return next(err);
+                }
             },
         );
 
