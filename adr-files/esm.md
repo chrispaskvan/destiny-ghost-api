@@ -20,13 +20,14 @@ Lastly, I wanted to use native JavaScript without any transpilers.
 
 ## Consequences
 
-The experimental flag for specifying the node loader is not available in production. Therefore, I have to run using 'development' as the node environment set in NODE_ENV.
+The experimental flag for specifying the node loader is not available in production. Therefore, I have to run using 'development' as the node environment set in NODE\_ENV.
 
 I also cannot launch node from the Docker file with ES modules enabled. I am instead forced to revert to using a start up script defined in the 'package.json' from the Dockerfile.
 
 Finally, Jest does not support ESM imports with its 'mock' function. The feature is not support as of the time of this decision. I decided to switch to Vite as the test driver since its implementation mirrors Jest and it has full support for ESM including 'mock'.
 
 ## References
-  * [NodeJS API Reference](https://nodejs.org/api/cli.html#--input-typetype)
-  * [Missing ESM Support for jest.mock](https://github.com/facebook/jest/issues/10025)
-  * [node --experimental-modules, requested module does not provide an export named](https://stackoverflow.com/questions/47277887/node-experimental-modules-requested-module-does-not-provide-an-export-named)
+
+* [NodeJS API Reference](https://nodejs.org/api/cli.html#--input-typetype)
+* [Missing ESM Support for jest.mock](https://github.com/facebook/jest/issues/10025)
+* [node --experimental-modules, requested module does not provide an export named](https://stackoverflow.com/questions/47277887/node-experimental-modules-requested-module-does-not-provide-an-export-named)

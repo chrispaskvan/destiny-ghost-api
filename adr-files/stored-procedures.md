@@ -17,4 +17,5 @@ I found stored procedures in Cosmos to be clunky. Despite having recently added 
 The performance of a stored procedure running on the database should be better than fetching and deleting documents using HTTP communication protocol via the client .
 
 ## References
-  * [How to write stored procedures and triggers in Azure Cosmos DB by using the JavaScript query API](https://learn.microsoft.com/en-us/azure/cosmos-db/nosql/how-to-write-javascript-query-api)
+
+* [How to write stored procedures and triggers in Azure Cosmos DB by using the JavaScript query API](https://learn.microsoft.com/en-us/azure/cosmos-db/nosql/how-to-write-javascript-query-api)

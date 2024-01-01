@@ -16,12 +16,13 @@ Upon implementing the shared singleton Redis client, the unit tests started repo
 
 > A worker process has failed to exit gracefully and has been force exited. This is likely caused by tests leaking due to improper teardown. Try running with --runInBand --detectOpenHandles to find leaks.
 
-The way Jest caches a required module causes this behavior. The solution was to use 'redis-mock' in the cache module when NODE_ENV=test.
+The way Jest caches a required module causes this behavior. The solution was to use 'redis-mock' in the cache module when NODE\_ENV=test.
 
 ## Consequences
 
-There's a condition require based on NODE_ENV in './helpers/cache.js' which is not ideal. The unit tests will report memory leaks if NODE_ENV does not equal "test" when running Jest.
+There's a condition require based on NODE\_ENV in './helpers/cache.js' which is not ideal. The unit tests will report memory leaks if NODE\_ENV does not equal "test" when running Jest.
 
 ## References
-  * [Unable to reuse Redis connections](https://github.com/OptimalBits/bull/issues/841)
-  * [Jest memory problems in node environment](https://github.com/facebook/jest/issues/6399)
+
+* [Unable to reuse Redis connections](https://github.com/OptimalBits/bull/issues/841)
+* [Jest memory problems in node environment](https://github.com/facebook/jest/issues/6399)
