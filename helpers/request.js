@@ -19,9 +19,7 @@ const axiosSingleton = (function singleton() {
 
     return {
         getInstance() {
-            if (!instance) {
-                instance = createInstance();
-            }
+            instance ||= createInstance();
 
             return instance;
         },
