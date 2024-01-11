@@ -55,7 +55,7 @@ class HttpLog extends PinoHttp {
             genReqId: (req, res) => {
                 let requestId = req.headers['x-request-id'];
 
-                if (!requestId) requestId = createId();
+                requestId ||= createId();
                 res.setHeader('X-Request-Id', requestId);
 
                 return requestId;
