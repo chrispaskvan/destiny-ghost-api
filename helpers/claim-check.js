@@ -6,11 +6,7 @@ class ClaimCheck {
      * Claim Check Number
      * @private
      */
-    #number;
-
-    constructor() {
-        this.#number = createId();
-    }
+    #number = createId();
 
     get number() {
         return this.#number;

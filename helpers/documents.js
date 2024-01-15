@@ -25,10 +25,10 @@ class Documents {
      * @returns {Promise}
      * @private
      */
-    #getCollection(collectionId) {
-        return Promise.resolve(this.client
+    async #getCollection(collectionId) {
+        return this.client
             .database(databaseId)
-            .container(collectionId));
+            .container(collectionId);
     }
 
     /**

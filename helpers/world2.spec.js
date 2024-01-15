@@ -23,7 +23,7 @@ describe('It\'s Bungie\'s 2nd world. You\'re just querying it.', () => {
         'should return the lore for Ghost Primus',
         () => existsSync(directory), // eslint-disable-line security/detect-non-literal-fs-filename, max-len
         async () => {
-            const { displayProperties: { name } } = await world.getLore(2505533224);
+            const { displayProperties: { name } } = world.getLore(2505533224);
 
             expect(name).toEqual('Ghost Primus');
         },
@@ -33,7 +33,7 @@ describe('It\'s Bungie\'s 2nd world. You\'re just querying it.', () => {
         'should return the item category Hand Cannon',
         () => existsSync(directory), // eslint-disable-line security/detect-non-literal-fs-filename, max-len
         async () => {
-            const { displayProperties: { name } } = await world.getItemCategory(6);
+            const { displayProperties: { name } } = world.getItemCategory(6);
 
             expect(name).toEqual('Hand Cannon');
         },
@@ -42,8 +42,8 @@ describe('It\'s Bungie\'s 2nd world. You\'re just querying it.', () => {
     itif(
         'should return the Hunter character class',
         () => existsSync(directory), // eslint-disable-line security/detect-non-literal-fs-filename, max-len
-        async () => {
-            const { displayProperties: { name } } = await world.getClassByHash(671679327);
+        () => {
+            const { displayProperties: { name } } = world.getClassByHash(671679327);
 
             expect(name).toEqual('Hunter');
         },
@@ -63,10 +63,20 @@ describe('It\'s Bungie\'s 2nd world. You\'re just querying it.', () => {
     itif(
         'should return the icon of the Agent of Nine',
         () => existsSync(directory), // eslint-disable-line security/detect-non-literal-fs-filename, max-len
-        async () => {
-            const url = await world.getVendorIcon(xurHash);
+        () => {
+            const url = world.getVendorIcon(xurHash);
 
             expect(url).toBeDefined();
+        },
+    );
+
+    itif(
+        'should return the category hash for weapons',
+        () => existsSync(directory), // eslint-disable-line security/detect-non-literal-fs-filename, max-len
+        async () => {
+            const { weaponCategory } = world;
+
+            expect(weaponCategory).toEqual(1);
         },
     );
 });

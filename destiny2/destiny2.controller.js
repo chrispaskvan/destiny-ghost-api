@@ -32,7 +32,7 @@ class Destiny2Controller extends DestinyController {
                 displayProperties: {
                     name: className,
                 },
-            } = await this.world.getClassByHash(classHash);
+            } = this.world.getClassByHash(classHash);
 
             return {
                 characterId,
@@ -93,9 +93,7 @@ class Destiny2Controller extends DestinyController {
                 return itemHashes;
             }
 
-            const items = await Promise.all(
-                itemHashes.map(itemHash => this.world.getItemByHash(itemHash)),
-            );
+            const items = itemHashes.map(itemHash => this.world.getItemByHash(itemHash));
 
             return items;
         }

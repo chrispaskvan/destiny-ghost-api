@@ -3,7 +3,7 @@
  */
 import { existsSync } from 'fs';
 import {
-    beforeAll, describe, expect,
+    beforeAll, describe, expect, it,
 } from 'vitest';
 import World from './world';
 import itif from './itif';
@@ -33,11 +33,19 @@ describe('It\'s Bungie\'s 1st world. You\'re just querying it.', () => {
         },
     );
 
+    describe('if the numberOfCards is not a number', () => {
+        it('should throw an error', async () => {
+            const numberOfCards = 'foo';
+
+            expect(() => world.getGrimoireCards(numberOfCards)).toThrow('numberOfCards must be a number');
+        });
+    });
+
     itif(
         'should return the icon of the Agent of Nine',
         () => existsSync(directory), // eslint-disable-line security/detect-non-literal-fs-filename, max-len
-        async () => {
-            const url = await world.getVendorIcon(postmasterHash);
+        () => {
+            const url = world.getVendorIcon(postmasterHash);
 
             expect(url).toBeDefined();
         },

@@ -46,8 +46,7 @@ class NotificationController {
                         characters[0].characterId,
                         accessToken,
                     );
-                    const items = await Promise.all(itemHashes
-                        .map(itemHash => this.world.getItemByHash(itemHash)));
+                    const items = itemHashes.map(itemHash => this.world.getItemByHash(itemHash));
                     const message = items
                         .filter(({ itemCategoryHashes }) => itemCategoryHashes.includes(this.world.weaponCategory)) // eslint-disable-line max-len
                         .map(({ displayProperties: { name } }) => name).join('\n');

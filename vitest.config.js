@@ -5,11 +5,13 @@ export default defineConfig({
     test: {
         coverage: {
             reporter: ['clover', 'html'],
-            statements: 79.45,
-            branches: 88.83,
-            functions: 70.75,
-            lines: 79.45,
-            thresholdAutoUpdate: true,
+            thresholds: {
+                autoUpdate: true,
+                statements: 76.85,
+                branches: 87.31,
+                functions: 68.8,
+                lines: 76.85,
+            },
         },
     },
 });

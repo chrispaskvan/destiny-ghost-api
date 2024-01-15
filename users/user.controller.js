@@ -260,7 +260,7 @@ class UserController {
             return undefined;
         }
 
-        const iconUrl = await this.world.getVendorIcon(postmasterHash);
+        const iconUrl = this.world.getVendorIcon(postmasterHash);
         const promises = [];
 
         promises.push(this.notifications.sendMessage(
