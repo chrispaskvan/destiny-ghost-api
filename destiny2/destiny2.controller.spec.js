@@ -37,7 +37,7 @@ let destiny2Controller;
 
 beforeEach(() => {
     const world = {
-        getClassByHash: vi.fn(() => Promise.resolve({
+        getClassByHash: vi.fn(() => ({
             classType: 1,
             displayProperties: {
                 name: 'Hunter',
@@ -51,7 +51,7 @@ beforeEach(() => {
             index: 1,
             redacted: false,
         })),
-        getItemByHash: vi.fn(() => Promise.resolve({
+        getItemByHash: vi.fn(() => ({
             displayProperties: {
                 name: 'Eyasluna',
             },

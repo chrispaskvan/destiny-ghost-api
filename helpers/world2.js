@@ -44,28 +44,45 @@ class World2 extends World {
                 timeout: 3000,
             });
 
-            const categories = database.prepare('SELECT json FROM DestinyItemCategoryDefinition').all();
-            const classes = database.prepare('SELECT json FROM DestinyClassDefinition').all();
-            const damageTypes = database.prepare('SELECT json FROM DestinyDamageTypeDefinition').all();
-            const items = database.prepare('SELECT json FROM DestinyInventoryItemDefinition').all();
+            const categoryDefinitions = database.prepare('SELECT json FROM DestinyItemCategoryDefinition').all();
+            const classDefinitions = database.prepare('SELECT json FROM DestinyClassDefinition').all();
+            const damageTypeDefinitions = database.prepare('SELECT json FROM DestinyDamageTypeDefinition').all();
+            const itemDefinitions = database.prepare('SELECT json FROM DestinyInventoryItemDefinition').all();
             const loreDefinitions = database.prepare('SELECT json FROM DestinyLoreDefinition').all();
-            const vendors = database.prepare('SELECT json FROM DestinyVendorDefinition').all();
+            const vendorDefinitions = database.prepare('SELECT json FROM DestinyVendorDefinition').all();
 
             database.close();
 
-            this.categories = categories.map(({ json: category }) => JSON.parse(category));
-            this.classes = classes.map(({ json: classDefinition }) => JSON.parse(classDefinition));
-            this.damageTypes = damageTypes.map(({ json: damageType }) => JSON.parse(damageType));
-            this.items = items.map(({ json: item }) => JSON.parse(item));
-            this.loreDefinitions = loreDefinitions.map(({ json: lore }) => JSON.parse(lore));
-            this.vendors = vendors.map(({ json: vendor }) => JSON.parse(vendor));
+            this.categories = categoryDefinitions
+                .map(({ json: category }) => JSON.parse(category));
+
+            const classes = classDefinitions
+                .map(({ json: classDefinition }) => JSON.parse(classDefinition));
+            const damageTypes = damageTypeDefinitions
+                .map(({ json: damageType }) => JSON.parse(damageType));
+
+            this.items = itemDefinitions.map(({ json: item }) => JSON.parse(item));
+
+            const lores = loreDefinitions.map(({ json: lore }) => JSON.parse(lore));
+            const vendors = vendorDefinitions.map(({ json: vendor }) => JSON.parse(vendor));
+
+            this.categoryHashMap = new Map(
+                this.categories.map(category => [category.hash, category]),
+            );
+            this.classHashMap = new Map(
+                classes.map(characterClass => [characterClass.hash, characterClass]),
+            );
+            this.damageTypeHashMap = new Map(
+                damageTypes.map(damageType => [damageType.hash, damageType]),
+            );
+            this.itemHashMap = new Map(this.items.map(item => [item.hash, item]));
+            this.loreDefinitionHashMap = new Map(lores.map(lore => [lore.hash, lore]));
+            this.vendorHashMap = new Map(vendors.map(vendor => [vendor.hash, vendor]));
         }
     }
 
     get weaponCategory() {
-        if (!this.#weaponCategory) {
-            this.#weaponCategory = this.categories.find(category => category?.displayProperties?.name === 'Weapon').hash;
-        }
+        this.#weaponCategory ||= this.categories.find(category => category?.displayProperties?.name === 'Weapon').hash;
 
         return this.#weaponCategory;
     }
@@ -75,8 +92,7 @@ class World2 extends World {
      * @param classHash {string}
      */
     getClassByHash(classHash) {
-        return Promise.resolve(this.classes
-            .find(characterClass => characterClass.hash === classHash));
+        return this.classHashMap.get(classHash);
     }
 
     /**
@@ -84,8 +100,7 @@ class World2 extends World {
      * @param classHash {string}
      */
     getDamageTypeByHash(damageTypeHash) {
-        return Promise.resolve(this.damageTypes
-            .find(damageType => damageType.hash === damageTypeHash));
+        return this.damageTypeHashMap.get(damageTypeHash);
     }
 
     /**
@@ -94,15 +109,7 @@ class World2 extends World {
      * @returns {*}
      */
     getItemByHash(itemHash) {
-        return new Promise((resolve, reject) => {
-            try {
-                const item = this.items.find(item1 => item1.hash === itemHash);
-
-                resolve(item);
-            } catch (err) {
-                reject(err);
-            }
-        });
+        return this.itemHashMap.get(itemHash);
     }
 
     /**
@@ -126,8 +133,7 @@ class World2 extends World {
      * @returns {Promise}
      */
     getItemCategory(itemCategoryHash) {
-        return Promise.resolve(this.categories
-            .find(category => category.hash === itemCategoryHash));
+        return this.categoryHashMap.get(itemCategoryHash);
     }
 
     /**
@@ -136,7 +142,7 @@ class World2 extends World {
      * @returns {Promise}
      */
     getLore(hash) {
-        return Promise.resolve(this.loreDefinitions.find(lore => lore.hash === hash));
+        return this.loreDefinitionHashMap.get(hash);
     }
 
     /**
@@ -145,8 +151,8 @@ class World2 extends World {
      * @returns {Promise}
      */
     getVendorIcon(vendorHash) {
-        const vendor1 = this.vendors.find(vendor => vendor.hash === vendorHash);
-        const icon = vendor1?.displayProperties?.icon;
+        const vendor = this.vendorHashMap.get(vendorHash);
+        const icon = vendor?.displayProperties?.icon;
 
         return icon ? Promise.resolve(`https://www.bungie.net${icon}`) : Promise.resolve(undefined);
     }

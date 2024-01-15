@@ -31,7 +31,7 @@ let destiny2Router;
 
 beforeEach(() => {
     const world = {
-        getClassByHash: vi.fn(() => Promise.resolve({
+        getClassByHash: vi.fn(() => ({
             classType: 1,
             displayProperties: {
                 name: 'Hunter',

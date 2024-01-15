@@ -17,9 +17,6 @@ import log from './log';
  */
 class World {
     constructor({ directory } = {}) {
-        this.grimoireCards = [];
-        this.vendors = [];
-
         if (directory) {
             const [databaseFileName] = readdirSync(directory)
                 .map(name => ({
@@ -48,14 +45,16 @@ class World {
             });
 
             const grimoireCards = database.prepare('SELECT * FROM DestinyGrimoireCardDefinition').all();
-            const vendors = database.prepare('SELECT * FROM DestinyVendorDefinition').all();
+            const vendorDefinitions = database.prepare('SELECT * FROM DestinyVendorDefinition').all();
 
             database.close();
 
             this.grimoireCards = grimoireCards
                 .map(({ json: grimoireCard }) => JSON.parse(grimoireCard));
-            this.vendors = vendors
-                .map(({ json: vendor }) => JSON.parse(vendor));
+
+            const vendors = vendorDefinitions.map(({ json: vendor }) => JSON.parse(vendor));
+
+            this.vendorHashMap = new Map(vendors.map(vendor => [vendor.hash, vendor]));
         }
     }
 
@@ -66,7 +65,11 @@ class World {
      * @returns {Promise}
      */
     getGrimoireCards(numberOfCards) {
-        return Promise.resolve(sampleSize(this.grimoireCards, numberOfCards));
+        if (typeof numberOfCards !== 'number') {
+            throw new Error('numberOfCards must be a number');
+        }
+
+        return sampleSize(this.grimoireCards, numberOfCards);
     }
 
     /**
@@ -76,8 +79,8 @@ class World {
      * @returns {Promise<string>}
      */
     getVendorIcon(vendorHash) {
-        const vendor1 = this.vendors.find(vendor => vendor?.summary?.vendorHash === vendorHash);
-        const icon = vendor1?.summary?.vendorIcon;
+        const vendor = this.vendorHashMap.get(vendorHash);
+        const icon = vendor?.summary?.vendorIcon;
 
         return icon ? Promise.resolve(`https://www.bungie.net${icon}`) : Promise.resolve(undefined);
     }
