@@ -1,3 +1,5 @@
+import log from '../helpers/log';
+
 class Manifests {
     constructor({
         destinyService,
@@ -32,10 +34,18 @@ class Manifests {
      * @returns {Promise<void>}
      */
     async upsertManifests() {
-        await Promise.allSettled([
+        const results = await Promise.allSettled([
             Manifests.#upsertManifest(this.destinyService, this.worldRepository),
             Manifests.#upsertManifest(this.destiny2Service, this.world2Repository),
         ]);
+
+        results.forEach((result, index) => {
+            if (result.status === 'fulfilled') {
+                log.info(`Destiny ${index ? '2 ' : ''}manifest updated.`);
+            } else {
+                log.error(`Destiny ${index ? '2 ' : ''}manifest update failed.`);
+            }
+        });
     }
 }
 
