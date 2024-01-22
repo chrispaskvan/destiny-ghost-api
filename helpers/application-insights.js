@@ -4,22 +4,28 @@
  * @module application-insights
  * @author Chris Paskvan
  * @requires applicationinsights
+ * @see {@link https://github.com/microsoft/ApplicationInsights-node.js?tab=readme-ov-file#configuration}
  */
 import applicationInsights from 'applicationinsights';
 import configuration from './config';
 
 const { applicationInsights: { instrumentationKey } } = configuration;
-// eslint-disable-next-line import/no-mutable-exports
-let client;
+const setupTelemetryClient = () => {
+    if (process.env.NODE_ENV !== 'production') {
+        return {
+            trackMetric: () => undefined,
+        };
+    }
 
-if (process.env.NODE_ENV === 'production') {
-    applicationInsights.setup(instrumentationKey).start();
-    client = applicationInsights.defaultClient;
-} else {
-    // eslint-disable-next-line no-import-assign
-    client = {
-        trackMetric: () => undefined,
-    };
-}
+    applicationInsights.setup(instrumentationKey)
+        .setAutoDependencyCorrelation(false)
+        .setAutoCollectRequests(false)
+        .setAutoCollectPerformance(false, false)
+        .setAutoCollectDependencies(false);
+    applicationInsights.start();
+
+    return applicationInsights.defaultClient;
+};
+const client = setupTelemetryClient();
 
 export default client;
