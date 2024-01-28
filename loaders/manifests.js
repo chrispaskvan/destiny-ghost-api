@@ -39,11 +39,11 @@ class Manifests {
             Manifests.#upsertManifest(this.destiny2Service, this.world2Repository),
         ]);
 
-        results.forEach((result, index) => {
-            if (result.status === 'fulfilled') {
-                log.info(`Destiny ${index ? '2 ' : ''}manifest updated.`);
+        results.forEach(({ status, value, reason }, index) => {
+            if (status === 'fulfilled') {
+                log.info({ value }, `Destiny ${index ? '2 ' : ''}manifest updated.`);
             } else {
-                log.error(`Destiny ${index ? '2 ' : ''}manifest update failed.`);
+                log.error({ reason }, `Destiny ${index ? '2 ' : ''}manifest update failed.`);
             }
         });
     }

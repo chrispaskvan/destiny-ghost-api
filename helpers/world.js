@@ -5,12 +5,13 @@
 import {
     readdirSync, statSync, existsSync, createWriteStream, unlinkSync,
 } from 'fs';
-import { join, basename } from 'path';
+import { basename, join } from 'path';
 import sampleSize from 'lodash/sampleSize';
 import Database from 'better-sqlite3';
 import axios from 'axios';
 import { open } from 'yauzl';
 import log from './log';
+import sanitizeDirectory from './sanitize-directory';
 
 /**
  * World Repository
@@ -18,6 +19,8 @@ import log from './log';
 class World {
     constructor({ directory } = {}) {
         if (directory) {
+            sanitizeDirectory(directory);
+
             const [databaseFileName] = readdirSync(directory)
                 .map(name => ({
                     name,
@@ -125,10 +128,12 @@ class World {
                                     return reject(err);
                                 }
 
+                                const sanitizedFileName = basename(entry.fileName);
+
                                 readStream.on('end', () => {
                                     this.bootstrap(fileName);
                                 });
-                                readStream.pipe(createWriteStream(`${databaseDirectory}/${entry.fileName}`));
+                                readStream.pipe(createWriteStream(`${databaseDirectory}/${sanitizedFileName}`));
                                 unlinkSync(`${databasePath}.zip`);
 
                                 return resolve(manifest);
