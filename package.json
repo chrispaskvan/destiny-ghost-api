@@ -55,7 +55,7 @@
         "joi": "^17.12.0",
         "json-schema-defaults": "^0.4.0",
         "lodash": "^4.17.21",
-        "nodemailer": "^6.9.8",
+        "nodemailer": "^6.9.9",
         "nodemailer-smtp-transport": "^2.7.4",
         "pino": "^8.17.2",
         "pino-http": "^9.0.0",
