@@ -110,8 +110,11 @@ class HealthController {
         return responseBody.status.description;
     }
 
-    static unhealthy() {
+    static unhealthy(err) {
         failures += 1;
+        log.error({
+            message: err.message,
+        }, 'Health Check failure occurred.');
     }
 
     async getWorldItem() {
