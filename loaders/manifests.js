@@ -43,7 +43,7 @@ class Manifests {
             if (status === 'fulfilled') {
                 log.info({ value }, `Destiny ${index ? '2 ' : ''}manifest updated.`);
             } else {
-                log.error({ reason }, `Destiny ${index ? '2 ' : ''}manifest update failed.`);
+                log.error({ reason: reason.message }, `Destiny ${index ? '2 ' : ''}manifest update failed.`);
             }
         });
     }

@@ -40,7 +40,6 @@ const startServer = () => {
 
     server.bindAsync(`127.0.0.1:${port}`, grpc.ServerCredentials.createInsecure(), () => {
         console.log(`GRPC server listening on port ${port}.`); // eslint-disable-line no-console
-        server.start();
     });
 };
 
