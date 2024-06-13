@@ -43,9 +43,14 @@ export default app => {
     /**
      * Attach Session
      */
+    if (process.env.NODE_ENV === 'production') {
+        app.set('trust proxy', 1);
+    }
+
+    const domain = `.${process.env.DOMAIN.split('.').slice(-2).join('.')}`;
     const ghostSession = session({
         cookie: {
-            domain: process.env.DOMAIN,
+            domain,
             httpOnly: true,
             maxAge: configuration.session.cookie.maxAge,
             secure: true,
