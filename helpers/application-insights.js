@@ -18,7 +18,6 @@ const setupTelemetryClient = () => {
     }
 
     applicationInsights.setup(instrumentationKey)
-        .setAutoDependencyCorrelation(false)
         .setAutoCollectRequests(false)
         .setAutoCollectPerformance(false, false)
         .setAutoCollectDependencies(false);

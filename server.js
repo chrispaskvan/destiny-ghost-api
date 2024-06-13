@@ -72,7 +72,7 @@ const startServer = async () => {
         const cpuCount = cpus().length;
         const duration = Date.now() - start;
 
-        applicationInsights.trackMetric({ name: 'Startup Time', value: duration });
+        applicationInsights.trackMetric({ name: 'startup-time', value: duration });
 
         // eslint-disable-next-line no-console
         console.log(`HTTP server listening on port ${port} with ${cpuCount} cpus.`);
