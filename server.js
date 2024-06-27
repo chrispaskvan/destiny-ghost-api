@@ -3,7 +3,7 @@
  */
 import { readFileSync } from 'fs';
 import { createServer } from 'http';
-import { createServer as _createServer } from 'https';
+import { createServer as createSecureServer } from 'https';
 import { cpus } from 'os';
 import express from 'express';
 import { createTerminus } from '@godaddy/terminus';
@@ -39,7 +39,7 @@ const startServer = async () => {
             key: readFileSync('./security/_wildcard.destiny-ghost.com-key.pem'),
             cert: readFileSync('./security/_wildcard.destiny-ghost.com.pem'),
         };
-        const server = _createServer({
+        const server = createSecureServer({
             ...httpsOptions,
             ...serverOptions,
         }, app);

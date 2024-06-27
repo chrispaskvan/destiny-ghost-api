@@ -5,9 +5,11 @@ import { readFileSync } from 'fs';
 import { CosmosClient } from '@azure/cosmos';
 import { Router } from 'express';
 import { serve, setup } from 'swagger-ui-express';
+import { createHandler } from 'graphql-http/lib/use/express';
 import twilio from 'twilio';
 
 import AuthenticationController from '../authentication/authentication.controller';
+import AuthenticationMiddleWare from '../authentication/authentication.middleware';
 import AuthenticationService from '../authentication/authentication.service';
 import Destiny2Cache from '../destiny2/destiny2.cache';
 import Destiny2Service from '../destiny2/destiny2.service';
@@ -28,6 +30,8 @@ import Manifests from './manifests';
 import NotificationRouter from '../notifications/notification.routes';
 import TwilioRouter from '../twilio/twilio.routes';
 import UserRouter from '../users/user.routes';
+import schema from '../graphql/schema';
+import root from '../graphql/root';
 
 const {
     documents: {
@@ -144,6 +148,39 @@ export default () => {
         worldRepository: world,
     });
     routes.use('/users', userRouter);
+
+    /**
+     * GraphQL
+     */
+    const middleware = new AuthenticationMiddleWare({ authenticationController });
+
+    routes.use(
+        '/director',
+        (req, res, next) => middleware.authenticateUser(req, res, next),
+        createHandler({
+            schema,
+            rootValue: root,
+            context: ({ raw: req }) => {
+                const {
+                    session: {
+                        displayName,
+                        membershipType,
+                    },
+                } = req;
+                const isAdministrator = authenticationController.constructor.isAdministrator({
+                    displayName,
+                    membershipType,
+                });
+
+                return {
+                    cacheService: destiny2Cache,
+                    destiny2Service,
+                    isAdministrator,
+                    userService,
+                };
+            },
+        }),
+    );
 
     /**
      * Manifest Management

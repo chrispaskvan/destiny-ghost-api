@@ -1,7 +1,7 @@
 import {
     beforeEach, describe, expect, it, vi,
 } from 'vitest';
-import Destiny2Cache from './destiny2.cache';
+import Destiny2Cache, { expiration } from './destiny2.cache';
 import mockProfileCharactersResponse from '../mocks/profileCharactersResponse.json';
 
 let destiny2Cache;
@@ -62,7 +62,7 @@ describe('Destiny2Cache', () => {
                     .setCharacters(membershipId, characters); // eslint-disable-line max-len
 
                 expect(client.set).toHaveBeenCalledOnce();
-                expect(client.set).toHaveBeenCalledWith(membershipId, JSON.stringify(characters));
+                expect(client.set).toHaveBeenCalledWith(`characters-${membershipId}`, JSON.stringify(characters), 'EX', expiration);
             });
         });
     });

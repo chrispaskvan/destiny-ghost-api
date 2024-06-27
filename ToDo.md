@@ -53,6 +53,7 @@ Local copy of Cosmos DB in Docker
 Docker of wiremock
 Replace ServiceBus with BullMQ?
 Install Circuit Breaker
+Cross Save Capabilities
 
 Problem Statement:
 Messages are saved to the database based on the Twilio data schema captured by the service through the web hook. When a user sends a message to the service, in converse with receiving a message from the service, the phone number the message is directed to, and identified in the data, is the Twilio messaging service's, not the user's.

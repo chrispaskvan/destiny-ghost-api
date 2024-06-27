@@ -1,4 +1,5 @@
 import Joi from 'joi';
+import configuration from '../helpers/config';
 import validate from '../helpers/validate';
 
 /**
@@ -43,6 +44,18 @@ class AuthenticationController {
         }
 
         return user;
+    }
+
+    /**
+     * Identify if the user is an administrator.
+     *
+     * @param user
+     * @returns {boolean}
+     */
+    static isAdministrator(user) {
+        return !!configuration.administrators
+            .find(administrator => administrator.displayName === user.displayName
+                && administrator.membershipType === user.membershipType);
     }
 }
 
