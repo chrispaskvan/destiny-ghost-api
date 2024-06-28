@@ -1,6 +1,7 @@
 import DestinyCache from '../destiny/destiny.cache';
 
-const expiration = 86400; // 24 hours
+const charactersExpiration = 86400; // 24 hours
+const playerStatisticsExpiration = 3600; // 1 hour
 
 /**
  * Destiny Cache Class
@@ -18,11 +19,27 @@ class Destiny2Cache extends DestinyCache {
     }
 
     /**
+     * @param teeth
+     * @returns {string}
+     */
+    static #getCharactersCacheKey(...teeth) {
+        return ['characters', ...teeth].join('-');
+    }
+
+    /**
+     * @param teeth
+     * @returns {string}
+     */
+    static #getPlayerStatisticsCacheKey(...teeth) {
+        return ['player-statistics', ...teeth].join('-');
+    }
+
+    /**
      * Get the cached list of characters for the user.
      * @param {*} membershipId
      */
     async getCharacters(membershipId) {
-        const res = await this.client.get(`characters-${membershipId}`);
+        const res = await this.client.get(Destiny2Cache.#getCharactersCacheKey(membershipId));
 
         return res ? JSON.parse(res) : undefined;
     }
@@ -32,7 +49,7 @@ class Destiny2Cache extends DestinyCache {
      * @param {*} membershipId
      */
     async getPlayerStatistics(membershipId) {
-        const res = await this.client.get(`statistics-${membershipId}`);
+        const res = await this.client.get(Destiny2Cache.#getPlayerStatisticsCacheKey(membershipId));
 
         return res ? JSON.parse(res) : undefined;
     }
@@ -52,10 +69,10 @@ class Destiny2Cache extends DestinyCache {
         }
 
         return await this.client.set(
-            `characters-${membershipId}`,
+            Destiny2Cache.#getCharactersCacheKey(membershipId),
             JSON.stringify(characters),
             'EX',
-            expiration,
+            charactersExpiration,
         );
     }
 
@@ -74,13 +91,13 @@ class Destiny2Cache extends DestinyCache {
         }
 
         return await this.client.set(
-            `statistics-${membershipId}`,
+            Destiny2Cache.#getPlayerStatisticsCacheKey(membershipId),
             JSON.stringify(statistics),
             'EX',
-            3600, // 1 hour
+            playerStatisticsExpiration,
         );
     }
 }
 
 export default Destiny2Cache;
-export { expiration };
+export { charactersExpiration, playerStatisticsExpiration };

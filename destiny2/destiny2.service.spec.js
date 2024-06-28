@@ -8,8 +8,9 @@ import Destiny2Service from './destiny2.service';
 import DestinyError from '../destiny/destiny.error';
 import mockManifestResponse from '../mocks/manifestResponse.json';
 import mockProfileCharactersResponse from '../mocks/profileCharactersResponse.json';
+import mockPlayerStatisticsResponse from '../mocks/playerStatisticsResponse.json';
 import mockXurResponse from '../mocks/xurResponse.json';
-import { get } from '../helpers/request';
+import { get, post } from '../helpers/request';
 
 vi.mock('../helpers/request');
 
@@ -21,9 +22,11 @@ const mockUser = {
 const cacheService = {
     getCharacters: vi.fn(),
     getManifest: vi.fn(),
+    getPlayerStatistics: vi.fn(),
     getVendor: vi.fn(),
     setCharacters: vi.fn(),
     setManifest: vi.fn(),
+    setPlayerStatistics: vi.fn(),
     setVendor: vi.fn(),
 };
 
@@ -36,6 +39,48 @@ beforeEach(() => {
 describe.concurrent('Destiny2Service', () => {
     beforeEach(() => {
         vi.resetAllMocks();
+    });
+
+    describe('findPlayers', () => {
+        describe('when ErrorCode equals 1', () => {
+            it('should return the search results', async () => {
+                const displayName = 'some-display-name';
+                const pageNumber = 1;
+                const responseBody = {
+                    ErrorCode: 1,
+                    Response: {
+                        searchResults: [
+                            {
+                                displayName,
+                                membershipId: 'some-membership-id',
+                                membershipType: 2,
+                            },
+                        ],
+                    },
+                };
+
+                post.mockImplementationOnce(() => Promise.resolve(responseBody));
+
+                const players = await Destiny2Service.findPlayers(displayName, pageNumber);
+
+                expect(players).toEqual(responseBody.Response.searchResults);
+            });
+        });
+
+        describe('when ErrorCode does not equal 1', () => {
+            it('should throw', async () => {
+                const responseBody = {
+                    ErrorCode: 0,
+                    Message: 'Ok',
+                    Response: {},
+                    Status: 'Failed',
+                };
+
+                post.mockImplementationOnce(() => Promise.resolve(responseBody));
+
+                await expect(Destiny2Service.findPlayers('some-display-name', 1)).rejects.toThrow(DestinyError);
+            });
+        });
     });
 
     describe('getManifest', () => {
@@ -83,6 +128,91 @@ describe.concurrent('Destiny2Service', () => {
                 }));
 
                 await expect(destiny2Service.getManifest()).rejects.toThrow(DestinyError);
+            });
+        });
+    });
+
+    describe('getPlayerStatistics', () => {
+        describe('when ErrorCode equals 1', () => {
+            const allPvP = mockPlayerStatisticsResponse
+                .Response?.mergedAllCharacters?.results?.allPvP;
+            const {
+                allTime: {
+                    combatRating: {
+                        basic: { displayValue: combatRating },
+                    },
+                    efficiency: {
+                        basic: { displayValue: efficiency },
+                    },
+                    highestLightLevel: {
+                        basic: { displayValue: highestLightLevel },
+                    },
+                    killsDeathsAssists: {
+                        basic: { displayValue: kda },
+                    },
+                    killsDeathsRatio: {
+                        basic: { displayValue: kdr },
+                    },
+                },
+            } = allPvP;
+            const playerStatistics = {
+                pvp: {
+                    combatRating,
+                    efficiency,
+                    highestLightLevel,
+                    kda,
+                    kdr,
+                },
+            };
+
+            describe('when player statistics are not cached', () => {
+                it('should return the player\'s statistics', async () => {
+                    cacheService.getPlayerStatistics
+                        .mockImplementationOnce(() => Promise.resolve());
+
+                    get.mockImplementationOnce(() => Promise.resolve(mockPlayerStatisticsResponse));
+
+                    const result = await destiny2Service
+                        .getPlayerStatistics(mockUser.membershipId, mockUser.membershipType);
+
+                    expect(result).toEqual(playerStatistics);
+                    expect(get).toHaveBeenCalledOnce();
+                    expect(cacheService.setPlayerStatistics).toHaveBeenCalledWith(
+                        mockUser.membershipId,
+                        playerStatistics,
+                    );
+                });
+            });
+
+            describe('when player statistics are cached', () => {
+                it('should return the cached player\'s statistics', async () => {
+                    cacheService.getPlayerStatistics
+                        .mockImplementationOnce(() => Promise.resolve(playerStatistics));
+
+                    get.mockImplementationOnce(() => Promise.resolve(mockPlayerStatisticsResponse));
+
+                    const result = await destiny2Service
+                        .getPlayerStatistics(mockUser.membershipId, mockUser.membershipType);
+
+                    expect(result).toEqual(playerStatistics);
+                    expect(get).not.toHaveBeenCalled();
+                    expect(cacheService.setPlayerStatistics).not.toHaveBeenCalled();
+                });
+            });
+        });
+
+        describe('when ErrorCode does not equal 1', () => {
+            it('should return the latest manifest', async () => {
+                get.mockImplementation(() => Promise.resolve({
+                    ErrorCode: 0,
+                    Message: 'Ok',
+                    Response: {},
+                    Status: 'Failed',
+                }));
+
+                await expect(destiny2Service
+                    .getPlayerStatistics(mockUser.membershipId, mockUser.membershipType))
+                    .rejects.toThrow(DestinyError);
             });
         });
     });

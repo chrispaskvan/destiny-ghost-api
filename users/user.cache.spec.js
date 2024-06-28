@@ -13,7 +13,7 @@ describe('UserCache', () => {
     describe('deleteUser', () => {
         beforeEach(() => {
             client = {
-                del: vi.fn((key, callback) => callback(undefined, 1)),
+                del: vi.fn(() => Promise.resolve(1)),
             };
 
             cacheService = new UserCache({ client });
@@ -48,7 +48,7 @@ describe('UserCache', () => {
                 it('resolves value', async () => {
                     client = {
                         get:
-                        vi.fn((key, callback) => callback(undefined, JSON.stringify(mockUser))),
+                        vi.fn(() => Promise.resolve(JSON.stringify(mockUser))),
                     };
 
                     cacheService = new UserCache({ client });
@@ -62,7 +62,7 @@ describe('UserCache', () => {
             describe('when cache is not found', () => {
                 it('resolves value', async () => {
                     client = {
-                        get: vi.fn((key, callback) => callback(undefined, undefined)),
+                        get: vi.fn(() => Promise.resolve(undefined)),
                     };
 
                     cacheService = new UserCache({ client });
@@ -95,10 +95,10 @@ describe('UserCache', () => {
     describe('getUser', () => {
         beforeEach(() => {
             client = {
-                del: vi.fn((key, callback) => callback(undefined, 1)),
-                get: vi.fn((key, callback) => callback(undefined, JSON.stringify(mockUser))),
+                del: vi.fn(() => Promise.resolve(1)),
+                get: vi.fn(() => Promise.resolve(JSON.stringify(mockUser))),
                 quit: vi.fn(),
-                set: vi.fn((key, value, option, ttl, callback) => callback()),
+                set: vi.fn(() => Promise.resolve()),
             };
 
             cacheService = new UserCache({ client });
@@ -149,7 +149,7 @@ describe('UserCache', () => {
         describe('when client set operation succeeds', () => {
             beforeEach(() => {
                 client = {
-                    set: vi.fn((key, value, option, ttl, callback) => callback()),
+                    set: vi.fn(() => Promise.resolve()),
                 };
 
                 cacheService = new UserCache({ client });
