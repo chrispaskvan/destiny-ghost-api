@@ -1,13 +1,23 @@
 import {
     beforeEach, describe, expect, it, vi,
 } from 'vitest';
-import Destiny2Cache from './destiny2.cache';
+import Destiny2Cache, { charactersExpiration, playerStatisticsExpiration } from './destiny2.cache';
 import mockProfileCharactersResponse from '../mocks/profileCharactersResponse.json';
+import mockPlayerStatisticsResponse from '../mocks/playerStatisticsResponse.json';
 
 let destiny2Cache;
 
 const { Response: { characters: { data } } } = mockProfileCharactersResponse;
 const characters = Object.values(data).map(character => character);
+const {
+    Response: {
+        mergedAllCharacters: {
+            results: {
+                allPvP: playerStatistics,
+            },
+        },
+    },
+} = mockPlayerStatisticsResponse;
 const client = {
     get: vi.fn(),
     set: vi.fn(),
@@ -18,6 +28,10 @@ beforeEach(() => {
 });
 
 describe('Destiny2Cache', () => {
+    beforeEach(() => {
+        vi.resetAllMocks();
+    });
+
     describe('getCharacters', () => {
         describe('when characters are found', () => {
             it('should return characters', async () => {
@@ -31,7 +45,7 @@ describe('Destiny2Cache', () => {
         });
 
         describe('when characters are not found', () => {
-            it('should return characters', async () => {
+            it('should return undefined', async () => {
                 client.get.mockResolvedValueOnce(undefined);
 
                 const result = await destiny2Cache.getCharacters();
@@ -55,14 +69,64 @@ describe('Destiny2Cache', () => {
         });
 
         describe('when given a membership id and an array of characters', () => {
-            it('should cache the characters using the membership id as the key', async () => {
+            it('should cache the characters', async () => {
                 const membershipId = 'some-membership-id';
 
                 await destiny2Cache
                     .setCharacters(membershipId, characters); // eslint-disable-line max-len
 
                 expect(client.set).toHaveBeenCalledOnce();
-                expect(client.set).toHaveBeenCalledWith(membershipId, JSON.stringify(characters));
+                expect(client.set).toHaveBeenCalledWith(expect.any(String), JSON.stringify(characters), 'EX', charactersExpiration);
+            });
+        });
+    });
+
+    describe('getPlayerStatistics', () => {
+        describe('when player statistics are found', () => {
+            it('should return player statistics', async () => {
+                client.get
+                    .mockImplementationOnce(() => Promise
+                        .resolve(JSON.stringify(playerStatistics)));
+
+                const result = await destiny2Cache.getPlayerStatistics();
+
+                expect(result).toEqual(playerStatistics);
+            });
+        });
+
+        describe('when player statistics are not found', () => {
+            it('should return undefined', async () => {
+                client.get.mockResolvedValueOnce(undefined);
+
+                const result = await destiny2Cache.getPlayerStatistics();
+
+                expect(result).toBeUndefined();
+            });
+        });
+    });
+
+    describe('setPlayerStatistics', () => {
+        describe('when membershipId is not a string', () => {
+            it('should throw an error', async () => {
+                await expect(destiny2Cache.setPlayerStatistics({})).rejects.toThrowError();
+            });
+        });
+
+        describe('when player statistics is an empty object', () => {
+            it('should throw an error', async () => {
+                await expect(destiny2Cache.setPlayerStatistics('some-membership-id', {})).rejects.toThrowError();
+            });
+        });
+
+        describe('when given a membership id and an object of player statistics', () => {
+            it('should cache the player statistics', async () => {
+                const membershipId = 'some-membership-id';
+
+                await destiny2Cache
+                    .setPlayerStatistics(membershipId, playerStatistics);
+
+                expect(client.set).toHaveBeenCalledOnce();
+                expect(client.set).toHaveBeenCalledWith(expect.any(String), JSON.stringify(playerStatistics), 'EX', playerStatisticsExpiration);
             });
         });
     });

@@ -20,13 +20,8 @@ class UserCache {
      * @returns {Promise}
      * @private
      */
-    #deleteCache(key) {
-        return new Promise((resolve, reject) => {
-            this.client.del(
-                key,
-                (err, res) => (err ? reject(err) : resolve(res)),
-            );
-        });
+    async #deleteCache(key) {
+        return await this.client.del(key);
     }
 
     /**
@@ -60,16 +55,10 @@ class UserCache {
      * @returns {Promise}
      * @private
      */
-    getCache(key) {
-        return new Promise((resolve, reject) => {
-            this.client.get(key, (err, res) => {
-                if (err) {
-                    return reject(err);
-                }
+    async getCache(key) {
+        const res = await this.client.get(key);
 
-                return resolve(res ? JSON.parse(res) : undefined);
-            });
-        });
+        return res ? JSON.parse(res) : undefined;
     }
 
     /**
@@ -99,7 +88,7 @@ class UserCache {
      * @param user
      * @returns {*}
      */
-    setUser(user = {}) {
+    async setUser(user = {}) {
         const {
             displayName,
             emailAddress,
@@ -115,30 +104,22 @@ class UserCache {
         }
 
         const key = UserCache.#getCacheKey(displayName, membershipType);
-        const promise1 = new Promise((resolve, reject) => {
-            this.client.set(
-                key,
-                JSON.stringify(user),
-                'EX',
-                60 * 60,
-                (err, res) => (err ? reject(err) : resolve(res)),
-            );
-        });
+        const promise1 = await this.client.set(
+            key,
+            JSON.stringify(user),
+            'EX',
+            60 * 60,
+        );
 
         let promise2;
 
         if (phoneNumber) {
-            promise2 = new Promise((resolve, reject) => {
-                this.client.set(
-                    phoneNumber,
-                    JSON.stringify({ displayName, membershipType }),
-
-                    'EX',
-
-                    60 * 60,
-                    (err, res) => (err ? reject(err) : resolve(res)),
-                );
-            });
+            promise2 = await this.client.set(
+                phoneNumber,
+                JSON.stringify({ displayName, membershipType }),
+                'EX',
+                60 * 60,
+            );
         } else {
             promise2 = Promise.resolve();
         }
@@ -146,17 +127,12 @@ class UserCache {
         let promise3;
 
         if (emailAddress) {
-            promise3 = new Promise((resolve, reject) => {
-                this.client.set(
-                    emailAddress,
-                    JSON.stringify({ displayName, membershipType }),
-
-                    'EX',
-
-                    60 * 60,
-                    (err, res) => (err ? reject(err) : resolve(res)),
-                );
-            });
+            promise3 = await this.client.set(
+                emailAddress,
+                JSON.stringify({ displayName, membershipType }),
+                'EX',
+                60 * 60,
+            );
         } else {
             promise3 = Promise.resolve();
         }

@@ -1,5 +1,4 @@
 import { StatusCodes } from 'http-status-codes';
-import configuration from '../helpers/config';
 
 /**
  * User Authentication Middleware Class
@@ -25,9 +24,7 @@ class RoleMiddleware {
             const user = await this.authentication.authenticate(req);
 
             if (user) {
-                if (configuration.administrators
-                    .find(administrator => administrator.displayName === user.displayName
-                        && administrator.membershipType === user.membershipType)) {
+                if (this.authentication.constructor.isAdministrator(user)) {
                     next();
                 } else {
                     res.status(StatusCodes.UNAUTHORIZED).end();

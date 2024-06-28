@@ -14,7 +14,7 @@ import DestinyService from '../destiny/destiny.service';
 import configuration from '../helpers/config';
 import log from '../helpers/log';
 import { xurHash } from './destiny2.constants';
-import { get } from '../helpers/request';
+import { get, post } from '../helpers/request';
 
 const { bungie: { apiKey, host } } = configuration;
 
@@ -34,6 +34,120 @@ class Destiny2Service extends DestinyService {
      * @type {string}
      */
     _api = 'Destiny2';
+
+    /**
+     * Find players by display name.
+     *
+     * @param displayName
+     * @param {int} pageNumber
+     * @returns {Promise}
+     */
+    static async findPlayers(displayName, pageNumber) {
+        const options = {
+            data: {
+                displayNamePrefix: displayName,
+            },
+            headers: {
+                'x-api-key': apiKey,
+            },
+            url: `${servicePlatform}/User/Search/GlobalName/${pageNumber}/`,
+        };
+        const responseBody = await post(options);
+
+        if (responseBody.ErrorCode === 1) {
+            const { Response: { searchResults } } = responseBody;
+
+            return searchResults;
+        }
+
+        throw new DestinyError(
+            responseBody.ErrorCode || -1,
+            responseBody.Message || '',
+            responseBody.ErrorStatus || '',
+        );
+    }
+
+    /**
+     * Get player PVP statistics.
+     *
+     * @param membershipId
+     * @param membershipType
+     * @returns {Promise}
+     */
+    async getPlayerStatistics(membershipId, membershipType) {
+        const emptyStatistics = {
+            pvp: {
+                combatRating: null,
+                efficiency: null,
+                highestLightLevel: null,
+                kda: null,
+                kdr: null,
+            },
+        };
+
+        if (!membershipId || !membershipType) {
+            return emptyStatistics;
+        }
+
+        let statistics = await this.cacheService.getPlayerStatistics(membershipId);
+
+        if (statistics) return statistics;
+
+        const options = {
+            headers: {
+                'x-api-key': apiKey,
+            },
+            url: `${servicePlatform}/Destiny2/${membershipType}/Account/${membershipId}/Stats`,
+        };
+        const responseBody = await get(options);
+
+        if (responseBody.ErrorCode === 1) {
+            const allPvP = responseBody.Response?.mergedAllCharacters?.results?.allPvP;
+
+            if (allPvP && Object.keys(allPvP).length) {
+                const {
+                    allTime: {
+                        combatRating: {
+                            basic: { displayValue: combatRating },
+                        },
+                        efficiency: {
+                            basic: { displayValue: efficiency },
+                        },
+                        highestLightLevel: {
+                            basic: { displayValue: highestLightLevel },
+                        },
+                        killsDeathsAssists: {
+                            basic: { displayValue: kda },
+                        },
+                        killsDeathsRatio: {
+                            basic: { displayValue: kdr },
+                        },
+                    },
+                } = allPvP;
+
+                statistics = {
+                    pvp: {
+                        combatRating,
+                        efficiency,
+                        highestLightLevel,
+                        kda,
+                        kdr,
+                    },
+                };
+                await this.cacheService.setPlayerStatistics(membershipId, statistics);
+
+                return statistics;
+            }
+
+            return emptyStatistics;
+        }
+
+        throw new DestinyError(
+            responseBody.ErrorCode || -1,
+            responseBody.Message || '',
+            responseBody.ErrorStatus || '',
+        );
+    }
 
     /**
      * Get user profile.
