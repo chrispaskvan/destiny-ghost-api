@@ -12,7 +12,6 @@ import applicationInsights from './helpers/application-insights';
 import cache from './helpers/cache';
 import loaders from './loaders';
 import log from './helpers/log';
-import publisher from './helpers/publisher';
 import subscriber from './helpers/subscriber';
 
 let insecureConnection;
@@ -60,7 +59,6 @@ const startServer = async () => {
             console.log('Interuption or termination signal received. Shutting down the server ...');
             await Promise.all([
                 cache.quit(),
-                publisher.close(),
                 subscriber.close(),
             ]);
             insecureServer.close();

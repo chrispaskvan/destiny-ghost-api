@@ -13,7 +13,7 @@ import DestinyError from '../destiny/destiny.error';
 import DestinyService from '../destiny/destiny.service';
 import configuration from '../helpers/config';
 import log from '../helpers/log';
-import { xurHash } from './destiny2.constants';
+import { strangeGearOffersHash } from './destiny2.constants';
 import { get, post } from '../helpers/request';
 
 const { bungie: { apiKey, host } } = configuration;
@@ -213,7 +213,7 @@ class Destiny2Service extends DestinyService {
      * @returns {Promise}
      */
     async getXur(membershipId, membershipType, characterId, accessToken) {
-        const vendor = await this.cacheService.getVendor(xurHash);
+        const vendor = await this.cacheService.getVendor(strangeGearOffersHash);
 
         log.info({
             membershipId,
@@ -230,7 +230,7 @@ class Destiny2Service extends DestinyService {
                 authorization: `Bearer ${accessToken}`,
                 'x-api-key': apiKey,
             },
-            url: `${servicePlatform}/Destiny2/${membershipType}/Profile/${membershipId}/Character/${characterId}/Vendors/${xurHash}?components=402`,
+            url: `${servicePlatform}/Destiny2/${membershipType}/Profile/${membershipId}/Character/${characterId}/Vendors/${strangeGearOffersHash}?components=402`,
         };
         const responseBody = await get(options);
 
@@ -238,7 +238,7 @@ class Destiny2Service extends DestinyService {
             const { Response: { sales: { data } } } = responseBody;
             const itemHashes = Object.entries(data).map(([, value]) => value.itemHash);
 
-            this.cacheService.setVendor(xurHash, itemHashes);
+            this.cacheService.setVendor(strangeGearOffersHash, itemHashes);
 
             return itemHashes;
         }
