@@ -61,3 +61,8 @@ Messages are saved to the database based on the Twilio data schema captured by t
 Billing per User Report
 
 * Nice to add an index to the /From path on the Messages container.
+
+bullmq
+api/app folders
+react
+tensorflow

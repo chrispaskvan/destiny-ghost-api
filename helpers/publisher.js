@@ -1,3 +1,4 @@
+/* eslint-disable max-classes-per-file */
 /**
  * A module for publishing messages.
  *
@@ -6,12 +7,9 @@
  * @author Chris Paskvan
  * @requires azure
  */
-// eslint-disable-next-line max-classes-per-file
-import { ServiceBusAdministrationClient, ServiceBusClient } from '@azure/service-bus';
-import configuration from './config';
+import { Queue } from 'bullmq';
+import cache from './cache';
 import context from './async-context';
-
-const { serviceBus: { connectionString, queueName } } = configuration;
 
 class PublisherError extends Error {
     constructor(message) {
@@ -25,36 +23,20 @@ class PublisherError extends Error {
  */
 class Publisher {
     /**
-     * Azure Service Bus Client
+     * BullMQ Queue
      * @private
      */
-    #serviceBusService;
+    #queue;
 
     /**
-     * Azure Service Bus Message Sender
-     * @private
+     * Create a new instance of the Publisher.
+     * @constructor
+     * @param {string} topic - The topic to publish messages to.
+     * @param {object} cache - The cache to use for storing messages.
+     * @returns {Publisher} - A new instance of the Publisher.
      */
-    #sender;
-
-    /**
-     * Create topic for message.
-     *
-     * @returns {Request|Promise}
-     * @private
-     */
-    async #createTopicAndSender() {
-        const serviceBusAdministratorService = new ServiceBusAdministrationClient(connectionString);
-
-        try {
-            await serviceBusAdministratorService.createTopic(queueName);
-        } catch (err) {
-            if (err.statusCode !== 409) {
-                throw new Error('Failed to create topic.', { cause: err });
-            }
-        }
-
-        this.#serviceBusService = new ServiceBusClient(connectionString);
-        this.#sender = await this.#serviceBusService.createSender(queueName);
+    constructor(topic = 'notifications') {
+        this.#queue = new Queue(topic, cache);
     }
 
     /**
@@ -69,21 +51,6 @@ class Publisher {
      */
     static throwIfMissingClaimCheckNumber() {
         throw new PublisherError('claim check number is required');
-    }
-
-    /**
-     * Clean up resources.
-     */
-    async close() {
-        try {
-            if (this.#sender) {
-                await this.#sender.close();
-            }
-        } finally {
-            if (this.#serviceBusService) {
-                await this.#serviceBusService.close();
-            }
-        }
     }
 
     /**
@@ -110,11 +77,7 @@ class Publisher {
             },
         };
 
-        if (!this.#sender) {
-            await this.#createTopicAndSender();
-        }
-
-        return await this.#sender.sendMessages(message);
+        return await this.#queue.add('notification', message);
     }
 }
 
