@@ -26,7 +26,7 @@ beforeEach(() => {
     destinyService = new DestinyService({ cacheService });
 });
 
-describe.concurrent('DestinyService', () => {
+describe('DestinyService', () => {
     beforeEach(() => {
         vi.resetAllMocks();
     });

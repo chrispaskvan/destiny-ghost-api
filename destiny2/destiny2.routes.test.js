@@ -31,7 +31,7 @@ beforeAll(async () => {
     nock.enableNetConnect(ipAddress);
 });
 
-describe.concurrent('/destiny2', () => {
+describe('/destiny2', () => {
     describe('GET /destiny2/inventory', () => {
         /**
          * The intent of this test is to use async iterators to load a complete set of results by
