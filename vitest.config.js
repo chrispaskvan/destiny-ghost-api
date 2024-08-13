@@ -13,5 +13,8 @@ export default defineConfig({
                 lines: 78.12,
             },
         },
+        sequence: {
+            hooks: 'parallel',
+        },
     },
 });

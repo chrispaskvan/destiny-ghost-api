@@ -65,7 +65,7 @@ beforeEach(() => {
     });
 });
 
-describe.concurrent('Destiny2Controller', () => {
+describe('Destiny2Controller', () => {
     describe('getProfile', () => {
         describe('when session displayName and membershipType are defined', () => {
             describe('when user and destiny services return a user', () => {
