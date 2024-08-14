@@ -1,4 +1,3 @@
- 
 /**
  * A module for accessing the Destiny World database.
  */
@@ -111,7 +110,6 @@ class World {
                 responseType: 'stream',
             }).then(({ data: stream }) => {
                 stream.on('data', chunk => {
-                     
                     file.write(new Buffer.from(chunk));
                 });
                 stream.on('end', () => {

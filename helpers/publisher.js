@@ -1,4 +1,3 @@
- 
 /**
  * A module for publishing messages.
  *

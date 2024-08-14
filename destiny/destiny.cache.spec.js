@@ -1,4 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+    afterEach, beforeEach, describe, expect, it, vi,
+} from 'vitest';
 import RedisErrors from 'redis-errors';
 import DestinyCache from './destiny.cache';
 import mockManifestResponse from '../mocks/manifestResponse.json';
@@ -27,18 +29,15 @@ describe('DestinyCache', () => {
             global.Date = class extends Date {
                 constructor(date) {
                     if (date) {
-                         
                         // eslint-disable-next-line constructor-super
                         return super(date);
                     }
 
-                     
                     return currentDate;
                 }
             };
         });
         afterEach(() => {
-             
             global.Date = realDate;
         });
         describe('when the current date and time is after the reset', () => {
@@ -152,7 +151,6 @@ describe('DestinyCache', () => {
 
                 expect(client.set).toHaveBeenCalledOnce();
                 expect(client.set).toBeCalledWith(
-                     
                     destinyCache._manifestKey,
                     JSON.stringify({ lastModified, manifest: mockManifestResponse.Response }),
                     'EX',

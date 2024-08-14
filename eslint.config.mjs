@@ -26,4 +26,5 @@ export default [
             indent: [2, 4],
             "no-return-await": "off",
         },
-    }];
+    },
+];

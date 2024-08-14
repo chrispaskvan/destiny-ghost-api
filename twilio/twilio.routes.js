@@ -56,7 +56,7 @@ const routes = ({
 
                             return res.end();
                         }
-                         
+
                         for (const [key, value] of Object.entries(cookies)) {
                             if (value) {
                                 res.cookie(key, value);

@@ -32,7 +32,6 @@ if (process.env.NODE_ENV !== 'production') {
 const logger = pino(options);
 const log = new Proxy(logger, {
     get(target, property, receiver) {
-         
         target = context.getStore()?.get('logger') || target;
 
         return Reflect.get(target, property, receiver);

@@ -87,7 +87,7 @@ class Documents {
         const options = {
             accessCondition: {
                 type: 'IfMatch',
-                condition: document._etag,  
+                condition: document._etag,
             },
         };
         const { resource: updatedDocument } = await container

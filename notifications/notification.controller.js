@@ -48,9 +48,8 @@ class NotificationController {
                     );
                     const items = itemHashes.map(itemHash => this.world.getItemByHash(itemHash));
                     const message = items
-                        .filter(({ itemCategoryHashes }) => itemCategoryHashes.includes(this.world.weaponCategory))  
+                        .filter(({ itemCategoryHashes }) => itemCategoryHashes.includes(this.world.weaponCategory))
                         .map(({ displayProperties: { name } }) => name).join('\n');
-                     
                     const { status } = await this.notifications.sendMessage(message, phoneNumber, null, {
                         claimCheckNumber,
                         notificationType,
@@ -112,7 +111,7 @@ class NotificationController {
      * @param {string} number - Claim Check Number
      * @returns
      */
-    async getClaimCheck(number) {  
+    async getClaimCheck(number) {
         return await ClaimCheck.getClaimCheck(number);
     }
 }

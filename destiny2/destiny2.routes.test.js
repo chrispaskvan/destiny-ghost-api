@@ -63,16 +63,13 @@ describe('/destiny2', () => {
                 async function* loadItems(url) {
                     const result = pageThrough(url);
 
-                     
                     for await (const page of result) {
-                         
                         for (const item of page.data) {
                             yield item;
                         }
                     }
                 }
 
-                 
                 for await (const item of loadItems('/destiny2/inventory?page=1&size=11')) {
                     items.push(item);
                     if (items.length >= limit) {

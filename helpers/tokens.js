@@ -1,4 +1,3 @@
- 
 /**
  * A module for creating tokens.
  *
@@ -35,7 +34,7 @@ function getCode(length = 6) {
     const chars = '1234567890';
     let cursor = 0;
 
-    length = isNormalInteger(length) ? length : 6;  
+    length = isNormalInteger(length) ? length : 6;
 
     const result = new Array(length);
     const randomBytes = _randomBytes(length);

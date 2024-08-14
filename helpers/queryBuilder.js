@@ -16,7 +16,6 @@ class QueryBuilder {
      */
     select(selections) {
         if (typeof selections === 'string') {
-             
             selections = selections.trim();
             if (selections.length === 0) {
                 throw new Error('select string is empty');
@@ -31,7 +30,6 @@ class QueryBuilder {
         }
 
         if (typeof selections === 'string') {
-             
             selections = selections.split(',');
         }
 
@@ -53,7 +51,7 @@ class QueryBuilder {
      */
     from(table) {
         if (typeof table === 'string') {
-            table = table.trim();  
+            table = table.trim();
             if (table.length === 0) {
                 throw new Error('table string is empty');
             }
@@ -94,7 +92,6 @@ class QueryBuilder {
     where(key, value) {
         const filter = {};
 
-         
         filter[key] = value;
         this.filters.push(filter);
 
@@ -136,7 +133,6 @@ class QueryBuilder {
                 sql += `${childAlias || tableAlias}.${key} = ${parameterName}`;
                 parameters.push({
                     name: parameterName,
-                     
                     value: filter[key],
                 });
             });

@@ -167,7 +167,6 @@ describe('UserRouter', () => {
                         try {
                             expect(res.statusCode).toEqual(StatusCodes.OK);
 
-                             
                             const body = JSON.parse(res._getData());
 
                             expect(body).toEqual({

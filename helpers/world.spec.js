@@ -21,7 +21,7 @@ beforeAll(() => {
 describe('It\'s Bungie\'s 1st world. You\'re just querying it.', () => {
     itif(
         'should return 2 random Grimoire Cards',
-        () => existsSync(directory),  
+        () => existsSync(directory),
         async () => {
             const count = 2;
 
@@ -43,7 +43,7 @@ describe('It\'s Bungie\'s 1st world. You\'re just querying it.', () => {
 
     itif(
         'should return the icon of the Agent of Nine',
-        () => existsSync(directory),  
+        () => existsSync(directory),
         () => {
             const url = world.getVendorIcon(postmasterHash);
 

@@ -10,7 +10,7 @@ const hook = createHook({
             performance.mark(`gjallarhorn-${id}-init`);
             trackedResources.set(id, type === 'GETADDRINFOREQWRAP'
                 ? `DNS Lookup: ${resource.hostname}`
-                : `HTTP Request: ${resource.req.method} ${resource.req.connection._host}${resource.req.path}`);  
+                : `HTTP Request: ${resource.req.method} ${resource.req.connection._host}${resource.req.path}`);
         }
     },
     destroy(id) {

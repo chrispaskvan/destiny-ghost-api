@@ -21,7 +21,6 @@ export async function resolve(specifier, context, next) {
 
     // `resolveAsync` works with paths, not URLs
     if (specifier.startsWith('file://')) {
-         
         specifier = fileURLToPath(specifier);
     }
     const parentPath = fileURLToPath(parentURL);
@@ -30,7 +29,6 @@ export async function resolve(specifier, context, next) {
     try {
         const resolution = await resolveAsync(specifier, {
             basedir: dirname(parentPath),
-             
             // For whatever reason, --experimental-specifier-resolution=node doesn't search for .mjs extensions
             // but it does search for index.mjs files within directories
             extensions: ['.js', '.json', '.node', '.mjs'],

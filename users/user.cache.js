@@ -40,7 +40,6 @@ class UserCache {
         }
 
         if (displayName && membershipType) {
-             
             promise2 = this.#deleteCache(UserCache.#getCacheKey(displayName, membershipType));
         } else {
             promise2 = Promise.resolve();

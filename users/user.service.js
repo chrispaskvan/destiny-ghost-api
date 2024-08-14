@@ -258,8 +258,8 @@ class UserService {
         const carrier = await this.getPhoneNumberType(user.phoneNumber);
         const filterUser = filter(userSchema);
 
-        user.carrier = carrier.name;  
-        user.type = carrier.type;  
+        user.carrier = carrier.name;
+        user.type = carrier.type;
         userSchema.additionalProperties = false;
 
         const filteredUser = filterUser(user);
@@ -304,9 +304,7 @@ class UserService {
         );
         const delivered = new Set();
 
-         
         for (const message of messages) {
-             
             const received = delivered.has(message.SmsSid) || await this.documents.getDocuments(
                 messageCollectionId,
                 `SELECT * FROM c WHERE c.SmsSid = '${message.SmsSid}' AND c.SmsStatus = 'delivered'`,

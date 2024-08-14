@@ -95,7 +95,6 @@ describe('Destiny2Router', () => {
                     });
 
                     res.on('end', () => {
-                         
                         const data = JSON.parse(res._getData());
 
                         try {
