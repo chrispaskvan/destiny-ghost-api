@@ -287,6 +287,7 @@ class UserService {
      * @param {number} membershipType
      * @returns {Promise.<T>}
      */
+    // eslint-disable-next-line no-unused-private-class-members
     async #deleteUser(documentId, membershipType) {
         return await this.documents
             .deleteDocumentById(userCollectionId, documentId, membershipType);

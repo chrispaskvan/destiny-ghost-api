@@ -70,14 +70,13 @@ class AuthenticationService {
 
         if (ttl < now) {
             try {
-                 
                 user = await this.destinyService.getCurrentUser(accessToken);
-            } catch (err) {
+            } catch {
                 const bungie = await this.destinyService
                     .getAccessTokenFromRefreshToken(refreshToken);
 
-                bungie._ttl = now + bungie.expires_in * 1000;  
-                user.bungie = bungie;  
+                bungie._ttl = now + bungie.expires_in * 1000;
+                user.bungie = bungie;
                 await Promise.all([
                     this.cacheService.setUser(user),
                     this.userService.updateUserBungie(user.id, bungie),

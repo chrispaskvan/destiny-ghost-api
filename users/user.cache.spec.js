@@ -119,6 +119,7 @@ describe('UserCache', () => {
 
             describe('when membershipId is not found', () => {
                 it('returns user', async () => {
+                    // eslint-disable-next-line no-unused-vars
                     const { membershipId, ...mockUser1 } = mockUser;
 
                     vi.spyOn(cacheService, 'getCache')
@@ -172,6 +173,7 @@ describe('UserCache', () => {
             describe('when display name and membership type are given', () => {
                 describe('when email address is not included', () => {
                     it('cache user', async () => {
+                        // eslint-disable-next-line no-unused-vars
                         const { emailAddress, ...mockUser1 } = mockUser;
                         const res = await cacheService.setUser(mockUser1);
 
@@ -182,6 +184,7 @@ describe('UserCache', () => {
 
                 describe('when phone number is not included', () => {
                     it('cache user', async () => {
+                        // eslint-disable-next-line no-unused-vars
                         const { phoneNumber, ...mockUser1 } = mockUser;
                         const res = await cacheService.setUser(mockUser1);
 

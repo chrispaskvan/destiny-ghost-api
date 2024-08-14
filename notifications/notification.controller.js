@@ -57,7 +57,7 @@ class NotificationController {
                     });
                     await ClaimCheck.updatePhoneNumber(claimCheckNumber, phoneNumber, status);
                 }
-            } catch (err) {
+            } catch {
                 const { status } = await this.notifications.sendMessage('Xur has closed shop. He\'ll return Friday.', phoneNumber, null, {
                     claimCheckNumber,
                     notificationType,
