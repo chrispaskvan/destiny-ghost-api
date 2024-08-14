@@ -45,7 +45,6 @@ const startServer = async () => {
 
         secureConnection = server.listen(
             443,
-            // eslint-disable-next-line no-console
             () => console.log('HTTPS server listening on port 443.'),
         );
     }
@@ -55,7 +54,6 @@ const startServer = async () => {
     createTerminus(insecureServer, {
         signals: ['SIGINT', 'SIGTERM'],
         onSignal: async () => {
-            // eslint-disable-next-line no-console
             console.log('Interuption or termination signal received. Shutting down the server ...');
             await Promise.all([
                 cache.quit(),
@@ -72,7 +70,6 @@ const startServer = async () => {
 
         applicationInsights.trackMetric({ name: 'startup-time', value: duration });
 
-        // eslint-disable-next-line no-console
         console.log(`HTTP server listening on port ${port} with ${cpuCount} cpus.`);
     });
 

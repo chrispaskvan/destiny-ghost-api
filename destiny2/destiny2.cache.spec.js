@@ -73,7 +73,7 @@ describe('Destiny2Cache', () => {
                 const membershipId = 'some-membership-id';
 
                 await destiny2Cache
-                    .setCharacters(membershipId, characters); // eslint-disable-line max-len
+                    .setCharacters(membershipId, characters);
 
                 expect(client.set).toHaveBeenCalledOnce();
                 expect(client.set).toHaveBeenCalledWith(expect.any(String), JSON.stringify(characters), 'EX', charactersExpiration);

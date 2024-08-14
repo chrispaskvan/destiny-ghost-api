@@ -109,7 +109,7 @@ describe('Destiny2Controller', () => {
                         },
                     }]);
                     expect(destiny2Service.getXur)
-                        .toHaveBeenCalledWith(membershipId, membershipType, characterId, accessToken); // eslint-disable-line max-len
+                        .toHaveBeenCalledWith(membershipId, membershipType, characterId, accessToken);
                 });
             });
         });

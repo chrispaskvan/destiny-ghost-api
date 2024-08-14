@@ -9,7 +9,6 @@ vi.mock('bullmq', () => ({
     })),
 }));
 
-// eslint-disable-next-line import/first
 import publisher from './publisher';
 
 const chance = new Chance();

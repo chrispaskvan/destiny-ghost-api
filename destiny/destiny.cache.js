@@ -37,7 +37,6 @@ class DestinyCache {
      * Get the cached Destiny Manifest.
      * @returns {Promise}
      */
-    // eslint-disable-next-line no-underscore-dangle
     async getManifest(manifestKey = this._manifestKey) {
         try {
             const res = await this.client.get(manifestKey);
@@ -97,7 +96,6 @@ class DestinyCache {
         if (manifest && typeof manifest === 'object') {
             try {
                 return await this.client.set(
-                    // eslint-disable-next-line no-underscore-dangle
                     this._manifestKey,
                     JSON.stringify({ lastModified, manifest }),
                     'EX',

@@ -56,7 +56,6 @@ class DestinyService {
             headers: {
                 'x-api-key': apiKey,
             },
-            // eslint-disable-next-line no-underscore-dangle
             url: `${servicePlatform}/${this._api}/Manifest`,
         };
         const {
@@ -148,7 +147,7 @@ class DestinyService {
      * @param state
      * @returns {Promise}
      */
-    getAuthorizationUrl(state) { // eslint-disable-line class-methods-use-this
+    getAuthorizationUrl(state) {
         return Promise.resolve(`${host}/en/Oauth/Authorize?client_id=${clientId}&response_type=code&state=${state}`);
     }
 
@@ -159,7 +158,7 @@ class DestinyService {
      * @param membershipType
      * @returns {Promise}
      */
-    async getCharacters(membershipId, membershipType) { // eslint-disable-line class-methods-use-this, max-len
+    async getCharacters(membershipId, membershipType) {
         const options = {
             headers: {
                 'x-api-key': apiKey,
@@ -246,7 +245,7 @@ class DestinyService {
      * @param memberships
      * @private
      */
-    #getPreferredMembership(memberships) { // eslint-disable-line class-methods-use-this
+    #getPreferredMembership(memberships) {
         const [{ crossSaveOverride }] = memberships;
 
         return memberships.find(({ membershipType }) => membershipType === crossSaveOverride)

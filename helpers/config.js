@@ -2,7 +2,6 @@ import { readFileSync, readdirSync } from 'fs';
 import camelCase from 'lodash/camelCase';
 
 function loadFile(file) {
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     const data = readFileSync(`./settings/${file}`, 'utf8');
 
     return {

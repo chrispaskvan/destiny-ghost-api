@@ -236,7 +236,6 @@ class UserController {
     async signUp({ displayName, membershipType, user }) {
         const bungieUser = await this.users.getUserByDisplayName(displayName, membershipType);
 
-        // eslint-disable-next-line no-param-reassign
         user.phoneNumber = UserController.#cleanPhoneNumber(user.phoneNumber);
         Object.assign(user, bungieUser, {
             membership: {
@@ -274,9 +273,7 @@ class UserController {
         const result = await Promise.all(promises);
         const [message, postMark] = result;
 
-        // eslint-disable-next-line no-param-reassign
         user.membership.message = message;
-        // eslint-disable-next-line no-param-reassign
         user.membership.postmark = postMark;
 
         await this.users.updateUser(user);
@@ -298,7 +295,6 @@ class UserController {
             return undefined;
         }
 
-        // eslint-disable-next-line no-param-reassign
         ({ displayName } = currentUser);
 
         const { membershipId, membershipType, profilePicturePath } = currentUser;

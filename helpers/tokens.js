@@ -1,4 +1,3 @@
-/* eslint-disable security/detect-object-injection */
 /**
  * A module for creating tokens.
  *
@@ -35,7 +34,7 @@ function getCode(length = 6) {
     const chars = '1234567890';
     let cursor = 0;
 
-    length = isNormalInteger(length) ? length : 6; // eslint-disable-line no-param-reassign
+    length = isNormalInteger(length) ? length : 6;
 
     const result = new Array(length);
     const randomBytes = _randomBytes(length);

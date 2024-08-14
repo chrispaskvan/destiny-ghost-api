@@ -258,8 +258,8 @@ class UserService {
         const carrier = await this.getPhoneNumberType(user.phoneNumber);
         const filterUser = filter(userSchema);
 
-        user.carrier = carrier.name; // eslint-disable-line no-param-reassign
-        user.type = carrier.type; // eslint-disable-line no-param-reassign
+        user.carrier = carrier.name;
+        user.type = carrier.type;
         userSchema.additionalProperties = false;
 
         const filteredUser = filterUser(user);
@@ -287,6 +287,7 @@ class UserService {
      * @param {number} membershipType
      * @returns {Promise.<T>}
      */
+    // eslint-disable-next-line no-unused-private-class-members
     async #deleteUser(documentId, membershipType) {
         return await this.documents
             .deleteDocumentById(userCollectionId, documentId, membershipType);
@@ -303,9 +304,7 @@ class UserService {
         );
         const delivered = new Set();
 
-        // eslint-disable-next-line no-restricted-syntax
         for (const message of messages) {
-            // eslint-disable-next-line no-await-in-loop
             const received = delivered.has(message.SmsSid) || await this.documents.getDocuments(
                 messageCollectionId,
                 `SELECT * FROM c WHERE c.SmsSid = '${message.SmsSid}' AND c.SmsStatus = 'delivered'`,

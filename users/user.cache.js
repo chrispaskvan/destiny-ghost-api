@@ -40,7 +40,6 @@ class UserCache {
         }
 
         if (displayName && membershipType) {
-            // eslint-disable-next-line max-len
             promise2 = this.#deleteCache(UserCache.#getCacheKey(displayName, membershipType));
         } else {
             promise2 = Promise.resolve();
