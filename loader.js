@@ -6,15 +6,12 @@ import { dirname } from 'node:path';
 import { cwd } from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
-
-// eslint-disable-next-line import/extensions
 import resolveCallback from 'resolve/async.js';
 
 const resolveAsync = promisify(resolveCallback);
 
 const baseURL = pathToFileURL(`${cwd()}/`).href;
 
-// eslint-disable-next-line import/prefer-default-export
 export async function resolve(specifier, context, next) {
     const { parentURL = baseURL } = context;
 
@@ -24,7 +21,7 @@ export async function resolve(specifier, context, next) {
 
     // `resolveAsync` works with paths, not URLs
     if (specifier.startsWith('file://')) {
-        // eslint-disable-next-line no-param-reassign
+         
         specifier = fileURLToPath(specifier);
     }
     const parentPath = fileURLToPath(parentURL);
@@ -33,7 +30,7 @@ export async function resolve(specifier, context, next) {
     try {
         const resolution = await resolveAsync(specifier, {
             basedir: dirname(parentPath),
-            // eslint-disable-next-line max-len
+             
             // For whatever reason, --experimental-specifier-resolution=node doesn't search for .mjs extensions
             // but it does search for index.mjs files within directories
             extensions: ['.js', '.json', '.node', '.mjs'],

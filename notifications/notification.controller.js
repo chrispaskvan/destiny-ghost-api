@@ -48,9 +48,9 @@ class NotificationController {
                     );
                     const items = itemHashes.map(itemHash => this.world.getItemByHash(itemHash));
                     const message = items
-                        .filter(({ itemCategoryHashes }) => itemCategoryHashes.includes(this.world.weaponCategory)) // eslint-disable-line max-len
+                        .filter(({ itemCategoryHashes }) => itemCategoryHashes.includes(this.world.weaponCategory))  
                         .map(({ displayProperties: { name } }) => name).join('\n');
-                    // eslint-disable-next-line max-len
+                     
                     const { status } = await this.notifications.sendMessage(message, phoneNumber, null, {
                         claimCheckNumber,
                         notificationType,
@@ -112,7 +112,7 @@ class NotificationController {
      * @param {string} number - Claim Check Number
      * @returns
      */
-    async getClaimCheck(number) { // eslint-disable-line class-methods-use-this
+    async getClaimCheck(number) {  
         return await ClaimCheck.getClaimCheck(number);
     }
 }

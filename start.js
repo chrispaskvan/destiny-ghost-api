@@ -2,7 +2,7 @@ import { startServer } from './server';
 import { startServer as grpcStart } from './grpc';
 
 function exitOnError(err) {
-    // eslint-disable-next-line no-console
+     
     console.log(err);
     process.exit(1);
 }

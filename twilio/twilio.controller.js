@@ -152,7 +152,7 @@ class TwilioController {
                     .getXur(membershipId, membershipType, characters[0].characterId, accessToken);
                 const items = itemHashes.map(itemHash => this.world.getItemByHash(itemHash));
                 const weapons = items
-                    .filter(({ itemCategoryHashes }) => itemCategoryHashes.includes(this.world.weaponCategory)); // eslint-disable-line max-len
+                    .filter(({ itemCategoryHashes }) => itemCategoryHashes.includes(this.world.weaponCategory));  
                 const result = weapons.reduce((memo, { displayProperties }) => (`${memo + displayProperties.name}\n`), ' ').trim();
 
                 return {
@@ -279,7 +279,7 @@ class TwilioController {
         default: {
             const groups = groupBy(items, item => item.itemName);
             const keys = Object.keys(groups);
-            // eslint-disable-next-line security/detect-object-injection
+             
             const result = keys.reduce((memo, key) => `${memo}\n${key} ${groups[key][0].itemCategory}`, ' ').trim();
 
             return {

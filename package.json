@@ -7,7 +7,7 @@
     "scripts": {
         "coverage": "npm run test:watch -- --coverage --run",
         "format": "remark . --quiet --frail --output",
-        "lint": "eslint --fix --ignore-path .gitignore .",
+        "lint": "eslint --fix .",
         "start:production": "NODE_ENV=production npm start",
         "start:dev": "NODE_ENV=development npm start",
         "start": "node --require=suppress-experimental-warnings --loader=./loader.js --no-experimental-fetch -r dotenv/config --max-old-space-size=8192 --unhandled-rejections=strict start",
@@ -79,10 +79,8 @@
     "devDependencies": {
         "@vitest/coverage-v8": "^2.0.5",
         "chance": "^1.1.12",
-        "eslint": "^8.54.0",
-        "eslint-config-airbnb-base": "^15.0.0",
-        "eslint-plugin-import": "^2.29.0",
-        "eslint-plugin-security": "^1.7.1",
+        "eslint": "^9.9.0",
+        "eslint-plugin-security": "^3.0.1",
         "husky": "^9.1.4",
         "nock": "^13.4.0",
         "node-mocks-http": "^1.15.1",

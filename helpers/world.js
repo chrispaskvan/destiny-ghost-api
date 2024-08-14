@@ -1,4 +1,4 @@
-/* eslint-disable security/detect-non-literal-fs-filename */
+ 
 /**
  * A module for accessing the Destiny World database.
  */
@@ -111,7 +111,7 @@ class World {
                 responseType: 'stream',
             }).then(({ data: stream }) => {
                 stream.on('data', chunk => {
-                    // eslint-disable-next-line new-cap
+                     
                     file.write(new Buffer.from(chunk));
                 });
                 stream.on('end', () => {

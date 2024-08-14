@@ -16,7 +16,7 @@ class QueryBuilder {
      */
     select(selections) {
         if (typeof selections === 'string') {
-            // eslint-disable-next-line no-param-reassign
+             
             selections = selections.trim();
             if (selections.length === 0) {
                 throw new Error('select string is empty');
@@ -31,7 +31,7 @@ class QueryBuilder {
         }
 
         if (typeof selections === 'string') {
-            // eslint-disable-next-line no-param-reassign
+             
             selections = selections.split(',');
         }
 
@@ -53,7 +53,7 @@ class QueryBuilder {
      */
     from(table) {
         if (typeof table === 'string') {
-            table = table.trim(); // eslint-disable-line no-param-reassign
+            table = table.trim();  
             if (table.length === 0) {
                 throw new Error('table string is empty');
             }
@@ -94,7 +94,7 @@ class QueryBuilder {
     where(key, value) {
         const filter = {};
 
-        // eslint-disable-next-line security/detect-object-injection
+         
         filter[key] = value;
         this.filters.push(filter);
 
@@ -136,7 +136,7 @@ class QueryBuilder {
                 sql += `${childAlias || tableAlias}.${key} = ${parameterName}`;
                 parameters.push({
                     name: parameterName,
-                    // eslint-disable-next-line security/detect-object-injection
+                     
                     value: filter[key],
                 });
             });

@@ -56,7 +56,7 @@ const routes = ({
 
                             return res.end();
                         }
-                        // eslint-disable-next-line no-restricted-syntax
+                         
                         for (const [key, value] of Object.entries(cookies)) {
                             if (value) {
                                 res.cookie(key, value);

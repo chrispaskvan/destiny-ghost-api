@@ -150,7 +150,7 @@ describe('AuthenticationService', () => {
         });
 
         describe('when current user requires a refresh', () => {
-            // eslint-disable-next-line camelcase
+             
             const { bungie: { access_token } } = mockUser;
             const expiresIn = 1;
             const now = 11;
@@ -158,7 +158,7 @@ describe('AuthenticationService', () => {
             beforeEach(async () => {
                 destinyService.getCurrentUser = vi.fn().mockRejectedValueOnce();
                 destinyService.getAccessTokenFromRefreshToken = vi.fn().mockResolvedValue({
-                    access_token, // eslint-disable-line camelcase
+                    access_token,  
                     expires_in: expiresIn,
                 });
             });
@@ -176,7 +176,7 @@ describe('AuthenticationService', () => {
                     ...user1,
                     bungie: {
                         _ttl: now + expiresIn * 1000,
-                        access_token, // eslint-disable-line camelcase
+                        access_token,  
                         expires_in: expiresIn,
                     },
                 });

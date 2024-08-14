@@ -1,4 +1,3 @@
-/* eslint-disable import/no-extraneous-dependencies */
 import StreamArray from 'stream-json/streamers/StreamArray';
 import axios from 'axios';
 import nock from 'nock';
@@ -64,16 +63,16 @@ describe('/destiny2', () => {
                 async function* loadItems(url) {
                     const result = pageThrough(url);
 
-                    // eslint-disable-next-line no-restricted-syntax
+                     
                     for await (const page of result) {
-                        // eslint-disable-next-line no-restricted-syntax
+                         
                         for (const item of page.data) {
                             yield item;
                         }
                     }
                 }
 
-                // eslint-disable-next-line no-restricted-syntax
+                 
                 for await (const item of loadItems('/destiny2/inventory?page=1&size=11')) {
                     items.push(item);
                     if (items.length >= limit) {

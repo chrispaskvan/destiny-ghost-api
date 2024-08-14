@@ -87,10 +87,10 @@ describe('UserService', () => {
             global.Date = class extends Date {
                 constructor(date) {
                     if (date) {
-                        return super(date); // eslint-disable-line constructor-super, max-len, no-constructor-return
+                        return super(date);  
                     }
 
-                    // eslint-disable-next-line no-constructor-return
+                     
                     return currentDate;
                 }
             };
@@ -254,7 +254,7 @@ describe('UserService', () => {
                 documentService.getDocuments
                     .mockImplementation(() => Promise.resolve([user, user]));
 
-                // eslint-disable-next-line max-len
+                 
                 await expect(userService.getUserByDisplayName(user.displayName, user.membershipType))
                     .rejects.toThrow();
 
@@ -282,7 +282,7 @@ describe('UserService', () => {
             it('should fail when no documents are returned', async () => {
                 documentService.getDocuments.mockImplementation(() => Promise.resolve());
 
-                // eslint-disable-next-line max-len
+                 
                 await expect(userService.getUserByDisplayName(user.displayName, user.membershipType))
                     .rejects.toThrow();
 

@@ -95,7 +95,7 @@ describe('Destiny2Router', () => {
                     });
 
                     res.on('end', () => {
-                        // eslint-disable-next-line no-underscore-dangle
+                         
                         const data = JSON.parse(res._getData());
 
                         try {

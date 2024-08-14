@@ -1,4 +1,4 @@
-/* eslint-disable security/detect-non-literal-fs-filename */
+ 
 import { existsSync, mkdirSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';

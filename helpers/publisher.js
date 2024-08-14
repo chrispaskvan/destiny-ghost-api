@@ -1,4 +1,4 @@
-/* eslint-disable max-classes-per-file */
+ 
 /**
  * A module for publishing messages.
  *

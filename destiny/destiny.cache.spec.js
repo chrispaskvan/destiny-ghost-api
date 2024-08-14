@@ -28,11 +28,11 @@ describe('DestinyCache', () => {
             global.Date = class extends Date {
                 constructor(date) {
                     if (date) {
-                        // eslint-disable-next-line constructor-super, no-constructor-return
+                         
                         return super(date);
                     }
 
-                    // eslint-disable-next-line constructor-super, no-constructor-return
+                     
                     return currentDate;
                 }
             };
@@ -151,7 +151,7 @@ describe('DestinyCache', () => {
 
                 expect(client.set).toHaveBeenCalledOnce();
                 expect(client.set).toBeCalledWith(
-                    // eslint-disable-next-line no-underscore-dangle
+                     
                     destinyCache._manifestKey,
                     JSON.stringify({ lastModified, manifest: mockManifestResponse.Response }),
                     'EX',

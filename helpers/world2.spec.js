@@ -21,7 +21,7 @@ beforeAll(() => {
 describe('It\'s Bungie\'s 2nd world. You\'re just querying it.', () => {
     itif(
         'should return the lore for Ghost Primus',
-        () => existsSync(directory), // eslint-disable-line security/detect-non-literal-fs-filename, max-len
+        () => existsSync(directory),  
         async () => {
             const { displayProperties: { name } } = world.getLore(2505533224);
 
@@ -31,7 +31,7 @@ describe('It\'s Bungie\'s 2nd world. You\'re just querying it.', () => {
 
     itif(
         'should return the item category Hand Cannon',
-        () => existsSync(directory), // eslint-disable-line security/detect-non-literal-fs-filename, max-len
+        () => existsSync(directory),  
         async () => {
             const { displayProperties: { name } } = world.getItemCategory(6);
 
@@ -41,7 +41,7 @@ describe('It\'s Bungie\'s 2nd world. You\'re just querying it.', () => {
 
     itif(
         'should return the Hunter character class',
-        () => existsSync(directory), // eslint-disable-line security/detect-non-literal-fs-filename, max-len
+        () => existsSync(directory),  
         () => {
             const { displayProperties: { name } } = world.getClassByHash(671679327);
 
@@ -51,7 +51,7 @@ describe('It\'s Bungie\'s 2nd world. You\'re just querying it.', () => {
 
     itif(
         'should return Night Watch',
-        () => existsSync(directory), // eslint-disable-line security/detect-non-literal-fs-filename, max-len
+        () => existsSync(directory),  
         async () => {
             const itemName = 'Night Watch';
             const items = await world.getItemByName(itemName);
@@ -62,7 +62,7 @@ describe('It\'s Bungie\'s 2nd world. You\'re just querying it.', () => {
 
     itif(
         'should return the icon of the Agent of Nine',
-        () => existsSync(directory), // eslint-disable-line security/detect-non-literal-fs-filename, max-len
+        () => existsSync(directory),  
         () => {
             const url = world.getVendorIcon(xurHash);
 
@@ -72,7 +72,7 @@ describe('It\'s Bungie\'s 2nd world. You\'re just querying it.', () => {
 
     itif(
         'should return the category hash for weapons',
-        () => existsSync(directory), // eslint-disable-line security/detect-non-literal-fs-filename, max-len
+        () => existsSync(directory),  
         async () => {
             const { weaponCategory } = world;
 

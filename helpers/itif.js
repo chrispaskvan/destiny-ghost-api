@@ -1,4 +1,3 @@
-// eslint-disable-next-line import/no-extraneous-dependencies
 import { it } from 'vitest';
 
 const itif = (name, condition, cb) => {
