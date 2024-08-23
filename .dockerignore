@@ -1,14 +1,11 @@
 .artillery
 .clinic
 .dockerignore
-.eslintrc
-.eslintignore
 .env
 .git
 .github
 .gitignore
-.idea
-.snyk
+.husky
 .vscode
 ToDo.md
 coverage

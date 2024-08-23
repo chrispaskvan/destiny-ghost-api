@@ -2,7 +2,6 @@
 .artillery/
 .clinic/
 .env
-.idea/
 .vscode/
 coverage/
 databases/
