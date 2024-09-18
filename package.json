@@ -39,7 +39,7 @@
         "base64url": "^3.0.1",
         "better-sqlite3": "^11.2.1",
         "body-parser": "^1.20.2",
-        "bullmq": "^5.12.10",
+        "bullmq": "^5.12.11",
         "compression": "^1.7.4",
         "connect-redis": "^7.1.0",
         "cookie-parser": "^1.4.6",
