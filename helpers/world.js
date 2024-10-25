@@ -115,13 +115,15 @@ class World {
                 stream.on('end', () => {
                     log.info(`content downloaded from ${relativeUrl}`);
 
-                    open(`${databasePath}.zip`, (err, zipFile) => {
+                    open(`${databasePath}.zip`, { lazyEntries: true }, (err, zipFile) => {
                         if (err) {
                             return reject(err);
                         }
 
+                        zipFile.readEntry();
+
                         return zipFile.on('entry', entry => {
-                            zipFile.openReadStream(entry, (err1, readStream) => {
+                            zipFile.openReadStream(entry, (err, readStream) => {
                                 if (err) {
                                     return reject(err);
                                 }
@@ -129,8 +131,10 @@ class World {
                                 const sanitizedFileName = basename(entry.fileName);
 
                                 readStream.on('end', () => {
+                                    zipFile.readEntry();
                                     this.bootstrap(fileName);
                                 });
+
                                 readStream.pipe(createWriteStream(`${databaseDirectory}/${sanitizedFileName}`));
                                 unlinkSync(`${databasePath}.zip`);
 
