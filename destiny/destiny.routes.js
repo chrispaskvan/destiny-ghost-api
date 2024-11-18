@@ -35,14 +35,17 @@ const routes = ({
     });
 
     destinyRouter.route('/signIn/')
-        .get(cors(), (req, res, next) => {
-            destinyController.getAuthorizationUrl()
-                .then(({ state, url }) => {
+        .get(cors(),
+            async (req, res, next) => {
+                try {
+                    const { state, url } = await destinyController.getAuthorizationUrl();
+
                     req.session.state = state;
                     res.send(url);
-                })
-                .catch(next);
-        });
+                } catch (err) {
+                    next(err);
+                }
+            });
 
     /**
      * @swagger
@@ -61,18 +64,20 @@ const routes = ({
      *          description: Unauthorized
      */
     destinyRouter.route('/currentUser/')
-        .get((req, res, next) => {
-            const { session: { displayName, membershipType } } = req;
+        .get(async (req, res, next) => {
+            try {
+                const { session: { displayName, membershipType } } = req;
 
-            if (!displayName || !membershipType) {
-                return res.status(StatusCodes.UNAUTHORIZED).end();
+                if (!displayName || !membershipType) {
+                    return res.status(StatusCodes.UNAUTHORIZED).end();
+                }
+
+                const bungieUser = await destinyController.getCurrentUser(displayName, membershipType)
+
+                res.json(bungieUser);
+            } catch (err) {
+                next(err);
             }
-
-            return destinyController.getCurrentUser(displayName, membershipType)
-                .then(bungieUser => {
-                    res.json(bungieUser);
-                })
-                .catch(next);
         });
 
     /**
@@ -101,26 +106,26 @@ const routes = ({
      *          description: Unrecognized whole number.
      */
     destinyRouter.route('/grimoireCards/:numberOfCards')
-        .get(
-            cors(),
-            (req, res, next) => {
-                const { params: { numberOfCards } } = req;
-                const count = parseInt(numberOfCards, 10);
+        .get(cors(),
+            async (req, res, next) => {
+                try {
+                    const { params: { numberOfCards } } = req;
+                    const count = parseInt(numberOfCards, 10);
 
-                if (Number.isNaN(count)) {
-                    return res.status(StatusCodes.UNPROCESSABLE_ENTITY).end();
+                    if (Number.isNaN(count)) {
+                        return res.status(StatusCodes.UNPROCESSABLE_ENTITY).end();
+                    }
+
+                    if (count < 1 || count > 10) {
+                        return res.status(StatusCodes.BAD_REQUEST)
+                            .send('Must be a whole number less than or equal to 10.');
+                    }
+
+                    const grimoireCards = await destinyController.getGrimoireCards(count);
+                    res.status(StatusCodes.OK).json(grimoireCards);
+                } catch (err) {
+                    next(err);
                 }
-
-                if (count < 1 || count > 10) {
-                    return res.status(StatusCodes.BAD_REQUEST)
-                        .send('Must be a whole number less than or equal to 10.');
-                }
-
-                return destinyController.getGrimoireCards(count)
-                    .then(grimoireCards => {
-                        res.status(StatusCodes.OK).json(grimoireCards);
-                    })
-                    .catch(next);
             },
         );
 
@@ -142,10 +147,10 @@ const routes = ({
      *          description: Returns the Destiny Manifest definition.
      */
     destinyRouter.route('/manifest')
-        .get((req, res, next) => {
+        .get(async (req, res, next) => {
             const cacheControl = req.headers['cache-control'];
             const skipCache = cacheControl && (getMaxAgeFromCacheControl(cacheControl) === 0
-                || cacheControl.split(',').includes('no-cache'));
+            || cacheControl.split(',').includes('no-cache'));
 
             res.locals.skipCache = skipCache;
             if (skipCache) {
@@ -153,29 +158,30 @@ const routes = ({
             } else {
                 next();
             }
-        }, (req, res, next) => {
-            destinyController.getManifest(res.locals.skipCache)
-                .then(result => {
-                    const {
-                        data: {
-                            manifest,
-                        },
-                        meta: {
-                            lastModified,
-                            maxAge,
-                        },
-                    } = result;
-                    const ifModifiedSince = new Date(req.headers['if-modified-since'] ?? null);
+        }, async (req, res, next) => {
+            try {
+                const result = await destinyController.getManifest(res.locals.skipCache);
+                const {
+                    data: {
+                        manifest,
+                    },
+                    meta: {
+                        lastModified,
+                        maxAge,
+                    },
+                } = result;
+                const ifModifiedSince = new Date(req.headers['if-modified-since'] ?? null);
 
-                    res.set({
-                        'Last-Modified': lastModified,
-                        'Cache-Control': `max-age=${maxAge}`,
-                    });
-                    res.status(ifModifiedSince > new Date(lastModified)
-                        ? StatusCodes.NOT_MODIFIED : StatusCodes.OK)
-                        .json(manifest);
-                })
-                .catch(next);
+                res.set({
+                    'Last-Modified': lastModified,
+                    'Cache-Control': `max-age=${maxAge}`,
+                });
+                res.status(ifModifiedSince > new Date(lastModified)
+                    ? StatusCodes.NOT_MODIFIED : StatusCodes.OK)
+                    .json(manifest);
+            } catch (err) {
+                next(err);
+            }
         });
 
     /**
@@ -193,12 +199,14 @@ const routes = ({
      *          description: Returns the Destiny Manifest definition.
      */
     destinyRouter.route('/manifest')
-        .post((req, res, next) => {
-            destinyController.upsertManifest()
-                .then(manifest => {
-                    res.status(StatusCodes.OK).json(manifest);
-                })
-                .catch(next);
+        .post(async (req, res, next) => {
+            try {
+                const manifest = await destinyController.upsertManifest();
+
+                res.status(StatusCodes.OK).json(manifest);
+            } catch (err) {
+                next(err);
+            }
         });
 
     return destinyRouter;

@@ -4,6 +4,7 @@ import {
 import { createResponse, createRequest } from 'node-mocks-http';
 import configuration from '../helpers/config';
 import authorizeUser from './authorization.middleware';
+import { StatusCodes } from 'http-status-codes';
 
 describe('authorizeUser', () => {
     const next = vi.fn().mockImplementation(() => {});
@@ -22,7 +23,7 @@ describe('authorizeUser', () => {
 
             authorizeUser(req, res, next);
 
-            expect(res.statusCode).toEqual(403);
+            expect(res.statusCode).toEqual(StatusCodes.FORBIDDEN);
             expect(next).not.toBeCalled();
         });
     });
@@ -37,7 +38,7 @@ describe('authorizeUser', () => {
 
             authorizeUser(req, res, next);
 
-            expect(res.statusCode).toEqual(403);
+            expect(res.statusCode).toEqual(StatusCodes.FORBIDDEN);
             expect(next).not.toBeCalled();
         });
     });

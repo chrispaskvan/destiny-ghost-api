@@ -37,68 +37,74 @@ const routes = ({
     });
 
     notificationRouter.route('/claimChecks/:claimCheck')
-        .get((req, res, next) => authorizeUser(req, res, next), (req, res, next) => {
-            const { params: { claimCheck: number } } = req;
+        .get(async (req, res, next) => await authorizeUser(req, res, next),
+            async (req, res, next) => {
+                try {
+                    const { params: { claimCheck: number } } = req;
 
-            notificationController.getClaimCheck(number)
-                .then(claimCheck => {
+                    const claimCheck = await notificationController.getClaimCheck(number);
+
                     if (claimCheck) {
                         res.status(StatusCodes.OK).json(claimCheck);
                     } else {
                         res.status(StatusCodes.NOT_FOUND).end();
                     }
-                })
-                .catch(next);
-        });
+                } catch (err) {
+                    next(err);
+                }
+            });
 
     notificationRouter.route('/:subscription')
-        .post((req, res, next) => authorizeUser(req, res, next), async (req, res, next) => {
-            try {
-                const { params: { subscription } } = req;
-                const idempotencyKey = req.headers['idempotency-key'];
+        .post(async (req, res, next) => await authorizeUser(req, res, next),
+            async (req, res, next) => {
+                try {
+                    const { params: { subscription } } = req;
+                    const idempotencyKey = req.headers['idempotency-key'];
 
-                if (idempotencyKey) {
-                    let claimCheck = await getIdempotencyKey(idempotencyKey);
+                    if (idempotencyKey) {
+                        let claimCheck = await getIdempotencyKey(idempotencyKey);
 
-                    if (!claimCheck) {
-                        claimCheck = await notificationController
-                            .create(subscription, null);
-                        await setIdempotencyKey(idempotencyKey, claimCheck);
+                        if (!claimCheck) {
+                            claimCheck = await notificationController
+                                .create(subscription, null);
+                            await setIdempotencyKey(idempotencyKey, claimCheck);
+                        }
+
+                        const headers = {
+                            'Destiny-Ghost-Postmaster': claimCheck,
+                        };
+
+                        res.set(headers).status(StatusCodes.ACCEPTED).end();
+                    } else {
+                        res.status(StatusCodes.BAD_REQUEST).end();
                     }
-
-                    const headers = {
-                        'Destiny-Ghost-Postmaster': claimCheck,
-                    };
-
-                    res.set(headers).status(StatusCodes.ACCEPTED).end();
-                } else {
-                    res.status(StatusCodes.BAD_REQUEST).end();
+                } catch (err) {
+                    next(err);
                 }
-            } catch (err) {
-                next(err);
-            }
-        });
+            });
 
     notificationRouter.route('/:subscription/:phoneNumber')
-        .post((req, res, next) => authorizeUser(req, res, next), (req, res, next) => {
-            const { params: { subscription, phoneNumber } } = req;
+        .post(async (req, res, next) => await authorizeUser(req, res, next),
+            async (req, res, next) => {
+                try {
+                    const { params: { subscription, phoneNumber } } = req;
 
-            if (!Object.keys(notificationTypes).find(key => key === subscription)) {
-                res.status(StatusCodes.NOT_FOUND).json('That subscription is not recognized.');
+                    if (!Object.keys(notificationTypes).find(key => key === subscription)) {
+                        res.status(StatusCodes.NOT_FOUND).json('That subscription is not recognized.');
 
-                return;
-            }
+                        return;
+                    }
 
-            notificationController.create(subscription, phoneNumber)
-                .then(claimCheck => {
+                    const claimCheck = await notificationController.create(subscription, phoneNumber);
                     const headers = {
                         'Destiny-Ghost-Postmaster': claimCheck,
                     };
 
                     res.set(headers).status(StatusCodes.ACCEPTED).end();
-                })
-                .catch(next);
-        });
+                } catch (err) {
+                    next(err);
+                }
+            });
 
     return notificationRouter;
 };

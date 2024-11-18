@@ -1,3 +1,4 @@
+import { StatusCodes } from 'http-status-codes';
 import Joi from 'joi';
 import validate from '../helpers/validate';
 
@@ -31,7 +32,7 @@ class AuthenticationMiddleware {
             if (user) {
                 next();
             } else {
-                res.status(401).end();
+                res.status(StatusCodes.UNAUTHORIZED).end();
             }
         } catch (err) {
             next(err);

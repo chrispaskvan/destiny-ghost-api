@@ -46,69 +46,75 @@ const routes = ({
     });
     const userRouter = Router();
 
-    userRouter.all('*', cors(configuration.cors));
+    userRouter.all('/', cors(configuration.cors));
 
     userRouter.route('/signUp')
-        .post(
-            (req, res, next) => middleware.authenticateUser(req, res, next),
-            (req, res, next) => {
-                const { body: user, session: { displayName, membershipType } } = req;
+        .post((req, res, next) => middleware.authenticateUser(req, res, next),
+            async (req, res, next) => {
+                try {    
+                    const { body: user, session: { displayName, membershipType } } = req;
 
-                if (!(user.firstName && user.lastName && user.phoneNumber && user.emailAddress)) {
-                    return res.status(StatusCodes.UNPROCESSABLE_ENTITY).end();
-                }
+                    if (!(user.firstName && user.lastName && user.phoneNumber && user.emailAddress)) {
+                        return res.status(StatusCodes.UNPROCESSABLE_ENTITY).end();
+                    }
 
-                return userController.signUp({ displayName, membershipType, user })
-                    .then(newUser => (newUser
+                    const newUser = await userController.signUp({ displayName, membershipType, user });
+
+                    return newUser
                         ? res.status(StatusCodes.OK).end()
-                        : res.status(StatusCodes.CONFLICT).end()))
-                    .catch(next);
-            },
-        );
+                        : res.status(StatusCodes.CONFLICT).end();
+                } catch (err) {
+                    next(err);
+                }
+            });
 
     userRouter.route('/join')
         .post(
             (req, res, next) => middleware.authenticateUser(req, res, next),
-            (req, res, next) => {
-                const { body: user } = req;
+            async (req, res, next) => {
+                try {
+                    const { body: user } = req;
 
-                userController.join(user)
-                    .then(newUser => (newUser
+                    const newUser = await userController.join(user)
+                    return newUser
                         ? res.status(StatusCodes.OK).end()
-                        : res.status(StatusCodes.BAD_REQUEST).end()))
-                    .catch(next);
+                        : res.status(StatusCodes.BAD_REQUEST).end();
+                } catch (err) {
+                    next(err);
+                }
             },
         );
 
     userRouter.route('/signIn/Bungie')
-        .get((req, res, next) => {
-            const {
-                query: { code, state: queryState },
-                session: { displayName, state: sessionState },
-            } = req;
+        .get(async (req, res, next) => {
+            try {
+                const {
+                    query: { code, state: queryState },
+                    session: { displayName, state: sessionState },
+                } = req;
 
-            if (displayName) {
-                return res.status(StatusCodes.OK)
-                    .json({ displayName });
+                if (displayName) {
+                    return res.status(StatusCodes.OK)
+                        .json({ displayName });
+                }
+                if (sessionState !== queryState) {
+                    return res.sendStatus(StatusCodes.FORBIDDEN);
+                }
+
+                const user = await userController.signIn({
+                    code,
+                    displayName,
+                    queryState,
+                    sessionState,
+                });
+                if (!user) {
+                    return res.status(StatusCodes.NOT_FOUND).end();
+                }
+
+                return signIn(req, res, user, next);
+            } catch (err) {
+                next(err);
             }
-            if (sessionState !== queryState) {
-                return res.sendStatus(StatusCodes.FORBIDDEN);
-            }
-
-            return userController.signIn({
-                code,
-                displayName,
-                queryState,
-                sessionState,
-            })
-                .then(user => {
-                    if (!user) {
-                        return res.status(StatusCodes.NOT_FOUND).end();
-                    }
-
-                    return signIn(req, res, user, next);
-                })
-                .catch(next);
         });
 
     userRouter.route('/signOut')
@@ -141,16 +147,18 @@ const routes = ({
      *          description: No Destiny Ghost user found.
      */
     userRouter.route('/:emailAddress/emailAddress')
-        .get(
-            (req, res, next) => middleware.authenticateUser(req, res, next),
-            (req, res, next) => {
-                const { params: { emailAddress } } = req;
+        .get((req, res, next) => middleware.authenticateUser(req, res, next),
+            async (req, res, next) => {
+                try {
+                    const { params: { emailAddress } } = req;
+                    const user = await userController.getUserByEmailAddress(emailAddress);
 
-                return userController.getUserByEmailAddress(emailAddress)
-                    .then(user => (user
+                    return user
                         ? res.status(StatusCodes.NO_CONTENT).end()
-                        : res.status(StatusCodes.NOT_FOUND).end()))
-                    .catch(next);
+                        : res.status(StatusCodes.NOT_FOUND).end();
+                } catch (err) {
+                    next(err);
+                }
             },
         );
 
@@ -178,22 +186,23 @@ const routes = ({
      *          description: No Destiny Ghost user found.
      */
     userRouter.route('/:phoneNumber/phoneNumber')
-        .get(
-            (req, res, next) => middleware.authenticateUser(req, res, next),
-            (req, res, next) => {
-                const { params: { phoneNumber } } = req;
+        .get((req, res, next) => middleware.authenticateUser(req, res, next),
+            async (req, res, next) => {
+                try {
+                    const { params: { phoneNumber } } = req;
 
-                return userController.getUserByPhoneNumber(phoneNumber)
-                    .then(user => (user
+                    const user = await userController.getUserByPhoneNumber(phoneNumber);
+                    return user
                         ? res.status(StatusCodes.NO_CONTENT).end()
-                        : res.status(StatusCodes.NOT_FOUND).end()))
-                    .catch(next);
+                        : res.status(StatusCodes.NOT_FOUND).end();
+                } catch (err) {
+                    next(err);
+                }
             },
         );
 
     userRouter.route('/join')
-        .post(
-            (req, res, next) => middleware.authenticateUser(req, res, next),
+        .post((req, res, next) => middleware.authenticateUser(req, res, next),
             (req, res, next) => userController.join(req, res)
                 .catch(next),
         );
@@ -217,56 +226,62 @@ const routes = ({
      *          description: Destiny Ghost profile for the current user was not found.
      */
     userRouter.route('/current')
-        .get(
-            (req, res, next) => middleware.authenticateUser(req, res, next),
-            (req, res, next) => {
-                const { session: { displayName, membershipType } } = req;
+        .get(async (req, res, next) => await middleware.authenticateUser(req, res, next),
+            async (req, res, next) => {
+                try {
+                    const { session: { displayName, membershipType } } = req;
 
-                if (!displayName || !membershipType) {
-                    return res.status(StatusCodes.NOT_FOUND).end();
+                    if (!displayName || !membershipType) {
+                        return res.status(StatusCodes.NOT_FOUND).end();
+                    }
+
+                    const user = await userController.getCurrentUser(displayName, membershipType);
+                    if (user) {
+                        return res.status(StatusCodes.OK).json(user);
+                    }
+
+                    return res.status(StatusCodes.UNAUTHORIZED).end();
+                } catch (err) {
+                    next(err);
                 }
-
-                return userController.getCurrentUser(displayName, membershipType)
-                    .then(user => {
-                        if (user) {
-                            return res.status(StatusCodes.OK).json(user);
-                        }
-
-                        return res.status(StatusCodes.UNAUTHORIZED).end();
-                    })
-                    .catch(next);
             },
         );
 
     userRouter.route('/')
         .patch(
             (req, res, next) => middleware.authenticateUser(req, res, next),
-            (req, res, next) => {
-                const { body: patches, session: { displayName, membershipType } } = req;
-                userController.update({ displayName, membershipType, patches })
-                    .then(user => (user
+            async (req, res, next) => {
+                try {
+                    const { body: patches, session: { displayName, membershipType } } = req;
+                    const user = await userController.update({ displayName, membershipType, patches });
+
+                    return user
                         ? res.json(user)
-                        : res.status(StatusCodes.NOT_FOUND).send('user not found')))
-                    .catch(next);
+                        : res.status(StatusCodes.NOT_FOUND).send('user not found');
+                } catch (err) {
+                    next(err);
+                }
             },
         );
 
     userRouter.route('/:id/version/:version')
-        .get(
-            (req, res, next) => middleware.authenticateUser(req, res, next),
+        .get((req, res, next) => middleware.authenticateUser(req, res, next),
             (req, res, next) => roles.administrativeUser(req, res, next),
-            (req, res, next) => {
-                const { params: { id, version } } = req;
+            async (req, res, next) => {
+                try {
+                    const { params: { id, version } } = req;
 
-                if (!id) {
-                    return res.status(StatusCodes.CONFLICT).send('user id not found');
-                }
+                    if (!id) {
+                        return res.status(StatusCodes.CONFLICT).send('user id not found');
+                    }
 
-                return userController.getUserById(id, version)
-                    .then(user => (user
+                    const user = await userController.getUserById(id, version);
+                    return user
                         ? res.status(StatusCodes.OK).json(user)
-                        : res.status(StatusCodes.NOT_FOUND).send('user not found')))
-                    .catch(next);
+                        : res.status(StatusCodes.NOT_FOUND).send('user not found');
+                } catch (err) {
+                    next(err);
+                }
             },
         );
 
@@ -292,8 +307,8 @@ const routes = ({
      */
     userRouter.route('/:phoneNumber/phoneNumber/messages')
         .delete(
-            // (req, res, next) => middleware.authenticateUser(req, res, next),
-            // (req, res, next) => roles.administrativeUser(req, res, next),
+            (req, res, next) => middleware.authenticateUser(req, res, next),
+            (req, res, next) => roles.administrativeUser(req, res, next),
             async (req, res, next) => {
                 try {
                     const { params: { phoneNumber } } = req;
