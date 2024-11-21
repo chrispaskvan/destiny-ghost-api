@@ -34,7 +34,7 @@
         "@paralleldrive/cuid2": "^2.2.2",
         "@snyk/protect": "^1.1294.0",
         "agentkeepalive": "^4.5.0",
-        "applicationinsights": "^3.3.0",
+        "applicationinsights": "^3.4.0",
         "axios": "^1.7.7",
         "base64url": "^3.0.1",
         "better-sqlite3": "^11.5.0",
