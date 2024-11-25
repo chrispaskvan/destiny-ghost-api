@@ -1,4 +1,4 @@
-FROM node:22.11.0-bookworm-slim
+FROM node:22.11.0-alpine3.19
 
 # labels
 LABEL org.opencontainers.image.created=$CREATED_DATE
