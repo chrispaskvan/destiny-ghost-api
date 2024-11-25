@@ -56,6 +56,7 @@ beforeEach(() => {
 });
 
 describe('Destiny2Router', () => {
+    const next = vi.fn();
     let res;
 
     beforeEach(() => {
@@ -106,7 +107,7 @@ describe('Destiny2Router', () => {
                         }
                     });
 
-                    destiny2Router(req, res);
+                    destiny2Router(req, res, next);
                 }));
             });
         });
@@ -129,7 +130,7 @@ describe('Destiny2Router', () => {
                     }
                 });
 
-                destiny2Router(req, res);
+                destiny2Router(req, res, next);
             }));
         });
     });

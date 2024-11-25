@@ -57,16 +57,16 @@ const routes = ({
      *          description: Unauthorized
      */
     destiny2Router.route('/characters')
-        .get(
-            (req, res, next) => middleware.authenticateUser(req, res, next),
-            (req, res, next) => {
-                const { session: { displayName, membershipType } } = req;
+        .get(async (req, res, next) => await middleware.authenticateUser(req, res, next),
+            async (req, res, next) => {
+                try {
+                    const { session: { displayName, membershipType } } = req;
+                    const characterBases = await destiny2Controller.getCharacters(displayName, membershipType);
 
-                destiny2Controller.getCharacters(displayName, membershipType)
-                    .then(characterBases => {
-                        res.json(characterBases);
-                    })
-                    .catch(next);
+                    res.json(characterBases);
+                } catch (err) {
+                    next(err);
+                }
             },
         );
 
@@ -85,9 +85,10 @@ const routes = ({
      *          description: Returns the complete Destiny 2 item inventory.
      */
     destiny2Router.route('/inventory')
-        .get((req, res, next) => authorizeUser(req, res, next), (req, res, next) => {
-            destiny2Controller.getInventory()
-                .then(items => {
+        .get(async (req, res, next) => await authorizeUser(req, res, next),
+            async (req, res, next) => {
+                try {
+                    const items = await destiny2Controller.getInventory()
                     let page = parseInt(req.query.page, 10);
                     let size = parseInt(req.query.size, 10);
 
@@ -125,9 +126,10 @@ const routes = ({
                             },
                         });
                     }
-                })
-                .catch(next);
-        });
+                } catch (err) {
+                    next(err);
+                }
+            });
 
     /**
      * @swagger
@@ -147,40 +149,41 @@ const routes = ({
      *          description: Returns the Destiny Manifest definition.
      */
     destiny2Router.route('/manifest')
-        .get((req, res, next) => {
+        .get(async (req, res, next) => {
             const cacheControl = req.headers['cache-control'];
             const skipCache = cacheControl && (getMaxAgeFromCacheControl(cacheControl) === 0
                 || cacheControl.split(',').includes('no-cache'));
 
             res.locals.skipCache = skipCache;
             if (skipCache) {
-                authorizeUser(req, res, next);
+                await authorizeUser(req, res, next);
             } else {
                 next();
             }
-        }, (req, res, next) => {
-            destiny2Controller.getManifest(res.locals.skipCache)
-                .then(result => {
-                    const {
-                        data: {
-                            manifest,
-                        },
-                        meta: {
-                            lastModified,
-                            maxAge,
-                        },
-                    } = result;
-                    const ifModifiedSince = new Date(req.headers['if-modified-since'] ?? null);
+        }, async (req, res, next) => {
+            try {
+                const result = await destiny2Controller.getManifest(res.locals.skipCache);
+                const {
+                    data: {
+                        manifest,
+                    },
+                    meta: {
+                        lastModified,
+                        maxAge,
+                    },
+                } = result;
+                const ifModifiedSince = new Date(req.headers['if-modified-since'] ?? null);
 
-                    res.set({
-                        'Last-Modified': lastModified,
-                        'Cache-Control': `max-age=${maxAge}`,
-                    });
-                    res.status(ifModifiedSince > new Date(lastModified)
-                        ? StatusCodes.NOT_MODIFIED : StatusCodes.OK)
-                        .json(manifest);
-                })
-                .catch(next);
+                res.set({
+                    'Last-Modified': lastModified,
+                    'Cache-Control': `max-age=${maxAge}`,
+                });
+                res.status(ifModifiedSince > new Date(lastModified)
+                    ? StatusCodes.NOT_MODIFIED : StatusCodes.OK)
+                    .json(manifest);
+            } catch (err) {
+                next(err);
+            }
         });
 
     /**
@@ -200,13 +203,16 @@ const routes = ({
      *          description: Forbidden
      */
     destiny2Router.route('/manifest')
-        .post((req, res, next) => authorizeUser(req, res, next), (req, res, next) => {
-            destiny2Controller.upsertManifest()
-                .then(({ data: { manifest } }) => {
+        .post(async (req, res, next) => await authorizeUser(req, res, next),
+            async (req, res, next) => {
+                try {
+                    const { data: { manifest } } = destiny2Controller.upsertManifest()
+
                     res.status(StatusCodes.OK).json(manifest);
-                })
-                .catch(next);
-        });
+                } catch (err) {
+                    next(err);
+                }
+            });
 
     /**
      * @swagger
@@ -227,21 +233,21 @@ const routes = ({
      *          description: Xur could not be found.
      */
     destiny2Router.route('/xur')
-        .get(
-            cors(configuration.cors),
-            (req, res, next) => middleware.authenticateUser(req, res, next),
-            (req, res, next) => {
-                const { session: { displayName, membershipType } } = req;
+        .get(cors(configuration.cors),
+            async (req, res, next) => await middleware.authenticateUser(req, res, next),
+            async (req, res, next) => {
+                try {
+                    const { session: { displayName, membershipType } } = req;
+                    const items = await destiny2Controller.getXur(displayName, membershipType);
 
-                destiny2Controller.getXur(displayName, membershipType)
-                    .then(items => {
-                        if (items) {
-                            return res.status(StatusCodes.OK).json(items);
-                        }
+                    if (items) {
+                        return res.status(StatusCodes.OK).json(items);
+                    }
 
-                        return res.status(StatusCodes.NOT_FOUND);
-                    })
-                    .catch(next);
+                    return res.status(StatusCodes.NOT_FOUND);
+                } catch (err) {
+                    next(err);
+                }
             },
         );
 

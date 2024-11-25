@@ -15,6 +15,9 @@ const authenticationController = {
         displayName,
         membershipType,
     })),
+    constructor: {
+        isAdministrator: vi.fn(() => true),
+    },
 };
 const destinyService = {
     getCurrentUser: vi.fn(),
@@ -42,6 +45,7 @@ beforeEach(() => {
 });
 
 describe('UserRouter', () => {
+    const next = vi.fn();
     let res;
 
     beforeEach(() => {
@@ -88,7 +92,7 @@ describe('UserRouter', () => {
                     }
                 });
 
-                userRouter(req, res);
+                userRouter(req, res, next);
             }));
         });
 
@@ -129,7 +133,7 @@ describe('UserRouter', () => {
                     }
                 });
 
-                userRouter(req, res);
+                userRouter(req, res, next);
             }));
         });
 
@@ -187,7 +191,7 @@ describe('UserRouter', () => {
                         }
                     });
 
-                    userRouter(req, res);
+                    userRouter(req, res, next);
                 }));
             });
 
@@ -220,7 +224,7 @@ describe('UserRouter', () => {
                         }
                     });
 
-                    userRouter(req, res);
+                    userRouter(req, res, next);
                 }));
             });
 
@@ -249,14 +253,14 @@ describe('UserRouter', () => {
 
                     res.on('end', () => {
                         try {
-                            expect(res.statusCode).toEqual(401);
+                            expect(res.statusCode).toEqual(StatusCodes.UNAUTHORIZED);
                             done();
                         } catch (err) {
                             reject(err);
                         }
                     });
 
-                    userRouter(req, res);
+                    userRouter(req, res, next);
                 }));
             });
         });
@@ -287,7 +291,7 @@ describe('UserRouter', () => {
                     }
                 });
 
-                userRouter(req, res);
+                userRouter(req, res, next);
             }));
         });
 
@@ -309,7 +313,7 @@ describe('UserRouter', () => {
                     }
                 });
 
-                userRouter(req, res);
+                userRouter(req, res, next);
             }));
         });
     });
@@ -339,7 +343,7 @@ describe('UserRouter', () => {
                     }
                 });
 
-                userRouter(req, res);
+                userRouter(req, res, next);
             }));
         });
 
@@ -361,7 +365,7 @@ describe('UserRouter', () => {
                     }
                 });
 
-                userRouter(req, res);
+                userRouter(req, res, next);
             }));
         });
     });
@@ -379,14 +383,14 @@ describe('UserRouter', () => {
 
                 res.on('end', () => {
                     try {
-                        expect(res.statusCode).toEqual(404);
+                        expect(res.statusCode).toEqual(StatusCodes.NOT_FOUND);
                         done();
                     } catch (err) {
                         reject(err);
                     }
                 });
 
-                userRouter(req, res);
+                userRouter(req, res, next);
             }));
         });
 
@@ -419,7 +423,7 @@ describe('UserRouter', () => {
 
                 res.on('end', () => {
                     try {
-                        expect(res.statusCode).toEqual(200);
+                        expect(res.statusCode).toEqual(StatusCodes.OK);
                         expect(mock).toHaveBeenCalledWith({
                             displayName,
                             firstName,
@@ -444,7 +448,7 @@ describe('UserRouter', () => {
                     }
                 });
 
-                userRouter(req, res);
+                userRouter(req, res, next);
             }));
         });
     });
@@ -459,14 +463,14 @@ describe('UserRouter', () => {
 
                 res.on('end', () => {
                     try {
-                        expect(res.statusCode).toEqual(409);
+                        expect(res.statusCode).toEqual(StatusCodes.CONFLICT);
                         done();
                     } catch (err) {
                         reject(err);
                     }
                 });
 
-                userRouter(req, res);
+                userRouter(req, res, next);
             }));
         });
 
@@ -481,14 +485,14 @@ describe('UserRouter', () => {
 
                 res.on('end', () => {
                     try {
-                        expect(res.statusCode).toEqual(404);
+                        expect(res.statusCode).toEqual(StatusCodes.NOT_FOUND);
                         done();
                     } catch (err) {
                         reject(err);
                     }
                 });
 
-                userRouter(req, res);
+                userRouter(req, res, next);
             }));
         });
 
@@ -507,14 +511,14 @@ describe('UserRouter', () => {
 
                 res.on('end', () => {
                     try {
-                        expect(res.statusCode).toEqual(200);
+                        expect(res.statusCode).toEqual(StatusCodes.OK);
                         done();
                     } catch (err) {
                         reject(err);
                     }
                 });
 
-                userRouter(req, res);
+                userRouter(req, res, next);
             }));
         });
     });

@@ -26,6 +26,7 @@ const documents = {
 let healthRouter;
 
 describe('HealthRouter', () => {
+    const next = vi.fn();
     let res;
 
     beforeEach(() => {
@@ -64,7 +65,7 @@ describe('HealthRouter', () => {
                 });
             });
 
-            it('should return a positive response', () => new Promise((done, reject) => {
+            it('should return a positive response', async () => {
                 const req = createRequest({
                     method: 'GET',
                     url: '/',
@@ -79,35 +80,29 @@ describe('HealthRouter', () => {
                 documents.getDocuments = vi.fn().mockResolvedValue([2]);
 
                 res.on('end', () => {
-                    try {
-                        expect(res.statusCode).toEqual(StatusCodes.OK);
+                    expect(res.statusCode).toEqual(StatusCodes.OK);
 
-                        const body = JSON.parse(res._getData());
+                    const body = JSON.parse(res._getData());
 
-                        expect(body).toEqual({
-                            documents: 2,
-                            twilio: 'All Systems Go',
-                            destiny: {
-                                manifest: '56578.17.04.12.1251-6',
-                                world: 'Red Hand IX',
-                            },
-                            destiny2: {
-                                manifest: '61966.18.01.12.0839-8',
-                                world: 'Eyasluna Legendary Hand Cannon',
-                            },
-                        });
-
-                        done();
-                    } catch (err) {
-                        reject(err);
-                    }
+                    expect(body).toEqual({
+                        documents: 2,
+                        twilio: 'All Systems Go',
+                        destiny: {
+                            manifest: '56578.17.04.12.1251-6',
+                            world: 'Red Hand IX',
+                        },
+                        destiny2: {
+                            manifest: '61966.18.01.12.0839-8',
+                            world: 'Eyasluna Legendary Hand Cannon',
+                        },
+                    });
                 });
 
-                healthRouter(req, res);
-            }));
+                await healthRouter(req, res, next);
+            });
         });
 
-        describe('when all services are unhealthy', () => {
+        describe('when all services are unhealthy', async () => {
             const world = {
                 close: () => Promise.resolve(),
                 getItemByName: () => Promise.reject(new Error()),
@@ -129,7 +124,7 @@ describe('HealthRouter', () => {
                 });
             });
 
-            it('should return a negative response', () => new Promise((done, reject) => {
+            it('should return a negative response', async () => {
                 const req = createRequest({
                     method: 'GET',
                     url: '/',
@@ -140,32 +135,26 @@ describe('HealthRouter', () => {
                 documents.getDocuments = vi.fn().mockRejectedValue(new Error());
 
                 res.on('end', () => {
-                    try {
-                        expect(res.statusCode).toEqual(StatusCodes.SERVICE_UNAVAILABLE);
+                    expect(res.statusCode).toEqual(StatusCodes.SERVICE_UNAVAILABLE);
 
-                        const body = JSON.parse(res._getData());
+                    const body = JSON.parse(res._getData());
 
-                        expect(body).toEqual({
-                            documents: -1,
-                            twilio: 'N/A',
-                            destiny: {
-                                manifest: 'N/A',
-                                world: 'N/A',
-                            },
-                            destiny2: {
-                                manifest: 'N/A',
-                                world: 'N/A',
-                            },
-                        });
-
-                        done();
-                    } catch (err) {
-                        reject(err);
-                    }
+                    expect(body).toEqual({
+                        documents: -1,
+                        twilio: 'N/A',
+                        destiny: {
+                            manifest: 'N/A',
+                            world: 'N/A',
+                        },
+                        destiny2: {
+                            manifest: 'N/A',
+                            world: 'N/A',
+                        },
+                    });
                 });
 
-                healthRouter(req, res);
-            }));
+                await healthRouter(req, res, next);
+            });
         });
     });
 });
