@@ -5,6 +5,7 @@
 [![Codacy Badge](https://api.codacy.com/project/badge/Coverage/f3739ef16c3a4c9d9ad08423744fa5d3)](https://www.codacy.com/manual/chrispaskvan/destiny-ghost-api?utm_source=github.com\&utm_medium=referral\&utm_content=chrispaskvan/destiny-ghost-api\&utm_campaign=Badge_Coverage)
 [![Maintainability](https://api.codeclimate.com/v1/badges/da028fbc47cd8718e45b/maintainability)](https://codeclimate.com/github/chrispaskvan/destiny-ghost-api/maintainability)
 [![Known Vulnerabilities](https://snyk.io/test/github/chrispaskvan/destiny-ghost-api/badge.svg)](https://snyk.io/test/github/chrispaskvan/destiny-ghost-api)
+[![Dependency Status](https://img.shields.io/librariesio/github/chrispaskvan/destiny-ghost-api)](https://libraries.io/github/chrispaskvan/destiny-ghost-api)
 
 Node application for SMS/MMS interface for receiving notifications of Vendor (Xur) inventory changes and on-demand weapon searches.
 
