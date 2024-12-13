@@ -150,8 +150,6 @@ describe('UserRouter', () => {
                     });
 
                     destinyService.getCurrentUser.mockImplementation(() => Promise.resolve({
-                        displayName: 'l',
-                        membershipType: 2,
                         links: [
                             {
                                 rel: 'characters',
@@ -165,6 +163,8 @@ describe('UserRouter', () => {
                                 value: '11',
                             },
                         },
+                        displayName: 'l',
+                        membershipType: 2,
                     }));
 
                     res.on('end', () => {
@@ -213,6 +213,8 @@ describe('UserRouter', () => {
                                 value: '11',
                             },
                         },
+                        displayName: 'l',
+                        membershipType: 2,
                     }));
 
                     res.on('end', () => {
@@ -371,9 +373,32 @@ describe('UserRouter', () => {
     });
 
     describe('update', () => {
+        describe('when If-Match header is not defined', () => {
+            it('should return precondition failed', () => new Promise((done, reject) => {
+                const req = createRequest({
+                    method: 'PATCH',
+                    url: '/',
+                    session: {},
+                });
+
+                res.on('end', () => {
+                    try {
+                        expect(res.statusCode).toEqual(StatusCodes.PRECONDITION_REQUIRED);
+                        done();
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
+
+                userRouter(req, res, next);
+            }));
+        });
         describe('when user is undefined', () => {
             it('should not return a user', () => new Promise((done, reject) => {
                 const req = createRequest({
+                    headers: {
+                        'if-match': '02',
+                    },
                     method: 'PATCH',
                     url: '/',
                     session: {},
@@ -395,61 +420,111 @@ describe('UserRouter', () => {
         });
 
         describe('when user is defined', () => {
-            it('should patch the user', () => new Promise((done, reject) => {
-                const firstName = '11';
-                const req = createRequest({
-                    method: 'PATCH',
-                    url: '/',
-                    body: [
-                        {
-                            op: 'replace',
-                            path: '/firstName',
-                            value: firstName,
+            const ETag = '02';
+            const firstName = '11';
+
+            describe('when ETag does match', () => {
+                it('should patch the user', () => new Promise((done, reject) => {
+                    const req = createRequest({
+                        headers: {
+                            'if-match': ETag,
                         },
-                    ],
-                    session: {
-                        displayName,
-                        membershipType,
-                    },
-                });
-                const user = {
-                    displayName,
-                    firstName: '08',
-                    membershipType,
-                };
-                const mock = userService.updateUser;
-
-                userService.getUserByDisplayName.mockImplementation(() => Promise.resolve(user));
-
-                res.on('end', () => {
-                    try {
-                        expect(res.statusCode).toEqual(StatusCodes.OK);
-                        expect(mock).toHaveBeenCalledWith({
+                        method: 'PATCH',
+                        url: '/',
+                        body: [
+                            {
+                                op: 'replace',
+                                path: '/firstName',
+                                value: firstName,
+                            },
+                        ],
+                        session: {
                             displayName,
-                            firstName,
                             membershipType,
-                            version: 2,
-                            patches: [
-                                {
-                                    patch: [
-                                        {
-                                            op: 'replace',
-                                            path: '/firstName',
-                                            value: '08',
-                                        },
-                                    ],
-                                    version: 1,
-                                },
-                            ],
-                        });
-                        done();
-                    } catch (err) {
-                        reject(err);
-                    }
-                });
+                        },
+                    });
+                    const user = {
+                        _etag: ETag,
+                        displayName,
+                        firstName: '08',
+                        membershipType,
+                    };
+                    const mock = userService.updateUser;
 
-                userRouter(req, res, next);
-            }));
+                    userService.getUserByDisplayName.mockImplementation(() => Promise.resolve(user));
+
+                    res.on('end', () => {
+                        try {
+                            expect(res.statusCode).toEqual(StatusCodes.NO_CONTENT);
+                            expect(mock).toHaveBeenCalledWith({
+                                _etag: ETag,
+                                displayName,
+                                firstName,
+                                membershipType,
+                                version: 2,
+                                patches: [
+                                    {
+                                        patch: [
+                                            {
+                                                op: 'replace',
+                                                path: '/firstName',
+                                                value: '08',
+                                            },
+                                        ],
+                                        version: 1,
+                                    },
+                                ],
+                            });
+                            done();
+                        } catch (err) {
+                            reject(err);
+                        }
+                    });
+
+                    userRouter(req, res, next);
+                }));
+            });
+            describe('when ETag does not match', () => {
+                it('should return precondition failed', () => new Promise((done, reject) => {
+                    const req = createRequest({
+                        headers: {
+                            'if-match': ETag,
+                        },
+                        method: 'PATCH',
+                        url: '/',
+                        body: [
+                            {
+                                op: 'replace',
+                                path: '/firstName',
+                                value: firstName,
+                            },
+                        ],
+                        session: {
+                            displayName,
+                            membershipType,
+                        },
+                    });
+                    const user = {
+                        _etag: 'x',
+                        displayName,
+                        firstName: '08',
+                        membershipType,
+                    };
+
+                    userService.getUserByDisplayName.mockImplementation(() => Promise.resolve(user));
+
+                    res.on('end', () => {
+                        try {
+                            expect(res.statusCode).toEqual(StatusCodes.PRECONDITION_FAILED);
+                            done();
+                        } catch (err) {
+                            reject(err);
+                        }
+                    });
+
+                    userRouter(req, res, next);
+                }));
+            });
         });
     });
 

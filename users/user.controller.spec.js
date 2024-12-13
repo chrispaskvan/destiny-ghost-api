@@ -60,6 +60,8 @@ describe('UserController', () => {
         describe('when session displayName and membershipType are defined', () => {
             describe('when user and destiny services return a user', () => {
                 it('should return the current user', async () => {
+                    const ETag = chance.guid();
+
                     destinyService.getCurrentUser.mockImplementation(() => Promise.resolve({
                         displayName: 'l',
                         membershipType: 2,
@@ -71,16 +73,25 @@ describe('UserController', () => {
                         ],
                     }));
                     userService.getUserByDisplayName.mockImplementation(() => Promise.resolve({
+                        _etag: ETag,
                         bungie: {
                             accessToken: {
                                 value: '11',
                             },
                         },
+                        notifications: [
+                            {
+                                enabled: true,
+                                type: 'Xur',
+                            }
+                        ],
                     }));
 
-                    const user = await userController.getCurrentUser(displayName, membershipType);
+                    const currentUser = await userController.getCurrentUser(displayName, membershipType);
 
-                    expect(user).not.toBeUndefined();
+                    expect(currentUser.ETag).toEqual(ETag);
+                    expect(currentUser.user).not.toBeUndefined();
+                    expect(currentUser.user?.notifications.length).toBeGreaterThan(0);
                 });
             });
 
@@ -95,7 +106,7 @@ describe('UserController', () => {
                         },
                     }));
 
-                    const user = await userController.getCurrentUser(displayName, membershipType);
+                    const { user } = await userController.getCurrentUser(displayName, membershipType);
 
                     expect(user).toBeUndefined();
                 });
@@ -115,7 +126,7 @@ describe('UserController', () => {
                     }));
                     userService.getUserByDisplayName.mockImplementation(() => Promise.resolve());
 
-                    const user = await userController.getCurrentUser(displayName, membershipType);
+                    const { user } = await userController.getCurrentUser(displayName, membershipType);
 
                     expect(user).toBeUndefined();
                 });

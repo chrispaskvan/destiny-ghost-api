@@ -300,13 +300,80 @@
         ],
         "responses": {
           "200": {
-            "description": "Returns the current Destiny Ghost user's profile."
+            "description": "Returns the current Destiny Ghost user's profile.",
+            "headers": {
+              "ETag": {
+                "description": "The ETag of the updated user profile.",
+                "schema": null,
+                "type": "string"
+              }
+            }
           },
           "401": {
             "description": "Unauthorized"
           },
           "404": {
             "description": "Destiny Ghost profile for the current user was not found."
+          }
+        },
+        "headers": {
+          "ETag": {
+            "description": "The ETag of the updated user profile.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "/users/{userId}": {
+      "patch": {
+        "summary": "Update a user's profile.",
+        "tags": [
+          "Users"
+        ],
+        "parameters": [
+          {
+            "name": "If-Match",
+            "in": "head",
+            "description": "The ETag of the user profile.",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "204": {
+            "description": "Returns the updated user profile."
+          }
+        }
+      }
+    },
+    "/users/{phoneNumber}/phoneNumber/messages": {
+      "delete": {
+        "summary": "Delete intermediary messages for a given user.",
+        "tags": [
+          "Users"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "User was not found."
+          },
+          "409": {
+            "description": "Phone Number not given."
           }
         }
       }
