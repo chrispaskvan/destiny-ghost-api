@@ -133,7 +133,7 @@ class UserController {
             return await this.users.deleteUserMessages(user.phoneNumber);
         }
 
-        throw new Error('User is corrupted.');
+        throw new Error('user is corrupted');
     }
 
     /**
@@ -160,22 +160,32 @@ class UserController {
     }
 
     /**
+     * @typedef {Object} CurrentUser
+     * @property {string} ETag
+     * @property {Object} User
+     */
+
+    /**
      * Get current user.
      * @param req
      * @param res
+     * @returns {Promise<CurrentUser>}
      */
     async getCurrentUser(displayName, membershipType) {
         const user = await this.users.getUserByDisplayName(displayName, membershipType);
 
         if (user) {
-            const { bungie: { access_token: accessToken } } = user;
-
+            const { bungie: { access_token: accessToken }, _etag: ETag } = user;
             const bungieUser = await this.destiny.getCurrentUser(accessToken);
 
-            return bungieUser ? UserController.#getUserResponse(bungieUser) : undefined;
+            return bungieUser
+                ? {
+                    ETag,
+                    user: UserController.#getUserResponse(user),
+                } : {};
         }
 
-        return undefined;
+        return {};
     }
 
     /**
@@ -188,7 +198,7 @@ class UserController {
     }
 
     /**
-     * Check if the phone number is registered to a current user.
+     * Get user by id.
      * @param req
      * @param res
      */
@@ -263,8 +273,7 @@ class UserController {
         const promises = [];
 
         promises.push(this.notifications.sendMessage(
-            `Enter ${
-                user.membership.tokens.code} to verify your phone number.`,
+            `Enter ${user.membership.tokens.code} to verify your phone number.`,
             user.phoneNumber,
             user.type === 'mobile' ? iconUrl : '',
         ));
@@ -325,13 +334,16 @@ class UserController {
      * {@tutorial http://williamdurand.fr/2014/02/14/please-do-not-patch-like-an-idiot}
      * @param req
      * @param res
-     * @returns {*}
+     * @returns {Promise}
      */
-    async update({ displayName, membershipType, patches }) {
+    async update({ ETag, displayName, membershipType, patches }) {
         const user = await this.users.getUserByDisplayName(displayName, membershipType, true);
 
         if (!user) {
             return undefined;
+        }
+        if (user._etag !== ETag) {
+            throw new Error('precondition failed');
         }
 
         const userCopy = JSON.parse(JSON.stringify(user));

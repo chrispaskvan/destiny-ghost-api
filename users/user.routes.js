@@ -220,6 +220,11 @@ const routes = ({
      *      responses:
      *        200:
      *          description: Returns the current Destiny Ghost user's profile.
+     *          headers:
+     *            'ETag':
+     *              description: The ETag of the updated user profile.
+     *              schema:
+     *              type: string
      *        401:
      *          description: Unauthorized
      *        404:
@@ -235,9 +240,10 @@ const routes = ({
                         return res.status(StatusCodes.NOT_FOUND).end();
                     }
 
-                    const user = await userController.getCurrentUser(displayName, membershipType);
+                    const { ETag, user } = await userController.getCurrentUser(displayName, membershipType);
+
                     if (user) {
-                        return res.status(StatusCodes.OK).json(user);
+                        return res.setHeader('ETag', ETag).status(StatusCodes.OK).json(user);
                     }
 
                     return res.status(StatusCodes.UNAUTHORIZED).end();
@@ -246,19 +252,57 @@ const routes = ({
                 }
             },
         );
-
+    /**
+     * @swagger
+     * paths:
+     *  /users/{userId}:
+     *    patch:
+     *      summary: Update a user's profile.
+     *      tags:
+     *        - Users
+     *      parameters:
+     *        - name: If-Match
+     *          in: head
+     *          description: The ETag of the user profile.
+     *          schema:
+     *            type: string
+     *          required: true
+     *      produces:
+     *        - application/json
+     *      responses:
+     *        204:
+     *          description: Returns the updated user profile.
+     */
     userRouter.route('/')
         .patch(
             (req, res, next) => middleware.authenticateUser(req, res, next),
             async (req, res, next) => {
                 try {
-                    const { body: patches, session: { displayName, membershipType } } = req;
-                    const user = await userController.update({ displayName, membershipType, patches });
+                    const {
+                        body: patches,
+                        headers: {
+                            'if-match': ETag
+                        },
+                        session: {
+                            displayName,
+                            membershipType
+                        }
+                    } = req;
+
+                    if (!ETag) {
+                        return res.status(StatusCodes.PRECONDITION_REQUIRED).end();
+                    }
+
+                    const user = await userController.update({ ETag, displayName, membershipType, patches });
 
                     return user
-                        ? res.json(user)
+                        ? res.status(StatusCodes.NO_CONTENT).end()
                         : res.status(StatusCodes.NOT_FOUND).send('user not found');
                 } catch (err) {
+                    if (err.message === 'precondition failed') {
+                        return res.status(StatusCodes.PRECONDITION_FAILED).end();
+                    }
+
                     next(err);
                 }
             },
