@@ -36,6 +36,53 @@ function isPhoneNumber(phoneNumber) {
     return !!phoneNumber.trim().length;
 }
 
+/**
+* @swagger
+*  components:
+*    schemas:
+*      Patch:
+*        type: array
+*        items:
+*          type: object
+*          properties:
+*            op:
+*              type: string
+*              enum: [replace]
+*            path:
+*              type: string
+*            value:
+*              type: string
+*      User:
+*        type: object
+*        required:
+*          - displayName
+*        properties:
+*          dateRegistered:
+*            type: string
+*            format: date-time
+*          displayName:
+*            type: string
+*          emailAddress:
+*            type: string
+*            format: email
+*          firstName:
+*            type: string
+*          lastName:
+*            type: string
+*          links:
+*            type: array
+*            items:
+*              $ref: '#/components/schemas/Link'
+*          notifications:
+*            type: array
+*            items:
+*              $ref: '#/components/schemas/Notification'
+*          phoneNumber:
+*            type: string
+*            format: phone
+*          profilePicturePath:
+*            type: string
+*/
 const routes = ({
     authenticationController, destinyService, notificationService, userService, worldRepository,
 }) => {
@@ -51,7 +98,7 @@ const routes = ({
     userRouter.route('/signUp')
         .post((req, res, next) => middleware.authenticateUser(req, res, next),
             async (req, res, next) => {
-                try {    
+                try {
                     const { body: user, session: { displayName, membershipType } } = req;
 
                     if (!(user.firstName && user.lastName && user.phoneNumber && user.emailAddress)) {
@@ -220,6 +267,10 @@ const routes = ({
      *      responses:
      *        200:
      *          description: Returns the current Destiny Ghost user's profile.
+     *          content:
+     *            application/json:
+     *              schema:
+     *                $ref: '#/components/schemas/User'
      *          headers:
      *            'ETag':
      *              description: The ETag of the updated user profile.
@@ -258,15 +309,28 @@ const routes = ({
      *  /users/{userId}:
      *    patch:
      *      summary: Update a user's profile.
+     *      description: See [JSONPatch](https://jsonpatch.com) for more information.
      *      tags:
      *        - Users
      *      parameters:
      *        - name: If-Match
-     *          in: head
+     *          in: header
      *          description: The ETag of the user profile.
      *          schema:
      *            type: string
      *          required: true
+     *        - name: userId
+     *          in: path
+     *          description: The user's id.
+     *          required: true
+     *          schema:
+     *            type: string
+     *      requestBody:
+     *        description: Update an existent user in the store
+     *        content:
+     *          application/json:
+     *            schema:
+     *              $ref: '#/components/schemas/Patch'
      *      produces:
      *        - application/json
      *      responses:
@@ -337,6 +401,13 @@ const routes = ({
      *      summary: Delete intermediary messages for a given user.
      *      tags:
      *        - Users
+     *      parameters:
+     *        - name: phoneNumber
+     *          in: path
+     *          description: The phone number of the user.
+     *          required: true
+     *          schema:
+     *            type: string
      *      produces:
      *        - application/json
      *      responses:

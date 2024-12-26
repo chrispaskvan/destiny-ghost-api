@@ -73,7 +73,6 @@ class UserController {
         emailAddress,
         firstName,
         lastName,
-        membershipType,
         notifications = [],
         phoneNumber,
         profilePicturePath,
@@ -93,15 +92,14 @@ class UserController {
             emailAddress,
             firstName,
             lastName,
-            membershipType,
-            notifications: subscriptions,
-            phoneNumber,
             links: [
                 {
                     rel: 'characters',
                     href: '/destiny2/characters',
                 },
             ],
+            notifications: subscriptions,
+            phoneNumber,
             profilePicturePath,
         };
     }

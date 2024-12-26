@@ -1,68 +1,60 @@
 # To Do List
 
-## User Interfaces
+## User Interface
 
--https://material-ui.com/store/items/onepirate/
--https://github.com/expressjs/vhost
--https://www.hacksparrow.com/webdev/express/vhost.html
+The application needs a user interface to allow users to register, login, and manage their subscriptions. Plan on using React. Add a UI testing framework like Cypress or Playwright.
 
-## Coverage Ratchet
+The web application also needs to have a public page that provides a clear and comprehensive overview of the campaign's objectives and interactions the end-user would experience after opting in. For more details about the Campaign Approval Best Practices, see [here](https://support.twilio.com/hc/en-us/articles/11847054539547-A2P-10DLC-Campaign-Approval-Best-Practices).
+
+### Bonuses
+
+The user interface should be a Progressive Web Application (PWA) that can be installed on a user's device.
+
+The user interface could provide a billing report for the user.
+
+Segregate the user interface from the API to allow for independent scaling.
 
 ## Performance Testing
 
--https://github.com/nearform/node-clinic
+More performance tests should be added to the application to identify bottlenecks.
 
-## CosmosDB Stored Procedure for Removing Intermediate Message Statuses
+### Resources
+- [Node Clinic](https://github.com/nearform/node-clinic)
+- [Artillery](https://www.artillery.io)
 
 ## Notifications
 
--Save array of subscriber phone numbers to the Notifications collection.
--Emit an event to notify the class to add a subscriber.
--Fetch subscribers from the Notification collection.
--Add a utility end point for synchronization in case of failures.
+The application could maintain a list of subscribers to notify for each vendor rather than querying for subscribed users in the user collection.
+- Save an array of subscribed phone numbers to the vendor in the Notifications collection.
+- Emit an event to notify the Notification class to add a subscriber.
+- Fetch subscribers from the Notification collection when it is time to send a message.
+- Add a utility for synchronizing the list of phone numbers subscibed to the vendor with the source of truth User collection as a fallback in case of failures.
 
-## File Structure
+## Telemetry
 
--https://softwareontheroad.com/ideal-nodejs-project-structure
--https://github.com/santiq/bulletproof-nodejs
+The application has been instrumented with Application Insights, but custom telemetry data could be added to provide more insights into the application's performance.
 
-## Local SSL Certificate
+### Bonuses
 
--https://github.com/FiloSottile/mkcert
--https://stackoverflow.com/questions/21397809/create-a-trusted-self-signed-ssl-cert-for-localhost-for-use-with-express-node
+- Evaluate how to capture application metrics like Node performace.
+- Consider OpenTelemetry for distributed tracing.
 
-Health versus Metrics
-OpenTelemetry
-Circuit Breaker
+## Circuit Breaker
 
-New User Workflow w/Intergration Tests
-User Interface
+Bungie's API is a external dependency that could be unreliable. Implement a circuit breaker to prevent the application from making requests to the API when it is down.
 
-Docker Compose file for CI Testing
-Improve Use of Application Insights
+## Manifest Refresh
 
-CRON job to refresh manifest
+Add a timer to automatically refresh the manifest file when Bungie releases a new version.
 
-[Testing the dark scenarios of your Node.js application](https://practica.dev/blog/testing-the-dark-scenarios-of-your-nodejs-application/)
-[The EventSource interface is web content's interface to server-sent events.](https://developer.mozilla.org/en-US/docs/Web/API/EventSource)
-[Testing Automation, What are Pyramids and Diamonds?](https://ritesh-kapoor.medium.com/testing-automation-what-are-pyramids-and-diamonds-67494fec7c55)
+## Rich Communication Services (RCS)
 
-Call /v1/notifications
-Playwright?
-Local copy of Cosmos DB in Docker
-Docker of wiremock
-Replace ServiceBus with BullMQ?
-Install Circuit Breaker
-Cross Save Capabilities
+The application could be enhanced to use RCS to provide a richer experience for users. RCS is a messaging protocol that allows for more interactive messaging experiences. For example, a user could receive a message with a carousel of images of the players in a fireteam. See [How to send an RCS message with Twilio and Node.js](https://www.twilio.com/en-us/blog/getting-started-with-rcs-node) for more information.
 
-Problem Statement:
-Messages are saved to the database based on the Twilio data schema captured by the service through the web hook. When a user sends a message to the service, in converse with receiving a message from the service, the phone number the message is directed to, and identified in the data, is the Twilio messaging service's, not the user's.
+## Challenges
 
-Billing per User Report
+Messages are saved to the database based on the Twilio data schema captured by the service through the web hook. When a user sends a message to the service, in converse with receiving a message from the service, the phone number the message is directed to, and identified in the data, is the Twilio messaging service's, not the user's. Therefore, the service cannot determine how many messages a user has sent to the service. The service can only determine how many messages the user has received from the service. This is a challenge because the service needs to bill users based on both the number of messages they send to the service and the number of messages received from the service.
 
-* Nice to add an index to the /From path on the Messages container.
+## AI
 
-bullmq
-api/app folders
-react
-tensorflow
+I'd like to explore the possibility of using AI to drive a feature that uses text recognition from an image to determine players in a fireteam. A user could send a screenshot of the players in the lobby before the start of a match and receive a report from the service with the players' stats in order to highlight strong players over weak ones.
