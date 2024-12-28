@@ -41,7 +41,7 @@ The application has been instrumented with Application Insights, but custom tele
 
 ## Circuit Breaker
 
-Bungie's API is a external dependency that could be unreliable. Implement a circuit breaker to prevent the application from making requests to the API when it is down.
+Bungie's API is a external dependency that could be unreliable. Implement a circuit breaker to prevent the application from making requests to the API when it is down. Check out [Opossum](https://github.com/nodeshift/opossum) for a Node.js circuit breaker.
 
 ## Manifest Refresh
 

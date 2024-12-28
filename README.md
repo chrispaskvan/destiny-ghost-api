@@ -17,6 +17,10 @@ This project provides a quick and convenient way to query the Destiny database t
 
 This project is not affiliated with, maintained, authorized, endorsed, or sponsored by Bungie.
 
+## To Do List
+
+See my ideas for future enhancements in [ToDo.md](ToDo.md).
+
 ## Background
 
 In the fall of 2007, I was introduced to Halo 3. I immediately fell in love with the game. Perhaps my greatest achievement as a gamer was completing the campaign on Legendary difficulty. Bungie moved on from Halo and released Destiny in the fall of 2014.
