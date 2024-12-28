@@ -11,7 +11,7 @@ Node application for SMS/MMS interface for receiving notifications of Vendor (Xu
 
 ## Description
 
-This project is a work in progress. I eventually intend to release an app for registering with this service. The problem this project intends to solve is to provide a quick and convenient way for users to query the Destiny database through short messages. For example, "Thorn" returns "Thorn Exotic Primary Hand Cannon". In addition, the service can also notify gamers, who may not log on to Destiny on a daily basis, updates as to what items come up for sale when vendors refresh their stock. So for example when Xur finally sells that Gjallarhorn you've been dying for, you don't miss it.
+This project provides a quick and convenient way to query the Destiny database through text messages. The primary function allows guardians to message the name of the mysterious weapon that just struck them down in PvP (Player versus Player) for more information. For example, "Thorn" returns "Thorn Exotic Primary Hand Cannon". The service can also notify guardians, who may not log onto Destiny on a regular basis, updates as to what items come up for sale when vendors refresh their stock. So when Xur finally sells that Gjallarhorn you've been dying for, you don't miss it.
 
 ## Disclaimer
 
@@ -21,13 +21,51 @@ This project is not affiliated with, maintained, authorized, endorsed, or sponso
 
 In the fall of 2007, I was introduced to Halo 3. I immediately fell in love with the game. Perhaps my greatest achievement as a gamer was completing the campaign on Legendary difficulty. Bungie moved on from Halo and released Destiny in the fall of 2014.
 
-Destiny had some shortcomings from the start. Despite that, my imagination was captured by how the Destiny community found ways to fill the gaps. Developers shared apps for managing inventory, finding Public Events, and looking for a group (LFG). And what made these apps possible was Bungie's public Destiny API.
+Destiny had its share of shortcomings from the beginning. Despite that, my imagination was captured by how the Destiny community found ways to fill the gaps. Developers shared apps for managing inventory, finding Public Events, and looking for a group (LFG). And what made these apps possible was Bungie's public Destiny API.
 
 From a business perspective, I found this fascinating. By offering a public API, Bungie got to see what features the community wanted. Sometimes Bungie incorporated these features. And other times, Bungie embraced these 3rd party apps.
 
-As a developer and a gamer, I wanted a fun portfolio project. At the time, I was impressed with the Twilio's developer experience for programmable SMS messages. So I came up with an application for receiving SMS messages for important Destiny events like "What is Xur selling today?" and a way to query the Destiny database over SMS. With this project, I try new things, apply what I've learned, and ask my phone after I get one-shotted in the Crucible, "What gun was that‽"
+As a developer and a gamer, I wanted a fun portfolio project. At the time when I started, I was impressed with the Twilio's developer experience for programmable SMS (Short Message Service). So I came up with an application for receiving SMS messages for important Destiny events like "What is Xur selling today?" and a way to query the Destiny database through SMS. With this project, I like to try new things, apply what I've learned, and ask my phone after I get one-shotted in the Crucible, "What gun was that‽"
 
-## Architecture
+## Software Architecture
+
+### Frameworks
+- Express.js 5.x
+- Vitest.js for testing
+- ESLint
+- BullMQ for pub/sub messaging
+- Pino for logging
+- Twilio for SMS/MMS
+
+### Security
+- Secure HTTP response headers with Helmet
+- Rate limits
+- Data validation and schema definitions
+- Body parser limits
+
+### Design Patterns
+- Graceful shutdown
+- Caching strategies
+- JSON PAtch
+- Health checks and metrics
+- ESM support
+- API documentation with Swagger
+- Test suites: unit, integration, and end-to-end
+
+### Featured Architectures
+- Observability from request and trace headers integrated with logs
+- Performance hooks for capturing latency of external services
+- HTTP request streaming and paginated responses for fetching inventory
+- GRPC server for fetching inventory data
+- Asynchronous notification API with idempotency and claim checks. Throttling is in place to prevent abuse.
+- GraphQL: The API supports GraphQL queries
+- Optimistic Locking: The patch user endpoint leverages optimistic locking to prevent colliding updates to a user's profile.
+
+### Best Practices
+
+- https://github.com/nodeshift/nodejs-reference-architecture
+- https://github.com/testjavascript/nodejs-integration-tests-best-practices
+- https://github.com/goldbergyoni/nodebestpractices
 
 ## References
 

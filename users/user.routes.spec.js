@@ -181,7 +181,6 @@ describe('UserRouter', () => {
                                         rel: 'characters',
                                     },
                                 ],
-                                membershipType: 2,
                                 notifications: [],
                             });
 

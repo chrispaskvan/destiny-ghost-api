@@ -12,6 +12,22 @@ import getMaxAgeFromCacheControl from '../helpers/get-max-age-from-cache-control
 import configuration from '../helpers/config';
 
 /**
+ * @swagger
+ *  components:
+ *    schemas:
+ *      Link:
+ *        type: object
+ *        required:
+ *          - href
+ *          - rel
+ *        properties:
+ *          href:
+ *            type: string
+ *          rel:
+ *            type: string
+ */
+
+/**
  * Destiny Routes
  * @param authenticationController
  * @param destiny2Service
@@ -141,7 +157,7 @@ const routes = ({
      *        - Destiny 2
      *      parameters:
      *        - name: If-Modified-Since
-     *          in: head
+     *          in: header
      *      produces:
      *        - application/json
      *      responses:

@@ -10,25 +10,6 @@
     }
   },
   "paths": {
-    "/destiny/currentUser": {
-      "get": {
-        "summary": "Get the currently authenticated user.",
-        "tags": [
-          "Destiny"
-        ],
-        "produces": [
-          "application/json"
-        ],
-        "responses": {
-          "200": {
-            "description": "Returns current user details."
-          },
-          "401": {
-            "description": "Unauthorized"
-          }
-        }
-      }
-    },
     "/destiny/grimoireCards/{numberOfCards}": {
       "get": {
         "summary": "Get a random selection of Grimoire Cards.",
@@ -51,10 +32,37 @@
         ],
         "responses": {
           "200": {
-            "description": "Returns a random selection of Grimoire Cards."
+            "description": "Returns a random selection of Grimoire Cards.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Unique identifier assigned when not provided.",
+                "schema": null,
+                "type": "string"
+              },
+              "X-Trace-Id": {
+                "description": "Unique identifier assigned.",
+                "schema": null,
+                "type": "string"
+              },
+              "X-RateLimit-Limit": {
+                "description": "Number of requests allowed in the current period.",
+                "schema": null,
+                "type": "number"
+              },
+              "X-RateLimit-Remaining": {
+                "description": "Number of requests remaining in the current period.",
+                "schema": null,
+                "type": "number"
+              },
+              "X-RateLimit-Reset": {
+                "description": "Time at which the current period ends.",
+                "schema": null,
+                "type": "string"
+              }
+            }
           },
           "400": {
-            "description": "Invalid whole number between 1 and 10."
+            "description": "Invalid whole number outside the range of 1 to 10."
           },
           "422": {
             "description": "Unrecognized whole number."
@@ -70,8 +78,12 @@
         ],
         "parameters": [
           {
+            "name": "Cache-Control",
+            "in": "header"
+          },
+          {
             "name": "If-Modified-Since",
-            "in": "head"
+            "in": "header"
           }
         ],
         "produces": [
@@ -79,7 +91,34 @@
         ],
         "responses": {
           "200": {
-            "description": "Returns the Destiny Manifest definition."
+            "description": "Returns the Destiny Manifest definition.",
+            "headers": {
+              "Last-Modified": {
+                "description": "The date and time the manifest was last modified.",
+                "schema": null,
+                "type": "string"
+              },
+              "Cache-Control": {
+                "description": "The cache control header.",
+                "schema": null,
+                "type": "string"
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified",
+            "headers": {
+              "Last-Modified": {
+                "description": "The date and time the manifest was last modified.",
+                "schema": null,
+                "type": "string"
+              },
+              "Cache-Control": {
+                "description": "The cache control header.",
+                "schema": null,
+                "type": "string"
+              }
+            }
           }
         }
       },
@@ -142,7 +181,7 @@
         "parameters": [
           {
             "name": "If-Modified-Since",
-            "in": "head"
+            "in": "header"
           }
         ],
         "produces": [
@@ -301,6 +340,13 @@
         "responses": {
           "200": {
             "description": "Returns the current Destiny Ghost user's profile.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            },
             "headers": {
               "ETag": {
                 "description": "The ETag of the updated user profile.",
@@ -315,34 +361,46 @@
           "404": {
             "description": "Destiny Ghost profile for the current user was not found."
           }
-        },
-        "headers": {
-          "ETag": {
-            "description": "The ETag of the updated user profile.",
-            "schema": {
-              "type": "string"
-            }
-          }
         }
       }
     },
     "/users/{userId}": {
       "patch": {
         "summary": "Update a user's profile.",
+        "description": "See [JSONPatch](https://jsonpatch.com) for more information.",
         "tags": [
           "Users"
         ],
         "parameters": [
           {
             "name": "If-Match",
-            "in": "head",
+            "in": "header",
             "description": "The ETag of the user profile.",
             "schema": {
               "type": "string"
             },
             "required": true
+          },
+          {
+            "name": "userId",
+            "in": "path",
+            "description": "The user's id.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
+        "requestBody": {
+          "description": "Update an existent user in the store",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Patch"
+              }
+            }
+          }
+        },
         "produces": [
           "application/json"
         ],
@@ -358,6 +416,17 @@
         "summary": "Delete intermediary messages for a given user.",
         "tags": [
           "Users"
+        ],
+        "parameters": [
+          {
+            "name": "phoneNumber",
+            "in": "path",
+            "description": "The phone number of the user.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "produces": [
           "application/json"
@@ -379,6 +448,104 @@
       }
     }
   },
-  "components": {},
+  "components": {
+    "schemas": {
+      "Link": {
+        "type": "object",
+        "required": [
+          "href",
+          "rel"
+        ],
+        "properties": {
+          "href": {
+            "type": "string"
+          },
+          "rel": {
+            "type": "string"
+          }
+        }
+      },
+      "Notification": {
+        "type": "object",
+        "required": [
+          "enabled",
+          "type"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "type": {
+            "type": "string",
+            "example": "Xur"
+          }
+        }
+      },
+      "Patch": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "enum": [
+                "replace"
+              ]
+            },
+            "path": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "User": {
+        "type": "object",
+        "required": [
+          "displayName"
+        ],
+        "properties": {
+          "dateRegistered": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "emailAddress": {
+            "type": "string",
+            "format": "email"
+          },
+          "firstName": {
+            "type": "string"
+          },
+          "lastName": {
+            "type": "string"
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Link"
+            }
+          },
+          "notifications": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Notification"
+            }
+          },
+          "phoneNumber": {
+            "type": "string",
+            "format": "phone"
+          },
+          "profilePicturePath": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
   "tags": []
 }

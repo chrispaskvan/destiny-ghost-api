@@ -6,6 +6,23 @@ import NotificationController from './notification.controller';
 import authorizeUser from '../authorization/authorization.middleware';
 
 /**
+ * @swagger
+ *  components:
+ *    schemas:
+ *      Notification:
+ *        type: object
+ *        required:
+ *          - enabled
+ *          - type
+ *        properties:
+ *          enabled:
+ *            type: boolean
+ *          type:
+ *            type: string
+ *            example: Xur
+ */
+
+/**
  * Notification Routes
  *
  * @param authenticationService

@@ -50,39 +50,6 @@ const routes = ({
     /**
      * @swagger
      * paths:
-     *  /destiny/currentUser:
-     *    get:
-     *      summary: Get the currently authenticated user.
-     *      tags:
-     *        - Destiny
-     *      produces:
-     *        - application/json
-     *      responses:
-     *        200:
-     *          description: Returns current user details.
-     *        401:
-     *          description: Unauthorized
-     */
-    destinyRouter.route('/currentUser/')
-        .get(async (req, res, next) => {
-            try {
-                const { session: { displayName, membershipType } } = req;
-
-                if (!displayName || !membershipType) {
-                    return res.status(StatusCodes.UNAUTHORIZED).end();
-                }
-
-                const bungieUser = await destinyController.getCurrentUser(displayName, membershipType)
-
-                res.json(bungieUser);
-            } catch (err) {
-                next(err);
-            }
-        });
-
-    /**
-     * @swagger
-     * paths:
      *  /destiny/grimoireCards/{numberOfCards}:
      *    get:
      *      summary: Get a random selection of Grimoire Cards.
@@ -100,8 +67,29 @@ const routes = ({
      *      responses:
      *        200:
      *          description: Returns a random selection of Grimoire Cards.
+     *          headers:
+     *            'X-Request-Id':
+     *              description: Unique identifier assigned when not provided.
+     *              schema:
+     *              type: string
+     *            'X-Trace-Id':
+     *              description: Unique identifier assigned.
+     *              schema:
+     *              type: string
+     *            'X-RateLimit-Limit':
+     *              description: Number of requests allowed in the current period.
+     *              schema:
+     *              type: number
+     *            'X-RateLimit-Remaining':
+     *              description: Number of requests remaining in the current period.
+     *              schema:
+     *              type: number
+     *            'X-RateLimit-Reset':
+     *              description: Time at which the current period ends.
+     *              schema:
+     *              type: string
      *        400:
-     *          description: Invalid whole number between 1 and 10.
+     *          description: Invalid whole number outside the range of 1 to 10.
      *        422:
      *          description: Unrecognized whole number.
      */
@@ -138,13 +126,35 @@ const routes = ({
      *      tags:
      *        - Destiny
      *      parameters:
+     *        - name: Cache-Control
+     *          in: header
      *        - name: If-Modified-Since
-     *          in: head
+     *          in: header
      *      produces:
      *        - application/json
      *      responses:
      *        200:
      *          description: Returns the Destiny Manifest definition.
+     *          headers:
+     *            'Last-Modified':
+     *              description: The date and time the manifest was last modified.
+     *              schema:
+     *              type: string
+     *            'Cache-Control':
+     *              description: The cache control header.
+     *              schema:
+     *              type: string
+     *        304:
+     *          description: Not Modified
+     *          headers:
+     *            'Last-Modified':
+     *              description: The date and time the manifest was last modified.
+     *              schema:
+     *              type: string
+     *            'Cache-Control':
+     *              description: The cache control header.
+     *              schema:
+     *              type: string
      */
     destinyRouter.route('/manifest')
         .get(async (req, res, next) => {
