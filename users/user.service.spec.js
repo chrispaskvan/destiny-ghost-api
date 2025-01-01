@@ -22,18 +22,6 @@ const documentService = {
 };
 
 /**
- * Get the phone number format into the Twilio standard.
- * @param phoneNumber
- * @returns {string}
- * @private
- */
-function cleanPhoneNumber(phoneNumber) {
-    const cleaned = phoneNumber.replace(/\D/g, '');
-
-    return `+1${cleaned}`;
-}
-
-/**
  * Mock Anonymous User
  */
 const anonymousUser = {
@@ -61,10 +49,11 @@ const user = {
             type: 'Xur',
         },
     ],
-    phoneNumber: cleanPhoneNumber(chance.phone({
+    phoneNumber: `+1 ${chance.phone({
         country: 'us',
+        formatted: false,
         mobile: true,
-    })),
+    })}`,
 };
 
 let userService;

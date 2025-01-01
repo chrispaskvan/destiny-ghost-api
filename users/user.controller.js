@@ -7,6 +7,7 @@
 import chain from 'lodash/chain';
 import isEqual from 'lodash/isEqual';
 import { applyPatch, createPatch } from 'rfc6902';
+import { parsePhoneNumber } from 'awesome-phonenumber'
 import Postmaster from '../helpers/postmaster';
 import { getBlob, getCode } from '../helpers/tokens';
 import { postmasterHash } from '../destiny/destiny.constants';
@@ -30,16 +31,21 @@ class UserController {
     }
 
     /**
-     * Get the phone number format into the Twilio standard.
+     * Get the phone number format into the Twilio standard: e164.
+     * Deny phone numbers from China, North Korea, and Russia.
      *
      * @param phoneNumber
      * @returns {string}
      * @private
      */
     static #cleanPhoneNumber(phoneNumber) {
-        const cleaned = phoneNumber.replace(/\D/g, '');
+        const cleaned = parsePhoneNumber(phoneNumber[0] === '+' ? phoneNumber : `+1${phoneNumber}`);
 
-        return `+1${cleaned}`;
+        if (!cleaned.valid || ['CN', 'KP', 'RU'].includes(cleaned.regionCode)) {
+            throw new Error('phone number is invalid', { cause: cleaned.error });
+        }
+
+        return cleaned?.number?.e164;
     }
 
     /**
@@ -237,58 +243,6 @@ class UserController {
     }
 
     /**
-     * User initial application request.
-     * @param req
-     * @param res
-     */
-    async signUp({ displayName, membershipType, user }) {
-        const bungieUser = await this.users.getUserByDisplayName(displayName, membershipType);
-
-        user.phoneNumber = UserController.#cleanPhoneNumber(user.phoneNumber);
-        Object.assign(user, bungieUser, {
-            membership: {
-                tokens: {
-                    blob: getBlob(),
-                    code: getCode(),
-                    timeStamp: UserController.#getEpoch(),
-                },
-            },
-        });
-
-        const userPromises = [
-            this.users.getUserByEmailAddress(user.emailAddress),
-            this.users.getUserByPhoneNumber(user.phoneNumber),
-        ];
-
-        const users = await Promise.all(userPromises);
-        const registeredUsers = users.filter(user1 => user1 && user1.dateRegistered);
-
-        if (registeredUsers.length) {
-            return undefined;
-        }
-
-        const iconUrl = this.world.getVendorIcon(postmasterHash);
-        const promises = [];
-
-        promises.push(this.notifications.sendMessage(
-            `Enter ${user.membership.tokens.code} to verify your phone number.`,
-            user.phoneNumber,
-            user.type === 'mobile' ? iconUrl : '',
-        ));
-        promises.push(this.postmaster.register(user, iconUrl, '/register'));
-
-        const result = await Promise.all(promises);
-        const [message, postMark] = result;
-
-        user.membership.message = message;
-        user.membership.postmark = postMark;
-
-        await this.users.updateUser(user);
-
-        return user;
-    }
-
-    /**
      * Sign In with Bungie and PSN/XBox Live
      * @param req
      * @param res
@@ -325,6 +279,57 @@ class UserController {
             ? this.users.updateUser(destinyGhostUser)
             : this.users.updateAnonymousUser(destinyGhostUser))
             .then(() => user);
+    }
+
+    /**
+     * User initial application request.
+     * @param req
+     * @param res
+     */
+    async signUp({ displayName, membershipType, user }) {
+        const bungieUser = await this.users.getUserByDisplayName(displayName, membershipType);
+
+        user.phoneNumber = UserController.#cleanPhoneNumber(user.phoneNumber);
+        Object.assign(user, bungieUser, {
+            membership: {
+                tokens: {
+                    blob: getBlob(),
+                    code: getCode(),
+                    timeStamp: UserController.#getEpoch(),
+                },
+            },
+        });
+
+        const userPromises = [
+            this.users.getUserByEmailAddress(user.emailAddress),
+            this.users.getUserByPhoneNumber(user.phoneNumber),
+        ];
+        const users = await Promise.all(userPromises);
+        const registeredUsers = users.filter(user1 => user1 && user1.dateRegistered);
+
+        if (registeredUsers.length) {
+            return undefined;
+        }
+
+        const iconUrl = this.world.getVendorIcon(postmasterHash);
+        const promises = [];
+
+        promises.push(this.notifications.sendMessage(
+            `Enter ${user.membership.tokens.code} to verify your phone number.`,
+            user.phoneNumber,
+            user.type === 'mobile' ? iconUrl : '',
+        ));
+        promises.push(this.postmaster.register(user, iconUrl, '/register'));
+
+        const result = await Promise.all(promises);
+        const [message, postMark] = result;
+
+        user.membership.message = message;
+        user.membership.postmark = postMark;
+
+        await this.users.updateUser(user);
+
+        return user;
     }
 
     /**

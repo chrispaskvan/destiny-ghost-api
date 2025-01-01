@@ -4,11 +4,17 @@ import {
 import Chance from 'chance';
 import UserController from './user.controller';
 
+vi.mock('../helpers/postmaster', () => ({
+    default: vi.fn().mockReturnValue({
+        register: vi.fn(),
+    }),
+}));
+
 const chance = new Chance();
 const displayName = chance.name();
 const membershipId = chance.integer().toString();
 const membershipType = chance.integer({ min: 1, max: 2 });
-const phoneNumber = chance.phone();
+const phoneNumber = '3636598203';
 const mockUser = {
     displayName,
     membershipId,
@@ -19,20 +25,28 @@ const destinyService = {
     getAccessTokenFromCode: vi.fn(),
     getCurrentUser: vi.fn(),
 };
+const notificationService = {
+    sendMessage: vi.fn().mockResolvedValue(),
+};
 const userService = {
     createAnonymousUser: vi.fn().mockImplementation(user => Promise.resolve(user)),
     deleteUserMessages: vi.fn().mockResolvedValue(),
     getCurrentUser: vi.fn(),
     getUserByDisplayName: vi.fn(),
+    getUserByEmailAddress: vi.fn(),
+    getUserByPhoneNumber: vi.fn(),
     getUserByMembershipId: vi.fn(),
     updateAnonymousUser: vi.fn().mockImplementation(user => Promise.resolve(user)),
     updateUser: vi.fn().mockImplementation(user => Promise.resolve(user)),
+};
+const worldRepository = {
+    getVendorIcon: vi.fn().mockResolvedValue('some-vendor-icon'),
 };
 
 let userController;
 
 beforeEach(() => {
-    userController = new UserController({ destinyService, userService });
+    userController = new UserController({ destinyService, notificationService, userService, worldRepository });
 });
 
 describe('UserController', () => {
@@ -205,6 +219,64 @@ describe('UserController', () => {
                         expect(userService.updateUser).toHaveBeenCalled();
                     });
                 });
+            });
+        });
+    });
+
+    describe('signUp', () => {
+        describe('when user is not registered', () => {
+            describe('when phone number is valid', () => {
+                it('should update user', async () => {
+                    userService.getUserByDisplayName.mockImplementation(() => Promise.resolve());
+                    userService.getUserByEmailAddress.mockImplementation(() => Promise.resolve());
+                    userService.getUserByPhoneNumber.mockImplementation(() => Promise.resolve());
+
+                    const user = await userController.signUp({
+                        displayName,
+                        membershipType,
+                        user: {
+                            phoneNumber,
+                        },
+                    });
+
+                    expect(userService.updateUser).toHaveBeenCalled();
+                    expect(user).not.toBeUndefined();
+                });
+            });
+            describe('when phone number is invalid', () => {
+                it('should not update user', async () => {
+                    userService.getUserByDisplayName.mockImplementation(() => Promise.resolve());
+                    userService.getUserByEmailAddress.mockImplementation(() => Promise.resolve());
+                    userService.getUserByPhoneNumber.mockImplementation(() => Promise.resolve());
+
+                    await expect(userController.signUp({
+                        displayName,
+                        membershipType,
+                        user: {
+                            phoneNumber: '+86 10 1234 5678',
+                        },
+                    })).rejects.toThrow(Error);
+                });
+            });
+        });
+
+        describe('when user is registered', () => {
+            it('should not return a user', async () => {
+                userService.getUserByDisplayName.mockImplementation(() => Promise.resolve({
+                    displayName,
+                    membershipType,
+                }));
+                userService.getUserByEmailAddress.mockImplementation(() => Promise.resolve({
+                    dateRegistered: new Date().toISOString(),
+                }));
+
+                const user = await userController.signUp({
+                    displayName,
+                    membershipType,
+                    user: { phoneNumber, ...mockUser },
+                });
+
+                expect(user).toBeUndefined();
             });
         });
     });
