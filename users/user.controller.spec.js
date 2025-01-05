@@ -34,8 +34,9 @@ const userService = {
     getCurrentUser: vi.fn(),
     getUserByDisplayName: vi.fn(),
     getUserByEmailAddress: vi.fn(),
-    getUserByPhoneNumber: vi.fn(),
+    getUserById: vi.fn(),
     getUserByMembershipId: vi.fn(),
+    getUserByPhoneNumber: vi.fn(),
     updateAnonymousUser: vi.fn().mockImplementation(user => Promise.resolve(user)),
     updateUser: vi.fn().mockImplementation(user => Promise.resolve(user)),
 };
@@ -144,6 +145,65 @@ describe('UserController', () => {
 
                     expect(user).toBeUndefined();
                 });
+            });
+        });
+    });
+
+    describe('getUserById', () => {
+        describe('when user is found', () => {
+            describe('when no version is given', () => {
+                it('should return the user', async () => {
+                    userService.getUserById.mockImplementation(() => Promise.resolve(mockUser));
+
+                    const user = await userController.getUserById(chance.guid(), 'a');
+
+                    expect(user).toEqual(mockUser);
+                });
+            });
+
+            describe('when version number provided is less than the current version', () => {
+                it('should return the user', async () => {
+                    const version = 1;
+
+                    userService.getUserById.mockImplementation(() => Promise.resolve({
+                        ...mockUser,
+                        firstName: 'Failsafe v3.0',
+                        version: 3,
+                        patches: [{
+                            patch: [{
+                                op: 'replace',
+                                path: '/firstName',
+                                value: 'Failsafe v2.0',
+                            }],
+                            version: 2,
+                        }, {
+                            patch: [{
+                                op: 'replace',
+                                path: '/firstName',
+                                value: 'Failsafe',
+                            }],
+                            version: 1,
+                        }],
+                    }));
+
+                    const user = await userController.getUserById(chance.guid(), version);
+
+                    expect(user).toEqual({
+                        ...mockUser,
+                        firstName: 'Failsafe',
+                        version,
+                    });
+                });
+            });
+        });
+
+        describe('when user is not found', () => {
+            it('should return undefined', async () => {
+                userService.getUserById.mockImplementation(() => Promise.resolve());
+
+                const user = await userController.getUserById(chance.guid(), -1);
+
+                expect(user).toBeUndefined();
             });
         });
     });

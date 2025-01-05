@@ -4,8 +4,8 @@
  * @module User Controller
  * @author Chris Paskvan
  */
-import chain from 'lodash/chain';
-import isEqual from 'lodash/isEqual';
+// eslint-disable-next-line no-unused-vars
+import { chain, isEqual, sortBy } from 'lodash';
 import { applyPatch, createPatch } from 'rfc6902';
 import { parsePhoneNumber } from 'awesome-phonenumber'
 import Postmaster from '../helpers/postmaster';
@@ -110,6 +110,14 @@ class UserController {
         };
     }
 
+    static #applyPatches(patches, user) {
+        for (const { patch } of patches) {
+            applyPatch(user, patch);
+        }
+
+        return user;
+    }
+
     /**
      * Allow only replace operations of mutable fields.
      *
@@ -208,7 +216,8 @@ class UserController {
      */
     async getUserById(id, version) {
         let versionNumber = parseInt(version, 10);
-        if (Number.isNaN(versionNumber)) {
+
+        if (Number.isNaN(versionNumber) || versionNumber < 0) {
             versionNumber = 0;
         }
 
@@ -216,15 +225,18 @@ class UserController {
 
         if (user) {
             if (versionNumber) {
-                const patches = user.patches.filter(patch => patch.version >= versionNumber) || [];
+                const patches = user.patches.filter(patch => patch.version <= versionNumber) || [];
 
                 if (patches.length > 0) {
-                    return this.constructor.applyPatches(chain(patches)
-                        .sortBy(patch => -1 * patch.version)
+                    const patchedUser = UserController.#applyPatches(chain(patches)
+                        .sortBy(patch => patch.version)
                         .value(), user);
-                }
 
-                return undefined;
+                    delete patchedUser.patches;
+                    delete patchedUser.version;
+
+                    return { version: versionNumber, ...patchedUser };
+                }
             }
 
             return user;

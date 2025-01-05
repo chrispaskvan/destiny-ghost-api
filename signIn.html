@@ -34,7 +34,7 @@
                 self.signOut = function () {
                     jQuery.ajax({
                         contentType: 'application/json; charset=utf-8',
-                        type: 'GET',
+                        type: 'POST',
                         url: '/users/signout'
                     })
                         .always(function () {
