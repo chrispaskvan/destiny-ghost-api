@@ -164,10 +164,29 @@ const routes = ({
             }
         });
 
+    /**
+     * @swagger
+     * paths:
+     *  /users/signOut:
+     *    post:
+     *      summary: Sign out a user.
+     *      tags:
+     *        - Users
+     *      responses:
+     *        200:
+     *          description: Success
+     *        500:
+     *          description: Internal Server Error
+     */
     userRouter.route('/signOut')
-        .get((req, res) => {
-            req.session.destroy();
-            res.status(StatusCodes.UNAUTHORIZED).end();
+        .post((req, res) => {
+            req.session.destroy(err => {
+                if (err) {
+                    return res.status(StatusCodes.INTERNAL_SERVER_ERROR)
+                        .json({ error: 'Failed to sign out' });
+                }
+                res.status(StatusCodes.OK).end();
+            });
         });
 
     /**
