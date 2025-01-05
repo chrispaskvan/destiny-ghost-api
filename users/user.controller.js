@@ -4,8 +4,7 @@
  * @module User Controller
  * @author Chris Paskvan
  */
-// eslint-disable-next-line no-unused-vars
-import { chain, isEqual, sortBy } from 'lodash';
+import isEqual from 'lodash/isEqual';
 import { applyPatch, createPatch } from 'rfc6902';
 import { parsePhoneNumber } from 'awesome-phonenumber'
 import Postmaster from '../helpers/postmaster';
@@ -228,9 +227,8 @@ class UserController {
                 const patches = user.patches.filter(patch => patch.version <= versionNumber) || [];
 
                 if (patches.length > 0) {
-                    const patchedUser = UserController.#applyPatches(chain(patches)
-                        .sortBy(patch => patch.version)
-                        .value(), user);
+                    const patchedUser = UserController.#applyPatches(patches
+                        .sort(patch => patch.version), user);
 
                     delete patchedUser.patches;
                     delete patchedUser.version;
