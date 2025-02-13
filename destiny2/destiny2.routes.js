@@ -8,6 +8,7 @@ import AuthenticationMiddleware from '../authentication/authentication.middlewar
 import Destiny2Controller from './destiny2.controller';
 import authorizeUser from '../authorization/authorization.middleware';
 import getMaxAgeFromCacheControl from '../helpers/get-max-age-from-cache-control';
+import log from '../helpers/log';
 
 import configuration from '../helpers/config';
 
@@ -103,8 +104,16 @@ const routes = ({
     destiny2Router.route('/inventory')
         .get(async (req, res, next) => await authorizeUser(req, res, next),
             async (req, res, next) => {
+                let aborted = false;
+
+                req.on('close', () => {
+                    if (!res.writableEnded) {
+                        aborted = true;
+                    }
+                });
+
                 try {
-                    const items = await destiny2Controller.getInventory()
+                    const items = await destiny2Controller.getInventory();
                     let page = parseInt(req.query.page, 10);
                     let size = parseInt(req.query.size, 10);
 
@@ -116,10 +125,18 @@ const routes = ({
                             'Transfer-Encoding': 'chunked',
                         });
 
-                        items.forEach(value => {
-                            res.write(first ? `[${JSON.stringify(value)}` : `,${JSON.stringify(value)}`);
+                        for (const [index, item] of items.entries()) {
+                            if (aborted) {
+                                log.info(`${req.method} ${req.url} request aborted at item ${index} of ${items.length}`);
+                                return res.end();
+                            }
+
+                            res.write(first ? `[${JSON.stringify(item)}` : `,${JSON.stringify(item)}`);
                             first = false;
-                        });
+
+                            // Introduce a delay to allow the event loop to process the 'close' event
+                            await new Promise(resolve => setImmediate(resolve));
+                        }
                         res.write(']');
                         res.end();
                     } else {
