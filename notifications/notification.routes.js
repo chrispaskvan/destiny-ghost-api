@@ -107,7 +107,7 @@ const routes = ({
                     const { params: { subscription, phoneNumber } } = req;
 
                     if (!Object.keys(notificationTypes).find(key => key === subscription)) {
-                        res.status(StatusCodes.NOT_FOUND).json('That subscription is not recognized.');
+                        res.status(StatusCodes.NOT_FOUND).send('That subscription is not recognized.');
 
                         return;
                     }

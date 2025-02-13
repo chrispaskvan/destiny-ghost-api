@@ -116,6 +116,24 @@ describe('/destiny2', () => {
                 expect(items.length).toBeTruthy();
                 expect(items[0].displayProperties).toBeInstanceOf(Object);
             });
+
+            test('should stop streaming the response when the request is aborted', async () => {
+                const controller = new AbortController();
+                const { signal } = controller;
+
+                setTimeout(() => controller.abort(), 500);
+
+                try {
+                    await axiosAPIClient.get(`http://${ipAddress}:${process.env.PORT}/destiny2/inventory`, {
+                        headers: configuration.notificationHeaders,
+                        signal,
+                    });
+                    
+                    throw new Error('Request should have been aborted');
+                } catch (err) {
+                    expect(err.name).toEqual('CanceledError');
+                }
+            });
         });
     });
 
