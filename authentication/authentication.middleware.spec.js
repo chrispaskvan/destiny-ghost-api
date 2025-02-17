@@ -5,25 +5,42 @@ import { createRequest, createResponse } from 'node-mocks-http';
 import AuthenticationMiddleware from './authentication.middleware';
 
 describe('authorizeUser', () => {
-    describe('when authenticate throws', () => {
-        it('should call next with err', () => {
+    describe('when user is found', () => {
+        it('should call next', async () => {
             const req = createRequest({
                 headers: {},
             });
             const res = createResponse();
             const next = vi.fn().mockImplementation(() => {});
-
-            const err = new Error('some-error');
             const authenticationController = {
-                authenticate: vi.fn().mockImplementation(() => { throw err; }),
+                authenticate: vi.fn().mockImplementation(() => ({})),
             };
             const authenticationMiddleware = new AuthenticationMiddleware({
                 authenticationController,
             });
 
-            authenticationMiddleware.authenticateUser(req, res, next);
+            await authenticationMiddleware.authenticateUser(req, res, next);
 
-            expect(next).toBeCalledWith(err);
+            expect(next).toBeCalled();
+        });
+    });
+    describe('when user is not found', () => {
+        it('should return 401', async () => {
+            const req = createRequest({
+                headers: {},
+            });
+            const res = createResponse();
+            const next = vi.fn().mockImplementation(() => {});
+            const authenticationController = {
+                authenticate: vi.fn().mockImplementation(() => null),
+            };
+            const authenticationMiddleware = new AuthenticationMiddleware({
+                authenticationController,
+            });
+
+            await authenticationMiddleware.authenticateUser(req, res, next);
+
+            expect(res.statusCode).toBe(401);
         });
     });
 });

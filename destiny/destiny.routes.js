@@ -36,15 +36,11 @@ const routes = ({
 
     destinyRouter.route('/signIn/')
         .get(cors(),
-            async (req, res, next) => {
-                try {
-                    const { state, url } = await destinyController.getAuthorizationUrl();
+            async (req, res) => {
+                const { state, url } = await destinyController.getAuthorizationUrl();
 
-                    req.session.state = state;
-                    res.send(url);
-                } catch (err) {
-                    next(err);
-                }
+                req.session.state = state;
+                res.send(url);
             });
 
     /**
@@ -95,25 +91,21 @@ const routes = ({
      */
     destinyRouter.route('/grimoireCards/:numberOfCards')
         .get(cors(),
-            async (req, res, next) => {
-                try {
-                    const { params: { numberOfCards } } = req;
-                    const count = parseInt(numberOfCards, 10);
+            async (req, res) => {
+                const { params: { numberOfCards } } = req;
+                const count = parseInt(numberOfCards, 10);
 
-                    if (Number.isNaN(count)) {
-                        return res.status(StatusCodes.UNPROCESSABLE_ENTITY).end();
-                    }
-
-                    if (count < 1 || count > 10) {
-                        return res.status(StatusCodes.BAD_REQUEST)
-                            .send('Must be a whole number less than or equal to 10.');
-                    }
-
-                    const grimoireCards = await destinyController.getGrimoireCards(count);
-                    res.status(StatusCodes.OK).json(grimoireCards);
-                } catch (err) {
-                    next(err);
+                if (Number.isNaN(count)) {
+                    return res.status(StatusCodes.UNPROCESSABLE_ENTITY).end();
                 }
+
+                if (count < 1 || count > 10) {
+                    return res.status(StatusCodes.BAD_REQUEST)
+                        .send('Must be a whole number less than or equal to 10.');
+                }
+
+                const grimoireCards = await destinyController.getGrimoireCards(count);
+                res.status(StatusCodes.OK).json(grimoireCards);
             },
         );
 
@@ -168,30 +160,26 @@ const routes = ({
             } else {
                 next();
             }
-        }, async (req, res, next) => {
-            try {
-                const result = await destinyController.getManifest(res.locals.skipCache);
-                const {
-                    data: {
-                        manifest,
-                    },
-                    meta: {
-                        lastModified,
-                        maxAge,
-                    },
-                } = result;
-                const ifModifiedSince = new Date(req.headers['if-modified-since'] ?? null);
+        }, async (req, res) => {
+            const result = await destinyController.getManifest(res.locals.skipCache);
+            const {
+                data: {
+                    manifest,
+                },
+                meta: {
+                    lastModified,
+                    maxAge,
+                },
+            } = result;
+            const ifModifiedSince = new Date(req.headers['if-modified-since'] ?? null);
 
-                res.set({
-                    'Last-Modified': lastModified,
-                    'Cache-Control': `max-age=${maxAge}`,
-                });
-                res.status(ifModifiedSince > new Date(lastModified)
-                    ? StatusCodes.NOT_MODIFIED : StatusCodes.OK)
-                    .json(manifest);
-            } catch (err) {
-                next(err);
-            }
+            res.set({
+                'Last-Modified': lastModified,
+                'Cache-Control': `max-age=${maxAge}`,
+            });
+            res.status(ifModifiedSince > new Date(lastModified)
+                ? StatusCodes.NOT_MODIFIED : StatusCodes.OK)
+                .json(manifest);
         });
 
     /**
@@ -209,14 +197,10 @@ const routes = ({
      *          description: Returns the Destiny Manifest definition.
      */
     destinyRouter.route('/manifest')
-        .post(async (req, res, next) => {
-            try {
-                const manifest = await destinyController.upsertManifest();
+        .post(async (req, res) => {
+            const manifest = await destinyController.upsertManifest();
 
-                res.status(StatusCodes.OK).json(manifest);
-            } catch (err) {
-                next(err);
-            }
+            res.status(StatusCodes.OK).json(manifest);
         });
 
     return destinyRouter;

@@ -26,16 +26,12 @@ class AuthenticationMiddleware {
      * @returns {Promise.<void>}
      */
     async authenticateUser(req, res, next) {
-        try {
-            const user = await this.authentication.authenticate(req);
+        const user = await this.authentication.authenticate(req);
 
-            if (user) {
-                next();
-            } else {
-                res.status(StatusCodes.UNAUTHORIZED).end();
-            }
-        } catch (err) {
-            next(err);
+        if (user) {
+            next();
+        } else {
+            res.status(StatusCodes.UNAUTHORIZED).end();
         }
     }
 }

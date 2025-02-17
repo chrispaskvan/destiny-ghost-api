@@ -49,16 +49,12 @@ const routes = ({
      *          description: Service is unavailable.
      */
     healthRouter.route('/')
-        .get(async (req, res, next) => {
-            try {
-                const { failures, health } = await healthController.getHealth();
+        .get(async (req, res) => {
+            const { failures, health } = await healthController.getHealth();
 
-                res.status(failures
-                    ? StatusCodes.SERVICE_UNAVAILABLE
-                    : StatusCodes.OK).json(health);
-            } catch (err) {
-                next(err);
-            }
+            res.status(failures
+                ? StatusCodes.SERVICE_UNAVAILABLE
+                : StatusCodes.OK).json(health);
         });
 
     /**
@@ -76,14 +72,10 @@ const routes = ({
      *          description: Returns measurements.
      */
     healthRouter.route('/metrics')
-        .get(async (req, res, next) => {
-            try {
-                const metrics = await healthController.getMetrics();
+        .get(async (req, res) => {
+            const metrics = await healthController.getMetrics();
 
-                res.status(StatusCodes.OK).json(metrics);
-            } catch (err) {
-                next(err);
-            }
+            res.status(StatusCodes.OK).json(metrics);
         });
 
     return healthRouter;
