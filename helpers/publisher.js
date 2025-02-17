@@ -35,7 +35,9 @@ class Publisher {
      * @returns {Publisher} - A new instance of the Publisher.
      */
     constructor(topic = 'notifications') {
-        this.#queue = new Queue(topic, cache);
+        this.#queue = new Queue(topic, {
+            connection: cache.options,
+        });
     }
 
     /**
