@@ -647,7 +647,7 @@ class UserService {
         const userDocument = await this.getUserByDisplayName(user.displayName, user.membershipType);
 
         Object.assign(userDocument, user);
-        await this.documents.updateDocument(userCollectionId, userDocument);
+        await this.documents.updateDocument(userCollectionId, userDocument, user.membershipType);
 
         return this.cacheService.setUser(userDocument);
     }
