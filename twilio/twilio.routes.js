@@ -32,69 +32,13 @@ const routes = ({
 
     twilioRouter.route('/destiny/r')
         .post(async (req, res, next) => await middleware.authenticateUser(req, res, next),
-            async (req, res, next) => {
-                try {
-                    const header = req.headers['x-twilio-signature'];
-                    const {
-                        body,
-                        cookies: requestCookies = {},
-                        originalUrl,
-                    } = req;
-
-                    if (!validateRequest(authToken, header, `${process.env.PROTOCOL}://${process.env.DOMAIN}${originalUrl}`, body)) {
-                        res.writeHead(StatusCodes.FORBIDDEN);
-
-                        return res.end();
-                    }
-
-                    const { cookies = {}, media, message } = await twilioController.request({
-                        body,
-                        cookies: requestCookies,
-                    });
-
-                    if (!message) {
-                        res.writeHead(StatusCodes.FORBIDDEN);
-
-                        return res.end();
-                    }
-
-                    for (const [key, value] of Object.entries(cookies)) {
-                        if (value) {
-                            res.cookie(key, value);
-                        } else {
-                            res.clearCookie(key);
-                        }
-                    }
-
-                    const twiml = new MessagingResponse();
-
-                    if (media) {
-                        twiml.message(attributes, message).media(media);
-                    } else {
-                        twiml.message(attributes, message);
-                    }
-                    res.writeHead(StatusCodes.OK, {
-                        'Content-Type': 'text/xml',
-                    });
-
-                    return res.end(twiml.toString());
-                } catch (err) {
-                    next(err);
-                }
-            },
-        );
-
-    twilioRouter.route('/destiny/s')
-        .post(async (req, res, next) => {
-            try {
+            async (req, res) => {
                 const header = req.headers['x-twilio-signature'];
                 const {
                     body,
-                    query = {},
+                    cookies: requestCookies = {},
                     originalUrl,
                 } = req;
-                const claimCheck = query['claim-check-number'];
-                const notificationType = query['notification-type'];
 
                 if (!validateRequest(authToken, header, `${process.env.PROTOCOL}://${process.env.DOMAIN}${originalUrl}`, body)) {
                     res.writeHead(StatusCodes.FORBIDDEN);
@@ -102,37 +46,80 @@ const routes = ({
                     return res.end();
                 }
 
-                await twilioController.statusCallback({
-                    ...body,
-                    ...(claimCheck && { ClaimCheck: claimCheck }),
-                    ...(notificationType && { NotificationType: notificationType }),
+                const { cookies = {}, media, message } = await twilioController.request({
+                    body,
+                    cookies: requestCookies,
                 });
+
+                if (!message) {
+                    res.writeHead(StatusCodes.FORBIDDEN);
+
+                    return res.end();
+                }
+
+                for (const [key, value] of Object.entries(cookies)) {
+                    if (value) {
+                        res.cookie(key, value);
+                    } else {
+                        res.clearCookie(key);
+                    }
+                }
 
                 const twiml = new MessagingResponse();
 
+                if (media) {
+                    twiml.message(attributes, message).media(media);
+                } else {
+                    twiml.message(attributes, message);
+                }
                 res.writeHead(StatusCodes.OK, {
                     'Content-Type': 'text/xml',
                 });
-                res.end(twiml.toString());
-            } catch (err) {
-                next(err);
+
+                return res.end(twiml.toString());
+            });
+
+    twilioRouter.route('/destiny/s')
+        .post(async (req, res) => {
+            const header = req.headers['x-twilio-signature'];
+            const {
+                body,
+                query = {},
+                originalUrl,
+            } = req;
+            const claimCheck = query['claim-check-number'];
+            const notificationType = query['notification-type'];
+
+            if (!validateRequest(authToken, header, `${process.env.PROTOCOL}://${process.env.DOMAIN}${originalUrl}`, body)) {
+                res.writeHead(StatusCodes.FORBIDDEN);
+
+                return res.end();
             }
+
+            await twilioController.statusCallback({
+                ...body,
+                ...(claimCheck && { ClaimCheck: claimCheck }),
+                ...(notificationType && { NotificationType: notificationType }),
+            });
+
+            const twiml = new MessagingResponse();
+
+            res.writeHead(StatusCodes.OK, {
+                'Content-Type': 'text/xml',
+            });
+            res.end(twiml.toString());
         });
 
     twilioRouter.route('/destiny/f')
-        .post((req, res, next) => {
-            try {
-                const message = TwilioController.fallback();
-                const twiml = new MessagingResponse();
+        .post((req, res) => {
+            const message = TwilioController.fallback();
+            const twiml = new MessagingResponse();
 
-                twiml.message(attributes, message);
-                res.writeHead(StatusCodes.OK, {
-                    'Content-Type': 'text/xml',
-                });
-                res.end(twiml.toString());
-            } catch (err) {
-                next(err);
-            }
+            twiml.message(attributes, message);
+            res.writeHead(StatusCodes.OK, {
+                'Content-Type': 'text/xml',
+            });
+            res.end(twiml.toString());
         });
 
     return twilioRouter;

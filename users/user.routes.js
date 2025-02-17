@@ -97,71 +97,59 @@ const routes = ({
 
     userRouter.route('/signUp')
         .post((req, res, next) => middleware.authenticateUser(req, res, next),
-            async (req, res, next) => {
-                try {
-                    const { body: user, session: { displayName, membershipType } } = req;
+            async (req, res) => {
+                const { body: user, session: { displayName, membershipType } } = req;
 
-                    if (!(user.firstName && user.lastName && user.phoneNumber && user.emailAddress)) {
-                        return res.status(StatusCodes.UNPROCESSABLE_ENTITY).end();
-                    }
-
-                    const newUser = await userController.signUp({ displayName, membershipType, user });
-
-                    return newUser
-                        ? res.status(StatusCodes.OK).end()
-                        : res.status(StatusCodes.CONFLICT).end();
-                } catch (err) {
-                    next(err);
+                if (!(user.firstName && user.lastName && user.phoneNumber && user.emailAddress)) {
+                    return res.status(StatusCodes.UNPROCESSABLE_ENTITY).end();
                 }
+
+                const newUser = await userController.signUp({ displayName, membershipType, user });
+
+                return newUser
+                    ? res.status(StatusCodes.OK).end()
+                    : res.status(StatusCodes.CONFLICT).end();
             });
 
     userRouter.route('/join')
         .post(
             (req, res, next) => middleware.authenticateUser(req, res, next),
-            async (req, res, next) => {
-                try {
-                    const { body: user } = req;
+            async (req, res) => {
+                const { body: user } = req;
 
-                    const newUser = await userController.join(user)
-                    return newUser
-                        ? res.status(StatusCodes.OK).end()
-                        : res.status(StatusCodes.BAD_REQUEST).end();
-                } catch (err) {
-                    next(err);
-                }
+                const newUser = await userController.join(user);
+                return newUser
+                    ? res.status(StatusCodes.OK).end()
+                    : res.status(StatusCodes.BAD_REQUEST).end();
             },
         );
 
     userRouter.route('/signIn/Bungie')
         .get(async (req, res, next) => {
-            try {
-                const {
-                    query: { code, state: queryState },
-                    session: { displayName, state: sessionState },
-                } = req;
+            const {
+                query: { code, state: queryState },
+                session: { displayName, state: sessionState },
+            } = req;
 
-                if (displayName) {
-                    return res.status(StatusCodes.OK)
-                        .json({ displayName });
-                }
-                if (sessionState !== queryState) {
-                    return res.sendStatus(StatusCodes.FORBIDDEN);
-                }
-
-                const user = await userController.signIn({
-                    code,
-                    displayName,
-                    queryState,
-                    sessionState,
-                });
-                if (!user) {
-                    return res.status(StatusCodes.NOT_FOUND).end();
-                }
-
-                return signIn(req, res, user, next);
-            } catch (err) {
-                next(err);
+            if (displayName) {
+                return res.status(StatusCodes.OK)
+                    .json({ displayName });
             }
+            if (sessionState !== queryState) {
+                return res.sendStatus(StatusCodes.FORBIDDEN);
+            }
+
+            const user = await userController.signIn({
+                code,
+                displayName,
+                queryState,
+                sessionState,
+            });
+            if (!user) {
+                return res.status(StatusCodes.NOT_FOUND).end();
+            }
+
+            return signIn(req, res, user, next);
         });
 
     /**
@@ -214,17 +202,13 @@ const routes = ({
      */
     userRouter.route('/:emailAddress/emailAddress')
         .get((req, res, next) => middleware.authenticateUser(req, res, next),
-            async (req, res, next) => {
-                try {
-                    const { params: { emailAddress } } = req;
-                    const user = await userController.getUserByEmailAddress(emailAddress);
+            async (req, res) => {
+                const { params: { emailAddress } } = req;
+                const user = await userController.getUserByEmailAddress(emailAddress);
 
-                    return user
-                        ? res.status(StatusCodes.NO_CONTENT).end()
-                        : res.status(StatusCodes.NOT_FOUND).end();
-                } catch (err) {
-                    next(err);
-                }
+                return user
+                    ? res.status(StatusCodes.NO_CONTENT).end()
+                    : res.status(StatusCodes.NOT_FOUND).end();
             },
         );
 
@@ -253,24 +237,19 @@ const routes = ({
      */
     userRouter.route('/:phoneNumber/phoneNumber')
         .get((req, res, next) => middleware.authenticateUser(req, res, next),
-            async (req, res, next) => {
-                try {
-                    const { params: { phoneNumber } } = req;
+            async (req, res) => {
+                const { params: { phoneNumber } } = req;
 
-                    const user = await userController.getUserByPhoneNumber(phoneNumber);
-                    return user
-                        ? res.status(StatusCodes.NO_CONTENT).end()
-                        : res.status(StatusCodes.NOT_FOUND).end();
-                } catch (err) {
-                    next(err);
-                }
+                const user = await userController.getUserByPhoneNumber(phoneNumber);
+                return user
+                    ? res.status(StatusCodes.NO_CONTENT).end()
+                    : res.status(StatusCodes.NOT_FOUND).end();
             },
         );
 
     userRouter.route('/join')
         .post((req, res, next) => middleware.authenticateUser(req, res, next),
-            (req, res, next) => userController.join(req, res)
-                .catch(next),
+            (req, res) => userController.join(req, res),
         );
 
     /**
@@ -302,24 +281,20 @@ const routes = ({
      */
     userRouter.route('/current')
         .get(async (req, res, next) => await middleware.authenticateUser(req, res, next),
-            async (req, res, next) => {
-                try {
-                    const { session: { displayName, membershipType } } = req;
+            async (req, res) => {
+                const { session: { displayName, membershipType } } = req;
 
-                    if (!displayName || !membershipType) {
-                        return res.status(StatusCodes.NOT_FOUND).end();
-                    }
-
-                    const { ETag, user } = await userController.getCurrentUser(displayName, membershipType);
-
-                    if (user) {
-                        return res.setHeader('ETag', ETag).status(StatusCodes.OK).json(user);
-                    }
-
-                    return res.status(StatusCodes.UNAUTHORIZED).end();
-                } catch (err) {
-                    next(err);
+                if (!displayName || !membershipType) {
+                    return res.status(StatusCodes.NOT_FOUND).end();
                 }
+
+                const { ETag, user } = await userController.getCurrentUser(displayName, membershipType);
+
+                if (user) {
+                    return res.setHeader('ETag', ETag).status(StatusCodes.OK).json(user);
+                }
+
+                return res.status(StatusCodes.UNAUTHORIZED).end();
             },
         );
     /**
@@ -359,7 +334,7 @@ const routes = ({
     userRouter.route('/')
         .patch(
             (req, res, next) => middleware.authenticateUser(req, res, next),
-            async (req, res, next) => {
+            async (req, res) => {
                 try {
                     const {
                         body: patches,
@@ -386,7 +361,7 @@ const routes = ({
                         return res.status(StatusCodes.PRECONDITION_FAILED).end();
                     }
 
-                    next(err);
+                    throw err;
                 }
             },
         );
@@ -394,21 +369,17 @@ const routes = ({
     userRouter.route('/:id/version/:version')
         .get((req, res, next) => middleware.authenticateUser(req, res, next),
             (req, res, next) => roles.administrativeUser(req, res, next),
-            async (req, res, next) => {
-                try {
-                    const { params: { id, version } } = req;
+            async (req, res) => {
+                const { params: { id, version } } = req;
 
-                    if (!id) {
-                        return res.status(StatusCodes.CONFLICT).send('user id not found');
-                    }
-
-                    const user = await userController.getUserById(id, version);
-                    return user
-                        ? res.status(StatusCodes.OK).json(user)
-                        : res.status(StatusCodes.NOT_FOUND).send('user not found');
-                } catch (err) {
-                    next(err);
+                if (!id) {
+                    return res.status(StatusCodes.CONFLICT).send('user id not found');
                 }
+
+                const user = await userController.getUserById(id, version);
+                return user
+                    ? res.status(StatusCodes.OK).json(user)
+                    : res.status(StatusCodes.NOT_FOUND).send('user not found');
             },
         );
 
@@ -443,26 +414,22 @@ const routes = ({
         .delete(
             (req, res, next) => middleware.authenticateUser(req, res, next),
             (req, res, next) => roles.administrativeUser(req, res, next),
-            async (req, res, next) => {
-                try {
-                    const { params: { phoneNumber } } = req;
+            async (req, res) => {
+                const { params: { phoneNumber } } = req;
 
-                    if (!isPhoneNumber(phoneNumber)) {
-                        return res.status(StatusCodes.CONFLICT).send('phone number not found');
-                    }
-
-                    const user = await userController.getUserByPhoneNumber(phoneNumber);
-
-                    if (!user) {
-                        return res.status(StatusCodes.NOT_FOUND).send('user not found');
-                    }
-
-                    await userController.deleteUserMessages(user);
-
-                    return res.status(StatusCodes.OK).end();
-                } catch (err) {
-                    return next(err);
+                if (!isPhoneNumber(phoneNumber)) {
+                    return res.status(StatusCodes.CONFLICT).send('phone number not found');
                 }
+
+                const user = await userController.getUserByPhoneNumber(phoneNumber);
+
+                if (!user) {
+                    return res.status(StatusCodes.NOT_FOUND).send('user not found');
+                }
+
+                await userController.deleteUserMessages(user);
+
+                return res.status(StatusCodes.OK).end();
             },
         );
 

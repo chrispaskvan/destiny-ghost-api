@@ -75,17 +75,12 @@ const routes = ({
      */
     destiny2Router.route('/characters')
         .get(async (req, res, next) => await middleware.authenticateUser(req, res, next),
-            async (req, res, next) => {
-                try {
-                    const { session: { displayName, membershipType } } = req;
-                    const characterBases = await destiny2Controller.getCharacters(displayName, membershipType);
+            async (req, res) => {
+                const { session: { displayName, membershipType } } = req;
+                const characterBases = await destiny2Controller.getCharacters(displayName, membershipType);
 
-                    res.json(characterBases);
-                } catch (err) {
-                    next(err);
-                }
-            },
-        );
+                res.json(characterBases);
+            });
 
     /**
      * @swagger
@@ -103,7 +98,7 @@ const routes = ({
      */
     destiny2Router.route('/inventory')
         .get(async (req, res, next) => await authorizeUser(req, res, next),
-            async (req, res, next) => {
+            async (req, res) => {
                 let aborted = false;
 
                 req.on('close', () => {
@@ -112,55 +107,51 @@ const routes = ({
                     }
                 });
 
-                try {
-                    const items = await destiny2Controller.getInventory();
-                    let page = parseInt(req.query.page, 10);
-                    let size = parseInt(req.query.size, 10);
+                const items = await destiny2Controller.getInventory();
+                let page = parseInt(req.query.page, 10);
+                let size = parseInt(req.query.size, 10);
 
-                    if (Number.isNaN(page) && Number.isNaN(size)) {
-                        let first = true;
+                if (Number.isNaN(page) && Number.isNaN(size)) {
+                    let first = true;
 
-                        res.writeHead(StatusCodes.OK, {
-                            'Content-Type': 'application/json',
-                            'Transfer-Encoding': 'chunked',
-                        });
+                    res.writeHead(StatusCodes.OK, {
+                        'Content-Type': 'application/json',
+                        'Transfer-Encoding': 'chunked',
+                    });
 
-                        for (const [index, item] of items.entries()) {
-                            if (aborted) {
-                                log.info(`${req.method} ${req.url} request aborted at item ${index} of ${items.length}`);
-                                return res.end();
-                            }
-
-                            res.write(first ? `[${JSON.stringify(item)}` : `,${JSON.stringify(item)}`);
-                            first = false;
-
-                            // Introduce a delay to allow the event loop to process the 'close' event
-                            await new Promise(resolve => setImmediate(resolve));
+                    for (const [index, item] of items.entries()) {
+                        if (aborted) {
+                            log.info(`${req.method} ${req.url} request aborted at item ${index} of ${items.length}`);
+                            return res.end();
                         }
-                        res.write(']');
-                        res.end();
-                    } else {
-                        if (Number.isNaN(page)) page = 1;
-                        if (Number.isNaN(size)) size = 11;
 
-                        const data = items.slice(0, size);
-                        const pages = Math.ceil(items.length / size);
+                        res.write(first ? `[${JSON.stringify(item)}` : `,${JSON.stringify(item)}`);
+                        first = false;
 
-                        res.status(StatusCodes.OK).json({
-                            data,
-                            links: {
-                                next: page === pages ? undefined : `${process.env.PROTOCOL}://${process.env.DOMAIN}/destiny2/inventory?page=${page + 1}&size=${size}`,
-                            },
-                            page: {
-                                size,
-                                total: items.length,
-                                pages,
-                                number: page,
-                            },
-                        });
+                        // Introduce a delay to allow the event loop to process the 'close' event
+                        await new Promise(resolve => setImmediate(resolve));
                     }
-                } catch (err) {
-                    next(err);
+                    res.write(']');
+                    res.end();
+                } else {
+                    if (Number.isNaN(page)) page = 1;
+                    if (Number.isNaN(size)) size = 11;
+
+                    const data = items.slice(0, size);
+                    const pages = Math.ceil(items.length / size);
+
+                    res.status(StatusCodes.OK).json({
+                        data,
+                        links: {
+                            next: page === pages ? undefined : `${process.env.PROTOCOL}://${process.env.DOMAIN}/destiny2/inventory?page=${page + 1}&size=${size}`,
+                        },
+                        page: {
+                            size,
+                            total: items.length,
+                            pages,
+                            number: page,
+                        },
+                    });
                 }
             });
 
@@ -193,30 +184,26 @@ const routes = ({
             } else {
                 next();
             }
-        }, async (req, res, next) => {
-            try {
-                const result = await destiny2Controller.getManifest(res.locals.skipCache);
-                const {
-                    data: {
-                        manifest,
-                    },
-                    meta: {
-                        lastModified,
-                        maxAge,
-                    },
-                } = result;
-                const ifModifiedSince = new Date(req.headers['if-modified-since'] ?? null);
+        }, async (req, res) => {
+            const result = await destiny2Controller.getManifest(res.locals.skipCache);
+            const {
+                data: {
+                    manifest,
+                },
+                meta: {
+                    lastModified,
+                    maxAge,
+                },
+            } = result;
+            const ifModifiedSince = new Date(req.headers['if-modified-since'] ?? null);
 
-                res.set({
-                    'Last-Modified': lastModified,
-                    'Cache-Control': `max-age=${maxAge}`,
-                });
-                res.status(ifModifiedSince > new Date(lastModified)
-                    ? StatusCodes.NOT_MODIFIED : StatusCodes.OK)
-                    .json(manifest);
-            } catch (err) {
-                next(err);
-            }
+            res.set({
+                'Last-Modified': lastModified,
+                'Cache-Control': `max-age=${maxAge}`,
+            });
+            res.status(ifModifiedSince > new Date(lastModified)
+                ? StatusCodes.NOT_MODIFIED : StatusCodes.OK)
+                .json(manifest);
         });
 
     /**
@@ -237,14 +224,10 @@ const routes = ({
      */
     destiny2Router.route('/manifest')
         .post(async (req, res, next) => await authorizeUser(req, res, next),
-            async (req, res, next) => {
-                try {
-                    const { data: { manifest } } = destiny2Controller.upsertManifest()
+            async (req, res) => {
+                const { data: { manifest } } = destiny2Controller.upsertManifest()
 
-                    res.status(StatusCodes.OK).json(manifest);
-                } catch (err) {
-                    next(err);
-                }
+                res.status(StatusCodes.OK).json(manifest);
             });
 
     /**
@@ -268,19 +251,15 @@ const routes = ({
     destiny2Router.route('/xur')
         .get(cors(configuration.cors),
             async (req, res, next) => await middleware.authenticateUser(req, res, next),
-            async (req, res, next) => {
-                try {
-                    const { session: { displayName, membershipType } } = req;
-                    const items = await destiny2Controller.getXur(displayName, membershipType);
+            async (req, res) => {
+                const { session: { displayName, membershipType } } = req;
+                const items = await destiny2Controller.getXur(displayName, membershipType);
 
-                    if (items) {
-                        return res.status(StatusCodes.OK).json(items);
-                    }
-
-                    return res.status(StatusCodes.NOT_FOUND);
-                } catch (err) {
-                    next(err);
+                if (items) {
+                    return res.status(StatusCodes.OK).json(items);
                 }
+
+                return res.status(StatusCodes.NOT_FOUND);
             },
         );
 
