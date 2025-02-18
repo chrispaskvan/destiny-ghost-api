@@ -13,6 +13,7 @@ import cache from './helpers/cache';
 import loaders from './loaders';
 import log from './helpers/log';
 import subscriber from './helpers/subscriber';
+import processExternalPromisesWithTimeout from './helpers/process-external-promises-with-timeout';
 
 let insecureConnection;
 let secureConnection;
@@ -55,10 +56,10 @@ const startServer = async () => {
         signals: ['SIGINT', 'SIGTERM'],
         onSignal: async () => {
             console.log('Interuption or termination signal received. Shutting down the server ...');
-            await Promise.all([
+            await processExternalPromisesWithTimeout([
                 cache.quit(),
                 subscriber.close(),
-            ]);
+            ], 3000);
             insecureServer.close();
         },
         logger: log.error.bind(log),
