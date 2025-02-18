@@ -34,7 +34,7 @@ const obs = new PerformanceObserver(list => {
 
     log.info({
         entry,
-        duration,
+        duration: Math.round(duration * 1000) / 1000,
     }, 'Performance Measurement');
 });
 
