@@ -37,10 +37,12 @@ const routes = ({
                 const {
                     body,
                     cookies: requestCookies = {},
-                    originalUrl,
                 } = req;
 
-                if (!validateRequest(authToken, header, `${process.env.PROTOCOL}://${process.env.DOMAIN}${originalUrl}`, body)) {
+                // Reconstruct the URL using known, trusted components
+                const reconstructedUrl = `${process.env.PROTOCOL}://${process.env.DOMAIN}/twilio/destiny/r`;
+
+                if (!validateRequest(authToken, header, reconstructedUrl, body)) {
                     res.writeHead(StatusCodes.FORBIDDEN);
 
                     return res.end();
