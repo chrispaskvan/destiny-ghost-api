@@ -7,6 +7,7 @@
 import { Router } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import twilio from 'twilio';
+import Joi from 'joi';
 
 import AuthenticationMiddleWare from '../authentication/authentication.middleware';
 import TwilioController from './twilio.controller';
@@ -30,6 +31,19 @@ const routes = ({
         authenticationService, destinyService, userService, worldRepository,
     });
 
+    // Define a schema for the expected body parameters
+    const bodySchema = Joi.object({
+        MessageSid: Joi.string().length(34).required(),
+        SmsSid: Joi.string().length(34).required(),
+        SmsMessageSid: Joi.string().length(34).required(),
+        AccountSid: Joi.string().length(34).required(),
+        MessagingServiceSid: Joi.string().length(34).required(),
+        From: Joi.string().required(),
+        To: Joi.string().required(),
+        Body: Joi.string().max(1600).required(),
+        NumMedia: Joi.number().integer().min(0).required(),
+    });
+
     twilioRouter.route('/destiny/r')
         .post(async (req, res, next) => await middleware.authenticateUser(req, res, next),
             async (req, res) => {
@@ -38,18 +52,23 @@ const routes = ({
                     body,
                     cookies: requestCookies = {},
                 } = req;
+                const { error: err, value: sanitizedBody } = bodySchema.validate(body);
+
+                if (err) {
+                    return res.status(StatusCodes.BAD_REQUEST).json({ error: err.details[0].message });
+                }
 
                 // Reconstruct the URL using known, trusted components
                 const reconstructedUrl = `${process.env.PROTOCOL}://${process.env.DOMAIN}/twilio/destiny/r`;
 
-                if (!validateRequest(authToken, header, reconstructedUrl, body)) {
+                if (!validateRequest(authToken, header, reconstructedUrl, sanitizedBody)) {
                     res.writeHead(StatusCodes.FORBIDDEN);
 
                     return res.end();
                 }
 
                 const { cookies = {}, media, message } = await twilioController.request({
-                    body,
+                    body: sanitizedBody,
                     cookies: requestCookies,
                 });
 
@@ -91,15 +110,20 @@ const routes = ({
             } = req;
             const claimCheck = query['claim-check-number'];
             const notificationType = query['notification-type'];
+            const { error: err, value: sanitizedBody } = bodySchema.validate(body);
 
-            if (!validateRequest(authToken, header, `${process.env.PROTOCOL}://${process.env.DOMAIN}${originalUrl}`, body)) {
+            if (err) {
+                return res.status(StatusCodes.BAD_REQUEST).json({ error: err.details[0].message });
+            }
+
+            if (!validateRequest(authToken, header, `${process.env.PROTOCOL}://${process.env.DOMAIN}${originalUrl}`, sanitizedBody)) {
                 res.writeHead(StatusCodes.FORBIDDEN);
 
                 return res.end();
             }
 
             await twilioController.statusCallback({
-                ...body,
+                ...sanitizedBody,
                 ...(claimCheck && { ClaimCheck: claimCheck }),
                 ...(notificationType && { NotificationType: notificationType }),
             });
