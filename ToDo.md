@@ -58,3 +58,7 @@ Messages are saved to the database based on the Twilio data schema captured by t
 ## AI
 
 I'd like to explore the possibility of using AI to drive a feature that uses text recognition from an image to determine players in a fireteam. A user could send a screenshot of the players in the lobby before the start of a match and receive a report from the service with the players' stats in order to highlight strong players over weak ones.
+
+## Twilio Verification Link
+
+Twilio supports a verification link that can be sent to a user's phone number to verify their identity. This could be used to verify a user at sign in instead of sending a magic number to the user's phone. See [Twilio Verify](https://www.twilio.com/docs/verify) for more information or [How to send an SMS magic link for one-click phone verification](https://www.twilio.com/en-us/blog/sms-magic-link-verification) for an example of how to implement this feature.
