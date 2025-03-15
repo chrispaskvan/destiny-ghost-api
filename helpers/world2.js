@@ -3,7 +3,6 @@
  *
  * @module World
  * @summary Destiny World database.
- * @author Chris Paskvan
  * @requires _
  * @requires fs
  * @requires Q
@@ -11,7 +10,6 @@
  * @requires sqlite3
  */
 import { join, basename } from 'path';
-import Database from 'better-sqlite3';
 import World from './world';
 import log from './log';
 
@@ -32,50 +30,32 @@ class World2 extends World {
     /**
      * @private
      */
-    bootstrap(fileName) {
+    async bootstrap(fileName) {
         const databasePath = fileName
             ? join(this.directory, basename(fileName)) : undefined;
 
         log.info(`Loading the second world from ${databasePath}`);
 
         if (databasePath) {
-            const database = new Database(databasePath, {
-                readonly: true,
-                fileMustExist: true,
-                timeout: 3000,
-            });
+            const [categoryDefinitions, classDefinitions, damageTypeDefinitions, itemDefinitions, loreDefinitions, vendorDefinitions] = await this.pool.run({ databasePath, queries: [
+                'SELECT json FROM DestinyItemCategoryDefinition',
+                'SELECT json FROM DestinyClassDefinition',
+                'SELECT json FROM DestinyDamageTypeDefinition',
+                'SELECT json FROM DestinyInventoryItemDefinition',
+                'SELECT json FROM DestinyLoreDefinition',
+                'SELECT json FROM DestinyVendorDefinition'
+            ]});
 
-            const categoryDefinitions = database.prepare('SELECT json FROM DestinyItemCategoryDefinition').all();
-            const classDefinitions = database.prepare('SELECT json FROM DestinyClassDefinition').all();
-            const damageTypeDefinitions = database.prepare('SELECT json FROM DestinyDamageTypeDefinition').all();
-            const itemDefinitions = database.prepare('SELECT json FROM DestinyInventoryItemDefinition').all();
-            const loreDefinitions = database.prepare('SELECT json FROM DestinyLoreDefinition').all();
-            const vendorDefinitions = database.prepare('SELECT json FROM DestinyVendorDefinition').all();
-
-            database.close();
-
-            this.categories = categoryDefinitions
-                .map(({ json: category }) => JSON.parse(category));
-
-            const classes = classDefinitions
-                .map(({ json: classDefinition }) => JSON.parse(classDefinition));
-            const damageTypes = damageTypeDefinitions
-                .map(({ json: damageType }) => JSON.parse(damageType));
-
-            this.items = itemDefinitions.map(({ json: item }) => JSON.parse(item));
-
+            const classes = classDefinitions.map(({ json: classDefinition }) => JSON.parse(classDefinition));
+            const damageTypes = damageTypeDefinitions.map(({ json: damageType }) => JSON.parse(damageType));
             const lores = loreDefinitions.map(({ json: lore }) => JSON.parse(lore));
             const vendors = vendorDefinitions.map(({ json: vendor }) => JSON.parse(vendor));
 
-            this.categoryHashMap = new Map(
-                this.categories.map(category => [category.hash, category]),
-            );
-            this.classHashMap = new Map(
-                classes.map(characterClass => [characterClass.hash, characterClass]),
-            );
-            this.damageTypeHashMap = new Map(
-                damageTypes.map(damageType => [damageType.hash, damageType]),
-            );
+            this.categories = categoryDefinitions.map(({ json: category }) => JSON.parse(category));
+            this.categoryHashMap = new Map(this.categories.map(category => [category.hash, category]));
+            this.classHashMap = new Map(classes.map(characterClass => [characterClass.hash, characterClass]));
+            this.damageTypeHashMap = new Map(damageTypes.map(damageType => [damageType.hash, damageType]));
+            this.items = itemDefinitions.map(({ json: item }) => JSON.parse(item));
             this.itemHashMap = new Map(this.items.map(item => [item.hash, item]));
             this.loreDefinitionHashMap = new Map(lores.map(lore => [lore.hash, lore]));
             this.vendorHashMap = new Map(vendors.map(vendor => [vendor.hash, vendor]));

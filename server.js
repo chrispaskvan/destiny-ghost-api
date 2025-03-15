@@ -14,6 +14,7 @@ import loaders from './loaders';
 import log from './helpers/log';
 import subscriber from './helpers/subscriber';
 import processExternalPromisesWithTimeout from './helpers/process-external-promises-with-timeout';
+import pool from './helpers/pool';
 
 let insecureConnection;
 let secureConnection;
@@ -58,6 +59,7 @@ const startServer = async () => {
             console.log('Interuption or termination signal received. Shutting down the server ...');
             await processExternalPromisesWithTimeout([
                 cache.quit(),
+                pool.close(),
                 subscriber.close(),
             ], 3000);
             insecureServer.close();

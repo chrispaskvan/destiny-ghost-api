@@ -3,6 +3,7 @@ import protoLoader from '@grpc/proto-loader';
 
 import configuration from './helpers/config';
 import World2 from './helpers/world2';
+import pool from './helpers/pool';
 
 let server;
 
@@ -17,6 +18,7 @@ const startServer = () => {
     const directory = process.env.DESTINY2_DATABASE_DIR;
     const world = new World2({
         directory,
+        pool,
     });
     const port = 1102;
 

@@ -8,14 +8,18 @@ import {
 import World from './world';
 import itif from './itif';
 import { postmasterHash } from '../destiny/destiny.constants';
+import pool from './pool';
 
 const directory = process.env.DESTINY_DATABASE_DIR;
 let world;
 
-beforeAll(() => {
+beforeAll(async () => {
     world = new World({
         directory,
+        pool,
     });
+
+    await world.bootstrapped;
 });
 
 describe('It\'s Bungie\'s 1st world. You\'re just querying it.', () => {

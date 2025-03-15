@@ -7,15 +7,19 @@ import {
 } from 'vitest';
 import World from './world2';
 import itif from './itif';
+import pool from './pool';
 import { xurHash } from '../destiny2/destiny2.constants';
 
 const directory = process.env.DESTINY2_DATABASE_DIR;
 let world;
 
-beforeAll(() => {
+beforeAll(async () => {
     world = new World({
         directory,
+        pool,
     });
+
+    await world.bootstrapped;
 });
 
 describe('It\'s Bungie\'s 2nd world. You\'re just querying it.', () => {
