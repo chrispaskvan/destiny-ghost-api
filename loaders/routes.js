@@ -32,6 +32,7 @@ import TwilioRouter from '../twilio/twilio.routes';
 import UserRouter from '../users/user.routes';
 import schema from '../graphql/schema';
 import root from '../graphql/root';
+import pool from '../helpers/pool';
 
 const {
     documents: {
@@ -84,9 +85,11 @@ export default () => {
 
     const world = new World({
         directory: process.env.DESTINY_DATABASE_DIR,
+        pool,
     });
     const world2 = new World2({
         directory: process.env.DESTINY2_DATABASE_DIR,
+        pool,
     });
     const destiny2Cache = new Destiny2Cache({ client });
     const destiny2Service = new Destiny2Service({ cacheService: destiny2Cache });

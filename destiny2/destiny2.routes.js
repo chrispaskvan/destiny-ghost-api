@@ -108,6 +108,11 @@ const routes = ({
                 });
 
                 const items = await destiny2Controller.getInventory();
+
+                if (!items?.length) {
+                    return res.status(StatusCodes.SERVICE_UNAVAILABLE).end();
+                }
+
                 let page = parseInt(req.query.page, 10);
                 let size = parseInt(req.query.size, 10);
 

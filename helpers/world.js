@@ -6,7 +6,6 @@ import {
 } from 'fs';
 import { basename, join } from 'path';
 import sampleSize from 'lodash/sampleSize';
-import Database from 'better-sqlite3';
 import axios from 'axios';
 import { open } from 'yauzl';
 import log from './log';
@@ -16,7 +15,10 @@ import sanitizeDirectory from './sanitize-directory';
  * World Repository
  */
 class World {
-    constructor({ directory } = {}) {
+    constructor({ directory, pool } = {}) {
+        this.bootstrapped = null;
+        this.pool = pool;
+
         if (directory) {
             sanitizeDirectory(directory);
 
@@ -29,35 +31,28 @@ class World {
                 .map(file => file.name);
 
             this.directory = directory;
-            this.bootstrap(databaseFileName);
+            this.bootstrapped = this.bootstrap(databaseFileName); // Store the bootstrap promise
         }
     }
 
     /**
      * @private
      */
-    bootstrap(fileName) {
+    async bootstrap(fileName) {
         const databasePath = fileName
             ? join(this.directory, basename(fileName)) : undefined;
 
         log.info(`Loading the first world from ${databasePath}`);
 
         if (databasePath) {
-            const database = new Database(databasePath, {
-                readonly: true,
-                fileMustExist: true,
-            });
-
-            const grimoireCards = database.prepare('SELECT * FROM DestinyGrimoireCardDefinition').all();
-            const vendorDefinitions = database.prepare('SELECT * FROM DestinyVendorDefinition').all();
-
-            database.close();
-
-            this.grimoireCards = grimoireCards
-                .map(({ json: grimoireCard }) => JSON.parse(grimoireCard));
+            const [grimoireCards, vendorDefinitions] = await this.pool.run({ databasePath, queries: [
+                'SELECT * FROM DestinyGrimoireCardDefinition',
+                'SELECT * FROM DestinyVendorDefinition'
+            ]});
 
             const vendors = vendorDefinitions.map(({ json: vendor }) => JSON.parse(vendor));
 
+            this.grimoireCards = grimoireCards.map(({ json: grimoireCard }) => JSON.parse(grimoireCard));
             this.vendorHashMap = new Map(vendors.map(vendor => [vendor.hash, vendor]));
         }
     }
