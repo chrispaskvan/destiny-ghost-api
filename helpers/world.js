@@ -40,6 +40,8 @@ class World {
         const databasePath = fileName
             ? join(this.directory, basename(fileName)) : undefined;
 
+        log.info(`Loading the first world from ${databasePath}`);
+
         if (databasePath) {
             const database = new Database(databasePath, {
                 readonly: true,
@@ -103,48 +105,94 @@ class World {
             return Promise.resolve(manifest);
         }
 
-        return new Promise((resolve, reject) => {
-            const file = createWriteStream(`${databasePath}.zip`);
+        const downloadFile = (url, path) => {
+            return new Promise((resolve, reject) => {
+                const file = createWriteStream(path);
+                let downloadError = false;
 
-            axios.get(`https://www.bungie.net${relativeUrl}`, {
-                responseType: 'stream',
-            }).then(({ data: stream }) => {
-                stream.on('data', chunk => {
-                    file.write(new Buffer.from(chunk));
-                });
-                stream.on('end', () => {
-                    log.info(`content downloaded from ${relativeUrl}`);
+                axios.get(url, { responseType: 'stream' })
+                    .then(({ data: stream }) => {
+                        stream.pipe(file);
 
-                    open(`${databasePath}.zip`, { lazyEntries: true }, (err, zipFile) => {
-                        if (err) {
-                            return reject(err);
-                        }
+                        stream.on('error', err => {
+                            handleError(err, path, reject);
+                        });
 
-                        zipFile.readEntry();
+                        file.on('finish', () => {
+                            if (downloadError) return;
 
-                        return zipFile.on('entry', entry => {
-                            zipFile.openReadStream(entry, (err, readStream) => {
-                                if (err) {
-                                    return reject(err);
-                                }
+                            resolve();
+                        });
 
-                                const sanitizedFileName = basename(entry.fileName);
+                        file.on('error', err => {
+                            handleError(err, path, reject);
+                        });
+                    })
+                    .catch(err => {
+                        handleError(err, path, reject);
+                    });
+            });
+        };
 
-                                readStream.on('end', () => {
-                                    zipFile.readEntry();
-                                    this.bootstrap(fileName);
-                                });
+        const unzipFile = (zipPath, outputPath) => {
+            return new Promise((resolve, reject) => {
+                open(zipPath, { lazyEntries: true }, (err, zipFile) => {
+                    if (err) {
+                        return handleError(err, zipPath, reject);
+                    }
 
-                                readStream.pipe(createWriteStream(`${databaseDirectory}/${sanitizedFileName}`));
-                                unlinkSync(`${databasePath}.zip`);
+                    zipFile.readEntry();
 
-                                return resolve(manifest);
+                    zipFile.on('entry', entry => {
+                        zipFile.openReadStream(entry, (err, readStream) => {
+                            if (err) {
+                                return handleError(err, zipPath, reject);
+                            }
+
+                            const sanitizedFileName = basename(entry.fileName);
+                            const writeStream = createWriteStream(`${outputPath}/${sanitizedFileName}`);
+
+                            readStream.pipe(writeStream);
+
+                            writeStream.on('finish', () => {
+                                zipFile.readEntry();
+                            });
+
+                            writeStream.on('error', err => {
+                                handleError(err, zipPath, reject);
                             });
                         });
                     });
+
+                    zipFile.on('end', () => {
+                        unlinkSync(zipPath);
+                        resolve();
+                    });
                 });
             });
-        });
+        };
+
+        const handleError = (err, path, reject) => {
+            unlinkSync(path);
+            reject(err);
+        };
+
+        return downloadFile(`https://www.bungie.net${relativeUrl}`, `${databasePath}.zip`)
+            .then(() => {
+                log.info(`Content downloaded from ${relativeUrl}`);
+
+                return unzipFile(`${databasePath}.zip`, databaseDirectory);
+            })
+            .then(() => {
+                this.bootstrap(fileName);
+
+                return manifest;
+            })
+            .catch(err => {
+                log.error('Error updating manifest:', err);
+
+                throw err;
+            });
     }
 }
 

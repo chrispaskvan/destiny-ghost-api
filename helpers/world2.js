@@ -13,6 +13,7 @@
 import { join, basename } from 'path';
 import Database from 'better-sqlite3';
 import World from './world';
+import log from './log';
 
 /**
  * World2 Repository
@@ -26,8 +27,6 @@ class World2 extends World {
 
     constructor(options = {}) {
         super(options);
-
-        this.bootstrap(this.databasePath);
     }
 
     /**
@@ -36,6 +35,8 @@ class World2 extends World {
     bootstrap(fileName) {
         const databasePath = fileName
             ? join(this.directory, basename(fileName)) : undefined;
+
+        log.info(`Loading the second world from ${databasePath}`);
 
         if (databasePath) {
             const database = new Database(databasePath, {
