@@ -2,6 +2,7 @@ import {
     beforeEach, describe, expect, it, vi,
 } from 'vitest';
 import Chance from 'chance';
+import getEpoch from '../helpers/get-epoch';
 import UserController from './user.controller';
 
 vi.mock('../helpers/postmaster', () => ({
@@ -34,6 +35,7 @@ const userService = {
     getCurrentUser: vi.fn(),
     getUserByDisplayName: vi.fn(),
     getUserByEmailAddress: vi.fn(),
+    getUserByEmailAddressToken: vi.fn(),
     getUserById: vi.fn(),
     getUserByMembershipId: vi.fn(),
     getUserByPhoneNumber: vi.fn(),
@@ -204,6 +206,99 @@ describe('UserController', () => {
                 const user = await userController.getUserById(chance.guid(), -1);
 
                 expect(user).toBeUndefined();
+            });
+        });
+    });
+
+    describe('join', () => {
+        describe('when user is not found', () => {
+            it('should return undefined', async () => {
+                userService.getUserByEmailAddressToken.mockImplementation(() => Promise.resolve());
+
+                const user = await userController.join({
+                    tokens: {
+                        emailAddress: 'some-token',
+                    },
+                });
+
+                expect(userService.getUserByEmailAddressToken).toHaveBeenCalled();
+                expect(user).toBeUndefined();
+                expect(userService.updateUser).not.toHaveBeenCalled();
+            });
+        });
+        describe('when user is found', () => {
+            const code = chance.string();
+
+            describe('when the token has expired', () => {
+                it('should return undefined', async () => {
+                    userService.getUserByEmailAddressToken.mockImplementation(() => Promise.resolve({
+                        membership: {
+                            tokens: {
+                                timeStamp: getEpoch() - 1000,
+                                code,
+                            },
+                        },
+                    }));
+
+                    const user = await userController.join({
+                        tokens: {
+                            phoneNumber: code,
+                        },
+                    });
+    
+                    expect(userService.getUserByEmailAddressToken).toHaveBeenCalled();
+                    expect(user).toBeUndefined();
+                    expect(userService.updateUser).not.toHaveBeenCalled();
+                });
+            });
+
+            describe('when the code is invalid', () => {
+                it('should return undefined', async () => {
+                    userService.getUserByEmailAddressToken.mockImplementation(() => Promise.resolve({
+                        membership: {
+                            tokens: {
+                                timeStamp: getEpoch(),
+                                code,
+                            },
+                        },
+                    }));
+
+                    const user = await userController.join({
+                        tokens: {
+                            phoneNumber: 'wrong-code',
+                        },
+                    });
+
+                    expect(userService.getUserByEmailAddressToken).toHaveBeenCalled();
+                    expect(user).toBeUndefined();
+                    expect(userService.updateUser).not.toHaveBeenCalled();
+                });
+            });
+
+            describe('when the code and token are valid', () => {
+                it('should return the user', async () => {
+                    userService.getUserByEmailAddressToken.mockImplementation(() => Promise.resolve(
+                        {
+                            membership: {
+                                tokens: {
+                                    timeStamp: getEpoch(),
+                                    code,
+                                },
+                            },
+                            ...mockUser,
+                        },
+                    ));
+
+                    const user = await userController.join({
+                        tokens: {
+                            phoneNumber: code,
+                        },
+                    });
+
+                    expect(userService.getUserByEmailAddressToken).toHaveBeenCalled();
+                    expect(user).toBeDefined();
+                    expect(userService.updateUser).toHaveBeenCalled();
+                });
             });
         });
     });
