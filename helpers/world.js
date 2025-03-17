@@ -45,15 +45,21 @@ class World {
         log.info(`Loading the first world from ${databasePath}`);
 
         if (databasePath) {
-            const [grimoireCards, vendorDefinitions] = await this.pool.run({ databasePath, queries: [
-                'SELECT * FROM DestinyGrimoireCardDefinition',
-                'SELECT * FROM DestinyVendorDefinition'
-            ]});
+            try {
+                const [grimoireCards, vendorDefinitions] = await this.pool.run({ databasePath, queries: [
+                    'SELECT * FROM DestinyGrimoireCardDefinition',
+                    'SELECT * FROM DestinyVendorDefinition'
+                ]});
 
-            const vendors = vendorDefinitions.map(({ json: vendor }) => JSON.parse(vendor));
+                const vendors = vendorDefinitions.map(({ json: vendor }) => JSON.parse(vendor));
 
-            this.grimoireCards = grimoireCards.map(({ json: grimoireCard }) => JSON.parse(grimoireCard));
-            this.vendorHashMap = new Map(vendors.map(vendor => [vendor.hash, vendor]));
+                this.grimoireCards = grimoireCards.map(({ json: grimoireCard }) => JSON.parse(grimoireCard));
+                this.vendorHashMap = new Map(vendors.map(vendor => [vendor.hash, vendor]));
+            }
+            catch (err) {
+                log.error(`Error loading the first world: ${err.message}`);
+                throw err;
+            }
         }
     }
 

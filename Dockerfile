@@ -8,8 +8,8 @@ LABEL com.destiny-ghost.nodeversion=$NODE_VERSION
 
 # Install python 3
 RUN apt-get update && apt-get install --no-install-recommends -y gcc g++ libc6-dev make python3 \
-&& apt-get clean \
-&& rm -rf /var/lib/apt/lists/*
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 # arguments with default values and expected environment variables
 ARG DESTINY_DATABASE_DIR=./databases/destiny

@@ -69,6 +69,7 @@
         "rfc6902": "^5.1.2",
         "suppress-experimental-warnings": "^2.0.0",
         "swagger-ui-express": "^5.0.0",
+        "tinypool": "^1.0.2",
         "twilio": "^5.5.0",
         "yauzl": "^3.2.0"
     },

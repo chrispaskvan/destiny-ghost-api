@@ -4,10 +4,10 @@
  * @module User Controller
  * @author Chris Paskvan
  */
-import isEqual from 'lodash/isEqual';
 import { applyPatch, createPatch } from 'rfc6902';
 import { parsePhoneNumber } from 'awesome-phonenumber'
 import Postmaster from '../helpers/postmaster';
+import getEpoch from '../helpers/get-epoch';
 import { getBlob, getCode } from '../helpers/tokens';
 import { postmasterHash } from '../destiny/destiny.constants';
 
@@ -45,16 +45,6 @@ class UserController {
         }
 
         return cleaned?.number?.e164;
-    }
-
-    /**
-     * Get current epoch.
-     *
-     * @returns {number}
-     * @private
-     */
-    static #getEpoch() {
-        return Math.floor((new Date()).getTime() / 1000);
     }
 
     /**
@@ -148,29 +138,6 @@ class UserController {
     }
 
     /**
-     * Confirm registration request by creating an account if appropriate.
-     *
-     * @param req
-     * @param res
-     */
-    async join(user) {
-        const registeredUser = await this.users
-            .getUserByEmailAddressToken(user.tokens.emailAddress);
-
-        if (!registeredUser
-            || UserController.#getEpoch() > (registeredUser.membership.tokens.timeStamp + ttl)
-            || !isEqual(user.tokens.phoneNumber, registeredUser.membership.tokens.code)) {
-            return undefined;
-        }
-
-        registeredUser.dateRegistered = new Date().toISOString();
-
-        await this.users.updateUser(registeredUser);
-
-        return user;
-    }
-
-    /**
      * @typedef {Object} CurrentUser
      * @property {string} ETag
      * @property {Object} User
@@ -253,6 +220,29 @@ class UserController {
     }
 
     /**
+     * Confirm registration request by creating an account if appropriate.
+     *
+     * @param req
+     * @param res
+     */
+    async join(user) {
+        const registeredUser = await this.users
+            .getUserByEmailAddressToken(user?.tokens?.emailAddress);
+
+        if (!registeredUser
+            || getEpoch() > (registeredUser?.membership?.tokens?.timeStamp + ttl)
+            || user?.tokens?.phoneNumber !== registeredUser?.membership?.tokens?.code) {
+            return undefined;
+        }
+
+        registeredUser.dateRegistered = new Date().toISOString();
+
+        await this.users.updateUser(registeredUser);
+
+        return user;
+    }
+
+    /**
      * Sign In with Bungie and PSN/XBox Live
      * @param req
      * @param res
@@ -305,7 +295,7 @@ class UserController {
                 tokens: {
                     blob: getBlob(),
                     code: getCode(),
-                    timeStamp: UserController.#getEpoch(),
+                    timeStamp: getEpoch(),
                 },
             },
         });

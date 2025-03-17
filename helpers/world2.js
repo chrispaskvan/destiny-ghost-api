@@ -3,11 +3,6 @@
  *
  * @module World
  * @summary Destiny World database.
- * @requires _
- * @requires fs
- * @requires Q
- * @requires S
- * @requires sqlite3
  */
 import { join, basename } from 'path';
 import World from './world';
@@ -37,28 +32,34 @@ class World2 extends World {
         log.info(`Loading the second world from ${databasePath}`);
 
         if (databasePath) {
-            const [categoryDefinitions, classDefinitions, damageTypeDefinitions, itemDefinitions, loreDefinitions, vendorDefinitions] = await this.pool.run({ databasePath, queries: [
-                'SELECT json FROM DestinyItemCategoryDefinition',
-                'SELECT json FROM DestinyClassDefinition',
-                'SELECT json FROM DestinyDamageTypeDefinition',
-                'SELECT json FROM DestinyInventoryItemDefinition',
-                'SELECT json FROM DestinyLoreDefinition',
-                'SELECT json FROM DestinyVendorDefinition'
-            ]});
+            try {
+                const [categoryDefinitions, classDefinitions, damageTypeDefinitions, itemDefinitions, loreDefinitions, vendorDefinitions] = await this.pool.run({ databasePath, queries: [
+                    'SELECT json FROM DestinyItemCategoryDefinition',
+                    'SELECT json FROM DestinyClassDefinition',
+                    'SELECT json FROM DestinyDamageTypeDefinition',
+                    'SELECT json FROM DestinyInventoryItemDefinition',
+                    'SELECT json FROM DestinyLoreDefinition',
+                    'SELECT json FROM DestinyVendorDefinition'
+                ]});
 
-            const classes = classDefinitions.map(({ json: classDefinition }) => JSON.parse(classDefinition));
-            const damageTypes = damageTypeDefinitions.map(({ json: damageType }) => JSON.parse(damageType));
-            const lores = loreDefinitions.map(({ json: lore }) => JSON.parse(lore));
-            const vendors = vendorDefinitions.map(({ json: vendor }) => JSON.parse(vendor));
+                const classes = classDefinitions.map(({ json: classDefinition }) => JSON.parse(classDefinition));
+                const damageTypes = damageTypeDefinitions.map(({ json: damageType }) => JSON.parse(damageType));
+                const lores = loreDefinitions.map(({ json: lore }) => JSON.parse(lore));
+                const vendors = vendorDefinitions.map(({ json: vendor }) => JSON.parse(vendor));
 
-            this.categories = categoryDefinitions.map(({ json: category }) => JSON.parse(category));
-            this.categoryHashMap = new Map(this.categories.map(category => [category.hash, category]));
-            this.classHashMap = new Map(classes.map(characterClass => [characterClass.hash, characterClass]));
-            this.damageTypeHashMap = new Map(damageTypes.map(damageType => [damageType.hash, damageType]));
-            this.items = itemDefinitions.map(({ json: item }) => JSON.parse(item));
-            this.itemHashMap = new Map(this.items.map(item => [item.hash, item]));
-            this.loreDefinitionHashMap = new Map(lores.map(lore => [lore.hash, lore]));
-            this.vendorHashMap = new Map(vendors.map(vendor => [vendor.hash, vendor]));
+                this.categories = categoryDefinitions.map(({ json: category }) => JSON.parse(category));
+                this.categoryHashMap = new Map(this.categories.map(category => [category.hash, category]));
+                this.classHashMap = new Map(classes.map(characterClass => [characterClass.hash, characterClass]));
+                this.damageTypeHashMap = new Map(damageTypes.map(damageType => [damageType.hash, damageType]));
+                this.items = itemDefinitions.map(({ json: item }) => JSON.parse(item));
+                this.itemHashMap = new Map(this.items.map(item => [item.hash, item]));
+                this.loreDefinitionHashMap = new Map(lores.map(lore => [lore.hash, lore]));
+                this.vendorHashMap = new Map(vendors.map(vendor => [vendor.hash, vendor]));
+            }
+            catch (err) {
+                log.error(`Error loading the second world: ${err.message}`);
+                throw err;
+            }
         }
     }
 

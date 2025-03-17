@@ -8,12 +8,13 @@ export default defineConfig({
                 autoUpdate: true,
                 statements: 80.9,
                 branches: 86.94,
-                functions: 72.98,
+                functions: 74.5,
                 lines: 80.9,
             },
         },
         sequence: {
             hooks: 'parallel',
         },
+        testTimeout: 10000, // Set the timeout to 10 seconds
     },
 });

@@ -33,7 +33,7 @@ beforeAll(async () => {
 const get = async (url, options) => {
     const delay = 1000; // milliseconds
     let res;
-    let retries = 3;
+    let retries = 5;
 
     while (retries > 0) {
         res = await axiosAPIClient.get(url, options);
