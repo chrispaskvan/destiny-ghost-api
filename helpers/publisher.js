@@ -6,7 +6,7 @@
  * @author Chris Paskvan
  * @requires azure
  */
-import { Queue } from 'bullmq';
+import { Queue, QueueEvents } from 'bullmq';
 import cache from './cache';
 import context from './async-context';
 
@@ -26,6 +26,7 @@ class Publisher {
      * @private
      */
     #queue;
+    #queueEvents;
 
     /**
      * Create a new instance of the Publisher.
@@ -37,6 +38,12 @@ class Publisher {
     constructor(topic = 'notifications') {
         this.#queue = new Queue(topic, {
             connection: cache.options,
+        });
+        this.#queueEvents = new QueueEvents(topic, {
+            connection: cache.options,
+        });
+        this.#queueEvents.on('deduplicated', ({ jobId, deduplicationId }, id) => {
+            console.log(`Job ${id} was deduplicated due to existing job ${jobId} with deduplication Id ${deduplicationId}`);
         });
     }
 
@@ -78,7 +85,14 @@ class Publisher {
             },
         };
 
-        return await this.#queue.add('notification', message);
+        return await this.#queue.add('notification', message,
+            {
+                deduplication: {
+                    id: `${notificationType}-${user.phoneNumber}`,
+                    ttl: 3_600_000,
+                }
+            }
+        );
     }
 }
 
