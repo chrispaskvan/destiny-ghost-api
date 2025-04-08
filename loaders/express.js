@@ -1,6 +1,6 @@
-import bodyParser from 'body-parser';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
+import express from 'express';
 import session from 'express-session';
 import helmet from 'helmet';
 
@@ -11,10 +11,10 @@ import rateLimiterMiddleware from '../helpers/rate-limiter.middleware';
 import store from '../helpers/store';
 
 export default app => {
-    app.use(bodyParser.json({
+    app.use(express.json({
         limit: '1mb',
     }));
-    app.use(bodyParser.urlencoded({
+    app.use(express.urlencoded({
         limit: '1mb',
         extended: true,
         parameterLimit: 51,

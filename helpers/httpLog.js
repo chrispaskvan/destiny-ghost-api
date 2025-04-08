@@ -26,7 +26,7 @@ class HttpLog extends PinoHttp {
                 };
             },
             customReceivedObject: (req, res, loggableObject) => {
-                const { session: { displayName, membershipType }, body: { From: phoneNumber } } = req;
+                const { session: { displayName, membershipType }, body: { From: phoneNumber } = {} } = req;
                 const { traceId } = context.getStore()?.get('logger')?.bindings() || {};
 
                 res.setHeader('X-Trace-Id', traceId);
