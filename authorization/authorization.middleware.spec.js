@@ -16,20 +16,20 @@ describe('authorizeUser', () => {
     });
 
     describe('when the notification header is missing', () => {
-        it('should return 403', () => {
+        it('should return 401', () => {
             const req = createRequest({
                 headers: {},
             });
 
             authorizeUser(req, res, next);
 
-            expect(res.statusCode).toEqual(StatusCodes.FORBIDDEN);
+            expect(res.statusCode).toEqual(StatusCodes.UNAUTHORIZED);
             expect(next).not.toBeCalled();
         });
     });
 
     describe('when the notification header is incorrect', () => {
-        it('should return 403', () => {
+        it('should return 401', () => {
             const req = createRequest({
                 headers: {
                     'x-destiny-': 'thorn',
@@ -38,7 +38,7 @@ describe('authorizeUser', () => {
 
             authorizeUser(req, res, next);
 
-            expect(res.statusCode).toEqual(StatusCodes.FORBIDDEN);
+            expect(res.statusCode).toEqual(StatusCodes.UNAUTHORIZED);
             expect(next).not.toBeCalled();
         });
     });

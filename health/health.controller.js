@@ -129,7 +129,7 @@ class HealthController {
                 itemName = notAvailable,
                 itemTypeAndTierDisplayName,
             } = {},
-        ] = await this.world2.getItemByName('Redrix\'s Estoc');
+        ] = await this.world2.getItemByName('Psychopomp');
 
         return `${itemName} ${itemTypeAndTierDisplayName}`;
     }

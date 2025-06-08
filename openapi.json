@@ -1,0 +1,760 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Destiny-Ghost API",
+    "version": "2.5.0",
+    "description": "A Node Express application for receiving SMS/MMS Notifications around changes to the vendor wares in Bungie's Destiny and make ad-hoc queries in the database.",
+    "license": {
+      "name": "MIT",
+      "url": "https://choosealicense.com/licenses/mit"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://api2.destiny-ghost.com",
+      "description": "Development server"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bungieOAuth": {
+        "type": "oauth2",
+        "description": "This API uses OAuth 2.0 with Bungie.net as the Authorization Server. Clients should obtain a Bearer token from Bungie.net and include it in the Authorization header.",
+        "flows": {
+          "authorizationCode": {
+            "authorizationUrl": "https://www.bungie.net/en/OAuth/Authorize",
+            "tokenUrl": "https://www.bungie.net/platform/app/oauth/token/",
+            "scopes": {}
+          }
+        }
+      },
+      "authorizationKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "Destiny-Ghost-Authorization",
+        "description": "Requires administrative privileges. Specific header provided out-of-band."
+      }
+    },
+    "schemas": {
+      "Link": {
+        "type": "object",
+        "required": [
+          "href",
+          "rel"
+        ],
+        "properties": {
+          "href": {
+            "type": "string"
+          },
+          "rel": {
+            "type": "string"
+          }
+        }
+      },
+      "Notification": {
+        "type": "object",
+        "required": [
+          "enabled",
+          "type"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "type": {
+            "type": "string",
+            "example": "Xur"
+          }
+        }
+      },
+      "Patch": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "enum": [
+                "replace"
+              ]
+            },
+            "path": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "User": {
+        "type": "object",
+        "required": [
+          "displayName"
+        ],
+        "properties": {
+          "dateRegistered": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "emailAddress": {
+            "type": "string",
+            "format": "email"
+          },
+          "firstName": {
+            "type": "string"
+          },
+          "lastName": {
+            "type": "string"
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Link"
+            }
+          },
+          "notifications": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Notification"
+            }
+          },
+          "phoneNumber": {
+            "type": "string",
+            "format": "phone"
+          },
+          "profilePicturePath": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Destiny",
+      "description": "Destiny 1 Legacy Game"
+    },
+    {
+      "name": "Destiny 2",
+      "description": "Destiny 2 Game",
+      "externalDocs": {
+        "description": "Bungie",
+        "url": "https://www.bungie.net/destiny"
+      }
+    },
+    {
+      "name": "Health",
+      "description": "Health Indicators"
+    },
+    {
+      "name": "Users",
+      "description": "User Management"
+    }
+  ],
+  "paths": {
+    "/destiny/grimoireCards/{numberOfCards}": {
+      "get": {
+        "summary": "Get a random selection of Grimoire Cards.",
+        "tags": [
+          "Destiny"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "numberOfCards",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10
+            },
+            "required": true,
+            "description": "The number of cards to return. (Max. 10)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns a random selection of Grimoire Cards.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Unique identifier assigned when not provided.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Trace-Id": {
+                "description": "Unique identifier assigned.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "description": "Number of requests allowed in the current period.",
+                "schema": {
+                  "type": "number"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "description": "Number of requests remaining in the current period.",
+                "schema": {
+                  "type": "number"
+                }
+              },
+              "X-RateLimit-Reset": {
+                "description": "Time at which the current period ends.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid whole number outside the range of 1 to 10."
+          },
+          "422": {
+            "description": "Unrecognized whole number."
+          }
+        }
+      }
+    },
+    "/destiny/manifest": {
+      "get": {
+        "summary": "Get details about the latest Destiny manifest definition.",
+        "tags": [
+          "Destiny"
+        ],
+        "parameters": [
+          {
+            "name": "Cache-Control",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-Modified-Since",
+            "in": "header",
+            "description": "Return not modified if the manifest has not changed since the date and time provided.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns the Destiny Manifest definition.",
+            "headers": {
+              "Last-Modified": {
+                "description": "The date and time the manifest was last modified.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "The cache control header.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified",
+            "headers": {
+              "Last-Modified": {
+                "description": "The date and time the manifest was last modified.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "The cache control header.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Download the latest Destiny manifest if the local copy is outdated.",
+        "tags": [
+          "Destiny"
+        ],
+        "security": [
+          {
+            "authorizationKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns the Destiny Manifest definition."
+          }
+        }
+      }
+    },
+    "/destiny2/characters": {
+      "get": {
+        "summary": "Get a list of the user's characters.",
+        "tags": [
+          "Destiny 2"
+        ],
+        "security": [
+          {
+            "bungieOAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns the current user's list of characters."
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/destiny2/inventory": {
+      "get": {
+        "summary": "Get the complete inventory of items.",
+        "tags": [
+          "Destiny 2"
+        ],
+        "security": [
+          {
+            "authorizationKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns the complete Destiny 2 item inventory."
+          }
+        }
+      }
+    },
+    "/destiny2/manifest": {
+      "get": {
+        "summary": "Get details about the latest Destiny 2 manifest definition.",
+        "tags": [
+          "Destiny 2"
+        ],
+        "parameters": [
+          {
+            "name": "Cache-Control",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-Modified-Since",
+            "in": "header",
+            "description": "Return not modified if the manifest has not changed since the date and time provided.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns the Destiny Manifest definition."
+          }
+        }
+      },
+      "post": {
+        "summary": "Download the latest Destiny2 manifest if the local copy is outdated.",
+        "tags": [
+          "Destiny 2"
+        ],
+        "security": [
+          {
+            "authorizationKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns the Destiny Manifest definition."
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        }
+      }
+    },
+    "/destiny2/xur": {
+      "get": {
+        "summary": "Get Xur's inventory if available.",
+        "tags": [
+          "Destiny 2"
+        ],
+        "security": [
+          {
+            "bungieOAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns Xur's inventory."
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Xur could not be found."
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Get a summary of the status of the Destiny Ghost API and its dependencies.",
+        "tags": [
+          "Health"
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns the status reports of underlying dependencies."
+          },
+          "503": {
+            "description": "Service is unavailable."
+          }
+        }
+      }
+    },
+    "/health/metrics": {
+      "get": {
+        "summary": "Get metrics on the health of the Destiny Ghost API.",
+        "tags": [
+          "Health"
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns measurements."
+          }
+        }
+      }
+    },
+    "/users/current": {
+      "get": {
+        "summary": "Get the current Destiny Ghost user.",
+        "tags": [
+          "Users"
+        ],
+        "security": [
+          {
+            "bungieOAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns the current Destiny Ghost user's profile.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "description": "The ETag of the updated user profile.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Destiny Ghost profile for the current user was not found."
+          }
+        }
+      }
+    },
+    "/users/current/ciphers": {
+      "post": {
+        "summary": "Request a verification code for the current user.",
+        "description": "Requests the system to send a time-sensitive verification code to the currently authenticated user's specified contact method (email or phone). This code is used to verify ownership of the contact method before performing sensitive operations like profile edits. The user's email address or phone number associated with their Destiny Ghost profile will be used.",
+        "tags": [
+          "Users"
+        ],
+        "security": [
+          {
+            "bungieOAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "channel"
+                ],
+                "properties": {
+                  "channel": {
+                    "type": "string",
+                    "enum": [
+                      "email",
+                      "phone"
+                    ],
+                    "description": "The communication channel to send the verification code to (must be registered with the user's profile)."
+                  }
+                },
+                "example": {
+                  "channel": "email"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Verification code successfully requested and is being sent. The user should check their email or phone."
+          },
+          "400": {
+            "description": "Bad Request. E.g., channel not specified, or user does not have the specified contact method registered and verified."
+          },
+          "401": {
+            "description": "Unauthorized. Bungie OAuth token missing or invalid."
+          },
+          "429": {
+            "description": "Too Many Requests. The user has requested codes too frequently."
+          }
+        }
+      }
+    },
+    "/users/current/cryptarch": {
+      "post": {
+        "summary": "Validate a verification code for the current user.",
+        "description": "Validates the provided verification code for the currently authenticated user. This code is used to verify ownership of the contact method before performing sensitive operations like profile edits.",
+        "tags": [
+          "Users"
+        ],
+        "security": [
+          {
+            "bungieOAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "channel",
+                  "code"
+                ],
+                "properties": {
+                  "channel": {
+                    "type": "string",
+                    "enum": [
+                      "email",
+                      "phone"
+                    ],
+                    "description": "The communication channel to send the verification code to (must be registered with the user's profile)."
+                  },
+                  "code": {
+                    "type": "string",
+                    "description": "The verification code received by the user.",
+                    "example": 123456
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Verification code successfully validated."
+          },
+          "400": {
+            "description": "Bad Request. E.g., channel not specified, or user does not have the specified contact method registered and verified."
+          },
+          "401": {
+            "description": "Unauthorized. Bungie OAuth token missing or invalid."
+          },
+          "404": {
+            "description": "Not Found. No pending verification found for this user and channel, or the code has already been used/invalidated."
+          },
+          "429": {
+            "description": "Too Many Requests. The user has requested codes too frequently."
+          }
+        }
+      }
+    },
+    "/users/join": {
+      "post": {
+        "summary": "Confirm the user.",
+        "tags": [
+          "Users"
+        ],
+        "security": [
+          {
+            "bungieOAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "tokens": {
+                    "type": "object",
+                    "properties": {
+                      "phoneNumber": {
+                        "type": "string",
+                        "format": "phone"
+                      },
+                      "emailAddress": {
+                        "type": "string",
+                        "format": "email"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "User joined successfully."
+          },
+          "400": {
+            "description": "Bad request."
+          }
+        }
+      }
+    },
+    "/users/signOut": {
+      "post": {
+        "summary": "Sign out a user.",
+        "tags": [
+          "Users"
+        ],
+        "security": [
+          {
+            "bungieOAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        }
+      }
+    },
+    "/users/signUp": {
+      "post": {
+        "summary": "Sign up for the service.",
+        "tags": [
+          "Users"
+        ],
+        "security": [
+          {
+            "bungieOAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "firstName": {
+                    "type": "string"
+                  },
+                  "lastName": {
+                    "type": "string"
+                  },
+                  "phoneNumber": {
+                    "type": "string",
+                    "format": "phone"
+                  },
+                  "emailAddress": {
+                    "type": "string",
+                    "format": "email"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "description": "Sign up for the service with a first name, last name, phone number, and email address.",
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/users/{userId}": {
+      "patch": {
+        "summary": "Update a user's profile.",
+        "description": "See [JSONPatch](https://jsonpatch.com) for more information.",
+        "tags": [
+          "Users"
+        ],
+        "security": [
+          {
+            "bungieOAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "If-Match",
+            "in": "header",
+            "description": "The ETag of the user profile.",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "userId",
+            "in": "path",
+            "description": "The user's id.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "Update an existent user in the store",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Patch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Returns the updated user profile."
+          }
+        }
+      }
+    }
+  }
+}

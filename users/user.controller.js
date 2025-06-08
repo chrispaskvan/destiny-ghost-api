@@ -126,6 +126,33 @@ class UserController {
     }
 
     /**
+     * Validate a user token.
+     * 
+     * @param {Object} param0
+     * @param {string} param0.displayName
+     * @param {string} param0.membershipType
+     * @param {string} param0.channel
+     * @param {string} param0.code
+     * @returns {Promise<Object>}
+     */
+    async decipher({ displayName, membershipType, channel, code }) {
+        const user = await this.users.getUserByDisplayName(displayName, membershipType);
+
+        if (!user) {
+            throw new Error('user not found');
+        }
+        if (getEpoch() > (user?.membership?.tokens?.timeStamp + ttl)) {
+            throw new Error('token expired');
+        }
+        if ((channel === 'phone' && user?.membership?.tokens?.code !== code)
+            || (channel === 'email' && user?.membership?.tokens?.blob !== code)) {
+            throw new Error('invalid code');
+        }
+
+        return user;
+    }
+
+    /**
      * Delete inconsequential message documents for the given user.
      * @param {Object} user
      */
@@ -242,6 +269,52 @@ class UserController {
         return user;
     }
 
+    /**
+     * Send a verification code to the user.
+     * 
+     * @param {*} user
+     */
+    async sendCipher({ displayName, membershipType, channel }) {
+        const user = await this.users.getUserByDisplayName(displayName, membershipType);
+
+        if (!(user && user?.dateRegistered && user?.emailAddress && user?.phoneNumber)) {
+            throw new Error('registration not found');
+        }
+
+        const iconUrl = this.world.getVendorIcon(postmasterHash);
+
+        if (channel === 'phone') {
+            Object.assign(user, {
+                membership: {
+                    tokens: {
+                        code: getCode(),
+                        timeStamp: getEpoch(),
+                    },
+                },
+            });
+
+            user.membership.message = await this.notifications.sendMessage(
+                `Enter ${user.membership.tokens.code} to verify your phone number.`,
+                user.phoneNumber,
+                user.type === 'mobile' ? iconUrl : '',
+            );
+        }
+
+        if (channel === 'email') {
+            Object.assign(user, {
+                membership: {
+                    tokens: {
+                        blob: getBlob(),
+                        timeStamp: getEpoch(),
+                    },
+                },
+            });
+
+            user.membership.postmark = await this.postmaster.confirm(user, iconUrl, '/confirm');
+        }
+
+        await this.users.updateUser(user);
+    }
     /**
      * Sign In with Bungie and PSN/XBox Live
      * @param req

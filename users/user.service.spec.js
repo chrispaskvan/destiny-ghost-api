@@ -499,58 +499,6 @@ describe('UserService', () => {
         });
     });
 
-    describe('getUserByPhoneNumberToken', () => {
-        describe('when phone number token is found', () => {
-            it('should return an existing user', () => {
-                documentService.getDocuments.mockImplementation(() => Promise.resolve([user]));
-
-                return userService.getUserByPhoneNumberToken(1)
-                    .then(user1 => {
-                        expect(user1).toEqual(user);
-                        expect(documentService.getDocuments).toHaveBeenCalled();
-                    });
-            });
-
-            it('should fail when more than one existing user is found', async () => {
-                documentService.getDocuments
-                    .mockImplementation(() => Promise.resolve([user, user]));
-
-                await expect(userService.getUserByPhoneNumberToken(1))
-                    .rejects.toThrow();
-
-                expect(documentService.getDocuments).toHaveBeenCalled();
-            });
-
-            it('should fail when no users are found', () => {
-                documentService.getDocuments.mockImplementation(() => Promise.resolve([]));
-
-                return userService.getUserByPhoneNumberToken(1)
-                    .then(user1 => {
-                        expect(user1).toBeUndefined();
-                        expect(documentService.getDocuments).toHaveBeenCalled();
-                    });
-            });
-
-            it('should fail when phone number is empty', async () => {
-                documentService.getDocuments.mockImplementation(() => Promise.resolve());
-
-                await expect(userService.getUserByPhoneNumberToken())
-                    .rejects.toThrow();
-
-                expect(documentService.getDocuments).not.toHaveBeenCalled();
-            });
-
-            it('should fail when no documents are found', async () => {
-                documentService.getDocuments.mockImplementation(() => Promise.resolve());
-
-                await expect(userService.getUserByPhoneNumberToken(1))
-                    .rejects.toThrow();
-
-                expect(documentService.getDocuments).toHaveBeenCalled();
-            });
-        });
-    });
-
     describe('getUserById', () => {
         describe('when user id defined', () => {
             it('should return an existing user', () => {

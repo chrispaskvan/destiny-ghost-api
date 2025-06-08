@@ -1,4 +1,4 @@
-FROM node:22.14.0-bookworm-slim
+FROM node:22.16.0-bookworm-slim
 
 # labels
 LABEL org.opencontainers.image.created=$CREATED_DATE
@@ -37,5 +37,9 @@ COPY --chown=node:node package.json package-lock.json* ./
 RUN npm config list && npm ci --omit=dev && npm cache clean --force
 
 COPY --chown=node:node . /destiny-ghost-api/
+
+# Build the OpenAPI (Swagger) document for production
+ENV NODE_ENV=production
+RUN npm run swagger
 
 CMD ["sh", "-c", "npm run start:production"]

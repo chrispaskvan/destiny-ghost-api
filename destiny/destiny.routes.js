@@ -44,7 +44,7 @@ const routes = ({
             });
 
     /**
-     * @swagger
+     * @openapi
      * paths:
      *  /destiny/grimoireCards/{numberOfCards}:
      *    get:
@@ -55,11 +55,11 @@ const routes = ({
      *        - in: path
      *          name: numberOfCards
      *          schema:
-     *            type: number
+     *            type: integer
+     *            minimum: 1
+     *            maximum: 10
      *          required: true
      *          description: The number of cards to return. (Max. 10)
-     *      produces:
-     *        - application/json
      *      responses:
      *        200:
      *          description: Returns a random selection of Grimoire Cards.
@@ -67,23 +67,23 @@ const routes = ({
      *            'X-Request-Id':
      *              description: Unique identifier assigned when not provided.
      *              schema:
-     *              type: string
+     *                type: string
      *            'X-Trace-Id':
      *              description: Unique identifier assigned.
      *              schema:
-     *              type: string
+     *                type: string
      *            'X-RateLimit-Limit':
      *              description: Number of requests allowed in the current period.
      *              schema:
-     *              type: number
+     *                type: number
      *            'X-RateLimit-Remaining':
      *              description: Number of requests remaining in the current period.
      *              schema:
-     *              type: number
+     *                type: number
      *            'X-RateLimit-Reset':
      *              description: Time at which the current period ends.
      *              schema:
-     *              type: string
+     *                type: string
      *        400:
      *          description: Invalid whole number outside the range of 1 to 10.
      *        422:
@@ -110,7 +110,7 @@ const routes = ({
         );
 
     /**
-     * @swagger
+     * @openapi
      * paths:
      *  /destiny/manifest:
      *    get:
@@ -120,10 +120,15 @@ const routes = ({
      *      parameters:
      *        - name: Cache-Control
      *          in: header
+     *          required: false
+     *          schema:
+     *            type: string
      *        - name: If-Modified-Since
      *          in: header
-     *      produces:
-     *        - application/json
+     *          description: 'Return not modified if the manifest has not changed since the date and time provided.'
+     *          required: false
+     *          schema:
+     *            type: string
      *      responses:
      *        200:
      *          description: Returns the Destiny Manifest definition.
@@ -131,28 +136,28 @@ const routes = ({
      *            'Last-Modified':
      *              description: The date and time the manifest was last modified.
      *              schema:
-     *              type: string
+     *                type: string
      *            'Cache-Control':
      *              description: The cache control header.
      *              schema:
-     *              type: string
+     *                type: string
      *        304:
      *          description: Not Modified
      *          headers:
      *            'Last-Modified':
      *              description: The date and time the manifest was last modified.
      *              schema:
-     *              type: string
+     *                type: string
      *            'Cache-Control':
      *              description: The cache control header.
      *              schema:
-     *              type: string
+     *                type: string
      */
     destinyRouter.route('/manifest')
         .get(async (req, res, next) => {
             const cacheControl = req.headers['cache-control'];
             const skipCache = cacheControl && (getMaxAgeFromCacheControl(cacheControl) === 0
-            || cacheControl.split(',').includes('no-cache'));
+                || cacheControl.split(',').includes('no-cache'));
 
             res.locals.skipCache = skipCache;
             if (skipCache) {
@@ -183,25 +188,26 @@ const routes = ({
         });
 
     /**
-     * @swagger
+     * @openapi
      * paths:
      *  /destiny/manifest:
      *    post:
      *      summary: Download the latest Destiny manifest if the local copy is outdated.
      *      tags:
      *        - Destiny
-     *      produces:
-     *        - application/json
+     *      security:
+     *        - authorizationKey: []
      *      responses:
      *        200:
      *          description: Returns the Destiny Manifest definition.
      */
     destinyRouter.route('/manifest')
-        .post(async (req, res) => {
-            const manifest = await destinyController.upsertManifest();
+        .post(async (req, res, next) => await authorizeUser(req, res, next),
+            async (req, res) => {
+                const manifest = await destinyController.upsertManifest();
 
-            res.status(StatusCodes.OK).json(manifest);
-        });
+                res.status(StatusCodes.OK).json(manifest);
+            });
 
     return destinyRouter;
 };

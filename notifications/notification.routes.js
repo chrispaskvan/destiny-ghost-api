@@ -6,7 +6,7 @@ import NotificationController from './notification.controller';
 import authorizeUser from '../authorization/authorization.middleware';
 
 /**
- * @swagger
+ * @openapi
  *  components:
  *    schemas:
  *      Notification:

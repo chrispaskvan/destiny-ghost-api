@@ -26,7 +26,7 @@ class RoleMiddleware {
             if (this.authentication.constructor.isAdministrator(user)) {
                 next();
             } else {
-                res.status(StatusCodes.UNAUTHORIZED).end();
+                res.status(StatusCodes.FORBIDDEN).end();
             }
         } else {
             res.status(StatusCodes.UNAUTHORIZED).end();

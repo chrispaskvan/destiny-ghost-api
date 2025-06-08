@@ -2,9 +2,9 @@ import { StatusCodes } from 'http-status-codes';
 import cors from 'cors';
 import { Router } from 'express';
 import AuthenticationMiddleWare from '../authentication/authentication.middleware';
-import RoleMiddleware from './role.middleware';
 import UserController from './user.controller';
 import configuration from '../helpers/config';
+import log from '../helpers/log';
 
 /**
  * Sign the user in by setting the session.
@@ -28,16 +28,7 @@ function signIn(req, res, user, next) {
 }
 
 /**
- * Validate the given phone number
- * @param {*} phoneNumber
- * @returns boolean
- */
-function isPhoneNumber(phoneNumber) {
-    return !!phoneNumber.trim().length;
-}
-
-/**
-* @swagger
+* @openapi
 *  components:
 *    schemas:
 *      Patch:
@@ -87,7 +78,6 @@ const routes = ({
     authenticationController, destinyService, notificationService, userService, worldRepository,
 }) => {
     const middleware = new AuthenticationMiddleWare({ authenticationController });
-    const roles = new RoleMiddleware({ authenticationController });
     const userController = new UserController({
         destinyService, notificationService, userService, worldRepository,
     });
@@ -95,173 +85,16 @@ const routes = ({
 
     userRouter.all('/', cors(configuration.cors));
 
-    userRouter.route('/signUp')
-        .post((req, res, next) => middleware.authenticateUser(req, res, next),
-            async (req, res) => {
-                const { body: user, session: { displayName, membershipType } } = req;
-
-                if (!(user.firstName && user.lastName && user.phoneNumber && user.emailAddress)) {
-                    return res.status(StatusCodes.UNPROCESSABLE_ENTITY).end();
-                }
-
-                const newUser = await userController.signUp({ displayName, membershipType, user });
-
-                return newUser
-                    ? res.status(StatusCodes.OK).end()
-                    : res.status(StatusCodes.CONFLICT).end();
-            });
-
-    userRouter.route('/join')
-        .post(
-            (req, res, next) => middleware.authenticateUser(req, res, next),
-            async (req, res) => {
-                const { body: user } = req;
-
-                const newUser = await userController.join(user);
-                return newUser
-                    ? res.status(StatusCodes.OK).end()
-                    : res.status(StatusCodes.BAD_REQUEST).end();
-            },
-        );
-
-    userRouter.route('/signIn/Bungie')
-        .get(async (req, res, next) => {
-            const {
-                query: { code, state: queryState },
-                session: { displayName, state: sessionState },
-            } = req;
-
-            if (displayName) {
-                return res.status(StatusCodes.OK)
-                    .json({ displayName });
-            }
-            if (sessionState !== queryState) {
-                return res.sendStatus(StatusCodes.FORBIDDEN);
-            }
-
-            const user = await userController.signIn({
-                code,
-                displayName,
-                queryState,
-                sessionState,
-            });
-            if (!user) {
-                return res.status(StatusCodes.NOT_FOUND).end();
-            }
-
-            return signIn(req, res, user, next);
-        });
-
     /**
-     * @swagger
-     * paths:
-     *  /users/signOut:
-     *    post:
-     *      summary: Sign out a user.
-     *      tags:
-     *        - Users
-     *      responses:
-     *        200:
-     *          description: Success
-     *        500:
-     *          description: Internal Server Error
-     */
-    userRouter.route('/signOut')
-        .post((req, res) => {
-            req.session.destroy(err => {
-                if (err) {
-                    return res.status(StatusCodes.INTERNAL_SERVER_ERROR)
-                        .json({ error: 'Failed to sign out' });
-                }
-                res.status(StatusCodes.OK).end();
-            });
-        });
-
-    /**
-     * @swagger
-     * paths:
-     *  /users/{emailAddress}/emailAddress:
-     *    get:
-     *      summary: Get the Destiny Ghost user by email address.
-     *      tags:
-     *        - Users
-     *      parameters:
-     *        - in: path
-     *          name: emailAddress
-     *          schema:
-     *            type: string
-     *          required: true
-     *          description: The email address of the Destiny Ghost user.
-     *      produces:
-     *        - application/json
-     *      responses:
-     *        204:
-     *          description: Destiny Ghost user found.
-     *        404:
-     *          description: No Destiny Ghost user found.
-     */
-    userRouter.route('/:emailAddress/emailAddress')
-        .get((req, res, next) => middleware.authenticateUser(req, res, next),
-            async (req, res) => {
-                const { params: { emailAddress } } = req;
-                const user = await userController.getUserByEmailAddress(emailAddress);
-
-                return user
-                    ? res.status(StatusCodes.NO_CONTENT).end()
-                    : res.status(StatusCodes.NOT_FOUND).end();
-            },
-        );
-
-    /**
-     * @swagger
-     * paths:
-     *  /users/{phoneNumber}/phoneNumber:
-     *    get:
-     *      summary: Get the Destiny Ghost user by phone number.
-     *      tags:
-     *        - Users
-     *      parameters:
-     *        - in: path
-     *          name: phoneNumber
-     *          schema:
-     *            type: string
-     *          required: true
-     *          description: The phone number of the Destiny Ghost user.
-     *      produces:
-     *        - application/json
-     *      responses:
-     *        204:
-     *          description: Destiny Ghost user found.
-     *        404:
-     *          description: No Destiny Ghost user found.
-     */
-    userRouter.route('/:phoneNumber/phoneNumber')
-        .get((req, res, next) => middleware.authenticateUser(req, res, next),
-            async (req, res) => {
-                const { params: { phoneNumber } } = req;
-
-                const user = await userController.getUserByPhoneNumber(phoneNumber);
-                return user
-                    ? res.status(StatusCodes.NO_CONTENT).end()
-                    : res.status(StatusCodes.NOT_FOUND).end();
-            },
-        );
-
-    userRouter.route('/join')
-        .post((req, res, next) => middleware.authenticateUser(req, res, next),
-            (req, res) => userController.join(req, res),
-        );
-
-    /**
-     * @swagger
+     * @openapi
      * paths:
      *  /users/current:
      *    get:
      *      summary: Get the current Destiny Ghost user.
      *      tags:
      *        - Users
-     *      produces:
-     *        - application/json
+     *      security:
+     *        - bungieOAuth: []
      *      responses:
      *        200:
      *          description: Returns the current Destiny Ghost user's profile.
@@ -273,7 +106,7 @@ const routes = ({
      *            'ETag':
      *              description: The ETag of the updated user profile.
      *              schema:
-     *              type: string
+     *                type: string
      *        401:
      *          description: Unauthorized
      *        404:
@@ -297,8 +130,301 @@ const routes = ({
                 return res.status(StatusCodes.UNAUTHORIZED).end();
             },
         );
+
     /**
-     * @swagger
+     * @openapi
+     * /users/current/ciphers:
+     *   post:
+     *     summary: Request a verification code for the current user.
+     *     description: Requests the system to send a time-sensitive verification code to the currently authenticated user's specified contact method (email or phone). This code is used to verify ownership of the contact method before performing sensitive operations like profile edits. The user's email address or phone number associated with their Destiny Ghost profile will be used.
+     *     tags:
+     *       - Users
+     *     security:
+     *       - bungieOAuth: []
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             type: object
+     *             required:
+     *               - channel
+     *             properties:
+     *               channel:
+     *                 type: string
+     *                 enum:
+     *                   - email
+     *                   - phone
+     *                 description: The communication channel to send the verification code to (must be registered with the user's profile).
+     *             example:
+     *               channel: email
+     *     responses:
+     *       202:
+     *         description: Verification code successfully requested and is being sent. The user should check their email or phone.
+     *       400:
+     *         description: Bad Request. E.g., channel not specified, or user does not have the specified contact method registered and verified.
+     *       401:
+     *         description: Unauthorized. Bungie OAuth token missing or invalid.
+     *       429:
+     *         description: Too Many Requests. The user has requested codes too frequently.
+     */
+    userRouter.route('/current/ciphers')
+        .post(
+            (req, res, next) => middleware.authenticateUser(req, res, next),
+            async (req, res) => {
+                try {
+                    const {
+                        body: { channel },
+                        session: { displayName, membershipType }
+                    } = req;
+
+                    if (!channel || !['email', 'phone'].includes(channel)) {
+                        return res.status(StatusCodes.BAD_REQUEST).send('Invalid channel. Must be "email" or "phone".');
+                    }
+
+                    await userController.sendCipher({ 
+                        displayName, 
+                        membershipType, 
+                        channel 
+                    });
+
+                    return res.status(StatusCodes.ACCEPTED).end();
+                } catch (err) {
+                    if (err.message.includes('not found')) {
+                        return res.status(StatusCodes.BAD_REQUEST).send('User registration not found.');
+                    }
+
+                    throw err;
+                }
+            },
+        );
+
+    /**
+     * @openapi
+     * /users/current/cryptarch:
+     *   post:
+     *     summary: Validate a verification code for the current user.
+     *     description: Validates the provided verification code for the currently authenticated user. This code is used to verify ownership of the contact method before performing sensitive operations like profile edits.
+     *     tags:
+     *       - Users
+     *     security:
+     *       - bungieOAuth: []
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             type: object
+     *             required:
+     *               - channel
+     *               - code
+     *             properties:
+     *               channel:
+     *                 type: string
+     *                 enum:
+     *                   - email
+     *                   - phone
+     *                 description: The communication channel to send the verification code to (must be registered with the user's profile).
+     *               code:
+     *                 type: string
+     *                 description: The verification code received by the user.
+     *                 example: 123456
+     *     responses:
+     *       204:
+     *         description: Verification code successfully validated.
+     *       400:
+     *         description: Bad Request. E.g., channel not specified, or user does not have the specified contact method registered and verified.
+     *       401:
+     *         description: Unauthorized. Bungie OAuth token missing or invalid.
+     *       404:
+     *         description: Not Found. No pending verification found for this user and channel, or the code has already been used/invalidated.
+     *       429:
+     *         description: Too Many Requests. The user has requested codes too frequently.
+     */
+    userRouter.route('/current/cryptarch')
+        .post(
+            (req, res, next) => middleware.authenticateUser(req, res, next),
+            async (req, res) => {
+                try {
+                    const {
+                        body: { channel, code },
+                        session: { displayName, membershipType }
+                    } = req;
+
+                    if (!channel || !['email', 'phone'].includes(channel)) {
+                        return res.status(StatusCodes.BAD_REQUEST).send('Invalid channel. Must be "email" or "phone".');
+                    }
+
+                    await userController.decipher({ 
+                        displayName, 
+                        membershipType, 
+                        channel, 
+                        code 
+                    });
+
+                    return res.status(StatusCodes.NO_CONTENT).end();
+                } catch {
+                    return res.status(StatusCodes.NOT_FOUND).send('Invalid cipher.');
+                }
+            }
+        );
+
+    /**
+     * @openapi
+     * paths:
+     *  /users/join:
+     *    post:
+     *      summary: Confirm the user.
+     *      tags:
+     *        - Users
+     *      security:
+     *        - bungieOAuth: []
+     *      requestBody:
+     *        required: true
+     *        content:
+     *          application/json:
+     *            schema:
+     *              type: object
+     *              properties:
+     *                tokens:
+     *                  type: object
+     *                  properties:
+     *                    phoneNumber:
+     *                      type: string
+     *                      format: phone
+     *                    emailAddress:
+     *                      type: string
+     *                      format: email
+     *      responses:
+     *        200:
+     *          description: User joined successfully.
+     *        400:
+     *          description: Bad request.
+     */
+    userRouter.route('/join')
+        .post(
+            (req, res, next) => middleware.authenticateUser(req, res, next),
+            async (req, res) => {
+                const { body: user } = req;
+                const newUser = await userController.join(user);
+
+                return newUser
+                    ? res.status(StatusCodes.OK).end()
+                    : res.status(StatusCodes.BAD_REQUEST).end();
+            },
+        );
+
+    /**
+     * Intentionally excluded from the OpenAPI documentation. This route is used for signing in
+     * with Bungie OAuth. It handles the OAuth callback and signs
+     * in the user based on the provided code and state.
+     */
+    userRouter.route('/signIn/Bungie')
+        .get(async (req, res, next) => {
+            const {
+                query: { code, state: queryState },
+                session: { displayName, state: sessionState },
+            } = req;
+
+            if (displayName) {
+                return res.status(StatusCodes.OK)
+                    .json({ displayName });
+            }
+            if (sessionState !== queryState) {
+                return res.sendStatus(StatusCodes.UNAUTHORIZED);
+            }
+
+            const user = await userController.signIn({
+                code,
+                displayName,
+                queryState,
+                sessionState,
+            });
+            if (!user) {
+                return res.status(StatusCodes.NOT_FOUND).end();
+            }
+
+            return signIn(req, res, user, next);
+        });
+
+    /**
+     * @openapi
+     * paths:
+     *  /users/signOut:
+     *    post:
+     *      summary: Sign out a user.
+     *      tags:
+     *        - Users
+     *      security:
+     *        - bungieOAuth: []
+     *      responses:
+     *        204:
+     *          description: No Content
+     *        500:
+     *          description: Internal Server Error
+     */
+    userRouter.route('/signOut')
+        .post((req, res, next) => middleware.authenticateUser(req, res, next),
+            (req, res) => {
+                req.session.destroy(err => {
+                    if (err) {
+                        return res.status(StatusCodes.INTERNAL_SERVER_ERROR)
+                            .json({ error: 'Failed to sign out' });
+                    }
+                    res.status(StatusCodes.NO_CONTENT).end();
+                });
+            });
+
+    /**
+     * @openapi
+     * paths:
+     *  /users/signUp:
+     *    post:
+     *      summary: Sign up for the service.
+     *      tags:
+     *        - Users
+     *      security:
+     *        - bungieOAuth: []
+     *      requestBody:
+     *        required: true
+     *        content:
+     *          application/json:
+     *            schema:
+     *              type: object
+     *              properties:
+     *                firstName:
+     *                  type: string
+     *                lastName:
+     *                  type: string
+     *                phoneNumber:
+     *                  type: string
+     *                  format: phone
+     *                emailAddress:
+     *                  type: string
+     *                  format: email
+     *      description: Sign up for the service with a first name, last name, phone number, and email address.
+     *      responses:
+     *        204:
+     *          description: No Content
+     */
+    userRouter.route('/signUp')
+        .post((req, res, next) => middleware.authenticateUser(req, res, next),
+            async (req, res) => {
+                const { body: user, session: { displayName, membershipType } } = req;
+
+                if (!(user.firstName && user.lastName && user.phoneNumber && user.emailAddress)) {
+                    return res.status(StatusCodes.UNPROCESSABLE_ENTITY).end();
+                }
+
+                const newUser = await userController.signUp({ displayName, membershipType, user });
+
+                log.info(user, newUser ? 'User signed up' : 'User sign up failed due to conflicts');
+
+                return res.status(StatusCodes.NO_CONTENT).end();
+            });
+
+    /**
+     * @openapi
      * paths:
      *  /users/{userId}:
      *    patch:
@@ -306,6 +432,8 @@ const routes = ({
      *      description: See [JSONPatch](https://jsonpatch.com) for more information.
      *      tags:
      *        - Users
+     *      security:
+     *        - bungieOAuth: []
      *      parameters:
      *        - name: If-Match
      *          in: header
@@ -325,8 +453,6 @@ const routes = ({
      *          application/json:
      *            schema:
      *              $ref: '#/components/schemas/Patch'
-     *      produces:
-     *        - application/json
      *      responses:
      *        204:
      *          description: Returns the updated user profile.
@@ -363,73 +489,6 @@ const routes = ({
 
                     throw err;
                 }
-            },
-        );
-
-    userRouter.route('/:id/version/:version')
-        .get((req, res, next) => middleware.authenticateUser(req, res, next),
-            (req, res, next) => roles.administrativeUser(req, res, next),
-            async (req, res) => {
-                const { params: { id, version } } = req;
-
-                if (!id) {
-                    return res.status(StatusCodes.CONFLICT).send('user id not found');
-                }
-
-                const user = await userController.getUserById(id, version);
-                return user
-                    ? res.status(StatusCodes.OK).json(user)
-                    : res.status(StatusCodes.NOT_FOUND).send('user not found');
-            },
-        );
-
-    /**
-     * @swagger
-     * paths:
-     *  /users/{phoneNumber}/phoneNumber/messages:
-     *    delete:
-     *      summary: Delete intermediary messages for a given user.
-     *      tags:
-     *        - Users
-     *      parameters:
-     *        - name: phoneNumber
-     *          in: path
-     *          description: The phone number of the user.
-     *          required: true
-     *          schema:
-     *            type: string
-     *      produces:
-     *        - application/json
-     *      responses:
-     *        200:
-     *          description: Success
-     *        401:
-     *          description: Unauthorized
-     *        404:
-     *          description: User was not found.
-     *        409:
-     *          description: Phone Number not given.
-     */
-    userRouter.route('/:phoneNumber/phoneNumber/messages')
-        .delete(
-            (req, res, next) => middleware.authenticateUser(req, res, next),
-            (req, res, next) => roles.administrativeUser(req, res, next),
-            async (req, res) => {
-                const { params: { phoneNumber } } = req;
-
-                if (!isPhoneNumber(phoneNumber)) {
-                    return res.status(StatusCodes.CONFLICT).send('phone number not found');
-                }
-
-                const user = await userController.getUserByPhoneNumber(phoneNumber);
-
-                if (!user) {
-                    return res.status(StatusCodes.NOT_FOUND).send('user not found');
-                }
-
-                await userController.deleteUserMessages(user);
-
-                return res.status(StatusCodes.OK).end();
             },
         );
 
