@@ -1,6 +1,8 @@
 import { createId } from '@paralleldrive/cuid2';
 import cache from './cache';
 
+const claimCheckExpiration = 86400; // 1 day in seconds
+
 class ClaimCheck {
     /**
      * Claim Check Number
@@ -14,7 +16,7 @@ class ClaimCheck {
 
     async addPhoneNumber(phoneNumber, status = 'queued') {
         await cache.hset(this.#number, phoneNumber, status);
-        await cache.expire(this.#number, 86400); // 1 day
+        await cache.expire(this.#number, claimCheckExpiration);
     }
 
     static async getClaimCheck(number) {
@@ -30,4 +32,4 @@ class ClaimCheck {
     }
 }
 
-export default ClaimCheck;
+export { ClaimCheck as default, claimCheckExpiration };

@@ -10,7 +10,7 @@ class AI {
     }
 
     async getPlayersFromFile(path) {
-        const { mimeType, uri: fileUri } = await ai.files.upload({ file: path });
+        const { mimeType, uri: fileUri } = await this.ai.files.upload({ file: path });
 
         log.info({ fileUri, mimeType, path }, 'File uploaded to the AI');
 
@@ -41,7 +41,7 @@ class AI {
                 ],
             },
         ];
-        const result = await ai.models.generateContent({
+        const result = await this.ai.models.generateContent({
             model,
             config,
             contents,
