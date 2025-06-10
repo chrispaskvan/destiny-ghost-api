@@ -22,7 +22,7 @@ class DirectorClient {
             redirect: 'follow'
         });
 
-        return responseBody.data.findPlayers[0]?.statistics; // Return the statistics of the first player
+        return responseBody.data.findPlayers?.[0]?.statistics; // Return the statistics of the first player
     }
 }
 

@@ -202,7 +202,7 @@ const routes = ({
      *          description: Returns the Destiny Manifest definition.
      */
     destinyRouter.route('/manifest')
-        .post(async (req, res, next) => await authorizeUser(req, res, next),
+        .post(authorizeUser,
             async (req, res) => {
                 const manifest = await destinyController.upsertManifest();
 

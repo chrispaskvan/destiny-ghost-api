@@ -97,7 +97,7 @@ const routes = ({
      *          description: Returns the complete Destiny 2 item inventory.
      */
     destiny2Router.route('/inventory')
-        .get(async (req, res, next) => await authorizeUser(req, res, next),
+        .get(authorizeUser,
             async (req, res) => {
                 let aborted = false;
 
@@ -235,7 +235,7 @@ const routes = ({
      *          description: Forbidden
      */
     destiny2Router.route('/manifest')
-        .post(async (req, res, next) => await authorizeUser(req, res, next),
+        .post(authorizeUser,
             async (req, res) => {
                 const { data: { manifest } } = destiny2Controller.upsertManifest()
 
