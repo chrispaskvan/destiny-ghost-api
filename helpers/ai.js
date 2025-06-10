@@ -5,6 +5,12 @@ import log from './log';
 const { gemini: { apiKey, model } } = configuration;
 
 class AI {
+    // Static prompt constants that can be used in tests
+    static prompts = {
+        imageDescription: 'The image is a list of players in a video game player versus player match. The player\'s display name is followed by the player\'s clan in square brackets.',
+        extractionInstruction: 'List the 12 display names in the image in the order they appear. Respond with a comma delimited string. Do not remove any whitespace between characters and do not add any spaces between commas.'
+    };
+
     constructor() {
         this.ai = new GoogleGenAI({ apiKey });
     }
@@ -28,7 +34,7 @@ class AI {
                         }
                     },
                     {
-                        text: 'The image is a list of players in a video game player versus player match. The player\'s display name is followed by the player\'s clan in square brackets.',
+                        text: AI.prompts.imageDescription,
                     },
                 ],
             },
@@ -36,7 +42,7 @@ class AI {
                 role: 'user',
                 parts: [
                     {
-                        text: 'List the 12 display names in the image in the order they appear. Respond with a comma delimited string. Do not remove any whitespace between characters and do not add any spaces between commas.',
+                        text: AI.prompts.extractionInstruction,
                     },
                 ],
             },
@@ -53,4 +59,4 @@ class AI {
 
 const aiInstance = new AI();
 
-export default aiInstance;
+export { aiInstance as default, AI };

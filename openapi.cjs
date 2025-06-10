@@ -1,10 +1,14 @@
+const { readFileSync } = require('fs');
+const { join } = require('path');
+
 const isProduction = process.env.NODE_ENV === 'production';
+const packageJson = JSON.parse(readFileSync(join(__dirname, 'package.json'), 'utf8'));
 
 module.exports = {
     openapi: '3.0.0',
     info: {
         title: 'Destiny-Ghost API',
-        version: '2.5.0',
+        version: packageJson.version,
         description:
             'A Node Express application for receiving SMS/MMS Notifications around changes to the vendor wares in Bungie\'s Destiny and make ad-hoc queries in the database.',
         license: {

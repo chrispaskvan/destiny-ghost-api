@@ -80,7 +80,7 @@
     },
     "devDependencies": {
         "@eslint/js": "^9.28.0",
-        "@vitest/coverage-v8": "^3.2.2",
+        "@vitest/coverage-v8": "^3.2.3",
         "chance": "^1.1.13",
         "eslint": "^9.28.0",
         "eslint-plugin-security": "^3.0.1",
@@ -96,7 +96,7 @@
         "stream-json": "^1.9.1",
         "swagger-jsdoc": "^6.2.8",
         "v8": "^0.1.0",
-        "vitest": "^3.2.2"
+        "vitest": "^3.2.3"
     },
     "snyk": true
 }
