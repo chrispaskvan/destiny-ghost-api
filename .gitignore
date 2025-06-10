@@ -3,7 +3,8 @@
 .clinic/
 .env
 .vscode/
-coverage/
+coverage/*
+!coverage/clover.xml
 databases/
 node_modules/
 security/

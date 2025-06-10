@@ -51,7 +51,7 @@ export default () => {
     routes.use('/docs', serve);
     routes.get(
         '/docs',
-        setup(JSON.parse(readFileSync('./swagger.json')), {
+        setup(JSON.parse(readFileSync('./openapi.json')), {
             explorer: false,
         }),
     );

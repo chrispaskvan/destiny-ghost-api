@@ -581,35 +581,6 @@ class UserService {
     }
 
     /**
-     * Get user from phone number token.
-     * @param phoneNumberToken
-     * @returns {Promise}
-     */
-    async getUserByPhoneNumberToken(phoneNumberToken) {
-        if (typeof phoneNumberToken !== 'number') {
-            return Promise.reject(Error('phoneNumberToken number is required.'));
-        }
-
-        const qb = new QueryBuilder();
-        const documents = await this.documents.getDocuments(
-            userCollectionId,
-            qb.where('membership.tokens.code', phoneNumberToken).getQuery(),
-            {
-                enableCrossPartitionQuery: true,
-            },
-        );
-        if (documents) {
-            if (documents.length > 1) {
-                throw new Error(`more than 1 document found for phoneNumberToken ${phoneNumberToken}`);
-            }
-
-            return documents[0];
-        }
-
-        throw new Error('documents undefined');
-    }
-
-    /**
      * Update anonymous user.
      * @param anonymousUser {Object}
      * @returns {Promise}

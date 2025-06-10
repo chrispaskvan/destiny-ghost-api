@@ -3,7 +3,6 @@ import smtpTransport from 'nodemailer-smtp-transport';
 import configuration from './config';
 
 const { smtp: smtpConfiguration } = configuration;
-const mailOptions = {};
 const website = process.env.WEBSITE;
 
 /**
@@ -32,25 +31,32 @@ class Postmaster {
     }
 
     /**
-     * Send registration email to user.
-     *
-     * @param user
-     * @param image
-     * @param url
+     * Send email with user token
+     * 
+     * @param {Object} user - User object with emailAddress, firstName, and membership.tokens.blob
+     * @param {string} image - Optional image URL
+     * @param {string} url - URL path for the action
+     * @param {string} action - Action type ('registration' or 'confirmation')
      * @returns {Promise}
+     * @private
      */
-    register({ emailAddress, firstName, membership: { tokens: { blob } } }, image, url) {
+    #sendEmail(user, image, url, action) {
+        const { emailAddress, firstName, membership: { tokens: { blob } } } = user;
+        
         return new Promise((resolve, reject) => {
-            Object.assign(mailOptions, {
+            const actionText = action === 'registration' ? 'registration' : 'confirmation';
+            const actionTitle = actionText.charAt(0).toUpperCase() + actionText.slice(1);
+            
+            const mailOptions = {
                 from: smtpConfiguration.from,
                 tls: {
                     rejectUnauthorized: false,
                 },
-                subject: 'Destiny Ghost Registration',
-                text: `Hi ${firstName},\r\n\r\nOpen the link below to continue the registration process.\r\n\r\n${website}${url}?token=${blob}`,
+                subject: `Destiny Ghost ${actionTitle}`,
+                text: `Hi ${firstName},\r\n\r\nOpen the link below to continue the ${actionText} process.\r\n\r\n${website}${url}?token=${blob}`,
                 to: emailAddress,
-                html: `${(image ? `<img src='${image}' style='background-color: ${Postmaster.#getRandomColor()};'><br /><br />` : '')}Hi ${firstName},<br /><br />Please click the link below to continue the registration process.<br /><br />${website}${url}?token=${blob}`,
-            });
+                html: `${(image ? `<img src='${image}' style='background-color: ${Postmaster.#getRandomColor()};'><br /><br />` : '')}Hi ${firstName},<br /><br />Please click the link below to continue the ${actionText} process.<br /><br />${website}${url}?token=${blob}`,
+            };
 
             this.transporter.sendMail(mailOptions, (err, response) => {
                 if (err) {
@@ -60,6 +66,30 @@ class Postmaster {
                 resolve(response);
             });
         });
+    }
+
+    /**
+     * Send confirmation email to user.
+     *
+     * @param user
+     * @param image
+     * @param url
+     * @returns {Promise}
+     */
+    confirm(user, image, url) {
+        return this.#sendEmail(user, image, url, 'confirmation');
+    }
+
+    /**
+     * Send registration email to user.
+     *
+     * @param user
+     * @param image
+     * @param url
+     * @returns {Promise}
+     */
+    register(user, image, url) {
+        return this.#sendEmail(user, image, url, 'registration');
     }
 }
 

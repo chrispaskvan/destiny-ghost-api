@@ -33,15 +33,13 @@ const routes = ({
     });
 
     /**
-     * @swagger
+     * @openapi
      * paths:
      *  /health:
      *    get:
      *      summary: Get a summary of the status of the Destiny Ghost API and its dependencies.
      *      tags:
      *        - Health
-     *      produces:
-     *        - application/json
      *      responses:
      *        200:
      *          description: Returns the status reports of underlying dependencies.
@@ -58,15 +56,13 @@ const routes = ({
         });
 
     /**
-     * @swagger
+     * @openapi
      * paths:
      *  /health/metrics:
      *    get:
      *      summary: Get metrics on the health of the Destiny Ghost API.
      *      tags:
      *        - Health
-     *      produces:
-     *        - application/json
      *      responses:
      *        200:
      *          description: Returns measurements.

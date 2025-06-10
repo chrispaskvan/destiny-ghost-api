@@ -6,7 +6,7 @@ import NotificationController from './notification.controller';
 import authorizeUser from '../authorization/authorization.middleware';
 
 /**
- * @swagger
+ * @openapi
  *  components:
  *    schemas:
  *      Notification:
@@ -54,7 +54,7 @@ const routes = ({
     });
 
     notificationRouter.route('/claimChecks/:claimCheck')
-        .get(async (req, res, next) => await authorizeUser(req, res, next),
+        .get(authorizeUser,
             async (req, res) => {
                 const { params: { claimCheck: number } } = req;
 
@@ -68,7 +68,7 @@ const routes = ({
             });
 
     notificationRouter.route('/:subscription')
-        .post(async (req, res, next) => await authorizeUser(req, res, next),
+        .post(authorizeUser,
             async (req, res) => {
                 const { params: { subscription } } = req;
                 const idempotencyKey = req.headers['idempotency-key'];
@@ -93,7 +93,7 @@ const routes = ({
             });
 
     notificationRouter.route('/:subscription/:phoneNumber')
-        .post(async (req, res, next) => await authorizeUser(req, res, next),
+        .post(authorizeUser,
             async (req, res) => {
                 const { params: { subscription, phoneNumber } } = req;
 

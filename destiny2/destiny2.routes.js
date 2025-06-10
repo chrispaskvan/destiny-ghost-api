@@ -13,7 +13,7 @@ import log from '../helpers/log';
 import configuration from '../helpers/config';
 
 /**
- * @swagger
+ * @openapi
  *  components:
  *    schemas:
  *      Link:
@@ -58,15 +58,15 @@ const routes = ({
     const middleware = new AuthenticationMiddleware({ authenticationController });
 
     /**
-     * @swagger
+     * @openapi
      * paths:
      *  /destiny2/characters:
      *    get:
      *      summary: Get a list of the user's characters.
      *      tags:
      *        - Destiny 2
-     *      produces:
-     *        - application/json
+     *      security:
+     *        - bungieOAuth: []
      *      responses:
      *        200:
      *          description: Returns the current user's list of characters.
@@ -83,21 +83,21 @@ const routes = ({
             });
 
     /**
-     * @swagger
+     * @openapi
      * paths:
      *  /destiny2/inventory:
      *    get:
      *      summary: Get the complete inventory of items.
      *      tags:
      *        - Destiny 2
-     *      produces:
-     *        - application/json
+     *      security:
+     *        - authorizationKey: []
      *      responses:
      *        200:
      *          description: Returns the complete Destiny 2 item inventory.
      */
     destiny2Router.route('/inventory')
-        .get(async (req, res, next) => await authorizeUser(req, res, next),
+        .get(authorizeUser,
             async (req, res) => {
                 let aborted = false;
 
@@ -161,7 +161,7 @@ const routes = ({
             });
 
     /**
-     * @swagger
+     * @openapi
      * paths:
      *  /destiny2/manifest:
      *    get:
@@ -169,10 +169,17 @@ const routes = ({
      *      tags:
      *        - Destiny 2
      *      parameters:
+     *        - name: Cache-Control
+     *          in: header
+     *          required: false
+     *          schema:
+     *            type: string
      *        - name: If-Modified-Since
      *          in: header
-     *      produces:
-     *        - application/json
+     *          description: 'Return not modified if the manifest has not changed since the date and time provided.'
+     *          required: false
+     *          schema:
+     *            type: string
      *      responses:
      *        200:
      *          description: Returns the Destiny Manifest definition.
@@ -212,15 +219,15 @@ const routes = ({
         });
 
     /**
-     * @swagger
+     * @openapi
      * paths:
      *  /destiny2/manifest:
      *    post:
      *      summary: Download the latest Destiny2 manifest if the local copy is outdated.
      *      tags:
      *        - Destiny 2
-     *      produces:
-     *        - application/json
+     *      security:
+     *        - authorizationKey: []
      *      responses:
      *        200:
      *          description: Returns the Destiny Manifest definition.
@@ -228,7 +235,7 @@ const routes = ({
      *          description: Forbidden
      */
     destiny2Router.route('/manifest')
-        .post(async (req, res, next) => await authorizeUser(req, res, next),
+        .post(authorizeUser,
             async (req, res) => {
                 const { data: { manifest } } = destiny2Controller.upsertManifest()
 
@@ -236,15 +243,15 @@ const routes = ({
             });
 
     /**
-     * @swagger
+     * @openapi
      * paths:
      *  /destiny2/xur:
      *    get:
      *      summary: Get Xur's inventory if available.
      *      tags:
      *        - Destiny 2
-     *      produces:
-     *        - application/json
+     *      security:
+     *        - bungieOAuth: []
      *      responses:
      *        200:
      *          description: Returns Xur's inventory.

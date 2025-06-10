@@ -29,10 +29,7 @@ function authorizeUser(req, res, next) {
     const { headers } = req;
 
     if (!authorized(headers)) {
-        res.writeHead(StatusCodes.FORBIDDEN);
-        res.end();
-
-        return;
+        return res.status(StatusCodes.UNAUTHORIZED).end();
     }
 
     next();
