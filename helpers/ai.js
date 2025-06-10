@@ -53,7 +53,7 @@ class AI {
             contents,
         });
 
-        return result?.text.split(',').map(s => s.trim()).filter(s => s);
+        return result?.text.split(',');
     }
 }
 

@@ -3,7 +3,6 @@ import smtpTransport from 'nodemailer-smtp-transport';
 import configuration from './config';
 
 const { smtp: smtpConfiguration } = configuration;
-const mailOptions = {};
 const website = process.env.WEBSITE;
 
 /**
@@ -48,7 +47,7 @@ class Postmaster {
             const actionText = action === 'registration' ? 'registration' : 'confirmation';
             const actionTitle = actionText.charAt(0).toUpperCase() + actionText.slice(1);
             
-            Object.assign(mailOptions, {
+            const mailOptions = {
                 from: smtpConfiguration.from,
                 tls: {
                     rejectUnauthorized: false,
@@ -57,7 +56,7 @@ class Postmaster {
                 text: `Hi ${firstName},\r\n\r\nOpen the link below to continue the ${actionText} process.\r\n\r\n${website}${url}?token=${blob}`,
                 to: emailAddress,
                 html: `${(image ? `<img src='${image}' style='background-color: ${Postmaster.#getRandomColor()};'><br /><br />` : '')}Hi ${firstName},<br /><br />Please click the link below to continue the ${actionText} process.<br /><br />${website}${url}?token=${blob}`,
-            });
+            };
 
             this.transporter.sendMail(mailOptions, (err, response) => {
                 if (err) {
