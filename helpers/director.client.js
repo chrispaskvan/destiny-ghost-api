@@ -12,7 +12,7 @@ class DirectorClient {
             cookie: cookieHeader
         };
         const graphql = JSON.stringify({
-            query: "query FindPlayersHeroNameAndFriends($displayName: String!) { findPlayers(displayName: $displayName) { bungieGlobalDisplayName bungieGlobalDisplayNameCode destinyMemberships { crossSaveOverride membershipType membershipId displayName bungieGlobalDisplayName bungieGlobalDisplayNameCode } destinyMemberships { crossSaveOverride membershipType membershipId displayName bungieGlobalDisplayName bungieGlobalDisplayNameCode } statistics { pvp { kdr highestLightLevel } } user { firstName lastName } } }",
+            query: this.query,
             variables: { displayName }
         });
         const responseBody = await post({
