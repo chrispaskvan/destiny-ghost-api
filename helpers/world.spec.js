@@ -41,7 +41,7 @@ describe('It\'s Bungie\'s 1st world. You\'re just querying it.', () => {
         it('should throw an error', async () => {
             const numberOfCards = 'foo';
 
-            await expect(() => world.getGrimoireCards(numberOfCards)).rejects.toThrow('numberOfCards must be a number');
+            await expect(world.getGrimoireCards(numberOfCards)).rejects.toThrow('numberOfCards must be a number');
         });
     });
 
