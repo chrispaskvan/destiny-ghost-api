@@ -41,15 +41,15 @@ describe('It\'s Bungie\'s 1st world. You\'re just querying it.', () => {
         it('should throw an error', async () => {
             const numberOfCards = 'foo';
 
-            expect(() => world.getGrimoireCards(numberOfCards)).toThrow('numberOfCards must be a number');
+            await expect(() => world.getGrimoireCards(numberOfCards)).rejects.toThrow('numberOfCards must be a number');
         });
     });
 
     itif(
         'should return the icon of the Agent of Nine',
         () => existsSync(directory),
-        () => {
-            const url = world.getVendorIcon(postmasterHash);
+        async () => {
+            const url = await world.getVendorIcon(postmasterHash);
 
             expect(url).toBeDefined();
         },

@@ -63,7 +63,8 @@ class World2 extends World {
         }
     }
 
-    get weaponCategory() {
+    async getWeaponCategory() {
+        await this.bootstrapped;
         this.#weaponCategory ||= this.categories.find(category => category?.displayProperties?.name === 'Weapon').hash;
 
         return this.#weaponCategory;
@@ -73,7 +74,9 @@ class World2 extends World {
      * Get the class according to the provided hash.
      * @param classHash {string}
      */
-    getClassByHash(classHash) {
+    async getClassByHash(classHash) {
+        await this.bootstrapped;
+
         return this.classHashMap.get(classHash);
     }
 
@@ -81,7 +84,9 @@ class World2 extends World {
      * Get the damage type according to the provided hash.
      * @param classHash {string}
      */
-    getDamageTypeByHash(damageTypeHash) {
+    async getDamageTypeByHash(damageTypeHash) {
+        await this.bootstrapped;
+
         return this.damageTypeHashMap.get(damageTypeHash);
     }
 
@@ -90,7 +95,9 @@ class World2 extends World {
      * @param itemHash
      * @returns {*}
      */
-    getItemByHash(itemHash) {
+    async getItemByHash(itemHash) {
+        await this.bootstrapped;
+
         return this.itemHashMap.get(itemHash);
     }
 
@@ -100,13 +107,15 @@ class World2 extends World {
      * @returns {Promise}
      */
     async getItemByName(itemName) {
+        await this.bootstrapped;
+
         const items = this.items.filter(({ displayProperties: { name } = '' }) => name.toLowerCase().includes(itemName.toLowerCase()));
 
-        return Promise.resolve(items.map(item => Object.assign(item, {
+        return items.map(item => Object.assign(item, {
             flavorText: item.flavorText,
             itemCategory: item.itemTypeAndTierDisplayName,
             itemName: item.displayProperties.name,
-        })));
+        }));
     }
 
     /**
@@ -114,7 +123,9 @@ class World2 extends World {
      * @param itemCategoryHash
      * @returns {Promise}
      */
-    getItemCategory(itemCategoryHash) {
+    async getItemCategory(itemCategoryHash) {
+        await this.bootstrapped;
+
         return this.categoryHashMap.get(itemCategoryHash);
     }
 
@@ -123,7 +134,9 @@ class World2 extends World {
      * @param hash
      * @returns {Promise}
      */
-    getLore(hash) {
+    async getLore(hash) {
+        await this.bootstrapped;
+
         return this.loreDefinitionHashMap.get(hash);
     }
 
@@ -132,11 +145,13 @@ class World2 extends World {
      * @param vendorHash
      * @returns {Promise}
      */
-    getVendorIcon(vendorHash) {
+    async getVendorIcon(vendorHash) {
+        await this.bootstrapped;
+
         const vendor = this.vendorHashMap.get(vendorHash);
         const icon = vendor?.displayProperties?.icon;
 
-        return icon ? Promise.resolve(`https://www.bungie.net${icon}`) : Promise.resolve(undefined);
+        return icon ? `https://www.bungie.net${icon}` : undefined;
     }
 }
 

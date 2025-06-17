@@ -150,9 +150,10 @@ class TwilioController {
             if (characters && characters.length) {
                 const itemHashes = await this.destiny
                     .getXur(membershipId, membershipType, characters[0].characterId, accessToken);
-                const items = itemHashes.map(itemHash => this.world.getItemByHash(itemHash));
+                const weaponCategory = await this.world.getWeaponCategory();
+                const items = await Promise.all(itemHashes.map(itemHash => this.world.getItemByHash(itemHash)));
                 const weapons = items
-                    .filter(({ itemCategoryHashes }) => itemCategoryHashes.includes(this.world.weaponCategory));
+                    .filter(({ itemCategoryHashes }) => itemCategoryHashes.includes(weaponCategory));
                 const result = weapons.reduce((memo, { displayProperties }) => (`${memo + displayProperties.name}\n`), ' ').trim();
 
                 return {

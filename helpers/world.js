@@ -69,10 +69,12 @@ class World {
      * @param numberOfCards {integer}
      * @returns {Promise}
      */
-    getGrimoireCards(numberOfCards) {
+    async getGrimoireCards(numberOfCards) {
         if (typeof numberOfCards !== 'number') {
             throw new Error('numberOfCards must be a number');
         }
+
+        await this.bootstrapped;
 
         return sampleSize(this.grimoireCards, numberOfCards);
     }
@@ -83,11 +85,13 @@ class World {
      * @param vendorHash {string}
      * @returns {Promise<string>}
      */
-    getVendorIcon(vendorHash) {
+    async getVendorIcon(vendorHash) {
+        await this.bootstrapped;
+
         const vendor = this.vendorHashMap.get(vendorHash);
         const icon = vendor?.summary?.vendorIcon;
 
-        return icon ? Promise.resolve(`https://www.bungie.net${icon}`) : Promise.resolve(undefined);
+        return icon ? `https://www.bungie.net${icon}` : undefined;
     }
 
     /**

@@ -15,18 +15,18 @@ class ClaimCheck {
     }
 
     async addPhoneNumber(phoneNumber, status = 'queued') {
-        await cache.hset(this.#number, phoneNumber, status);
+        await cache.hSet(this.#number, phoneNumber, status);
         await cache.expire(this.#number, claimCheckExpiration);
     }
 
     static async getClaimCheck(number) {
-        return await cache.hgetall(number);
+        return await cache.hGetAll(number);
     }
 
     static async updatePhoneNumber(claimCheckNumber, phoneNumber, status) {
-        const claimCheck = await cache.hget(claimCheckNumber, phoneNumber);
+        const claimCheck = await cache.hGet(claimCheckNumber, phoneNumber);
 
-        if (claimCheck) await cache.hset(claimCheckNumber, phoneNumber, status);
+        if (claimCheck) await cache.hSet(claimCheckNumber, phoneNumber, status);
 
         return claimCheck;
     }

@@ -95,11 +95,10 @@ class DestinyCache {
     }) {
         if (manifest && typeof manifest === 'object') {
             try {
-                return await this.client.set(
+                return await this.client.setEx(
                     this._manifestKey,
-                    JSON.stringify({ lastModified, manifest }),
-                    'EX',
                     maxAge,
+                    JSON.stringify({ lastModified, manifest }),
                 );
             } catch (err) {
                 if (!(err instanceof RedisErrors.RedisError)) throw err;
@@ -125,11 +124,10 @@ class DestinyCache {
         }
 
         try {
-            return await this.client.set(
+            return await this.client.setEx(
                 hash,
-                JSON.stringify(vendor),
-                'EX',
                 this.constructor.secondsUntilDailyReset(),
+                JSON.stringify(vendor),
             );
         } catch (err) {
             if (!(err instanceof RedisErrors.RedisError)) throw err;
