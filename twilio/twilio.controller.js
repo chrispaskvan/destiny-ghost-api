@@ -55,8 +55,8 @@ class TwilioController {
             itemType,
             itemTypeDisplayName,
         } = item;
-        const itemCategories = itemCategoryHashes.map(itemCategoryHash => this.world
-            .getItemCategory(itemCategoryHash));
+        const itemCategories = await Promise.all(itemCategoryHashes.map(async itemCategoryHash => await this.world
+            .getItemCategory(itemCategoryHash)));
         const filteredCategories = itemCategories.filter(({ hash1 }) => hash1 > 1);
         const sortedCategories = sortBy(
             filteredCategories,
@@ -67,7 +67,7 @@ class TwilioController {
         let damageType;
 
         if (defaultDamageTypeHash) {
-            ({ displayProperties: { name: damageType } = {} } = this.world
+            ({ displayProperties: { name: damageType } = {} } = await this.world
                 .getDamageTypeByHash(defaultDamageTypeHash));
         }
 

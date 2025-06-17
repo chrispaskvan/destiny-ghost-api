@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<coverage generated="1750121601964" clover="3.2.0">
-  <project timestamp="1750121601964" name="All files">
-    <metrics statements="6052" coveredstatements="4942" conditionals="692" coveredconditionals="611" methods="250" coveredmethods="198" elements="6994" coveredelements="5751" complexity="0" loc="6052" ncloc="6052" packages="12" files="74" classes="74"/>
+<coverage generated="1750129009480" clover="3.2.0">
+  <project timestamp="1750129009480" name="All files">
+    <metrics statements="6061" coveredstatements="4946" conditionals="692" coveredconditionals="611" methods="251" coveredmethods="198" elements="7004" coveredelements="5755" complexity="0" loc="6061" ncloc="6061" packages="12" files="74" classes="74"/>
     <package name="destiny-ghost-api">
       <metrics statements="238" coveredstatements="48" conditionals="10" coveredconditionals="4" methods="7" coveredmethods="2"/>
       <file name="grpc.js" path="/Users/chrispaskvan/Projects/destiny-ghost/destiny-ghost-api/grpc.js">
@@ -1458,15 +1458,15 @@
         <line num="124" count="2" type="stmt"/>
         <line num="125" count="2" type="stmt"/>
         <line num="127" count="2" type="cond" truecount="1" falsecount="0"/>
-        <line num="128" count="2919" type="cond" truecount="1" falsecount="0"/>
+        <line num="128" count="2909" type="cond" truecount="1" falsecount="0"/>
         <line num="129" count="1" type="stmt"/>
         <line num="130" count="1" type="stmt"/>
         <line num="131" count="1" type="cond" truecount="1" falsecount="0"/>
-        <line num="133" count="2919" type="cond" truecount="2" falsecount="0"/>
-        <line num="134" count="2919" type="stmt"/>
-        <line num="136" count="2919" type="stmt"/>
-        <line num="137" count="2919" type="cond" truecount="2" falsecount="0"/>
-        <line num="138" count="2917" type="cond" truecount="0" falsecount="1"/>
+        <line num="133" count="2909" type="cond" truecount="2" falsecount="0"/>
+        <line num="134" count="2909" type="stmt"/>
+        <line num="136" count="2909" type="stmt"/>
+        <line num="137" count="2909" type="cond" truecount="2" falsecount="0"/>
+        <line num="138" count="2907" type="cond" truecount="0" falsecount="1"/>
         <line num="139" count="0" type="stmt"/>
         <line num="140" count="0" type="stmt"/>
         <line num="141" count="2" type="stmt"/>
@@ -2129,7 +2129,7 @@
       </file>
     </package>
     <package name="destiny-ghost-api.helpers">
-      <metrics statements="1400" coveredstatements="1165" conditionals="201" coveredconditionals="168" methods="94" coveredmethods="77"/>
+      <metrics statements="1409" coveredstatements="1169" conditionals="201" coveredconditionals="168" methods="95" coveredmethods="77"/>
       <file name="ai.js" path="/Users/chrispaskvan/Projects/destiny-ghost/destiny-ghost-api/helpers/ai.js">
         <metrics statements="52" coveredstatements="52" conditionals="6" coveredconditionals="6" methods="3" coveredmethods="3"/>
         <line num="1" count="1" type="stmt"/>
@@ -2258,7 +2258,7 @@
         <line num="47" count="1" type="stmt"/>
       </file>
       <file name="cache.js" path="/Users/chrispaskvan/Projects/destiny-ghost/destiny-ghost-api/helpers/cache.js">
-        <metrics statements="24" coveredstatements="24" conditionals="1" coveredconditionals="1" methods="0" coveredmethods="0"/>
+        <metrics statements="33" coveredstatements="28" conditionals="1" coveredconditionals="1" methods="1" coveredmethods="0"/>
         <line num="1" count="1" type="stmt"/>
         <line num="2" count="1" type="stmt"/>
         <line num="3" count="1" type="stmt"/>
@@ -2274,15 +2274,24 @@
         <line num="14" count="1" type="stmt"/>
         <line num="15" count="1" type="stmt"/>
         <line num="16" count="1" type="stmt"/>
-        <line num="17" count="1" type="stmt"/>
-        <line num="18" count="1" type="stmt"/>
-        <line num="19" count="1" type="stmt"/>
-        <line num="20" count="1" type="stmt"/>
-        <line num="21" count="1" type="stmt"/>
-        <line num="23" count="1" type="cond" truecount="1" falsecount="0"/>
+        <line num="17" count="0" type="stmt"/>
+        <line num="18" count="0" type="stmt"/>
+        <line num="19" count="0" type="stmt"/>
+        <line num="21" count="0" type="stmt"/>
+        <line num="23" count="0" type="stmt"/>
         <line num="24" count="1" type="stmt"/>
+        <line num="25" count="1" type="stmt"/>
         <line num="26" count="1" type="stmt"/>
+        <line num="27" count="1" type="stmt"/>
         <line num="28" count="1" type="stmt"/>
+        <line num="29" count="1" type="stmt"/>
+        <line num="30" count="1" type="stmt"/>
+        <line num="31" count="1" type="stmt"/>
+        <line num="33" count="1" type="cond" truecount="1" falsecount="0"/>
+        <line num="34" count="1" type="stmt"/>
+        <line num="35" count="1" type="stmt"/>
+        <line num="37" count="1" type="stmt"/>
+        <line num="39" count="1" type="stmt"/>
       </file>
       <file name="claim-check.js" path="/Users/chrispaskvan/Projects/destiny-ghost/destiny-ghost-api/helpers/claim-check.js">
         <metrics statements="25" coveredstatements="25" conditionals="9" coveredconditionals="9" methods="5" coveredmethods="5"/>

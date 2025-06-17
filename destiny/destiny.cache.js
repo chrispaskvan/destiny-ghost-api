@@ -71,7 +71,7 @@ class DestinyCache {
      */
     async getVendor(vendorHash) {
         try {
-            const res = await this.client.get(vendorHash);
+            const res = await this.client.get(vendorHash.toString());
 
             return res ? JSON.parse(res) : undefined;
         } catch (err) {
@@ -125,7 +125,7 @@ class DestinyCache {
 
         try {
             return await this.client.setEx(
-                hash,
+                hash.toString(),
                 this.constructor.secondsUntilDailyReset(),
                 JSON.stringify(vendor),
             );

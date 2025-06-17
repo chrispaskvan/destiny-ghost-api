@@ -106,11 +106,13 @@ describe('DestinyCache', () => {
     });
 
     describe('getVendor', () => {
+        const hash = 11;
+
         describe('when manifest is found', () => {
             it('should return manifest data and meta', async () => {
                 client.get.mockResolvedValueOnce(JSON.stringify(mockXurResponse.Response));
 
-                const result = await destinyCache.getVendor();
+                const result = await destinyCache.getVendor(hash);
 
                 expect(result).toEqual(mockXurResponse.Response);
             });
@@ -120,7 +122,7 @@ describe('DestinyCache', () => {
             it('should return undefined', async () => {
                 client.get.mockRejectedValueOnce(new RedisErrors.RedisError());
 
-                const result = await destinyCache.getVendor();
+                const result = await destinyCache.getVendor(hash);
 
                 expect(result).toBeUndefined();
             });
@@ -130,7 +132,7 @@ describe('DestinyCache', () => {
             it('should throw', async () => {
                 client.get.mockRejectedValueOnce(new Error());
 
-                await expect(destinyCache.getVendor()).rejects.toThrow(Error);
+                await expect(destinyCache.getVendor(hash)).rejects.toThrow(Error);
             });
         });
     });
@@ -205,7 +207,7 @@ describe('DestinyCache', () => {
 
                 expect(client.setEx).toHaveBeenCalledOnce();
                 expect(client.setEx).toBeCalledWith(
-                    hash,
+                    hash.toString(),
                     expect.any(Number),
                     JSON.stringify(mockXurResponse.Response),
                 );

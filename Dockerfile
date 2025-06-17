@@ -31,17 +31,6 @@ FROM node:24.2.0-bookworm-slim AS production
 LABEL org.opencontainers.image.source=https://github.com/chrispaskvan/destiny-ghost-api \
       org.opencontainers.image.licenses=MIT
 
-# Install only runtime dependencies for better-sqlite3
-RUN apt-get update && apt-get install --no-install-recommends -y \
-      gcc \
-      g++ \
-      libc6-dev \
-      make \
-      python3 \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* \
-    && rm -rf /tmp/* /var/tmp/*
-
 # Arguments with default values and expected environment variables
 ARG DESTINY_DATABASE_DIR=./databases/destiny
 ENV DESTINY_DATABASE_DIR=$DESTINY_DATABASE_DIR
