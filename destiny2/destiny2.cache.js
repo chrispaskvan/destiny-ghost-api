@@ -68,11 +68,10 @@ class Destiny2Cache extends DestinyCache {
             throw new Error('characters is a required and must be a nonempty array.');
         }
 
-        return await this.client.set(
+        return await this.client.setEx(
             Destiny2Cache.#getCharactersCacheKey(membershipId),
-            JSON.stringify(characters),
-            'EX',
             charactersExpiration,
+            JSON.stringify(characters),
         );
     }
 
@@ -90,11 +89,10 @@ class Destiny2Cache extends DestinyCache {
             throw new Error('statistics are required and must not be an empty object.');
         }
 
-        return await this.client.set(
+        return await this.client.setEx(
             Destiny2Cache.#getPlayerStatisticsCacheKey(membershipId),
-            JSON.stringify(statistics),
-            'EX',
             playerStatisticsExpiration,
+            JSON.stringify(statistics),
         );
     }
 }

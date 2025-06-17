@@ -103,21 +103,19 @@ class UserCache {
         }
 
         const key = UserCache.#getCacheKey(displayName, membershipType);
-        const promise1 = await this.client.set(
+        const promise1 = await this.client.setEx(
             key,
-            JSON.stringify(user),
-            'EX',
             60 * 60,
+            JSON.stringify(user),
         );
 
         let promise2;
 
         if (phoneNumber) {
-            promise2 = await this.client.set(
+            promise2 = await this.client.setEx(
                 phoneNumber,
-                JSON.stringify({ displayName, membershipType }),
-                'EX',
                 60 * 60,
+                JSON.stringify({ displayName, membershipType }),
             );
         } else {
             promise2 = Promise.resolve();
@@ -126,11 +124,10 @@ class UserCache {
         let promise3;
 
         if (emailAddress) {
-            promise3 = await this.client.set(
+            promise3 = await this.client.setEx(
                 emailAddress,
-                JSON.stringify({ displayName, membershipType }),
-                'EX',
                 60 * 60,
+                JSON.stringify({ displayName, membershipType }),
             );
         } else {
             promise3 = Promise.resolve();

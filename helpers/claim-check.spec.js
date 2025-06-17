@@ -6,9 +6,9 @@ import cache from './cache';
 
 vi.mock('./cache', () => ({
     default: {
-        hset: vi.fn(),
-        hget: vi.fn(),
-        hgetall: vi.fn(),
+        hSet: vi.fn(),
+        hGet: vi.fn(),
+        hGetAll: vi.fn(),
         expire: vi.fn(),
     },
 }));
@@ -71,7 +71,7 @@ describe('ClaimCheck', () => {
         it('should add a phone number with default status "queued"', async () => {
             await claimCheck.addPhoneNumber(testPhoneNumber);
             
-            expect(cache.hset).toHaveBeenCalledWith(
+            expect(cache.hSet).toHaveBeenCalledWith(
                 testClaimCheckId,
                 testPhoneNumber,
                 status.queued
@@ -82,7 +82,7 @@ describe('ClaimCheck', () => {
         it('should add a phone number with custom status', async () => {
             await claimCheck.addPhoneNumber(testPhoneNumber, status.processing);
             
-            expect(cache.hset).toHaveBeenCalledWith(
+            expect(cache.hSet).toHaveBeenCalledWith(
                 testClaimCheckId,
                 testPhoneNumber,
                 status.processing
@@ -94,16 +94,16 @@ describe('ClaimCheck', () => {
             await claimCheck.addPhoneNumber(testPhoneNumber, status.queued);
             await claimCheck.addPhoneNumber(testPhoneNumber2, status.processing);
             
-            expect(cache.hset).toHaveBeenCalledTimes(2);
+            expect(cache.hSet).toHaveBeenCalledTimes(2);
             expect(cache.expire).toHaveBeenCalledTimes(2);
-            expect(cache.hset).toHaveBeenNthCalledWith(1, testClaimCheckId, testPhoneNumber, status.queued);
-            expect(cache.hset).toHaveBeenNthCalledWith(2, testClaimCheckId, testPhoneNumber2, status.processing);
+            expect(cache.hSet).toHaveBeenNthCalledWith(1, testClaimCheckId, testPhoneNumber, status.queued);
+            expect(cache.hSet).toHaveBeenNthCalledWith(2, testClaimCheckId, testPhoneNumber2, status.processing);
         });
 
         it('should handle cache errors gracefully', async () => {
             const cacheError = new Error('Cache connection failed');
 
-            vi.mocked(cache.hset).mockRejectedValueOnce(cacheError);
+            vi.mocked(cache.hSet).mockRejectedValueOnce(cacheError);
             
             await expect(claimCheck.addPhoneNumber(testPhoneNumber)).rejects.toThrow('Cache connection failed');
         });
@@ -115,27 +115,27 @@ describe('ClaimCheck', () => {
                 [testPhoneNumber]: status.queued,
                 [testPhoneNumber2]: status.processing,
             };
-            vi.mocked(cache.hgetall).mockResolvedValueOnce(expectedData);
+            vi.mocked(cache.hGetAll).mockResolvedValueOnce(expectedData);
             
             const result = await ClaimCheck.getClaimCheck(testClaimCheckId);
             
-            expect(cache.hgetall).toHaveBeenCalledWith(testClaimCheckId);
+            expect(cache.hGetAll).toHaveBeenCalledWith(testClaimCheckId);
             expect(result).toEqual(expectedData);
         });
 
         it('should return empty object when claim check does not exist', async () => {
             const claimCheckNumber = 'non-existent-id';
-            vi.mocked(cache.hgetall).mockResolvedValueOnce({});
+            vi.mocked(cache.hGetAll).mockResolvedValueOnce({});
             
             const result = await ClaimCheck.getClaimCheck(claimCheckNumber);
             
-            expect(cache.hgetall).toHaveBeenCalledWith(claimCheckNumber);
+            expect(cache.hGetAll).toHaveBeenCalledWith(claimCheckNumber);
             expect(result).toEqual({});
         });
 
         it('should handle cache errors gracefully', async () => {
             const cacheError = new Error('Cache read failed');
-            vi.mocked(cache.hgetall).mockRejectedValueOnce(cacheError);
+            vi.mocked(cache.hGetAll).mockRejectedValueOnce(cacheError);
             
             await expect(ClaimCheck.getClaimCheck(testClaimCheckId)).rejects.toThrow('Cache read failed');
         });
@@ -145,49 +145,49 @@ describe('ClaimCheck', () => {
         it('should update phone number status when it exists', async () => {
             const existingStatus = status.processing;
             
-            vi.mocked(cache.hget).mockResolvedValueOnce(existingStatus);
+            vi.mocked(cache.hGet).mockResolvedValueOnce(existingStatus);
             
             const result = await ClaimCheck.updatePhoneNumber(testClaimCheckId, testPhoneNumber, status.completed);
             
-            expect(cache.hget).toHaveBeenCalledWith(testClaimCheckId, testPhoneNumber);
-            expect(cache.hset).toHaveBeenCalledWith(testClaimCheckId, testPhoneNumber, status.completed);
+            expect(cache.hGet).toHaveBeenCalledWith(testClaimCheckId, testPhoneNumber);
+            expect(cache.hSet).toHaveBeenCalledWith(testClaimCheckId, testPhoneNumber, status.completed);
             expect(result).toBe(existingStatus);
         });
 
         it('should not update when phone number does not exist', async () => {
-            vi.mocked(cache.hget).mockResolvedValueOnce(null);
+            vi.mocked(cache.hGet).mockResolvedValueOnce(null);
             
             const result = await ClaimCheck.updatePhoneNumber(testClaimCheckId, testPhoneNumber, status.completed);
             
-            expect(cache.hget).toHaveBeenCalledWith(testClaimCheckId, testPhoneNumber);
-            expect(cache.hset).not.toHaveBeenCalled();
+            expect(cache.hGet).toHaveBeenCalledWith(testClaimCheckId, testPhoneNumber);
+            expect(cache.hSet).not.toHaveBeenCalled();
             expect(result).toBeNull();
         });
 
         it('should not update when phone number returns undefined', async () => {
-            vi.mocked(cache.hget).mockResolvedValueOnce(undefined);
+            vi.mocked(cache.hGet).mockResolvedValueOnce(undefined);
             
             const result = await ClaimCheck.updatePhoneNumber(testClaimCheckId, testPhoneNumber, status.completed);
             
-            expect(cache.hget).toHaveBeenCalledWith(testClaimCheckId, testPhoneNumber);
-            expect(cache.hset).not.toHaveBeenCalled();
+            expect(cache.hGet).toHaveBeenCalledWith(testClaimCheckId, testPhoneNumber);
+            expect(cache.hSet).not.toHaveBeenCalled();
             expect(result).toBeUndefined();
         });
 
         it('should handle empty string as falsy value', async () => {
-            vi.mocked(cache.hget).mockResolvedValueOnce('');
+            vi.mocked(cache.hGet).mockResolvedValueOnce('');
             
             const result = await ClaimCheck.updatePhoneNumber(testClaimCheckId, testPhoneNumber, status.completed);
             
-            expect(cache.hget).toHaveBeenCalledWith(testClaimCheckId, testPhoneNumber);
-            expect(cache.hset).not.toHaveBeenCalled();
+            expect(cache.hGet).toHaveBeenCalledWith(testClaimCheckId, testPhoneNumber);
+            expect(cache.hSet).not.toHaveBeenCalled();
             expect(result).toBe('');
         });
 
         it('should handle cache read errors gracefully', async () => {
             const cacheError = new Error('Cache read failed');
             
-            vi.mocked(cache.hget).mockRejectedValueOnce(cacheError);
+            vi.mocked(cache.hGet).mockRejectedValueOnce(cacheError);
             
             await expect(
                 ClaimCheck.updatePhoneNumber(testClaimCheckId, testPhoneNumber, status.completed)
@@ -198,8 +198,8 @@ describe('ClaimCheck', () => {
             const existingStatus = status.processing;
             const cacheError = new Error('Cache write failed');
             
-            vi.mocked(cache.hget).mockResolvedValueOnce(existingStatus);
-            vi.mocked(cache.hset).mockRejectedValueOnce(cacheError);
+            vi.mocked(cache.hGet).mockResolvedValueOnce(existingStatus);
+            vi.mocked(cache.hSet).mockRejectedValueOnce(cacheError);
             
             await expect(
                 ClaimCheck.updatePhoneNumber(testClaimCheckId, testPhoneNumber, status.completed)
@@ -212,7 +212,7 @@ describe('ClaimCheck', () => {
             const claimCheckNumber = claimCheck.number;
             
             await claimCheck.addPhoneNumber(testPhoneNumber, status.queued);            
-            vi.mocked(cache.hgetall).mockResolvedValueOnce({
+            vi.mocked(cache.hGetAll).mockResolvedValueOnce({
                 [testPhoneNumber]: status.queued,
             });
             
@@ -220,7 +220,7 @@ describe('ClaimCheck', () => {
 
             expect(claimCheckData[testPhoneNumber]).toBe(status.queued);
             
-            vi.mocked(cache.hget).mockResolvedValueOnce(status.queued);
+            vi.mocked(cache.hGet).mockResolvedValueOnce(status.queued);
             const oldStatus = await ClaimCheck.updatePhoneNumber(
                 claimCheckNumber,
                 testPhoneNumber,
@@ -228,7 +228,7 @@ describe('ClaimCheck', () => {
             );
             
             expect(oldStatus).toBe(status.queued);
-            expect(cache.hset).toHaveBeenLastCalledWith(
+            expect(cache.hSet).toHaveBeenLastCalledWith(
                 claimCheckNumber,
                 testPhoneNumber,
                 status.completed

@@ -53,7 +53,7 @@ class DestinyController {
      * @returns {Promise}
      */
     async getGrimoireCards(numberOfCards) {
-        return this.world.getGrimoireCards(numberOfCards);
+        return await this.world.getGrimoireCards(numberOfCards);
     }
 
     /**

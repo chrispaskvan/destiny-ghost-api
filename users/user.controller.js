@@ -281,7 +281,7 @@ class UserController {
             throw new Error('registration not found');
         }
 
-        const iconUrl = this.world.getVendorIcon(postmasterHash);
+        const iconUrl = await this.world.getVendorIcon(postmasterHash);
 
         if (channel === 'phone') {
             Object.assign(user, {
@@ -384,7 +384,7 @@ class UserController {
             return undefined;
         }
 
-        const iconUrl = this.world.getVendorIcon(postmasterHash);
+        const iconUrl = await this.world.getVendorIcon(postmasterHash);
         const promises = [];
 
         promises.push(this.notifications.sendMessage(

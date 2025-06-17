@@ -20,7 +20,7 @@ const {
 } = mockPlayerStatisticsResponse;
 const client = {
     get: vi.fn(),
-    set: vi.fn(),
+    setEx: vi.fn(),
 };
 
 beforeEach(() => {
@@ -75,8 +75,8 @@ describe('Destiny2Cache', () => {
                 await destiny2Cache
                     .setCharacters(membershipId, characters);
 
-                expect(client.set).toHaveBeenCalledOnce();
-                expect(client.set).toHaveBeenCalledWith(expect.any(String), JSON.stringify(characters), 'EX', charactersExpiration);
+                expect(client.setEx).toHaveBeenCalledOnce();
+                expect(client.setEx).toHaveBeenCalledWith(expect.any(String), charactersExpiration, JSON.stringify(characters));
             });
         });
     });
@@ -125,8 +125,8 @@ describe('Destiny2Cache', () => {
                 await destiny2Cache
                     .setPlayerStatistics(membershipId, playerStatistics);
 
-                expect(client.set).toHaveBeenCalledOnce();
-                expect(client.set).toHaveBeenCalledWith(expect.any(String), JSON.stringify(playerStatistics), 'EX', playerStatisticsExpiration);
+                expect(client.setEx).toHaveBeenCalledOnce();
+                expect(client.setEx).toHaveBeenCalledWith(expect.any(String), playerStatisticsExpiration, JSON.stringify(playerStatistics));
             });
         });
     });

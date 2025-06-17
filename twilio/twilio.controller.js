@@ -55,8 +55,8 @@ class TwilioController {
             itemType,
             itemTypeDisplayName,
         } = item;
-        const itemCategories = itemCategoryHashes.map(itemCategoryHash => this.world
-            .getItemCategory(itemCategoryHash));
+        const itemCategories = await Promise.all(itemCategoryHashes.map(async itemCategoryHash => await this.world
+            .getItemCategory(itemCategoryHash)));
         const filteredCategories = itemCategories.filter(({ hash1 }) => hash1 > 1);
         const sortedCategories = sortBy(
             filteredCategories,
@@ -67,7 +67,7 @@ class TwilioController {
         let damageType;
 
         if (defaultDamageTypeHash) {
-            ({ displayProperties: { name: damageType } = {} } = this.world
+            ({ displayProperties: { name: damageType } = {} } = await this.world
                 .getDamageTypeByHash(defaultDamageTypeHash));
         }
 
@@ -150,9 +150,10 @@ class TwilioController {
             if (characters && characters.length) {
                 const itemHashes = await this.destiny
                     .getXur(membershipId, membershipType, characters[0].characterId, accessToken);
-                const items = itemHashes.map(itemHash => this.world.getItemByHash(itemHash));
+                const weaponCategory = await this.world.getWeaponCategory();
+                const items = await Promise.all(itemHashes.map(itemHash => this.world.getItemByHash(itemHash)));
                 const weapons = items
-                    .filter(({ itemCategoryHashes }) => itemCategoryHashes.includes(this.world.weaponCategory));
+                    .filter(({ itemCategoryHashes }) => itemCategoryHashes.includes(weaponCategory));
                 const result = weapons.reduce((memo, { displayProperties }) => (`${memo + displayProperties.name}\n`), ' ').trim();
 
                 return {

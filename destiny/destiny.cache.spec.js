@@ -10,7 +10,7 @@ let destinyCache;
 
 const client = {
     get: vi.fn(),
-    set: vi.fn(),
+    setEx: vi.fn(),
     ttl: vi.fn(),
 };
 
@@ -106,11 +106,13 @@ describe('DestinyCache', () => {
     });
 
     describe('getVendor', () => {
+        const hash = 11;
+
         describe('when manifest is found', () => {
             it('should return manifest data and meta', async () => {
                 client.get.mockResolvedValueOnce(JSON.stringify(mockXurResponse.Response));
 
-                const result = await destinyCache.getVendor();
+                const result = await destinyCache.getVendor(hash);
 
                 expect(result).toEqual(mockXurResponse.Response);
             });
@@ -120,7 +122,7 @@ describe('DestinyCache', () => {
             it('should return undefined', async () => {
                 client.get.mockRejectedValueOnce(new RedisErrors.RedisError());
 
-                const result = await destinyCache.getVendor();
+                const result = await destinyCache.getVendor(hash);
 
                 expect(result).toBeUndefined();
             });
@@ -130,7 +132,7 @@ describe('DestinyCache', () => {
             it('should throw', async () => {
                 client.get.mockRejectedValueOnce(new Error());
 
-                await expect(destinyCache.getVendor()).rejects.toThrow(Error);
+                await expect(destinyCache.getVendor(hash)).rejects.toThrow(Error);
             });
         });
     });
@@ -141,7 +143,7 @@ describe('DestinyCache', () => {
 
         describe('when given a manifest', () => {
             it('should cache the manifest', async () => {
-                client.set.mockResolvedValueOnce();
+                client.setEx.mockResolvedValueOnce();
 
                 const result = await destinyCache.setManifest({
                     lastModified,
@@ -149,12 +151,11 @@ describe('DestinyCache', () => {
                     maxAge: ttl,
                 });
 
-                expect(client.set).toHaveBeenCalledOnce();
-                expect(client.set).toBeCalledWith(
+                expect(client.setEx).toHaveBeenCalledOnce();
+                expect(client.setEx).toBeCalledWith(
                     destinyCache._manifestKey,
-                    JSON.stringify({ lastModified, manifest: mockManifestResponse.Response }),
-                    'EX',
                     ttl,
+                    JSON.stringify({ lastModified, manifest: mockManifestResponse.Response }),
                 );
                 expect(result).toBeUndefined();
             });
@@ -162,7 +163,7 @@ describe('DestinyCache', () => {
 
         describe('when a Redis error occurs', () => {
             it('should return a string', async () => {
-                client.set.mockRejectedValueOnce(new RedisErrors.RedisError());
+                client.setEx.mockRejectedValueOnce(new RedisErrors.RedisError());
 
                 const result = await destinyCache.setManifest({
                     lastModified,
@@ -176,7 +177,7 @@ describe('DestinyCache', () => {
 
         describe('when a different error occurs', () => {
             it('should throw', async () => {
-                client.set.mockRejectedValueOnce(new Error());
+                client.setEx.mockRejectedValueOnce(new Error());
 
                 await expect(destinyCache.setManifest({
                     lastModified,
@@ -200,16 +201,15 @@ describe('DestinyCache', () => {
 
         describe('when the given hash is a number', () => {
             it('should cache the vendor', async () => {
-                client.set.mockResolvedValueOnce();
+                client.setEx.mockResolvedValueOnce();
 
                 const result = await destinyCache.setVendor(hash, mockXurResponse.Response);
 
-                expect(client.set).toHaveBeenCalledOnce();
-                expect(client.set).toBeCalledWith(
-                    hash,
-                    JSON.stringify(mockXurResponse.Response),
-                    'EX',
+                expect(client.setEx).toHaveBeenCalledOnce();
+                expect(client.setEx).toBeCalledWith(
+                    hash.toString(),
                     expect.any(Number),
+                    JSON.stringify(mockXurResponse.Response),
                 );
                 expect(result).toBeUndefined();
             });
@@ -217,7 +217,7 @@ describe('DestinyCache', () => {
 
         describe('when a Redis error occurs', () => {
             it('should return a string', async () => {
-                client.set.mockRejectedValueOnce(new RedisErrors.RedisError());
+                client.setEx.mockRejectedValueOnce(new RedisErrors.RedisError());
 
                 const result = await destinyCache.setVendor(hash, mockXurResponse.Response);
 
@@ -227,7 +227,7 @@ describe('DestinyCache', () => {
 
         describe('when a different error occurs', () => {
             it('should throw', async () => {
-                client.set.mockRejectedValueOnce(new Error());
+                client.setEx.mockRejectedValueOnce(new Error());
 
                 await expect(destinyCache.setVendor(hash, mockXurResponse.Response))
                     .rejects.toThrow(Error);

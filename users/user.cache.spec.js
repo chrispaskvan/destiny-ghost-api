@@ -98,7 +98,7 @@ describe('UserCache', () => {
                 del: vi.fn(() => Promise.resolve(1)),
                 get: vi.fn(() => Promise.resolve(JSON.stringify(mockUser))),
                 quit: vi.fn(),
-                set: vi.fn(() => Promise.resolve()),
+                setEx: vi.fn(() => Promise.resolve()),
             };
 
             cacheService = new UserCache({ client });
@@ -150,7 +150,7 @@ describe('UserCache', () => {
         describe('when client set operation succeeds', () => {
             beforeEach(() => {
                 client = {
-                    set: vi.fn(() => Promise.resolve()),
+                    setEx: vi.fn(() => Promise.resolve()),
                 };
 
                 cacheService = new UserCache({ client });
@@ -178,7 +178,7 @@ describe('UserCache', () => {
                         const res = await cacheService.setUser(mockUser1);
 
                         expect(res).toEqual([undefined, undefined, undefined]);
-                        expect(client.set).toHaveBeenCalledTimes(2);
+                        expect(client.setEx).toHaveBeenCalledTimes(2);
                     });
                 });
 
@@ -189,7 +189,7 @@ describe('UserCache', () => {
                         const res = await cacheService.setUser(mockUser1);
 
                         expect(res).toEqual([undefined, undefined, undefined]);
-                        expect(client.set).toHaveBeenCalledTimes(2);
+                        expect(client.setEx).toHaveBeenCalledTimes(2);
                     });
                 });
 
@@ -198,7 +198,7 @@ describe('UserCache', () => {
                         const res = await cacheService.setUser(mockUser);
 
                         expect(res).toEqual([undefined, undefined, undefined]);
-                        expect(client.set).toHaveBeenCalledTimes(3);
+                        expect(client.setEx).toHaveBeenCalledTimes(3);
                     });
                 });
             });
@@ -210,7 +210,7 @@ describe('UserCache', () => {
                 const errMessage = 'error';
 
                 client = {
-                    set: vi.fn(() => {
+                    setEx: vi.fn(() => {
                         throw new Error(errMessage);
                     }),
                 };
