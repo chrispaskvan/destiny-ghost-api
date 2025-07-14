@@ -33,7 +33,7 @@
         "@grpc/grpc-js": "^1.13.4",
         "@grpc/proto-loader": "^0.7.15",
         "@paralleldrive/cuid2": "^2.2.2",
-        "@snyk/protect": "^1.1297.2",
+        "@snyk/protect": "^1.1297.3",
         "agentkeepalive": "^4.6.0",
         "applicationinsights": "^3.7.0",
         "awesome-phonenumber": "^7.5.0",
