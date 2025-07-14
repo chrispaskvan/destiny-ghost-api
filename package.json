@@ -29,7 +29,7 @@
     "dependencies": {
         "@azure/cosmos": "^4.4.1",
         "@godaddy/terminus": "^4.12.1",
-        "@google/genai": "^1.5.1",
+        "@google/genai": "^1.6.0",
         "@grpc/grpc-js": "^1.13.4",
         "@grpc/proto-loader": "^0.7.15",
         "@paralleldrive/cuid2": "^2.2.2",
