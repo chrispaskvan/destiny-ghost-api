@@ -1,5 +1,5 @@
 # Build stage - includes dev dependencies for OpenAPI generation
-FROM node:24.2.0-bookworm-slim AS builder
+FROM node:24.6.0-bookworm-slim AS builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install --no-install-recommends -y \
@@ -25,7 +25,7 @@ COPY . .
 RUN NODE_ENV=production npm run swagger
 
 # Production stage - lean runtime image
-FROM node:24.2.0-bookworm-slim AS production
+FROM node:24.6.0-bookworm-slim AS production
 
 # Labels
 LABEL org.opencontainers.image.source=https://github.com/chrispaskvan/destiny-ghost-api \
