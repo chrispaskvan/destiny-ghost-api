@@ -1,5 +1,8 @@
+# Define Node.js version as a build argument
+ARG NODE_VERSION=24.6.0
+
 # Build stage - includes dev dependencies for OpenAPI generation
-FROM node:24.2.0-bookworm-slim AS builder
+FROM node:${NODE_VERSION}-bookworm-slim AS builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install --no-install-recommends -y \
@@ -8,15 +11,13 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
       libc6-dev \
       make \
       python3 \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* \
-    && rm -rf /tmp/* /var/tmp/*
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 WORKDIR /app
 
 # Copy package files and install ALL dependencies (including dev)
 COPY package.json package-lock.json* ./
-RUN npm ci && npm cache clean --force
+RUN --mount=type=cache,target=/root/.npm npm ci && npm cache clean --force
 
 # Copy source code
 COPY . .
@@ -25,7 +26,7 @@ COPY . .
 RUN NODE_ENV=production npm run swagger
 
 # Production stage - lean runtime image
-FROM node:24.2.0-bookworm-slim AS production
+FROM node:${NODE_VERSION}-bookworm-slim AS production
 
 # Labels
 LABEL org.opencontainers.image.source=https://github.com/chrispaskvan/destiny-ghost-api \
@@ -55,7 +56,7 @@ USER node
 
 # Copy package files and install ONLY production dependencies
 COPY --chown=node:node package.json package-lock.json* ./
-RUN npm config list && npm ci --omit=dev && npm cache clean --force
+RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev && npm cache clean --force
 
 # Copy generated OpenAPI file from build stage
 COPY --from=builder --chown=node:node /app/openapi.json ./

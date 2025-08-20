@@ -30,9 +30,9 @@ const redisConfiguration = {
 };
 const client = createClient(redisConfiguration);
 
-client.on('connect', () => log.info('Redis Client is connected.'));
-client.on('reconnecting', () => log.info('Redis Client is reconnecting...'));
-client.on('error', err => log.error({ err }, 'Connection to the Redis Server failed.'));
+client.on('connect', () => log.info('Cache client is connected.'));
+client.on('reconnecting', () => log.info('Cache client is reconnecting...'));
+client.on('error', err => log.error({ err }, 'Connection to the cache failed.'));
 
 await client.connect();
 

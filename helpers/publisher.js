@@ -7,8 +7,9 @@
  * @requires azure
  */
 import { Queue, QueueEvents } from 'bullmq';
-import cache from './cache';
+import client from './jobs.js';
 import context from './async-context';
+import log from './log';
 
 class PublisherError extends Error {
     constructor(message) {
@@ -37,13 +38,28 @@ class Publisher {
      */
     constructor(topic = 'notifications') {
         this.#queue = new Queue(topic, {
-            connection: cache.options,
+            connection: client,
         });
         this.#queueEvents = new QueueEvents(topic, {
-            connection: cache.options,
+            connection: client,
         });
         this.#queueEvents.on('deduplicated', ({ jobId, deduplicationId }, id) => {
             console.log(`Job ${id} was deduplicated due to existing job ${jobId} with deduplication Id ${deduplicationId}`);
+        });
+        this.#queueEvents.on('added', ({ jobId }) => {
+            log.info({ jobId }, 'Job added to queue');
+        });        
+        this.#queueEvents.on('waiting', ({ jobId }) => {
+            log.info({ jobId }, 'Job waiting in queue');
+        });        
+        this.#queueEvents.on('active', ({ jobId }) => {
+            log.info({ jobId }, 'Job started processing');
+        });        
+        this.#queueEvents.on('completed', ({ jobId }) => {
+            log.info({ jobId }, 'Job completed');
+        });
+        this.#queueEvents.on('failed', ({ jobId, failedReason }) => {
+            log.error({ jobId, failedReason }, 'Job failed');
         });
     }
 
@@ -85,7 +101,7 @@ class Publisher {
             },
         };
 
-        return await this.#queue.add('notification', message,
+        const result = await this.#queue.add('notification', message,
             {
                 deduplication: {
                     id: `${notificationType}-${user.phoneNumber}`,
@@ -93,6 +109,15 @@ class Publisher {
                 }
             }
         );
+        
+        log.info({ 
+            jobId: result.id, 
+            notificationType, 
+            phoneNumber: user.phoneNumber,
+            deduplicationId: `${notificationType}-${user.phoneNumber}`
+        }, 'Message published to queue');
+        
+        return result;
     }
 }
 
