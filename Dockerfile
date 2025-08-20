@@ -26,7 +26,7 @@ COPY . .
 RUN NODE_ENV=production npm run swagger
 
 # Production stage - lean runtime image
-FROM node:24.6.0-bookworm-slim AS production
+FROM node:${NODE_VERSION}-bookworm-slim AS production
 
 # Labels
 LABEL org.opencontainers.image.source=https://github.com/chrispaskvan/destiny-ghost-api \
