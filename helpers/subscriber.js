@@ -21,7 +21,7 @@ class Subscriber {
      * @param {string} queueName - The queue name to subscribe to.
      */
     listen(callback, queueName = 'notifications') {
-        const worker = new Worker(queueName, async (job) => {
+        const worker = new Worker(queueName, async job => {
             try {
                 const { data } = job;
                 const {
