@@ -40,7 +40,7 @@ class Subscriber {
                     notificationType,
                     traceId,
                     ...user,
-            }, 'Sending message');
+                }, 'Sending message');
 
                 await callback(user, {
                     claimCheckNumber,
@@ -66,7 +66,7 @@ class Subscriber {
         });
 
         // Handle worker events
-        worker.on('completed', (job) => {
+        worker.on('completed', job => {
             log.info({ jobId: job.id }, 'Job completed');
         });
         worker.on('failed', (job, err) => {
@@ -76,7 +76,7 @@ class Subscriber {
                 stack: err.stack 
             }, 'Job failed');
         });
-        worker.on('error', (err) => {
+        worker.on('error', err => {
             log.error({ error: err.message }, 'Worker error');
         });
 
