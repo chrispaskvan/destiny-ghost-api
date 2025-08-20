@@ -5,7 +5,8 @@ import log from './log';
 const { redis } = configuration;
 /**
  * Cache Store
- * @description Client includes built-in reconnect strategy. {@link https://github.com/redis/ioredis#auto-reconnect}
+ * Jobs Client for BullMQ
+ * @description Redis client used for BullMQ job queueing. Includes built-in reconnect strategy. {@link https://github.com/redis/ioredis#auto-reconnect}
  */
 const redisConfiguration = {
     maxRetriesPerRequest: 0,
