@@ -6,7 +6,7 @@
  * @author Chris Paskvan
  */
 import { Worker } from 'bullmq';
-import cache from './cache';
+import client from './jobs.js';
 import log from './log';
 
 class Subscriber {
@@ -20,37 +20,69 @@ class Subscriber {
      * @constructor
      * @param {string} queueName - The queue name to subscribe to.
      */
-    async listen(callback, queueName = 'notifications') {
-        const worker = new Worker(queueName, async ({ data }) => {
-            const {
-                body,
-                applicationProperties: {
+    listen(callback, queueName = 'notifications') {
+        const worker = new Worker(queueName, async (job) => {
+            try {
+                const { data } = job;
+                const {
+                    body,
+                    applicationProperties: {
+                        claimCheckNumber,
+                        notificationType,
+                        traceId,
+                    },
+                } = data;
+                const user = JSON.parse(body);
+
+                log.info({
+                    jobId: job.id,
                     claimCheckNumber,
                     notificationType,
                     traceId,
-                },
-            } = data;
-            const user = JSON.parse(body);
+                    ...user,
+            }, 'Sending message');
 
-            log.info({
-                claimCheckNumber,
-                notificationType,
-                traceId,
-                ...user,
-            }, 'Sending Message');
+                await callback(user, {
+                    claimCheckNumber,
+                    notificationType,
+                });
 
-            await callback(user, {
-                claimCheckNumber,
-                notificationType,
-            });
+                log.info({
+                    jobId: job.id,
+                    claimCheckNumber,
+                    notificationType,
+                }, 'Message processed successfully');
+            } catch (error) {
+                log.error({
+                    jobId: job.id,
+                    error: error.message,
+                    stack: error.stack,
+                }, 'Failed to process message');
+                throw error; // Re-throw to let BullMQ handle retries
+            }
         }, {
-            autorun: false,
-            connection: cache,
+            connection: client,
+            concurrency: 5, // Process up to 5 jobs concurrently
+        });
+
+        // Handle worker events
+        worker.on('completed', (job) => {
+            log.info({ jobId: job.id }, 'Job completed');
+        });
+        worker.on('failed', (job, err) => {
+            log.error({ 
+                jobId: job?.id, 
+                error: err.message,
+                stack: err.stack 
+            }, 'Job failed');
+        });
+        worker.on('error', (err) => {
+            log.error({ error: err.message }, 'Worker error');
         });
 
         this.#workers.push(worker);
 
-        return await worker.run();
+        log.info({ queueName }, 'Worker started for queue');
     }
 
     /**

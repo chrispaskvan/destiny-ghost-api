@@ -10,6 +10,7 @@ import { createTerminus } from '@godaddy/terminus';
 
 import applicationInsights from './helpers/application-insights';
 import cache from './helpers/cache';
+import jobs from './helpers/jobs';
 import loaders from './loaders';
 import log from './helpers/log';
 import subscriber from './helpers/subscriber';
@@ -59,6 +60,7 @@ const startServer = async () => {
             console.log('Interuption or termination signal received. Shutting down the server ...');
             await processExternalPromisesWithTimeout([
                 cache.quit(),
+                jobs.quit(),
                 pool.close(),
                 subscriber.close(),
             ], 3000);
