@@ -15,7 +15,12 @@ vi.mock('../helpers/publisher');
 vi.mock('../helpers/subscriber');
 vi.mock('./notification.error');
 vi.mock('../helpers/claim-check');
-vi.mock('../helpers/log');
+vi.mock('../helpers/log', () => ({
+    default: {
+        info: vi.fn(),
+        error: vi.fn(),
+    },
+}));
 vi.mock('../helpers/throttle');
 
 const chance = new Chance();
