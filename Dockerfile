@@ -2,7 +2,7 @@
 ARG NODE_VERSION=24.10.0
 
 # Build stage - includes dev dependencies for OpenAPI generation
-FROM node:${NODE_VERSION}-bookworm-slim AS builder
+FROM node:${NODE_VERSION}-trixie-slim AS builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install --no-install-recommends -y \
