@@ -1,5 +1,5 @@
 {
-  "openapi": "3.0.0",
+  "openapi": "3.1.1",
   "info": {
     "title": "Destiny-Ghost API",
     "version": "2.8.0",
@@ -63,7 +63,9 @@
           },
           "type": {
             "type": "string",
-            "example": "Xur"
+            "examples": [
+              "Xur"
+            ]
           }
         }
       },
@@ -159,6 +161,7 @@
     "/destiny/grimoireCards/{numberOfCards}": {
       "get": {
         "summary": "Get a random selection of Grimoire Cards.",
+        "operationId": "getDestinyGrimoireCards",
         "tags": [
           "Destiny"
         ],
@@ -223,6 +226,7 @@
     "/destiny/manifest": {
       "get": {
         "summary": "Get details about the latest Destiny manifest definition.",
+        "operationId": "getDestinyManifest",
         "tags": [
           "Destiny"
         ],
@@ -284,6 +288,7 @@
       },
       "post": {
         "summary": "Download the latest Destiny manifest if the local copy is outdated.",
+        "operationId": "downloadDestinyManifest",
         "tags": [
           "Destiny"
         ],
@@ -302,6 +307,7 @@
     "/destiny2/characters": {
       "get": {
         "summary": "Get a list of the user's characters.",
+        "operationId": "getCharacters",
         "tags": [
           "Destiny 2"
         ],
@@ -323,6 +329,7 @@
     "/destiny2/inventory": {
       "get": {
         "summary": "Get the complete inventory of items.",
+        "operationId": "getInventory",
         "tags": [
           "Destiny 2"
         ],
@@ -341,6 +348,7 @@
     "/destiny2/manifest": {
       "get": {
         "summary": "Get details about the latest Destiny 2 manifest definition.",
+        "operationId": "getDestiny2Manifest",
         "tags": [
           "Destiny 2"
         ],
@@ -371,6 +379,7 @@
       },
       "post": {
         "summary": "Download the latest Destiny2 manifest if the local copy is outdated.",
+        "operationId": "downloadDestiny2Manifest",
         "tags": [
           "Destiny 2"
         ],
@@ -392,6 +401,7 @@
     "/destiny2/xur": {
       "get": {
         "summary": "Get Xur's inventory if available.",
+        "operationId": "getXurInventory",
         "tags": [
           "Destiny 2"
         ],
@@ -416,6 +426,7 @@
     "/health": {
       "get": {
         "summary": "Get a summary of the status of the Destiny Ghost API and its dependencies.",
+        "operationId": "getHealth",
         "tags": [
           "Health"
         ],
@@ -432,6 +443,7 @@
     "/health/metrics": {
       "get": {
         "summary": "Get metrics on the health of the Destiny Ghost API.",
+        "operationId": "getHealthMetrics",
         "tags": [
           "Health"
         ],
@@ -445,6 +457,7 @@
     "/users/current": {
       "get": {
         "summary": "Get the current Destiny Ghost user.",
+        "operationId": "getCurrentUser",
         "tags": [
           "Users"
         ],
@@ -484,7 +497,8 @@
     "/users/current/ciphers": {
       "post": {
         "summary": "Request a verification code for the current user.",
-        "description": "Requests the system to send a time-sensitive verification code to the currently authenticated user's specified contact method (email or phone). This code is used to verify ownership of the contact method before performing sensitive operations like profile edits. The user's email address or phone number associated with their Destiny Ghost profile will be used.",
+        "operationId": "requestVerificationCode",
+        "description": "Sends a time-sensitive verification code to the user's registered email or phone. This code is required to verify ownership of the contact method before performing sensitive operations like profile edits.",
         "tags": [
           "Users"
         ],
@@ -512,9 +526,11 @@
                     "description": "The communication channel to send the verification code to (must be registered with the user's profile)."
                   }
                 },
-                "example": {
-                  "channel": "email"
-                }
+                "examples": [
+                  {
+                    "channel": "email"
+                  }
+                ]
               }
             }
           }
@@ -538,6 +554,7 @@
     "/users/current/cryptarch": {
       "post": {
         "summary": "Validate a verification code for the current user.",
+        "operationId": "validateVerificationCode",
         "description": "Validates the provided verification code for the currently authenticated user. This code is used to verify ownership of the contact method before performing sensitive operations like profile edits.",
         "tags": [
           "Users"
@@ -569,7 +586,9 @@
                   "code": {
                     "type": "string",
                     "description": "The verification code received by the user.",
-                    "example": 123456
+                    "examples": [
+                      123456
+                    ]
                   }
                 }
               }
@@ -598,6 +617,7 @@
     "/users/join": {
       "post": {
         "summary": "Confirm the user.",
+        "operationId": "join",
         "tags": [
           "Users"
         ],
@@ -644,6 +664,7 @@
     "/users/signOut": {
       "post": {
         "summary": "Sign out a user.",
+        "operationId": "signOut",
         "tags": [
           "Users"
         ],
@@ -665,6 +686,7 @@
     "/users/signUp": {
       "post": {
         "summary": "Sign up for the service.",
+        "operationId": "signUp",
         "tags": [
           "Users"
         ],
@@ -710,6 +732,7 @@
     "/users/{userId}": {
       "patch": {
         "summary": "Update a user's profile.",
+        "operationId": "updateUser",
         "description": "See [JSONPatch](https://jsonpatch.com) for more information.",
         "tags": [
           "Users"

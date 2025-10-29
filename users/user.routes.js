@@ -91,6 +91,7 @@ const routes = ({
      *  /users/current:
      *    get:
      *      summary: Get the current Destiny Ghost user.
+     *      operationId: getCurrentUser
      *      tags:
      *        - Users
      *      security:
@@ -136,7 +137,8 @@ const routes = ({
      * /users/current/ciphers:
      *   post:
      *     summary: Request a verification code for the current user.
-     *     description: Requests the system to send a time-sensitive verification code to the currently authenticated user's specified contact method (email or phone). This code is used to verify ownership of the contact method before performing sensitive operations like profile edits. The user's email address or phone number associated with their Destiny Ghost profile will be used.
+     *     operationId: requestVerificationCode
+     *     description: Sends a time-sensitive verification code to the user's registered email or phone. This code is required to verify ownership of the contact method before performing sensitive operations like profile edits.
      *     tags:
      *       - Users
      *     security:
@@ -156,8 +158,8 @@ const routes = ({
      *                   - email
      *                   - phone
      *                 description: The communication channel to send the verification code to (must be registered with the user's profile).
-     *             example:
-     *               channel: email
+     *             examples:
+     *               - channel: email
      *     responses:
      *       202:
      *         description: Verification code successfully requested and is being sent. The user should check their email or phone.
@@ -204,6 +206,7 @@ const routes = ({
      * /users/current/cryptarch:
      *   post:
      *     summary: Validate a verification code for the current user.
+     *     operationId: validateVerificationCode
      *     description: Validates the provided verification code for the currently authenticated user. This code is used to verify ownership of the contact method before performing sensitive operations like profile edits.
      *     tags:
      *       - Users
@@ -228,7 +231,7 @@ const routes = ({
      *               code:
      *                 type: string
      *                 description: The verification code received by the user.
-     *                 example: 123456
+     *                 examples: [123456]
      *     responses:
      *       204:
      *         description: Verification code successfully validated.
@@ -275,6 +278,7 @@ const routes = ({
      *  /users/join:
      *    post:
      *      summary: Confirm the user.
+     *      operationId: join
      *      tags:
      *        - Users
      *      security:
@@ -353,6 +357,7 @@ const routes = ({
      *  /users/signOut:
      *    post:
      *      summary: Sign out a user.
+     *      operationId: signOut
      *      tags:
      *        - Users
      *      security:
@@ -381,6 +386,7 @@ const routes = ({
      *  /users/signUp:
      *    post:
      *      summary: Sign up for the service.
+     *      operationId: signUp
      *      tags:
      *        - Users
      *      security:
@@ -429,6 +435,7 @@ const routes = ({
      *  /users/{userId}:
      *    patch:
      *      summary: Update a user's profile.
+     *      operationId: updateUser
      *      description: See [JSONPatch](https://jsonpatch.com) for more information.
      *      tags:
      *        - Users

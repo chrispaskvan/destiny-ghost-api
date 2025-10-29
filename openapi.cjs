@@ -5,7 +5,7 @@ const isProduction = process.env.NODE_ENV === 'production';
 const packageJson = JSON.parse(readFileSync(join(__dirname, 'package.json'), 'utf8'));
 
 module.exports = {
-    openapi: '3.0.0',
+    openapi: '3.1.1',
     info: {
         title: 'Destiny-Ghost API',
         version: packageJson.version,
