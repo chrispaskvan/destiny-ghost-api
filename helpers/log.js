@@ -6,7 +6,7 @@
  * @requires cuid
  * @requires pino
  */
-import { createId } from '@paralleldrive/cuid2/index.js';
+import { createId } from '@paralleldrive/cuid2';
 import pino from 'pino';
 import context from './async-context.js';
 

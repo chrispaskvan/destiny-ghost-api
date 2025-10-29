@@ -1,4 +1,4 @@
-import { createId } from '@paralleldrive/cuid2/index.js';
+import { createId } from '@paralleldrive/cuid2';
 import cache from './cache.js';
 
 const claimCheckExpiration = 86400; // 1 day in seconds

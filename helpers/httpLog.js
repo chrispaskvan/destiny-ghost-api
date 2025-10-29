@@ -9,7 +9,7 @@
  * @requires cuid
  */
 import PinoHttp from 'pino-http';
-import { createId } from '@paralleldrive/cuid2/index.js';
+import { createId } from '@paralleldrive/cuid2';
 import { stdSerializers } from 'pino';
 import context from './async-context.js';
 import log from './log.js';
