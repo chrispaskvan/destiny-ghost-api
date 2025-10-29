@@ -6,9 +6,9 @@
  * @requires cuid
  * @requires pino
  */
-import { createId } from '@paralleldrive/cuid2';
+import { createId } from '@paralleldrive/cuid2/index.js';
 import pino from 'pino';
-import context from './async-context';
+import context from './async-context.js';
 
 const productionOnlyOptions = {
     formatters: {

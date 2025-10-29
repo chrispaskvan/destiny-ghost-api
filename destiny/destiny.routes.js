@@ -4,9 +4,9 @@
 import { StatusCodes } from 'http-status-codes';
 import cors from 'cors';
 import { Router } from 'express';
-import DestinyController from './destiny.controller';
-import authorizeUser from '../authorization/authorization.middleware';
-import getMaxAgeFromCacheControl from '../helpers/get-max-age-from-cache-control';
+import DestinyController from './destiny.controller.js';
+import authorizeUser from '../authorization/authorization.middleware.js';
+import getMaxAgeFromCacheControl from '../helpers/get-max-age-from-cache-control.js';
 
 /**
  * Destiny Routes

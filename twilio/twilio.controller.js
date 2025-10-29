@@ -4,13 +4,13 @@
  * @module twilioController
  * @author Chris Paskvan
  */
-import groupBy from 'lodash/groupBy';
-import sortBy from 'lodash/sortBy';
+import groupBy from 'lodash/groupBy.js';
+import sortBy from 'lodash/sortBy.js';
 
-import ClaimCheck from '../helpers/claim-check';
-import getShortUrl from '../helpers/bitly';
-import log from '../helpers/log';
-import { MAX_SMS_MESSAGE_LENGTH } from './twilio.constants';
+import ClaimCheck from '../helpers/claim-check.js';
+import getShortUrl from '../helpers/bitly.js';
+import log from '../helpers/log.js';
+import { MAX_SMS_MESSAGE_LENGTH } from './twilio.constants.js';
 
 /**
  * Twilio Controller

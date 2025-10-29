@@ -5,11 +5,11 @@ import {
     readdirSync, statSync, existsSync, createWriteStream, unlinkSync,
 } from 'fs';
 import { basename, join } from 'path';
-import sampleSize from 'lodash/sampleSize';
+import sampleSize from 'lodash/sampleSize.js';
 import axios from 'axios';
 import { open } from 'yauzl';
-import log from './log';
-import sanitizeDirectory from './sanitize-directory';
+import log from './log.js';
+import sanitizeDirectory from './sanitize-directory.js';
 
 /**
  * World Repository

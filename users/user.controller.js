@@ -6,10 +6,10 @@
  */
 import { applyPatch, createPatch } from 'rfc6902';
 import { parsePhoneNumber } from 'awesome-phonenumber'
-import Postmaster from '../helpers/postmaster';
-import getEpoch from '../helpers/get-epoch';
-import { getBlob, getCode } from '../helpers/tokens';
-import { postmasterHash } from '../destiny/destiny.constants';
+import Postmaster from '../helpers/postmaster.js';
+import getEpoch from '../helpers/get-epoch.js';
+import { getBlob, getCode } from '../helpers/tokens.js';
+import { postmasterHash } from '../destiny/destiny.constants.js';
 
 /**
  * Time To Live for Tokens

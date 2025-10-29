@@ -1,6 +1,6 @@
 import { createTransport } from 'nodemailer';
 import smtpTransport from 'nodemailer-smtp-transport';
-import configuration from './config';
+import configuration from './config.js';
 
 const { smtp: smtpConfiguration } = configuration;
 const website = process.env.WEBSITE;

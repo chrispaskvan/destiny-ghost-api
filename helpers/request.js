@@ -1,7 +1,7 @@
 import Agent, { HttpsAgent } from 'agentkeepalive';
 import axios from 'axios';
-import ResponseError from './response.error';
-import log from './log';
+import ResponseError from './response.error.js';
+import log from './log.js';
 
 const axiosSingleton = (function singleton() {
     let instance;

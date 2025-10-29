@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { StatusCodes } from 'http-status-codes';
-import HealthController from './health.controller';
+import HealthController from './health.controller.js';
 
 /**
  * Destiny Routes

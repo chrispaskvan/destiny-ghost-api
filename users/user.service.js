@@ -1,12 +1,12 @@
-import defaults from 'lodash/defaults';
-import isEmpty from 'lodash/isEmpty';
+import defaults from 'lodash/defaults.js';
+import isEmpty from 'lodash/isEmpty.js';
 import Joi from 'joi';
 import schemaDefaults from 'json-schema-defaults';
 import validator, { filter } from 'is-my-json-valid';
-import QueryBuilder from '../helpers/queryBuilder';
-import log from '../helpers/log';
-import notificationTypes from '../notifications/notification.types';
-import validate from '../helpers/validate';
+import QueryBuilder from '../helpers/queryBuilder.js';
+import log from '../helpers/log.js';
+import notificationTypes from '../notifications/notification.types.js';
+import validate from '../helpers/validate.js';
 
 /**
  * Users Table Name

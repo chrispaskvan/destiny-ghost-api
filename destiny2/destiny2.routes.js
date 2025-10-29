@@ -4,13 +4,13 @@
 import { StatusCodes } from 'http-status-codes';
 import cors from 'cors';
 import { Router } from 'express';
-import AuthenticationMiddleware from '../authentication/authentication.middleware';
-import Destiny2Controller from './destiny2.controller';
-import authorizeUser from '../authorization/authorization.middleware';
-import getMaxAgeFromCacheControl from '../helpers/get-max-age-from-cache-control';
-import log from '../helpers/log';
+import AuthenticationMiddleware from '../authentication/authentication.middleware.js';
+import Destiny2Controller from './destiny2.controller.js';
+import authorizeUser from '../authorization/authorization.middleware.js';
+import getMaxAgeFromCacheControl from '../helpers/get-max-age-from-cache-control.js';
+import log from '../helpers/log.js';
 
-import configuration from '../helpers/config';
+import configuration from '../helpers/config.js';
 
 /**
  * @openapi

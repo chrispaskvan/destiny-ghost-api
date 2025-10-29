@@ -10,7 +10,7 @@
         "lint": "eslint --fix .",
         "start:production": "NODE_ENV=production npm start",
         "start:dev": "NODE_ENV=development npm start",
-        "start": "node --require=suppress-experimental-warnings --loader=./loader.js -r dotenv/config --max-old-space-size=8192 --unhandled-rejections=strict start",
+        "start": "node --require=suppress-experimental-warnings -r dotenv/config --max-old-space-size=8192 --unhandled-rejections=strict start.js",
         "swagger": "rm -f openapi.json && swagger-jsdoc -d openapi.cjs ./**/*.routes.js -o openapi.json",
         "test": "npm run test:watch -- --run",
         "test:watch": "NODE_ENV=test node -r dotenv/config node_modules/vitest/vitest.mjs",

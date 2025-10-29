@@ -7,7 +7,7 @@
  */
 import { Worker } from 'bullmq';
 import client from './jobs.js';
-import log from './log';
+import log from './log.js';
 
 class Subscriber {
     /**

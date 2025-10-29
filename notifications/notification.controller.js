@@ -1,10 +1,10 @@
-import publisher from '../helpers/publisher';
-import subscriber from '../helpers/subscriber';
-import NotificationError from './notification.error';
-import notificationTypes from './notification.types';
-import ClaimCheck from '../helpers/claim-check';
-import log from '../helpers/log';
-import throttle from '../helpers/throttle';
+import publisher from '../helpers/publisher.js';
+import subscriber from '../helpers/subscriber.js';
+import NotificationError from './notification.error.js';
+import notificationTypes from './notification.types.js';
+import ClaimCheck from '../helpers/claim-check.js';
+import log from '../helpers/log.js';
+import throttle from '../helpers/throttle.js';
 
 /**
  * Controller class for Notification routes.

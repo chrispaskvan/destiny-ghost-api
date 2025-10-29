@@ -1,5 +1,5 @@
 import Joi from 'joi';
-import validate from '../helpers/validate';
+import validate from '../helpers/validate.js';
 
 /**
  * User Authentication Service Class

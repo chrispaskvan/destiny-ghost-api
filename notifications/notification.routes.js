@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import { StatusCodes } from 'http-status-codes';
-import { getIdempotencyKey, setIdempotencyKey } from '../helpers/idempotency-keys';
-import notificationTypes from './notification.types';
-import NotificationController from './notification.controller';
-import authorizeUser from '../authorization/authorization.middleware';
+import { getIdempotencyKey, setIdempotencyKey } from '../helpers/idempotency-keys.js';
+import notificationTypes from './notification.types.js';
+import NotificationController from './notification.controller.js';
+import authorizeUser from '../authorization/authorization.middleware.js';
 
 /**
  * @openapi

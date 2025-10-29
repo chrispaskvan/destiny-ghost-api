@@ -9,10 +9,10 @@ import { StatusCodes } from 'http-status-codes';
 import twilio from 'twilio';
 import Joi from 'joi';
 
-import AuthenticationMiddleWare from '../authentication/authentication.middleware';
-import TwilioController from './twilio.controller';
+import AuthenticationMiddleWare from '../authentication/authentication.middleware.js';
+import TwilioController from './twilio.controller.js';
 
-import configuration from '../helpers/config';
+import configuration from '../helpers/config.js';
 
 const { twiml: { MessagingResponse }, validateRequest } = twilio;
 

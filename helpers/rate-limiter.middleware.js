@@ -1,6 +1,6 @@
 import { StatusCodes } from 'http-status-codes';
 import { RateLimiterRedis } from 'rate-limiter-flexible';
-import client from './cache';
+import client from './cache.js';
 
 const options = {
     storeClient: client,

@@ -7,7 +7,7 @@
  * @see {@link https://github.com/microsoft/ApplicationInsights-node.js?tab=readme-ov-file#configuration}
  */
 import applicationInsights from 'applicationinsights';
-import configuration from './config';
+import configuration from './config.js';
 
 const { applicationInsights: { instrumentationKey } } = configuration;
 const setupTelemetryClient = () => {

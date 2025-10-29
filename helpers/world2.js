@@ -5,8 +5,8 @@
  * @summary Destiny World database.
  */
 import { join, basename } from 'path';
-import World from './world';
-import log from './log';
+import World from './world.js';
+import log from './log.js';
 
 /**
  * World2 Repository

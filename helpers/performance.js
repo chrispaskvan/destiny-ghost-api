@@ -1,7 +1,7 @@
 import { createHook } from 'node:async_hooks';
 import { performance, PerformanceObserver } from 'node:perf_hooks';
 
-import log from './log';
+import log from './log.js';
 
 const trackedResources = new Map();
 const hook = createHook({

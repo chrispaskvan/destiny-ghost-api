@@ -9,10 +9,10 @@
  * @requires cuid
  */
 import PinoHttp from 'pino-http';
-import { createId } from '@paralleldrive/cuid2';
+import { createId } from '@paralleldrive/cuid2/index.js';
 import { stdSerializers } from 'pino';
-import context from './async-context';
-import log from './log';
+import context from './async-context.js';
+import log from './log.js';
 
 class HttpLog extends PinoHttp {
     constructor() {
