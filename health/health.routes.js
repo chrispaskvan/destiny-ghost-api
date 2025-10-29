@@ -38,6 +38,7 @@ const routes = ({
      *  /health:
      *    get:
      *      summary: Get a summary of the status of the Destiny Ghost API and its dependencies.
+     *      operationId: getHealth
      *      tags:
      *        - Health
      *      responses:
@@ -61,6 +62,7 @@ const routes = ({
      *  /health/metrics:
      *    get:
      *      summary: Get metrics on the health of the Destiny Ghost API.
+     *      operationId: getHealthMetrics
      *      tags:
      *        - Health
      *      responses:

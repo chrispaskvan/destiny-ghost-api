@@ -19,7 +19,7 @@ import authorizeUser from '../authorization/authorization.middleware';
  *            type: boolean
  *          type:
  *            type: string
- *            example: Xur
+ *            examples: [Xur]
  */
 
 /**

@@ -49,6 +49,7 @@ const routes = ({
      *  /destiny/grimoireCards/{numberOfCards}:
      *    get:
      *      summary: Get a random selection of Grimoire Cards.
+     *      operationId: getDestinyGrimoireCards
      *      tags:
      *        - Destiny
      *      parameters:
@@ -115,6 +116,7 @@ const routes = ({
      *  /destiny/manifest:
      *    get:
      *      summary: Get details about the latest Destiny manifest definition.
+     *      operationId: getDestinyManifest
      *      tags:
      *        - Destiny
      *      parameters:
@@ -193,6 +195,7 @@ const routes = ({
      *  /destiny/manifest:
      *    post:
      *      summary: Download the latest Destiny manifest if the local copy is outdated.
+     *      operationId: downloadDestinyManifest
      *      tags:
      *        - Destiny
      *      security:
