@@ -1,5 +1,5 @@
 import RedisErrors from 'redis-errors';
-import log from '../helpers/log';
+import log from '../helpers/log.js';
 
 /**
  * Destiny Cache Class

@@ -1,9 +1,9 @@
 import grpc from '@grpc/grpc-js';
 import protoLoader from '@grpc/proto-loader';
 
-import configuration from './helpers/config';
-import World2 from './helpers/world2';
-import pool from './helpers/pool';
+import configuration from './helpers/config.js';
+import World2 from './helpers/world2.js';
+import pool from './helpers/pool.js';
 
 let server;
 

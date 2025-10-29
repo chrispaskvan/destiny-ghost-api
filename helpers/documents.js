@@ -5,7 +5,7 @@
  * @summary Helper class for interfacing with DocumentDB.
  * @author Chris Paskvan
  */
-import configuration from './config';
+import configuration from './config.js';
 
 const { documents: { databaseId } } = configuration;
 

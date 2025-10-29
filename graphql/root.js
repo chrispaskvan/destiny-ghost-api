@@ -1,4 +1,4 @@
-import throttle from '../helpers/throttle';
+import throttle from '../helpers/throttle.js';
 
 const root = {
     async findPlayers({ displayName, pageNumber = 0 }, context) {

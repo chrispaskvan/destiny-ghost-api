@@ -1,5 +1,5 @@
 import { RedisStore } from 'connect-redis';
-import client from './cache';
+import client from './cache.js';
 
 /**
  * Cache Store

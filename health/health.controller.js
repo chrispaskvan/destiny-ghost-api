@@ -7,9 +7,9 @@
 import { getHeapStatistics } from 'v8';
 import { convert } from 'html-to-text';
 
-import { get } from '../helpers/request';
-import applicationInsights from '../helpers/application-insights';
-import log from '../helpers/log';
+import { get } from '../helpers/request.js';
+import applicationInsights from '../helpers/application-insights.js';
+import log from '../helpers/log.js';
 
 /**
  * Not available

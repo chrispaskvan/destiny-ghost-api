@@ -1,4 +1,4 @@
-import cache from './cache';
+import cache from './cache.js';
 
 const getIdempotencyKey = async idempotencyKey => {
     if (!(idempotencyKey && typeof idempotencyKey === 'string')) {

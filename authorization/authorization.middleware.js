@@ -2,7 +2,7 @@
  * User Authorization Middleware
  */
 import { StatusCodes } from 'http-status-codes';
-import configuration from '../helpers/config';
+import configuration from '../helpers/config.js';
 
 /**
  * Check for expected notification headers.

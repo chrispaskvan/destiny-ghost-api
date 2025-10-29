@@ -1,5 +1,5 @@
-import { startServer } from './server';
-import { startServer as grpcStart } from './grpc';
+import { startServer } from './server.js';
+import { startServer as grpcStart } from './grpc.js';
 
 function exitOnError(err) {
     console.log(err);

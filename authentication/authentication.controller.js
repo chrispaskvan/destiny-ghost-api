@@ -1,6 +1,6 @@
 import Joi from 'joi';
-import configuration from '../helpers/config';
-import validate from '../helpers/validate';
+import configuration from '../helpers/config.js';
+import validate from '../helpers/validate.js';
 
 /**
  * User Authentication Controller Class

@@ -10,9 +10,9 @@
  * the Bungie web API platform help page {@link https://www.bungie.net/platform/destiny/help/}.
  */
 import { stringify } from 'qs';
-import { get, post } from '../helpers/request';
-import DestinyError from './destiny.error';
-import configuration from '../helpers/config';
+import { get, post } from '../helpers/request.js';
+import DestinyError from './destiny.error.js';
+import configuration from '../helpers/config.js';
 
 const {
     bungie: {

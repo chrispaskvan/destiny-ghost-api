@@ -1,4 +1,4 @@
-import DestinyCache from '../destiny/destiny.cache';
+import DestinyCache from '../destiny/destiny.cache.js';
 
 const charactersExpiration = 86400; // 24 hours
 const playerStatisticsExpiration = 3600; // 1 hour

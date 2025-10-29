@@ -3,12 +3,12 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { StatusCodes } from 'http-status-codes';
 
-import DestinyError from '../destiny/destiny.error';
-import ResponseError from '../helpers/response.error';
-import Routes from './routes';
-import expressLoader from './express';
-import hook from '../helpers/performance';
-import log from '../helpers/log';
+import DestinyError from '../destiny/destiny.error.js';
+import ResponseError from '../helpers/response.error.js';
+import Routes from './routes.js';
+import expressLoader from './express.js';
+import hook from '../helpers/performance.js';
+import log from '../helpers/log.js';
 
 const loaders = {
     init: async ({ app }) => {

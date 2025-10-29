@@ -13,8 +13,8 @@
  * @requires util
  */
 import { format } from 'util';
-import configuration from './config';
-import { post } from './request';
+import configuration from './config.js';
+import { post } from './request.js';
 
 /**
  * @function

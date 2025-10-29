@@ -9,12 +9,12 @@
  * the wiki at {@link http://bungienetplatform.wikia.com/wiki/Endpoints} or
  * the Bungie web API platform help page {@link https://www.bungie.net/platform/destiny/help/}.
  */
-import DestinyError from '../destiny/destiny.error';
-import DestinyService from '../destiny/destiny.service';
-import configuration from '../helpers/config';
-import log from '../helpers/log';
-import { strangeGearOffersHash } from './destiny2.constants';
-import { get, post } from '../helpers/request';
+import DestinyError from '../destiny/destiny.error.js';
+import DestinyService from '../destiny/destiny.service.js';
+import configuration from '../helpers/config.js';
+import log from '../helpers/log.js';
+import { strangeGearOffersHash } from './destiny2.constants.js';
+import { get, post } from '../helpers/request.js';
 
 const { bungie: { apiKey, host } } = configuration;
 

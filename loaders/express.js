@@ -4,11 +4,11 @@ import express from 'express';
 import session from 'express-session';
 import helmet from 'helmet';
 
-import configuration from '../helpers/config';
-import httpLog from '../helpers/httpLog';
-import { contextMiddleware } from '../helpers/log';
-import rateLimiterMiddleware from '../helpers/rate-limiter.middleware';
-import store from '../helpers/store';
+import configuration from '../helpers/config.js';
+import httpLog from '../helpers/httpLog.js';
+import { contextMiddleware } from '../helpers/log.js';
+import rateLimiterMiddleware from '../helpers/rate-limiter.middleware.js';
+import store from '../helpers/store.js';
 
 export default app => {
     app.use(express.json({

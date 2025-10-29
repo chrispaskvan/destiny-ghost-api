@@ -1,6 +1,6 @@
 import Redis from 'ioredis';
-import configuration from './config';
-import log from './log';
+import configuration from './config.js';
+import log from './log.js';
 
 const { redis } = configuration;
 /**

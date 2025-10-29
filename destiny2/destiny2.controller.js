@@ -4,7 +4,7 @@
  * @module destinyController
  * @author Chris Paskvan
  */
-import DestinyController from '../destiny/destiny.controller';
+import DestinyController from '../destiny/destiny.controller.js';
 
 /**
  * Destiny Controller Service

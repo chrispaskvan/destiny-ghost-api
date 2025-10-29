@@ -8,8 +8,8 @@
  */
 import { Queue, QueueEvents } from 'bullmq';
 import client from './jobs.js';
-import context from './async-context';
-import log from './log';
+import context from './async-context.js';
+import log from './log.js';
 
 class PublisherError extends Error {
     constructor(message) {

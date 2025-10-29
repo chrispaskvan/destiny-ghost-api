@@ -8,14 +8,14 @@ import { cpus } from 'os';
 import express from 'express';
 import { createTerminus } from '@godaddy/terminus';
 
-import applicationInsights from './helpers/application-insights';
-import cache from './helpers/cache';
-import jobs from './helpers/jobs';
-import loaders from './loaders';
-import log from './helpers/log';
-import subscriber from './helpers/subscriber';
-import processExternalPromisesWithTimeout from './helpers/process-external-promises-with-timeout';
-import pool from './helpers/pool';
+import applicationInsights from './helpers/application-insights.js';
+import cache from './helpers/cache.js';
+import jobs from './helpers/jobs.js';
+import loaders from './loaders/index.js';
+import log from './helpers/log.js';
+import subscriber from './helpers/subscriber.js';
+import processExternalPromisesWithTimeout from './helpers/process-external-promises-with-timeout.js';
+import pool from './helpers/pool.js';
 
 let insecureConnection;
 let secureConnection;

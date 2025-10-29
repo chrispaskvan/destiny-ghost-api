@@ -7,8 +7,8 @@
  * @description Utility functions for submitting a SMS/MMS message with Twilio,
  * recording the message, and updating the message status.
  */
-import configuration from '../helpers/config';
-import { MAX_SMS_MESSAGE_LENGTH } from '../twilio/twilio.constants';
+import configuration from '../helpers/config.js';
+import { MAX_SMS_MESSAGE_LENGTH } from '../twilio/twilio.constants.js';
 
 /**
  * Notifications Class
