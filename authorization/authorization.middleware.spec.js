@@ -54,4 +54,19 @@ describe('authorizeUser', () => {
             expect(next).toBeCalled();
         });
     });
+
+    describe('when the API key is valid', () => {
+        it('should call next', () => {
+            const apiKey = configuration.apiKeys[0];
+            const req = createRequest({
+                headers: {
+                    [apiKey.header]: apiKey.key,
+                },
+            });
+
+            authorizeUser(req, res, next);
+
+            expect(next).toBeCalled();
+        });
+    });
 });

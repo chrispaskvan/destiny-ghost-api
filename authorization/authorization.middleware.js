@@ -10,12 +10,14 @@ import configuration from '../helpers/config.js';
  * @param {*} headers
  */
 const authorized = headers => {
+    const apiKeyEntries = configuration.apiKeys.map(({ header, key }) => [header, key]);
     const notificationEntries = Object.entries(configuration.notificationHeaders);
+    const authorizedEntries = apiKeyEntries.concat(notificationEntries);
     const headerEntries = Object.entries(headers)
-        .filter(([key1, value1]) => notificationEntries
+        .filter(([key1, value1]) => authorizedEntries
             .find(([key2, value2]) => key1 === key2 && value1 === value2));
 
-    return headerEntries.length === notificationEntries.length;
+    return headerEntries.length;
 };
 
 /**

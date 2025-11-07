@@ -33,6 +33,7 @@ import UserRouter from '../users/user.routes.js';
 import schema from '../graphql/schema.js';
 import root from '../graphql/root.js';
 import pool from '../helpers/pool.js';
+import McpRouter from '../mcp/mcp.routes.js';
 
 const {
     documents: {
@@ -151,6 +152,12 @@ export default () => {
         worldRepository: world,
     });
     routes.use('/users', userRouter);
+
+    const mcpRouter = McpRouter({
+        userService,
+        destinyService: destiny2Service,
+    });
+    routes.use('/mcp', mcpRouter);
 
     /**
      * GraphQL
