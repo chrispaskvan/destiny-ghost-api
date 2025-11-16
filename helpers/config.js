@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from 'fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import camelCase from 'lodash/camelCase.js';
 
 function loadFile(file) {

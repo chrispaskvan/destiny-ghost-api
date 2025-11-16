@@ -6,7 +6,7 @@
  * @author Chris Paskvan
  * @requires crypto
  */
-import { randomBytes as _randomBytes } from 'crypto';
+import { randomBytes as _randomBytes } from 'node:crypto';
 
 /**
  * Returns true if the number is an integer greater than 0.

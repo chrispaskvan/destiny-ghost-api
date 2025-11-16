@@ -1,4 +1,4 @@
-import { normalize, resolve } from 'path';
+import { normalize, resolve } from 'node:path';
 
 export default function sanitizeDirectory(directory) {
     const rootDirectory = process.env.INIT_CWD;

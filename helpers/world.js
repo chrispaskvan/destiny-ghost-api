@@ -3,8 +3,8 @@
  */
 import {
     readdirSync, statSync, existsSync, createWriteStream, unlinkSync,
-} from 'fs';
-import { basename, join } from 'path';
+} from 'node:fs';
+import { basename, join } from 'node:path';
 import sampleSize from 'lodash/sampleSize.js';
 import axios from 'axios';
 import { open } from 'yauzl';
