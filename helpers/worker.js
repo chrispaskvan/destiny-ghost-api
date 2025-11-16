@@ -15,7 +15,7 @@ export default async function ({ databasePath, queries }) {
         return results;
     }
     catch (err) {
-        throw new Error(`Failed to load the database: ${err.message}`);
+        throw new Error(`Failed to load the database: ${err.message}`, { cause: err });
     }
     finally {
         if (database) {

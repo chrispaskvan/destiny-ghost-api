@@ -1,5 +1,6 @@
 .DS_store
 .artillery/
+.claude/
 .clinic/
 .env
 .vscode/

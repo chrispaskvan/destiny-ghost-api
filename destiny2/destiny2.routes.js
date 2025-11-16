@@ -5,7 +5,6 @@ import { StatusCodes } from 'http-status-codes';
 import cors from 'cors';
 import { Router } from 'express';
 import AuthenticationMiddleware from '../authentication/authentication.middleware.js';
-import Destiny2Controller from './destiny2.controller.js';
 import authorizeUser from '../authorization/authorization.middleware.js';
 import getMaxAgeFromCacheControl from '../helpers/get-max-age-from-cache-control.js';
 import log from '../helpers/log.js';
@@ -31,25 +30,13 @@ import configuration from '../helpers/config.js';
 /**
  * Destiny Routes
  * @param authenticationController
- * @param destiny2Service
- * @param userService
- * @param worldRepository
+ * @param destiny2Controller
  * @returns {*}
  */
 const routes = ({
-    authenticationController, destiny2Service, userService, worldRepository,
+    authenticationController, destiny2Controller,
 }) => {
     const destiny2Router = Router();
-
-    /**
-     * Set up routes and initialize the controller.
-     * @type {Destiny2Controller}
-     */
-    const destiny2Controller = new Destiny2Controller({
-        destinyService: destiny2Service,
-        userService,
-        worldRepository,
-    });
 
     /**
      * Authentication controller when needed.
