@@ -18,7 +18,7 @@ export function createMcpServer({
 }) {
     const server = new McpServer({
         name: 'destiny-ghost',
-        version: process.env.npm_package_version
+        version: process.env.npm_package_version,
     });
     const characterSchema = z.object({
         characterId: z.string(),
