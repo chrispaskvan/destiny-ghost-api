@@ -66,7 +66,7 @@ export function createMcpServer({
             const items = await destinyController.getXur(user.displayName, user.membershipType, characterId);
             const validation = z.array(itemSchema).safeParse(items);
             if (!validation.success) {
-                throw new Error('Validation of character list failed');
+                throw new Error('Validation of Xur inventory failed');
             }
 
             return {
