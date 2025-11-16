@@ -8,6 +8,7 @@ import { z } from 'zod';
  *
  * @param {object} deps - The dependencies for the server.
  * @param {object} deps.destinyController - The Destiny 2 controller instance.
+ * @param {object} deps.user - The authenticated user object.
  * @returns {McpServer} A new McpServer instance configured for the given user.
  */
 
