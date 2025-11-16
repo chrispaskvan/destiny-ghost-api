@@ -6,10 +6,10 @@ export default defineConfig({
             reporter: ['clover', 'html'],
             thresholds: {
                 autoUpdate: true,
-                statements: 81.92,
-                branches: 88.37,
-                functions: 79.68,
-                lines: 81.92,
+                statements: 82.32,
+                branches: 88.71,
+                functions: 80.23,
+                lines: 82.32,
             },
         },
         sequence: {

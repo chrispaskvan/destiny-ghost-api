@@ -12,6 +12,7 @@ import AuthenticationController from '../authentication/authentication.controlle
 import AuthenticationMiddleWare from '../authentication/authentication.middleware.js';
 import AuthenticationService from '../authentication/authentication.service.js';
 import Destiny2Cache from '../destiny2/destiny2.cache.js';
+import Destiny2Controller from '../destiny2/destiny2.controller.js';
 import Destiny2Service from '../destiny2/destiny2.service.js';
 import DestinyCache from '../destiny/destiny.cache.js';
 import DestinyService from '../destiny/destiny.service.js';
@@ -109,11 +110,14 @@ export default () => {
     });
     routes.use('/destiny', destinyRouter);
 
-    const destiny2Router = Destiny2Router({
-        authenticationController,
-        destiny2Service,
+    const destiny2Controller = new Destiny2Controller({
+        destinyService: destiny2Service,
         userService,
         worldRepository: world2,
+    });
+    const destiny2Router = Destiny2Router({
+        authenticationController,
+        destiny2Controller,
     });
     routes.use('/destiny2', destiny2Router);
 
@@ -154,8 +158,7 @@ export default () => {
     routes.use('/users', userRouter);
 
     const mcpRouter = McpRouter({
-        userService,
-        destinyService: destiny2Service,
+        destinyController: destiny2Controller,
     });
     routes.use('/mcp', mcpRouter);
 

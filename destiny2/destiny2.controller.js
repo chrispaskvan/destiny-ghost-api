@@ -76,7 +76,7 @@ class Destiny2Controller extends DestinyController {
      *
      * @returns {*|Array}
      */
-    async getXur(displayName, membershipType) {
+    async getXur(displayName, membershipType, characterId) {
         const currentUser = await this.users.getUserByDisplayName(displayName, membershipType);
         const { bungie: { access_token: accessToken }, membershipId } = currentUser;
         const characters = await this.destiny.getProfile(membershipId, membershipType);
@@ -85,7 +85,7 @@ class Destiny2Controller extends DestinyController {
             const itemHashes = await this.destiny.getXur(
                 membershipId,
                 membershipType,
-                characters[0].characterId,
+                characterId || characters[0].characterId,
                 accessToken,
             );
 

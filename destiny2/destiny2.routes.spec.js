@@ -7,6 +7,7 @@ import Chance from 'chance';
 import { createResponse, createRequest } from 'node-mocks-http';
 
 import Destiny2Router from './destiny2.routes';
+import Destiny2Controller from './destiny2.controller.js';
 import manifest2Response from '../mocks/manifest2Response.json';
 
 const { Response: manifest } = manifest2Response;
@@ -26,32 +27,34 @@ const destiny2Service = {
 const userService = {
     getUserByDisplayName: vi.fn(() => Promise.resolve()),
 };
+const world = {
+    getClassByHash: vi.fn(() => ({
+        classType: 1,
+        displayProperties: {
+            name: 'Hunter',
+            hasIcon: false,
+        },
+        genderedClassNames: {
+            Male: 'Hunter',
+            Female: 'Hunter',
+        },
+        hash: '671679327',
+        index: 1,
+        redacted: false,
+    })),
+};
+const destiny2Controller = new Destiny2Controller({
+    destinyService: destiny2Service,
+    userService,
+    worldRepository: world,
+});
 
 let destiny2Router;
 
 beforeEach(() => {
-    const world = {
-        getClassByHash: vi.fn(() => ({
-            classType: 1,
-            displayProperties: {
-                name: 'Hunter',
-                hasIcon: false,
-            },
-            genderedClassNames: {
-                Male: 'Hunter',
-                Female: 'Hunter',
-            },
-            hash: '671679327',
-            index: 1,
-            redacted: false,
-        })),
-    };
-
     destiny2Router = Destiny2Router({
         authenticationController,
-        destiny2Service,
-        userService,
-        worldRepository: world,
+        destiny2Controller,
     });
 });
 

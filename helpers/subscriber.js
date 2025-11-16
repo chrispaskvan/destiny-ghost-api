@@ -52,13 +52,13 @@ class Subscriber {
                     claimCheckNumber,
                     notificationType,
                 }, 'Message processed successfully');
-            } catch (error) {
+            } catch (err) {
                 log.error({
                     jobId: job.id,
-                    error: error.message,
-                    stack: error.stack,
+                    error: err.message,
+                    stack: err.stack,
                 }, 'Failed to process message');
-                throw error; // Re-throw to let BullMQ handle retries
+                throw err; // Re-throw to let BullMQ handle retries
             }
         }, {
             connection: client,

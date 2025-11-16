@@ -7,53 +7,70 @@ import { z } from 'zod';
  * authenticated user object, making them available to all registered tools.
  *
  * @param {object} deps - The dependencies for the server.
- * @param {object} deps.destiny2Service - The Destiny 2 service instance.
- * @param {object} deps.user - The authenticated user object for this session.
+ * @param {object} deps.destinyController - The Destiny 2 controller instance.
  * @returns {McpServer} A new McpServer instance configured for the given user.
  */
 
 export function createMcpServer({
-    destinyService,
-    user
+    destinyController,
+    user,
 }) {
     const server = new McpServer({
         name: 'destiny-ghost',
         version: process.env.npm_package_version
     });
+    const characterSchema = z.object({
+        characterId: z.string(),
+        className: z.string(),
+        powerLevel: z.number(),
+    });
+    const itemSchema = z.object({
+        itemTypeAndTierDisplayName: z.string(),
+        displayProperties: z.object({
+            name: z.string(),
+        }),
+    });
 
     server.registerTool(
-        'get-Characters',
+        'get-characters',
         {
-            title: 'Get Characters',
-            description: 'Fetch the characters for the authenticated user.',
-            outputSchema: { characters: z.array(z.object({
-                characterId: z.string(),
-                classHash: z.number(),
-                powerLevel: z.number(),
-            }))},
+            title: 'Get Destiny 2 Characters',
+            description: 'Return the list of Destiny 2 characters for the authenticated user.',
+            outputSchema: { characters: z.array(characterSchema)},
         },
         async () => {
-            const characters = await destinyService.getCharacters(user.membershipId, user.membershipType);
-            const formattedCharacters = characters.map(({ characterBase }) => ({
-                characterId: characterBase.characterId,
-                classHash: characterBase.classHash,
-                powerLevel: characterBase.powerLevel,
-            }));
-
-            // let's use zod to validate the formattedCharacters before returning
-            const validation = z.array(z.object({
-                characterId: z.string(),
-                classHash: z.number(),
-                powerLevel: z.number(),
-            })).safeParse(formattedCharacters);
+            const characters = await destinyController.getCharacters(user.displayName, user.membershipType);
+            const validation = z.array(characterSchema).safeParse(characters);
 
             if (!validation.success) {
-                throw new Error('Validation failed for formattedCharacters');
+                throw new Error('Validation of character list failed');
             }
 
             return {
                 content: [{ type: 'text', text: `Retrieved ${characters.length} characters.` }],
-                structuredContent: { characters: formattedCharacters }
+                structuredContent: { characters }
+            };
+        }
+    );
+
+    server.registerTool(
+        'get-xur-inventory-for-character',
+        {
+            title: 'Get Xur\'s Inventory for a Character',
+            description: 'Return the list of items Xur is selling for a character.',
+            inputSchema: { characterId: z.string() },
+            outputSchema: { items: z.array(itemSchema)},
+        },
+        async ({ characterId }) => {
+            const items = await destinyController.getXur(user.displayName, user.membershipType, characterId);
+            const validation = z.array(itemSchema).safeParse(items);
+            if (!validation.success) {
+                throw new Error('Validation of character list failed');
+            }
+
+            return {
+                content: [{ type: 'text', text: `Retrieved ${items.length} items.` }],
+                structuredContent: { items }
             };
         }
     );
