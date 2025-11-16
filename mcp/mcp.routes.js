@@ -1,6 +1,7 @@
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { Router } from 'express';
 import { createId } from '@paralleldrive/cuid2';
+import { LRUCache as LruCache } from 'lru-cache';
 import authorizeUser from '../authorization/authorization.middleware.js';
 import { createMcpServer } from './mcp.server.js';
 import configuration from '../helpers/config.js';
@@ -10,14 +11,25 @@ const routes = ({
     destinyController,
 }) => {
     const mcpRouter = Router();
-    const sessions = new Map();
+    const sessions = new LruCache({
+        dispose: (value, key) => {
+            log.info({ sessionId: key }, 'Disposing session');
+            if (value.transport) {
+                value.transport.close();
+            }
+        },
+        max: 11, // The maximum number of items to store in the cache
+        ttl: 1000 * 60 * 60, // The time-to-live for each session in milliseconds (60 minutes)
+    });
 
     mcpRouter.post('/', authorizeUser, async (req, res) => {
-        let sessionId = req.headers['mcp-session-id'];
+        const sessionId = req.headers['mcp-session-id'];
         const sessionData = sessions.get(sessionId);
 
         if (sessionData) {
             const { transport } = sessionData;
+
+            sessions.set(sessionId, sessionData); // Refresh the session's TTL on each request
 
             return transport.handleRequest(req, res, req.body);
         }
