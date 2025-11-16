@@ -74,6 +74,9 @@ class Destiny2Controller extends DestinyController {
     /**
      * Get Xur's inventory.
      *
+     * @param {string} displayName - The display name of the user.
+     * @param {string|number} membershipType - The membership type of the user.
+     * @param {string|number} characterId - The character ID to use (optional).
      * @returns {*|Array}
      */
     async getXur(displayName, membershipType, characterId) {

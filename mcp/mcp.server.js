@@ -8,6 +8,7 @@ import { z } from 'zod';
  *
  * @param {object} deps - The dependencies for the server.
  * @param {object} deps.destinyController - The Destiny 2 controller instance.
+ * @param {object} deps.user - The authenticated user object.
  * @returns {McpServer} A new McpServer instance configured for the given user.
  */
 
@@ -65,7 +66,7 @@ export function createMcpServer({
             const items = await destinyController.getXur(user.displayName, user.membershipType, characterId);
             const validation = z.array(itemSchema).safeParse(items);
             if (!validation.success) {
-                throw new Error('Validation of character list failed');
+                throw new Error('Validation of Xur inventory failed');
             }
 
             return {
