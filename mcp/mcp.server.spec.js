@@ -163,7 +163,7 @@ describe('createMcpServer', () => {
                 call => call[0] === 'get-xur-inventory-for-character'
             )[2];
 
-            await expect(handler({ characterId: 'char123' })).rejects.toThrow('Validation of character list failed');
+            await expect(handler({ characterId: 'char123' })).rejects.toThrow('Validation of Xur inventory failed');
         });
     });
 });
