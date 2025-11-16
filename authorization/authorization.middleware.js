@@ -12,12 +12,19 @@ import configuration from '../helpers/config.js';
 const authorized = headers => {
     const apiKeyEntries = configuration.apiKeys.map(({ header, key }) => [header, key]);
     const notificationEntries = Object.entries(configuration.notificationHeaders);
-    const authorizedEntries = apiKeyEntries.concat(notificationEntries);
+    
+    // Check if any API key matches completely
+    const hasValidApiKey = apiKeyEntries.some(([key, value]) => 
+        headers[key] === value
+    );
+    
+    // Check if all notification headers match
     const headerEntries = Object.entries(headers)
-        .filter(([key1, value1]) => authorizedEntries
+        .filter(([key1, value1]) => notificationEntries
             .find(([key2, value2]) => key1 === key2 && value1 === value2));
-
-    return headerEntries.length;
+    const hasAllNotificationHeaders = headerEntries.length === notificationEntries.length;
+    
+    return hasValidApiKey || hasAllNotificationHeaders;
 };
 
 /**
