@@ -1,6 +1,6 @@
-import { existsSync, mkdirSync } from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import { existsSync, mkdirSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { StatusCodes } from 'http-status-codes';
 
 import DestinyError from '../destiny/destiny.error.js';

@@ -1,7 +1,7 @@
 /**
  * Route Definitions
  */
-import { readFileSync } from 'fs';
+import { readFileSync } from 'node:fs';
 import { CosmosClient } from '@azure/cosmos';
 import { Router } from 'express';
 import { serve, setup } from 'swagger-ui-express';

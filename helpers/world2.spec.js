@@ -1,7 +1,7 @@
 /**
  * World Model Tests
  */
-import { existsSync } from 'fs';
+import { existsSync } from 'node:fs';
 import {
     beforeAll, describe, expect,
 } from 'vitest';

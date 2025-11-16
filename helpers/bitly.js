@@ -12,7 +12,7 @@
  * @requires request
  * @requires util
  */
-import { format } from 'util';
+import { format } from 'node:util';
 import configuration from './config.js';
 import { post } from './request.js';
 

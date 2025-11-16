@@ -1,10 +1,10 @@
 /**
  * Application Server
  */
-import { readFileSync } from 'fs';
-import { createServer } from 'http';
-import { createServer as createSecureServer } from 'https';
-import { cpus } from 'os';
+import { readFileSync } from 'node:fs';
+import { createServer } from 'node:http';
+import { createServer as createSecureServer } from 'node:https';
+import { cpus } from 'node:os';
 import express from 'express';
 import { createTerminus } from '@godaddy/terminus';
 

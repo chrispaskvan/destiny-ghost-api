@@ -4,7 +4,7 @@
  * @module World
  * @summary Destiny World database.
  */
-import { join, basename } from 'path';
+import { join, basename } from 'node:path';
 import World from './world.js';
 import log from './log.js';
 
