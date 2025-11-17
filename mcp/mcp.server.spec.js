@@ -6,7 +6,9 @@ import { createMcpServer } from './mcp.server.js';
 
 vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => {
     const McpServer = vi.fn();
+
     McpServer.prototype.registerTool = vi.fn();
+
     return { McpServer };
 });
 
@@ -22,15 +24,14 @@ describe('createMcpServer', () => {
             getCharacters: vi.fn(),
             getXur: vi.fn(),
         };
-
         mockUser = {
             displayName: 'test-user',
             membershipType: 'test-type',
         };
-
         mockServerInstance = {
             registerTool: vi.fn(),
         };
+
         McpServer.mockImplementation(() => mockServerInstance);
     });
 
@@ -105,6 +106,7 @@ describe('createMcpServer', () => {
             const invalidCharacters = [{ characterId: '1', className: 'Warlock' }]; // Missing powerLevel
 
             mockDestinyController.getCharacters.mockResolvedValue(invalidCharacters);
+
             createMcpServer({
                 destinyController: mockDestinyController,
                 user: mockUser,
@@ -135,7 +137,6 @@ describe('createMcpServer', () => {
             const handler = mockServerInstance.registerTool.mock.calls.find(
                 call => call[0] === 'get-xur-inventory-for-character'
             )[2];
-
             const result = await handler({ characterId });
 
             expect(mockDestinyController.getXur).toHaveBeenCalledWith(
