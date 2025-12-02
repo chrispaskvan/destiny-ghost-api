@@ -60,7 +60,7 @@
         "json-schema-defaults": "^0.4.0",
         "lodash": "^4.17.21",
         "lru-cache": "^11.2.2",
-        "nodemailer": "^7.0.10",
+        "nodemailer": "^7.0.11",
         "nodemailer-smtp-transport": "^2.7.4",
         "pino": "^10.1.0",
         "pino-http": "^11.0.0",
