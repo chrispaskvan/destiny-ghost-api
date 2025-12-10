@@ -40,7 +40,7 @@ const userSchema = z.object({
     dateRegistered: z.string().refine(val => !isNaN(Date.parse(val)), {
         message: 'Invalid date-time format',
     }).optional(),
-    emailAddress: z.email(),
+    emailAddress: z.string().email(),
     firstName: z.string(),
     displayName: z.string(),
     isSubscribed: z.boolean().default(true),
