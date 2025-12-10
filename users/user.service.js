@@ -16,9 +16,9 @@ const userCollectionId = 'Users';
  * @private
  */
 const anonymousUserSchema = z.object({
-    displayName: z.string(),
+    displayName: z.string().min(3).max(16),
     membershipId: z.string(),
-    membershipType: z.number().int(),
+    membershipType: z.number().int().min(1).max(2),
     profilePicturePath: z.string(),
 });
 
@@ -29,6 +29,7 @@ const anonymousUserSchema = z.object({
 const notificationSchema = z.object({
     enabled: z.boolean(),
     type: z.string(),
+    messages: z.array(z.string()).default([]),
 }).strict();
 
 /**
@@ -157,9 +158,15 @@ class UserService {
 
         user.carrier = carrier.name;
         user.type = carrier.type;
-        existingUser = { ...existingUser, ...user };
 
-        return await this.documents.updateDocument(userCollectionId, existingUser);
+        if (existingUser) {
+            // User exists (from prior sign-in), merge and update
+            existingUser = { ...existingUser, ...user };
+            return await this.documents.updateDocument(userCollectionId, existingUser, user.membershipType);
+        }
+
+        // Anonymous user record missing, create on the fly
+        return await this.documents.createDocument(userCollectionId, user);
     }
 
     /**
@@ -489,7 +496,7 @@ class UserService {
                 .then(() => this.cacheService.setUser(anonymousUser));
         }
 
-        throw new Error(`user not found ${JSON.stringify(anonymousUser)}`);
+        throw new Error(`User with displayName ${anonymousUser.displayName} and membershipType ${anonymousUser.membershipType} not found`);
     }
 
     /**
@@ -500,11 +507,15 @@ class UserService {
     async updateUser(user) {
         try {
             userSchema.parse(user);
-        } catch (err) {                
+        } catch (err) {
             return Promise.reject(Error(JSON.stringify(err.issues)));
         }
 
         const userDocument = await this.getUserByDisplayName(user.displayName, user.membershipType);
+
+        if (!userDocument) {
+            throw new Error(`User with displayName ${user.displayName} and membershipType ${user.membershipType} not found`);
+        }
 
         Object.assign(userDocument, user);
         await this.documents.updateDocument(userCollectionId, userDocument, user.membershipType);
@@ -522,7 +533,7 @@ class UserService {
         const userDocument = await this.getUserById(userId);
 
         if (!userDocument) {
-            throw new Error(`user not found with id ${userId}`);
+            throw new Error(`User with id ${userId} not found`);
         }
 
         userDocument.bungie = bungie;

@@ -20,7 +20,7 @@ const loaders = {
 
         log.info(`DESTINY_DATABASE_DIR=${databases[0]},DESTINY2_DATABASE_DIR=${databases[1]}`);
         if (databases.map(database => database[0]).includes('.')) {
-            throw new Error('Illegal path supplied.');
+            throw new Error('Illegal path supplied');
         }
         databases.forEach(database => {
             const directories = database.split('/');

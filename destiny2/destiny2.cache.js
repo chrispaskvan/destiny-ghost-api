@@ -61,11 +61,11 @@ class Destiny2Cache extends DestinyCache {
      */
     async setCharacters(membershipId, characters) {
         if (!(membershipId && typeof membershipId === 'string')) {
-            throw new Error('membershipId is a required string.');
+            throw new Error('membershipId is a required string');
         }
 
         if (!(characters && characters.length)) {
-            throw new Error('characters is a required and must be a nonempty array.');
+            throw new Error('characters is a required and must be a nonempty array');
         }
 
         return await this.client.setEx(
@@ -82,11 +82,11 @@ class Destiny2Cache extends DestinyCache {
      */
     async setPlayerStatistics(membershipId, statistics) {
         if (!(membershipId && typeof membershipId === 'string')) {
-            throw new Error('membershipId is a required string.');
+            throw new Error('membershipId is a required string');
         }
 
         if (!(statistics && Object.keys(statistics).length)) {
-            throw new Error('statistics are required and must not be an empty object.');
+            throw new Error('statistics are required and must not be an empty object');
         }
 
         return await this.client.setEx(
