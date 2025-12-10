@@ -37,19 +37,17 @@ const notificationSchema = z.object({
  */
 const userSchema = z.object({
     carrier: z.string().optional(),
-    dateRegistered: z.string().refine(val => !isNaN(Date.parse(val)), {
-        message: 'Invalid date-time format',
-    }).optional(),
+    dateRegistered: z.string().datetime().optional(),
     emailAddress: z.string().email(),
     firstName: z.string(),
-    displayName: z.string(),
+    displayName: z.string().min(3).max(16),
     isSubscribed: z.boolean().default(true),
     membershipId: z.string(),
-    membershipType: z.number().int(),
+    membershipType: z.number().int().min(1).max(2),
     lastName: z.string(),
     notifications: z.array(notificationSchema).default([]),
     patches: z.array(z.object({})).default([]),
-    phoneNumber: z.string(),
+    phoneNumber: z.string().regex(/^\+?[1-9][\d\s-]{1,20}$/),
     roles: z.array(z.string()).default(['User']),
     type: z.string().optional(),
 });
