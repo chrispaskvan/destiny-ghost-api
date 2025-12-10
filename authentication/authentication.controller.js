@@ -1,6 +1,5 @@
-import Joi from 'joi';
+import { z } from 'zod';
 import configuration from '../helpers/config.js';
-import validate from '../helpers/validate.js';
 
 /**
  * User Authentication Controller Class
@@ -11,9 +10,11 @@ class AuthenticationController {
      * @param options
      */
     constructor(options) {
-        validate(options, {
-            authenticationService: Joi.object().required(),
+        const schema = z.object({
+            authenticationService: z.object({}),
         });
+        
+        schema.parse(options);
 
         this.authentication = options.authenticationService;
     }

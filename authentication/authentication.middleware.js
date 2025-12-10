@@ -1,6 +1,5 @@
 import { StatusCodes } from 'http-status-codes';
-import Joi from 'joi';
-import validate from '../helpers/validate.js';
+import { z } from 'zod';
 
 /**
  * User Authentication Middleware Class
@@ -11,9 +10,11 @@ class AuthenticationMiddleware {
      * @param options
      */
     constructor(options) {
-        validate(options, {
-            authenticationController: Joi.object().required(),
+        const schema = z.object({
+            authenticationController: z.object({}),
         });
+        
+        schema.parse(options);
 
         this.authentication = options.authenticationController;
     }
