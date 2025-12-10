@@ -121,24 +121,10 @@ class UserService {
      * @returns {*}
      */
     async createUser(user) {
-        let issues = [];
+        const result = userSchema.safeParse(user);
 
-        try {
-            userSchema.parse(user);
-        } catch (err) {                
-            issues = [...issues, ...err.issues];
-        }
-
-        user.notifications.forEach(notification => {
-            try {
-                notificationSchema.parse(notification);
-            } catch (err) {                
-                issues = [...issues, ...err.issues];
-            }
-        });
-
-        if (issues.length) {
-            return Promise.reject(new Error(JSON.stringify(issues)));
+        if (!result.success) {
+            return Promise.reject(new Error(JSON.stringify(result.error.issues)));
         }
 
         let existingUser = await this.getUserByPhoneNumber(user.phoneNumber);
