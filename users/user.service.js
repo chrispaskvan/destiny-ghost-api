@@ -16,9 +16,9 @@ const userCollectionId = 'Users';
  * @private
  */
 const anonymousUserSchema = z.object({
-    displayName: z.string(),
+    displayName: z.string().min(3).max(16),
     membershipId: z.string(),
-    membershipType: z.number().int(),
+    membershipType: z.number().int().min(1).max(2),
     profilePicturePath: z.string(),
 });
 
