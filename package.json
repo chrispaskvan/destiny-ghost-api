@@ -40,7 +40,7 @@
         "awesome-phonenumber": "^7.6.0",
         "axios": "^1.13.2",
         "base64url": "^3.0.1",
-        "better-sqlite3": "^12.4.1",
+        "better-sqlite3": "^12.5.0",
         "bullmq": "^5.63.2",
         "compression": "^1.8.1",
         "connect-redis": "^9.0.0",
