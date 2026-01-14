@@ -41,7 +41,7 @@
         "axios": "^1.13.2",
         "base64url": "^3.0.1",
         "better-sqlite3": "^12.4.1",
-        "bullmq": "^5.63.2",
+        "bullmq": "^5.66.2",
         "compression": "^1.8.1",
         "connect-redis": "^9.0.0",
         "cookie-parser": "^1.4.7",
