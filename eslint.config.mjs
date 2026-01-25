@@ -1,3 +1,4 @@
+import globals from "globals";
 import js from "@eslint/js";
 import security from "eslint-plugin-security";
 
@@ -10,23 +11,8 @@ export default [
         languageOptions: {
             ecmaVersion: "latest",
             globals: {
-                console: "readonly",
-                process: "readonly",
-                Buffer: "readonly",
-                __dirname: "readonly",
-                __filename: "readonly",
-                setTimeout: "readonly",
-                clearTimeout: "readonly",
-                setInterval: "readonly",
-                clearInterval: "readonly",
-                setImmediate: "readonly",
-                clearImmediate: "readonly",
-                global: "readonly",
-                module: "readonly",
-                require: "readonly",
-                exports: "writable",
-                URL: "readonly",
-                AbortController: "readonly",
+                ...globals.browser,
+                ...globals.node,
             },
             parserOptions: {
                 sourceType: "module"
