@@ -130,7 +130,7 @@ class UserService {
             issues = [...issues, ...err.issues];
         }
 
-        user.notifications.forEach(notification => {
+        user.notifications?.forEach(notification => {
             try {
                 notificationSchema.parse(notification);
             } catch (err) {                
