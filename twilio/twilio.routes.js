@@ -7,15 +7,13 @@
 import { Router } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import twilio from 'twilio';
-import Joi from 'joi';
+import { z } from 'zod';
 
 import AuthenticationMiddleWare from '../authentication/authentication.middleware.js';
 import TwilioController from './twilio.controller.js';
-
 import configuration from '../helpers/config.js';
 
 const { twiml: { MessagingResponse }, validateRequest } = twilio;
-
 const { twilio: { attributes, authToken } } = configuration;
 
 const routes = ({
@@ -32,16 +30,16 @@ const routes = ({
     });
 
     // Define a schema for the expected body parameters
-    const bodySchema = Joi.object({
-        MessageSid: Joi.string().length(34).required(),
-        SmsSid: Joi.string().length(34).required(),
-        SmsMessageSid: Joi.string().length(34).required(),
-        AccountSid: Joi.string().length(34).required(),
-        MessagingServiceSid: Joi.string().length(34).required(),
-        From: Joi.string().required(),
-        To: Joi.string().required(),
-        Body: Joi.string().max(1600).required(),
-        NumMedia: Joi.number().integer().min(0).required(),
+    const bodySchema = z.object({
+        MessageSid: z.string().length(34),
+        SmsSid: z.string().length(34),
+        SmsMessageSid: z.string().length(34),
+        AccountSid: z.string().length(34),
+        MessagingServiceSid: z.string().length(34),
+        From: z.string(),
+        To: z.string(),
+        Body: z.string().max(1600),
+        NumMedia: z.number().int().min(0),
     });
 
     twilioRouter.route('/destiny/r')
@@ -52,23 +50,24 @@ const routes = ({
                     body,
                     cookies: requestCookies = {},
                 } = req;
-                const { error: err, value: sanitizedBody } = bodySchema.validate(body);
 
-                if (err) {
-                    return res.status(StatusCodes.BAD_REQUEST).json({ error: err.details[0].message });
+                try {
+                    bodySchema.parse(body);
+                } catch (err) {
+                    return res.status(StatusCodes.BAD_REQUEST).json({ error: err.issues[0].message });
                 }
 
                 // Reconstruct the URL using known, trusted components
                 const reconstructedUrl = `${process.env.PROTOCOL}://${process.env.DOMAIN}/twilio/destiny/r`;
 
-                if (!validateRequest(authToken, header, reconstructedUrl, sanitizedBody)) {
+                if (!validateRequest(authToken, header, reconstructedUrl, body)) {
                     res.writeHead(StatusCodes.FORBIDDEN);
 
                     return res.end();
                 }
 
                 const { cookies = {}, media, message } = await twilioController.request({
-                    body: sanitizedBody,
+                    body,
                     cookies: requestCookies,
                 });
 
@@ -110,20 +109,21 @@ const routes = ({
             } = req;
             const claimCheck = query['claim-check-number'];
             const notificationType = query['notification-type'];
-            const { error: err, value: sanitizedBody } = bodySchema.validate(body);
-
-            if (err) {
-                return res.status(StatusCodes.BAD_REQUEST).json({ error: err.details[0].message });
+            
+            try {
+                bodySchema.parse(body);
+            } catch (err) {
+                return res.status(StatusCodes.BAD_REQUEST).json({ error: err.issues[0].message });
             }
 
-            if (!validateRequest(authToken, header, `${process.env.PROTOCOL}://${process.env.DOMAIN}${originalUrl}`, sanitizedBody)) {
+            if (!validateRequest(authToken, header, `${process.env.PROTOCOL}://${process.env.DOMAIN}${originalUrl}`, body)) {
                 res.writeHead(StatusCodes.FORBIDDEN);
 
                 return res.end();
             }
 
             await twilioController.statusCallback({
-                ...sanitizedBody,
+                ...body,
                 ...(claimCheck && { ClaimCheck: claimCheck }),
                 ...(notificationType && { NotificationType: notificationType }),
             });

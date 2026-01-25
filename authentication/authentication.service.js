@@ -1,5 +1,4 @@
-import Joi from 'joi';
-import validate from '../helpers/validate.js';
+import { z } from 'zod';
 
 /**
  * User Authentication Service Class
@@ -10,11 +9,13 @@ class AuthenticationService {
      * @param options
      */
     constructor(options) {
-        validate(options, {
-            cacheService: Joi.object().required(),
-            destinyService: Joi.object().required(),
-            userService: Joi.object().required(),
+        const schema = z.object({
+            cacheService: z.object({}),
+            destinyService: z.object({}),
+            userService: z.object({}),
         });
+        
+        schema.parse(options);
 
         this.cacheService = options.cacheService;
         this.destinyService = options.destinyService;

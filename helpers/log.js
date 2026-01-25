@@ -22,6 +22,12 @@ if (process.env.NODE_ENV !== 'production') {
     options = {
         transport: {
             target: 'pino-pretty',
+            worker: {
+                // --max-old-space-size is not allowed in worker threads
+                execArgv: process.execArgv.filter(
+                    arg => !arg.startsWith('--max-old-space-size')
+                ),
+            },
         },
         ...productionOnlyOptions,
     };

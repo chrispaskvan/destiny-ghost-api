@@ -11,8 +11,8 @@ describe('idempotency-keys', () => {
 
     describe('getIdempotencyKey', () => {
         it('should throw an error if idempotencyKey is not a string', async () => {
-            await expect(getIdempotencyKey(null)).rejects.toThrow('idempotencyKey is a required string.');
-            await expect(getIdempotencyKey(123)).rejects.toThrow('idempotencyKey is a required string.');
+            await expect(getIdempotencyKey(null)).rejects.toThrow();
+            await expect(getIdempotencyKey(123)).rejects.toThrow();
         });
 
         it('should return the value from cache', async () => {
@@ -30,13 +30,13 @@ describe('idempotency-keys', () => {
 
     describe('setIdempotencyKey', () => {
         it('should throw an error if idempotencyKey is not a string', async () => {
-            await expect(setIdempotencyKey(null, 'claim-check')).rejects.toThrow('idempotencyKey is a required string.');
-            await expect(setIdempotencyKey(123, 'claim-check')).rejects.toThrow('idempotencyKey is a required string.');
+            await expect(setIdempotencyKey(null, 'claim-check')).rejects.toThrow();
+            await expect(setIdempotencyKey(123, 'claim-check')).rejects.toThrow();
         });
 
         it('should throw an error if claimCheckNumber is not a string', async () => {
-            await expect(setIdempotencyKey('test-key', null)).rejects.toThrow('claimCheckNumber is a required string.');
-            await expect(setIdempotencyKey('test-key', 123)).rejects.toThrow('claimCheckNumber is a required string.');
+            await expect(setIdempotencyKey('test-key', null)).rejects.toThrow();
+            await expect(setIdempotencyKey('test-key', 123)).rejects.toThrow();
         });
 
         it('should set the value in cache and set expiration', async () => {

@@ -223,7 +223,7 @@ describe('UserService', () => {
             it('should throw', async () => {
                 await expect(userService
                     .getUserByDisplayName(user.membershipType, user.displayName))
-                    .rejects.toThrow('"displayName" must be a string. "membershipType" must be a number');
+                    .rejects.toThrow('Invalid input: expected string, received number,Invalid input: expected number, received string');
             });
         });
 

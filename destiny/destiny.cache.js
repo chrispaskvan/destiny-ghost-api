@@ -109,7 +109,7 @@ class DestinyCache {
             }
         }
 
-        throw new Error('Manifest object is required.');
+        throw new Error('Manifest object is required');
     }
 
     /**
@@ -120,7 +120,7 @@ class DestinyCache {
      */
     async setVendor(hash, vendor) {
         if (!hash || typeof hash !== 'number') {
-            throw new Error('Vendor hash number is required.');
+            throw new Error('Vendor hash number is required');
         }
 
         try {

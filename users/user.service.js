@@ -1,12 +1,8 @@
-import defaults from 'lodash/defaults.js';
 import isEmpty from 'lodash/isEmpty.js';
-import Joi from 'joi';
-import schemaDefaults from 'json-schema-defaults';
-import validator, { filter } from 'is-my-json-valid';
+import { z } from 'zod';
 import QueryBuilder from '../helpers/queryBuilder.js';
 import log from '../helpers/log.js';
 import notificationTypes from '../notifications/notification.types.js';
-import validate from '../helpers/validate.js';
 
 /**
  * Users Table Name
@@ -19,144 +15,45 @@ const userCollectionId = 'Users';
  * Schema for anonymous users.
  * @private
  */
-const anonymousUserSchema = {
-    name: 'AnonymousUser',
-    type: 'object',
-    properties: {
-        displayName: {
-            minLength: 3,
-            maxLength: 16,
-            required: true,
-            type: 'string',
-        },
-        membershipId: {
-            required: true,
-            type: 'string',
-        },
-        membershipType: {
-            required: true,
-            type: 'integer',
-            minimum: 1,
-            maximum: 2,
-        },
-        profilePicturePath: {
-            required: true,
-            type: 'string',
-        },
-    },
-};
-
-/**
- * Schema for registered users.
- * @private
- */
-const userSchema = {
-    name: 'User',
-    type: 'object',
-    properties: {
-        carrier: {
-            readOnly: true,
-            type: 'string',
-        },
-        dateRegistered: {
-            format: 'date-time',
-            readOnly: true,
-            type: 'string',
-        },
-        emailAddress: {
-            format: 'email',
-            readOnly: true,
-            required: true,
-            type: 'string',
-        },
-        firstName: {
-            required: true,
-            type: 'string',
-        },
-        displayName: {
-            minLength: 3,
-            maxLength: 16,
-            required: true,
-            type: 'string',
-        },
-        isSubscribed: {
-            default: true,
-            type: 'boolean',
-        },
-        membershipId: {
-            required: true,
-            type: 'string',
-        },
-        membershipType: {
-            required: true,
-            type: 'integer',
-            minimum: 1,
-            maximum: 2,
-        },
-        lastName: {
-            required: true,
-            type: 'string',
-        },
-        notifications: {
-            default: [],
-            required: false,
-            type: 'array',
-            uniqueItems: true,
-            items: {
-                type: 'object',
-            },
-        },
-        patches: {
-            default: [],
-            required: false,
-            type: 'array',
-            uniqueItems: true,
-            items: {
-                type: 'object',
-            },
-        },
-        phoneNumber: {
-            readOnly: true,
-            required: true,
-            type: 'string',
-            format: 'phone',
-        },
-        roles: {
-            default: ['User'],
-            required: false,
-            type: 'array',
-            uniqueItems: true,
-            items: {
-                type: 'string',
-            },
-        },
-        type: {
-            readOnly: true,
-            type: 'string',
-        },
-    },
-    additionalProperties: true,
-};
+const anonymousUserSchema = z.object({
+    displayName: z.string().min(3).max(16),
+    membershipId: z.string(),
+    membershipType: z.number().int().min(1).max(2),
+    profilePicturePath: z.string(),
+});
 
 /**
  * Schema for user notifications.
  * @private
  */
-const notificationSchema = {
-    name: 'User',
-    type: 'object',
-    properties: {
-        enabled: {
-            required: true,
-            type: 'boolean',
-        },
-        type: {
-            required: true,
-            type: 'string',
-        },
-    },
-    additionalProperties: false,
-};
+const notificationSchema = z.object({
+    enabled: z.boolean(),
+    type: z.string(),
+    messages: z.array(z.string()).default([]),
+}).strict();
+
+/**
+ * Schema for registered users.
+ * @private
+ */
+const userSchema = z.object({
+    carrier: z.string().optional(),
+    dateRegistered: z.string().refine(val => !isNaN(Date.parse(val)), {
+        message: 'Invalid date-time format',
+    }).optional(),
+    emailAddress: z.string().email(),
+    firstName: z.string(),
+    displayName: z.string(),
+    isSubscribed: z.boolean().default(true),
+    membershipId: z.string(),
+    membershipType: z.number().int(),
+    lastName: z.string(),
+    notifications: z.array(notificationSchema).default([]),
+    patches: z.array(z.object({})).default([]),
+    phoneNumber: z.string(),
+    roles: z.array(z.string()).default(['User']),
+    type: z.string().optional(),
+});
 
 /**
  * User Service Class
@@ -166,16 +63,17 @@ class UserService {
      * @constructor
      */
     constructor(options) {
-        validate(options, {
-            cacheService: Joi.object().required(),
-            documentService: Joi.object().required(),
-            client: Joi.object().required(),
+        const schema = z.object({
+            cacheService: z.object({}),
+            client: z.object({}),
+            documentService: z.object({}),
         });
+        
+        schema.parse(options);
 
         this.cacheService = options.cacheService;
-        this.documents = options.documentService;
-
         this.client = options.client;
+        this.documents = options.documentService;
     }
 
     /**
@@ -198,12 +96,10 @@ class UserService {
      * @returns {*}
      */
     async createAnonymousUser(user) {
-        const validateUser = validator(anonymousUserSchema, {
-            greedy: true,
-        });
-
-        if (!validateUser(user)) {
-            return Promise.reject(Error(JSON.stringify(validateUser.errors)));
+        try {
+            anonymousUserSchema.parse(user);
+        } catch (err) {                
+            return Promise.reject(Error(JSON.stringify(err.issues)));
         }
 
         const existingUser = await this
@@ -226,22 +122,24 @@ class UserService {
      * @returns {*}
      */
     async createUser(user) {
-        let errors = [];
-        const validateNotifications = validator(notificationSchema);
-        const validateUser = validator(userSchema);
+        let issues = [];
 
-        if (!validateUser(user)) {
-            return Promise.reject(new Error(JSON.stringify(validateUser.errors)));
+        try {
+            userSchema.parse(user);
+        } catch (err) {                
+            issues = [...issues, ...err.issues];
         }
 
-        user.notifications.forEach(notification => {
-            if (!validateNotifications(notification)) {
-                errors = [...errors, ...validateNotifications.errors];
+        user.notifications?.forEach(notification => {
+            try {
+                notificationSchema.parse(notification);
+            } catch (err) {                
+                issues = [...issues, ...err.issues];
             }
         });
 
-        if (errors.length) {
-            return Promise.reject(new Error(JSON.stringify(errors)));
+        if (issues.length) {
+            return Promise.reject(new Error(JSON.stringify(issues)));
         }
 
         let existingUser = await this.getUserByPhoneNumber(user.phoneNumber);
@@ -255,19 +153,20 @@ class UserService {
         }
 
         existingUser = await this.getUserByDisplayName(user.displayName, user.membershipType, true);
+
         const carrier = await this.getPhoneNumberType(user.phoneNumber);
-        const filterUser = filter(userSchema);
 
         user.carrier = carrier.name;
         user.type = carrier.type;
-        userSchema.additionalProperties = false;
 
-        const filteredUser = filterUser(user);
+        if (existingUser) {
+            // User exists (from prior sign-in), merge and update
+            existingUser = { ...existingUser, ...user };
+            return await this.documents.updateDocument(userCollectionId, existingUser, user.membershipType);
+        }
 
-        defaults(filteredUser, schemaDefaults(userSchema));
-        existingUser = { ...existingUser, ...filteredUser };
-
-        return await this.documents.updateDocument(userCollectionId, existingUser);
+        // Anonymous user record missing, create on the fly
+        return await this.documents.createDocument(userCollectionId, user);
     }
 
     /**
@@ -375,21 +274,18 @@ class UserService {
      * @returns {Promise}
      */
     async getUserByDisplayName(displayName, membershipType, skipCache = false) {
-        const schema = {
-            displayName: Joi.string().required(),
-            membershipType: Joi.number().required(),
-            skipCache: Joi.boolean().optional(),
-        };
-        const error = validate(
-            { displayName, membershipType, skipCache },
-            schema,
-            { abortEarly: false },
-        );
+        const schema = z.object({
+            displayName: z.string(),
+            membershipType: z.number().int(),
+            skipCache: z.boolean().optional(),
+        });
 
-        if (error) {
-            const messages = error.details.map(detail => detail.message);
+        try {
+            schema.parse({ displayName, membershipType, skipCache });
+        } catch (err) {                
+            const messages = err.issues.map(issue => issue.message);
 
-            return Promise.reject(messages.join(','));
+            return Promise.reject(new Error(messages.join(',')));
         }
 
         let user = await this.cacheService.getUser(displayName, membershipType);
@@ -586,10 +482,10 @@ class UserService {
      * @returns {Promise}
      */
     async updateAnonymousUser(anonymousUser) {
-        const validateUser = validator(anonymousUserSchema);
-
-        if (!validateUser(anonymousUser)) {
-            return Promise.reject(new Error(JSON.stringify(validateUser.errors)));
+        try {
+            anonymousUserSchema.parse(anonymousUser);
+        } catch (err) {                
+            return Promise.reject(Error(JSON.stringify(err.issues)));
         }
 
         const user = await this
@@ -600,7 +496,7 @@ class UserService {
                 .then(() => this.cacheService.setUser(anonymousUser));
         }
 
-        throw new Error(`user not found ${JSON.stringify(anonymousUser)}`);
+        throw new Error(`User with displayName ${anonymousUser.displayName} and membershipType ${anonymousUser.membershipType} not found`);
     }
 
     /**
@@ -609,13 +505,17 @@ class UserService {
      * @returns {Promise}
      */
     async updateUser(user) {
-        const validateUser = validator(userSchema);
-
-        if (!validateUser(user)) {
-            return Promise.reject(Error(JSON.stringify(validateUser.errors)));
+        try {
+            userSchema.parse(user);
+        } catch (err) {
+            return Promise.reject(Error(JSON.stringify(err.issues)));
         }
 
         const userDocument = await this.getUserByDisplayName(user.displayName, user.membershipType);
+
+        if (!userDocument) {
+            throw new Error(`User with displayName ${user.displayName} and membershipType ${user.membershipType} not found`);
+        }
 
         Object.assign(userDocument, user);
         await this.documents.updateDocument(userCollectionId, userDocument, user.membershipType);
@@ -633,7 +533,7 @@ class UserService {
         const userDocument = await this.getUserById(userId);
 
         if (!userDocument) {
-            throw new Error(`user not found with id ${userId}`);
+            throw new Error(`User with id ${userId} not found`);
         }
 
         userDocument.bungie = bungie;
