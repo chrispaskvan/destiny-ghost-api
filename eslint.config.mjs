@@ -9,6 +9,7 @@ export default [
     {
         languageOptions: {
             ecmaVersion: "latest",
+            sourceType: "module",
             globals: {
                 console: "readonly",
                 process: "readonly",
@@ -27,9 +28,6 @@ export default [
                 exports: "writable",
                 URL: "readonly",
                 AbortController: "readonly",
-            },
-            parserOptions: {
-                sourceType: "module"
             },
         },
         plugins: {
