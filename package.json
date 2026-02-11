@@ -38,7 +38,7 @@
         "agentkeepalive": "^4.6.0",
         "applicationinsights": "^3.13.0",
         "awesome-phonenumber": "^7.7.0",
-        "axios": "^1.13.4",
+        "axios": "^1.13.5",
         "base64url": "^3.0.1",
         "better-sqlite3": "^12.6.2",
         "bullmq": "^5.67.2",
