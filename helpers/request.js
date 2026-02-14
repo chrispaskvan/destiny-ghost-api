@@ -24,8 +24,8 @@ function headersToObject(headers) {
  * @param {*} [options.data] - Request body.
  * @returns {Promise<{ data: *, headers: object }>}
  */
-async function request({ url, method, headers = {}, data: body } = {}) {
-    const init = { method, headers: { ...headers } };
+async function request({ url, method, headers = {}, data: body, ...rest } = {}) {
+    const init = { method, headers: { ...headers }, ...rest };
 
     if (body !== undefined) {
         if (typeof body === 'string') {

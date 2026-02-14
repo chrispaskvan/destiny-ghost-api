@@ -117,14 +117,14 @@ class World {
         };
 
         const downloadFile = async (url, path) => {
-            const file = createWriteStream(path);
-
             try {
                 const response = await fetch(url);
 
                 if (!response.ok || !response.body) {
                     throw new Error(`Download failed with status ${response.status}`);
                 }
+
+                const file = createWriteStream(path);
 
                 await pipeline(response.body, file);
             }
