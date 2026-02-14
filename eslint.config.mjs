@@ -28,6 +28,7 @@ export default [
                 exports: "writable",
                 URL: "readonly",
                 AbortController: "readonly",
+                fetch: "readonly",
             },
         },
         plugins: {

@@ -5,8 +5,8 @@ import {
     readdirSync, statSync, existsSync, createWriteStream, unlinkSync,
 } from 'node:fs';
 import { basename, join } from 'node:path';
+import { pipeline } from 'node:stream/promises';
 import sampleSize from 'lodash/sampleSize.js';
-import axios from 'axios';
 import { open } from 'yauzl';
 import log from './log.js';
 import sanitizeDirectory from './sanitize-directory.js';
@@ -110,40 +110,36 @@ class World {
             return Promise.resolve(manifest);
         }
 
-        const downloadFile = (url, path) => {
-            return new Promise((resolve, reject) => {
+        const cleanupFile = path => {
+            if (existsSync(path)) {
+                unlinkSync(path);
+            }
+        };
+
+        const downloadFile = async (url, path) => {
+            try {
+                const response = await fetch(url);
+
+                if (!response.ok || !response.body) {
+                    throw new Error(`Download failed with status ${response.status}`);
+                }
+
                 const file = createWriteStream(path);
-                let downloadError = false;
 
-                axios.get(url, { responseType: 'stream' })
-                    .then(({ data: stream }) => {
-                        stream.pipe(file);
-
-                        stream.on('error', err => {
-                            handleError(err, path, reject);
-                        });
-
-                        file.on('finish', () => {
-                            if (downloadError) return;
-
-                            resolve();
-                        });
-
-                        file.on('error', err => {
-                            handleError(err, path, reject);
-                        });
-                    })
-                    .catch(err => {
-                        handleError(err, path, reject);
-                    });
-            });
+                await pipeline(response.body, file);
+            }
+            catch (err) {
+                cleanupFile(path);
+                throw err;
+            }
         };
 
         const unzipFile = (zipPath, outputPath) => {
             return new Promise((resolve, reject) => {
                 open(zipPath, { lazyEntries: true }, (err, zipFile) => {
                     if (err) {
-                        return handleError(err, zipPath, reject);
+                        cleanupFile(zipPath);
+                        return reject(err);
                     }
 
                     zipFile.readEntry();
@@ -151,7 +147,8 @@ class World {
                     zipFile.on('entry', entry => {
                         zipFile.openReadStream(entry, (err, readStream) => {
                             if (err) {
-                                return handleError(err, zipPath, reject);
+                                cleanupFile(zipPath);
+                                return reject(err);
                             }
 
                             const sanitizedFileName = basename(entry.fileName);
@@ -164,22 +161,18 @@ class World {
                             });
 
                             writeStream.on('error', err => {
-                                handleError(err, zipPath, reject);
+                                cleanupFile(zipPath);
+                                reject(err);
                             });
                         });
                     });
 
                     zipFile.on('end', () => {
-                        unlinkSync(zipPath);
+                        cleanupFile(zipPath);
                         resolve();
                     });
                 });
             });
-        };
-
-        const handleError = (err, path, reject) => {
-            unlinkSync(path);
-            reject(err);
         };
 
         return downloadFile(`https://www.bungie.net${relativeUrl}`, `${databasePath}.zip`)
