@@ -128,6 +128,11 @@ describe('/destiny2', () => {
                     const getResponse = await get('/destiny2/inventory', {
                         headers: configuration.notificationHeaders,
                     });
+
+                    if (!getResponse.body) {
+                        throw new Error('Expected response body to be a readable stream');
+                    }
+
                     const stream = Readable.fromWeb(getResponse.body);
                     const objectsStream = stream.pipe(StreamArray.withParser());
                     const items = [];
