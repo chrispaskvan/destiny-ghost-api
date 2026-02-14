@@ -32,7 +32,10 @@ async function request({ url, method, headers = {}, data: body } = {}) {
             init.body = body;
         } else {
             init.body = JSON.stringify(body);
-            init.headers['Content-Type'] ??= 'application/json';
+
+            if (!('Content-Type' in init.headers)) {
+                init.headers['Content-Type'] = 'application/json';
+            }
         }
     }
 

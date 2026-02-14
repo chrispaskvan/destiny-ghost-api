@@ -164,10 +164,11 @@ describe('/destiny2', () => {
                     }
 
                     const reader = response.body.getReader();
+                    const readPromise = reader.read();
 
-                    setTimeout(() => controller.abort(), 10);
+                    controller.abort();
 
-                    await expect(reader.read()).rejects.toMatchObject({ name: 'AbortError' });
+                    await expect(readPromise).rejects.toMatchObject({ name: 'AbortError' });
                 });
             });
         });

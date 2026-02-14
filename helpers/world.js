@@ -110,6 +110,12 @@ class World {
             return Promise.resolve(manifest);
         }
 
+        const cleanupFile = path => {
+            if (existsSync(path)) {
+                unlinkSync(path);
+            }
+        };
+
         const downloadFile = async (url, path) => {
             const file = createWriteStream(path);
 
@@ -123,7 +129,7 @@ class World {
                 await pipeline(response.body, file);
             }
             catch (err) {
-                handleError(err, path, () => {});
+                cleanupFile(path);
                 throw err;
             }
         };
@@ -132,7 +138,8 @@ class World {
             return new Promise((resolve, reject) => {
                 open(zipPath, { lazyEntries: true }, (err, zipFile) => {
                     if (err) {
-                        return handleError(err, zipPath, reject);
+                        cleanupFile(zipPath);
+                        return reject(err);
                     }
 
                     zipFile.readEntry();
@@ -140,7 +147,8 @@ class World {
                     zipFile.on('entry', entry => {
                         zipFile.openReadStream(entry, (err, readStream) => {
                             if (err) {
-                                return handleError(err, zipPath, reject);
+                                cleanupFile(zipPath);
+                                return reject(err);
                             }
 
                             const sanitizedFileName = basename(entry.fileName);
@@ -153,7 +161,8 @@ class World {
                             });
 
                             writeStream.on('error', err => {
-                                handleError(err, zipPath, reject);
+                                cleanupFile(zipPath);
+                                reject(err);
                             });
                         });
                     });
@@ -164,16 +173,6 @@ class World {
                     });
                 });
             });
-        };
-
-        const handleError = (err, path, reject) => {
-            if (existsSync(path)) {
-                unlinkSync(path);
-            }
-
-            if (typeof reject === 'function') {
-                reject(err);
-            }
         };
 
         return downloadFile(`https://www.bungie.net${relativeUrl}`, `${databasePath}.zip`)
