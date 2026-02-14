@@ -168,7 +168,7 @@ class World {
                     });
 
                     zipFile.on('end', () => {
-                        unlinkSync(zipPath);
+                        cleanupFile(zipPath);
                         resolve();
                     });
                 });
