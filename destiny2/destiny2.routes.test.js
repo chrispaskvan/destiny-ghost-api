@@ -1,7 +1,7 @@
 import StreamArray from 'stream-json/streamers/StreamArray';
-import axios from 'axios';
 import nock from 'nock';
 import { StatusCodes } from 'http-status-codes';
+import { Readable } from 'node:stream';
 import {
     afterAll, afterEach, beforeAll, describe, expect, test, vi,
 } from 'vitest';
@@ -10,35 +10,37 @@ import configuration from '../helpers/config';
 
 vi.mock('../helpers/subscriber');
 
-let axiosAPIClient;
+let baseUrl;
 const ipAddress = '127.0.0.1';
 
 beforeAll(async () => {
     process.env.PORT = 65535;
 
     const apiConnection = await startServer();
-    const axiosConfig = {
-        baseURL: `http://${ipAddress}:${apiConnection.port}`,
-        // Do not throw HTTP exceptions. Delegate to the tests to decide which error is acceptable.
-        validateStatus: () => true,
-    };
 
-    axiosAPIClient = axios.create(axiosConfig);
+    baseUrl = `http://${ipAddress}:${apiConnection.port}`;
 
     // Ensure that this component is isolated by preventing unknown calls.
     nock.disableNetConnect();
     nock.enableNetConnect(ipAddress);
 });
 
-const get = async (url, options) => {
+const get = async (url, options = {}) => {
     const delay = 1000; // milliseconds
     let res;
-    let retries = 5;
+    let retries = options.retries ?? 5;
+    const retryOn503 = options.retryOn503 ?? true;
 
     while (retries > 0) {
-        res = await axiosAPIClient.get(url, options);
+        const requestUrl = url.startsWith('http') ? url : `${baseUrl}${url}`;
 
-        if (res.status !== StatusCodes.SERVICE_UNAVAILABLE) {
+        res = await fetch(requestUrl, {
+            method: 'GET',
+            headers: options.headers,
+            signal: options.signal,
+        });
+
+        if (res.status !== StatusCodes.SERVICE_UNAVAILABLE || !retryOn503) {
             break;
         }
 
@@ -53,13 +55,12 @@ describe('/destiny2', () => {
     describe('GET /destiny2/inventory', () => {
         describe('when the server is not ready', async () => {
             test('should receive a response with a 503 status code', async () => {
-                const res = await axiosAPIClient.get('/destiny2/inventory', {
+                const res = await get('/destiny2/inventory', {
                     headers: configuration.notificationHeaders,
+                    retryOn503: false,
                 });
 
-                expect(res).toMatchObject({
-                    status: StatusCodes.SERVICE_UNAVAILABLE,
-                });
+                expect(res.status).toEqual(StatusCodes.SERVICE_UNAVAILABLE);
             });
         });
 
@@ -78,12 +79,12 @@ describe('/destiny2', () => {
                             const res = await get(_url, {
                                 headers: configuration.notificationHeaders,
                             });
-                            const page = res.data;
+                            const page = await res.json();
     
                             yield page;
     
-                            if (res.data.links.next) {
-                                const { pathname, search } = new URL(res.data.links.next);
+                            if (page.links.next) {
+                                const { pathname, search } = new URL(page.links.next);
     
                                 yield* fetchPage(`${pathname}${search}`, {
                                     headers: configuration.notificationHeaders,
@@ -126,9 +127,8 @@ describe('/destiny2', () => {
                 test('should receive a response with an array of items', async () => {
                     const getResponse = await get('/destiny2/inventory', {
                         headers: configuration.notificationHeaders,
-                        responseType: 'stream',
                     });
-                    const stream = getResponse.data;
+                    const stream = Readable.fromWeb(getResponse.body);
                     const objectsStream = stream.pipe(StreamArray.withParser());
                     const items = [];
 
@@ -146,9 +146,7 @@ describe('/destiny2', () => {
                         });
                     });
 
-                    expect(getResponse).toMatchObject({
-                        status: StatusCodes.OK,
-                    });
+                    expect(getResponse.status).toEqual(StatusCodes.OK);
                     expect(items.length).toBeTruthy();
                     expect(items[0].displayProperties).toBeInstanceOf(Object);
                 });
@@ -156,19 +154,20 @@ describe('/destiny2', () => {
                 test('should stop streaming the response when the request is aborted', async () => {
                     const controller = new AbortController();
                     const { signal } = controller;
+                    const response = await fetch(`${baseUrl}/destiny2/inventory`, {
+                        headers: configuration.notificationHeaders,
+                        signal,
+                    });
 
-                    setTimeout(() => controller.abort(), 500);
-
-                    try {
-                        await get(`http://${ipAddress}:${process.env.PORT}/destiny2/inventory`, {
-                            headers: configuration.notificationHeaders,
-                            signal,
-                        });
-                        
-                        throw new Error('Request should have been aborted');
-                    } catch (err) {
-                        expect(err.name).toEqual('CanceledError');
+                    if (!response.body) {
+                        throw new Error('Expected response body to be a stream');
                     }
+
+                    const reader = response.body.getReader();
+
+                    setTimeout(() => controller.abort(), 10);
+
+                    await expect(reader.read()).rejects.toMatchObject({ name: 'AbortError' });
                 });
             });
         });
@@ -177,11 +176,9 @@ describe('/destiny2', () => {
     describe('GET /destiny2/xur', () => {
         describe('when requesting Xur\'s inventory of items', () => {
             test('should receive a response with an array of items', async () => {
-                const getResponse = await axiosAPIClient.get('/destiny2/xur');
+                const getResponse = await get('/destiny2/xur');
 
-                expect(getResponse).toMatchObject({
-                    status: StatusCodes.UNAUTHORIZED,
-                });
+                expect(getResponse.status).toEqual(StatusCodes.UNAUTHORIZED);
             });
         });
     });

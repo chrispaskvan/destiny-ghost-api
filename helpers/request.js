@@ -1,56 +1,64 @@
-import Agent, { HttpsAgent } from 'agentkeepalive';
-import axios from 'axios';
 import ResponseError from './response.error.js';
 import log from './log.js';
 
-const axiosSingleton = (function singleton() {
-    let instance;
+/**
+ * Convert a fetch Headers object to a plain object.
+ */
+function headersToObject(headers) {
+    const obj = {};
 
-    function createInstance() {
-        const httpAgent = new Agent();
-        const httpsAgent = new HttpsAgent();
-        const axiosInstance = axios.create({
-            httpAgent,
-            httpsAgent,
-        });
+    headers.forEach((value, key) => {
+        obj[key] = value;
+    });
 
-        return axiosInstance;
-    }
-
-    return {
-        getInstance() {
-            instance ||= createInstance();
-
-            return instance;
-        },
-    };
-}());
+    return obj;
+}
 
 /**
  * HTTP Request Client
  *
- * @param {*} options {@link https://axios-http.com/docs/req_config}
- * @returns {@link https://axios-http.com/docs/res_schema} | {@link https://axios-http.com/docs/handling_errors}
+ * @param {object} options
+ * @param {string} options.url - The request URL.
+ * @param {string} options.method - The HTTP method.
+ * @param {object} [options.headers] - Request headers.
+ * @param {*} [options.data] - Request body.
+ * @returns {Promise<{ data: *, headers: object }>}
  */
-async function request(options) {
-    try {
-        const axiosInstance = axiosSingleton.getInstance();
-        const { data, headers } = await axiosInstance(options);
+async function request({ url, method, headers = {}, data: body } = {}) {
+    const init = { method, headers: { ...headers } };
 
-        return { data, headers };
-    } catch (err) {
-        if (err.response) {
-            const responseError = new ResponseError(err);
-
-            log.error({
-                err: responseError,
-            }, 'HTTP request failed!');
-
-            throw responseError;
+    if (body !== undefined) {
+        if (typeof body === 'string') {
+            init.body = body;
+        } else {
+            init.body = JSON.stringify(body);
+            init.headers['Content-Type'] ??= 'application/json';
         }
-
-        throw err;
     }
+
+    const response = await fetch(url, init);
+    const contentType = response.headers.get('content-type') ?? '';
+    const data = contentType.includes('application/json')
+        ? await response.json()
+        : await response.text();
+
+    if (!response.ok) {
+        const responseError = new ResponseError({
+            response: {
+                data,
+                status: response.status,
+                statusText: response.statusText,
+            },
+        });
+
+        log.error({
+            err: responseError,
+        }, 'HTTP request failed!');
+
+        throw responseError;
+    }
+
+    return { data, headers: headersToObject(response.headers) };
 }
 
 async function get(options, includeHeaders = false) {

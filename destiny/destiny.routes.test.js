@@ -1,4 +1,3 @@
-import axios from 'axios';
 import nock from 'nock';
 import { StatusCodes } from 'http-status-codes';
 import {
@@ -8,20 +7,15 @@ import { startServer, stopServer } from '../server';
 
 vi.mock('../helpers/subscriber');
 
-let axiosAPIClient;
+let baseUrl;
 const ipAddress = '127.0.0.1';
 
 beforeAll(async () => {
     process.env.PORT = 65534;
 
     const apiConnection = await startServer();
-    const axiosConfig = {
-        baseURL: `http://${ipAddress}:${apiConnection.port}`,
-        // Do not throw HTTP exceptions. Delegate to the tests to decide which error is acceptable.
-        validateStatus: () => true,
-    };
 
-    axiosAPIClient = axios.create(axiosConfig);
+    baseUrl = `http://${ipAddress}:${apiConnection.port}`;
 
     // ️️️Ensure that this component is isolated by preventing unknown calls.
     nock.disableNetConnect();
@@ -35,20 +29,18 @@ describe('/destiny', () => {
                 const numberOfCards = 2;
                 const requestId = 'Incandescent';
 
-                const getResponse = await axiosAPIClient({
-                    method: 'get',
-                    url: `/destiny/grimoireCards/${numberOfCards}`,
+                const response = await fetch(`${baseUrl}/destiny/grimoireCards/${numberOfCards}`, {
+                    method: 'GET',
                     headers: {
                         'X-Request-Id': requestId,
                     },
                 });
+                const data = await response.json();
 
-                expect(getResponse).toMatchObject({
-                    status: StatusCodes.OK,
-                });
-                expect(getResponse.data.length).toEqual(numberOfCards);
-                expect(getResponse.headers['x-request-id']).toEqual(requestId);
-                expect(getResponse.headers['x-trace-id']).toBeDefined();
+                expect(response.status).toEqual(StatusCodes.OK);
+                expect(data.length).toEqual(numberOfCards);
+                expect(response.headers.get('x-request-id')).toEqual(requestId);
+                expect(response.headers.get('x-trace-id')).toBeTruthy();
             });
         });
     });

@@ -5,8 +5,8 @@ import {
     readdirSync, statSync, existsSync, createWriteStream, unlinkSync,
 } from 'node:fs';
 import { basename, join } from 'node:path';
+import { pipeline } from 'node:stream/promises';
 import sampleSize from 'lodash/sampleSize.js';
-import axios from 'axios';
 import { open } from 'yauzl';
 import log from './log.js';
 import sanitizeDirectory from './sanitize-directory.js';
@@ -110,33 +110,22 @@ class World {
             return Promise.resolve(manifest);
         }
 
-        const downloadFile = (url, path) => {
-            return new Promise((resolve, reject) => {
-                const file = createWriteStream(path);
-                let downloadError = false;
+        const downloadFile = async (url, path) => {
+            const file = createWriteStream(path);
 
-                axios.get(url, { responseType: 'stream' })
-                    .then(({ data: stream }) => {
-                        stream.pipe(file);
+            try {
+                const response = await fetch(url);
 
-                        stream.on('error', err => {
-                            handleError(err, path, reject);
-                        });
+                if (!response.ok || !response.body) {
+                    throw new Error(`Download failed with status ${response.status}`);
+                }
 
-                        file.on('finish', () => {
-                            if (downloadError) return;
-
-                            resolve();
-                        });
-
-                        file.on('error', err => {
-                            handleError(err, path, reject);
-                        });
-                    })
-                    .catch(err => {
-                        handleError(err, path, reject);
-                    });
-            });
+                await pipeline(response.body, file);
+            }
+            catch (err) {
+                handleError(err, path, () => {});
+                throw err;
+            }
         };
 
         const unzipFile = (zipPath, outputPath) => {
@@ -178,8 +167,13 @@ class World {
         };
 
         const handleError = (err, path, reject) => {
-            unlinkSync(path);
-            reject(err);
+            if (existsSync(path)) {
+                unlinkSync(path);
+            }
+
+            if (typeof reject === 'function') {
+                reject(err);
+            }
         };
 
         return downloadFile(`https://www.bungie.net${relativeUrl}`, `${databasePath}.zip`)
