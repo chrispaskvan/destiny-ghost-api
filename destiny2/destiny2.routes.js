@@ -8,6 +8,7 @@ import AuthenticationMiddleware from '../authentication/authentication.middlewar
 import authorizeUser from '../authorization/authorization.middleware.js';
 import getMaxAgeFromCacheControl from '../helpers/get-max-age-from-cache-control.js';
 import log from '../helpers/log.js';
+import toTemporalInstant from '../helpers/to-temporal-instant.js';
 
 import configuration from '../helpers/config.js';
 
@@ -197,13 +198,14 @@ const routes = ({
                     maxAge,
                 },
             } = result;
-            const ifModifiedSince = new Date(req.headers['if-modified-since'] ?? null);
+            const ifModifiedSince = toTemporalInstant(req.headers['if-modified-since']);
+            const lastModifiedInstant = toTemporalInstant(lastModified);
 
             res.set({
                 'Last-Modified': lastModified,
                 'Cache-Control': `max-age=${maxAge}`,
             });
-            res.status(ifModifiedSince > new Date(lastModified)
+            res.status(Temporal.Instant.compare(ifModifiedSince, lastModifiedInstant) > 0
                 ? StatusCodes.NOT_MODIFIED : StatusCodes.OK)
                 .json(manifest);
         });

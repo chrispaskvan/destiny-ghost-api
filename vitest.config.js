@@ -12,6 +12,7 @@ export default defineConfig({
                 lines: 82.32,
             },
         },
+        pool: 'threads',
         sequence: {
             hooks: 'parallel',
         },

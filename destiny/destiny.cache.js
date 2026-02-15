@@ -21,16 +21,14 @@ class DestinyCache {
      * @returns {number}
      */
     static secondsUntilDailyReset() {
-        const now = new Date();
-        const then = new Date(now);
+        const now = Temporal.Now.zonedDateTimeISO('UTC');
+        let reset = now.withPlainTime({ hour: 17 });
 
-        then.setUTCHours(17);
-        then.setUTCMinutes(0);
-        if (then < now) {
-            then.setDate(then.getDate() + 1);
+        if (Temporal.ZonedDateTime.compare(reset, now) <= 0) {
+            reset = reset.add({ days: 1 });
         }
 
-        return (then - now) / 1000;
+        return Math.ceil(now.until(reset, { largestUnit: 'seconds' }).total('seconds'));
     }
 
     /**
