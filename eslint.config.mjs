@@ -29,6 +29,7 @@ export default [
                 URL: "readonly",
                 AbortController: "readonly",
                 fetch: "readonly",
+                Temporal: "readonly",
             },
         },
         plugins: {

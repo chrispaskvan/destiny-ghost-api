@@ -20,29 +20,14 @@ beforeEach(() => {
 
 describe('DestinyCache', () => {
     describe('secondsUntilDailyReset', () => {
-        let currentDate;
-        let realDate;
-
-        beforeEach(() => {
-            realDate = Date;
-             
-            global.Date = class extends Date {
-                constructor(date) {
-                    if (date) {
-                        // eslint-disable-next-line constructor-super
-                        return super(date);
-                    }
-
-                    return currentDate;
-                }
-            };
-        });
         afterEach(() => {
-            global.Date = realDate;
+            vi.restoreAllMocks();
         });
         describe('when the current date and time is after the reset', () => {
             it('time to reset tomorrow', () => {
-                currentDate = new Date('2020-04-25T18:00:00.000Z');
+                const fakeNow = Temporal.ZonedDateTime.from('2020-04-25T18:00:00[UTC]');
+
+                vi.spyOn(Temporal.Now, 'zonedDateTimeISO').mockReturnValue(fakeNow);
 
                 const resetIn = DestinyCache.secondsUntilDailyReset();
 
@@ -51,7 +36,9 @@ describe('DestinyCache', () => {
         });
         describe('when the current date and time is before the reset', () => {
             it('time to reset today', () => {
-                currentDate = new Date('2020-04-25T16:00:00.000Z');
+                const fakeNow = Temporal.ZonedDateTime.from('2020-04-25T16:00:00[UTC]');
+
+                vi.spyOn(Temporal.Now, 'zonedDateTimeISO').mockReturnValue(fakeNow);
 
                 const resetIn = DestinyCache.secondsUntilDailyReset();
 
