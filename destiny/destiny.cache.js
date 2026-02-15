@@ -22,7 +22,7 @@ class DestinyCache {
      */
     static secondsUntilDailyReset() {
         const now = Temporal.Now.zonedDateTimeISO('UTC');
-        let reset = now.withPlainTime({ hour: 17 });
+        let reset = now.withPlainTime({ hour: 17, minute: 0, second: 0 });
 
         if (Temporal.ZonedDateTime.compare(reset, now) <= 0) {
             reset = reset.add({ days: 1 });
