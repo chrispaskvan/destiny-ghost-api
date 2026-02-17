@@ -16,11 +16,16 @@ import { builtinModules } from 'node:module';
 
 process.binding = function binding(name) {
     if (name === 'natives') {
-        return builtinModules.reduce((natives, mod) => {
-            natives[mod] = '';
+        if (Array.isArray(builtinModules)) {
+            return builtinModules.reduce((natives, mod) => {
+                natives[mod] = '';
 
-            return natives;
-        }, {});
+                return natives;
+            }, {});
+        }
+
+        // Fallback: if builtinModules is unavailable or not an array, return an empty object
+        return {};
     }
 
     throw new Error(`process.binding('${name}') is not supported with the permission model`);
