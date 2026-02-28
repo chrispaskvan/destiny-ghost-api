@@ -3,12 +3,20 @@
  */
 import { existsSync } from 'node:fs';
 import {
-    beforeAll, describe, expect, it,
+    afterEach, beforeAll, describe, expect, it, vi,
 } from 'vitest';
 import World from './world';
 import itif from './itif';
 import { postmasterHash } from '../destiny/destiny.constants';
 import pool from './pool';
+
+vi.mock('node:fs', async importOriginal => {
+    const actual = await importOriginal();
+    return {
+        ...actual,
+        existsSync: vi.fn(actual.existsSync),
+    };
+});
 
 const directory = process.env.DESTINY_DATABASE_DIR;
 let world;
@@ -20,6 +28,75 @@ beforeAll(async () => {
     });
 
     await world.bootstrapped;
+});
+
+describe('updateManifest path safety', () => {
+    afterEach(() => {
+        vi.mocked(existsSync).mockClear();
+    });
+
+    it('should resolve a safe database path from a normal manifest URL', async () => {
+        const w = new World({ pool });
+        w.directory = '/app/databases/destiny';
+        const manifest = {
+            mobileWorldContentPaths: {
+                en: '/common/destiny_content/sqlite/en/world.content',
+            },
+        };
+
+        vi.mocked(existsSync).mockReturnValue(true);
+
+        const result = await w.updateManifest(manifest);
+
+        expect(result).toEqual(manifest);
+    });
+
+    it('should reject manifest URLs that resolve to . or ..', () => {
+        const w = new World({ pool });
+        w.directory = '/app/databases/destiny';
+
+        expect(() => w.updateManifest({
+            mobileWorldContentPaths: { en: '/path/to/..' },
+        })).toThrow('Invalid manifest path');
+
+        expect(() => w.updateManifest({
+            mobileWorldContentPaths: { en: '.' },
+        })).toThrow('Invalid manifest path');
+    });
+
+    it('should reject manifest with empty relative URL', () => {
+        const w = new World({ pool });
+        w.directory = '/app/databases/destiny';
+
+        expect(() => w.updateManifest({
+            mobileWorldContentPaths: { en: '' },
+        })).toThrow('Invalid manifest path');
+    });
+
+    it('should reject manifest with undefined relative URL', () => {
+        const w = new World({ pool });
+        w.directory = '/app/databases/destiny';
+
+        expect(() => w.updateManifest({
+            mobileWorldContentPaths: { en: undefined },
+        })).toThrow('Invalid manifest path');
+    });
+
+    it('should use only the basename when URL contains traversal', async () => {
+        const w = new World({ pool });
+        w.directory = '/app/databases/destiny';
+        const manifest = {
+            mobileWorldContentPaths: {
+                en: '/path/../../etc/passwd',
+            },
+        };
+
+        vi.mocked(existsSync).mockReturnValue(true);
+
+        const result = await w.updateManifest(manifest);
+
+        expect(result).toEqual(manifest);
+    });
 });
 
 describe('It\'s Bungie\'s 1st world. You\'re just querying it.', () => {
