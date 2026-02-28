@@ -18,7 +18,9 @@ export default function sanitizeDirectory(directory) {
         throw new Error('Invalid database directory');
     }
 
-    if (!databaseDirectory.startsWith(rootDirectory + sep)) {
+    const rootWithSep = rootDirectory.endsWith(sep) ? rootDirectory : rootDirectory + sep;
+
+    if (!databaseDirectory.startsWith(rootWithSep)) {
         throw new Error('Invalid database directory');
     }
 }
