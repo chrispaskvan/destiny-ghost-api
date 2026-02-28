@@ -103,7 +103,12 @@ class World {
     updateManifest(manifest) {
         const { directory: databaseDirectory } = this;
         const { mobileWorldContentPaths: { en: relativeUrl } } = manifest;
-        const fileName = basename(relativeUrl);
+        const fileName = basename(relativeUrl || '');
+
+        if (!fileName || fileName === '.' || fileName === '..') {
+            throw new Error(`Invalid manifest path: ${relativeUrl}`);
+        }
+
         const databasePath = join(databaseDirectory, fileName);
 
         if (existsSync(databasePath)) {

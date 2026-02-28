@@ -21,6 +21,19 @@ describe('sanitizeDirectory', () => {
         vi.restoreAllMocks();
     });
 
+    it('should fall back to process.cwd() when INIT_CWD is unset', () => {
+        delete process.env.INIT_CWD;
+        realpathSync.mockImplementation(p => p);
+
+        expect(() => sanitizeDirectory('data/databases')).not.toThrow();
+    });
+
+    it('should throw when realpathSync fails (non-existent path)', () => {
+        realpathSync.mockImplementation(() => { throw new Error('ENOENT'); });
+
+        expect(() => sanitizeDirectory('data/databases')).toThrow('Invalid database directory');
+    });
+
     it('should accept a valid subdirectory', () => {
         expect(() => sanitizeDirectory('data/databases')).not.toThrow();
     });

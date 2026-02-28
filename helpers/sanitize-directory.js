@@ -6,8 +6,17 @@ export default function sanitizeDirectory(directory) {
         throw new Error('Invalid database directory');
     }
 
-    const rootDirectory = realpathSync(process.env.INIT_CWD);
-    const databaseDirectory = realpathSync(normalize(resolve(rootDirectory, directory)));
+    const initCwd = process.env.INIT_CWD || process.cwd();
+
+    let rootDirectory;
+    let databaseDirectory;
+
+    try {
+        rootDirectory = realpathSync(initCwd);
+        databaseDirectory = realpathSync(normalize(resolve(rootDirectory, directory)));
+    } catch {
+        throw new Error('Invalid database directory');
+    }
 
     if (!databaseDirectory.startsWith(rootDirectory + sep)) {
         throw new Error('Invalid database directory');

@@ -2,6 +2,7 @@ import {
     beforeEach, describe, expect, it, vi,
 } from 'vitest';
 import { get } from '../helpers/request';
+import applicationInsights from '../helpers/application-insights';
 import HealthController from './health.controller';
 import manifestResponse from '../mocks/manifestResponse.json';
 import manifest2Response from '../mocks/manifest2Response.json';
@@ -180,6 +181,10 @@ describe('HealthController', () => {
             expect(memory).toHaveProperty('heapUsed');
             expect(memory).toHaveProperty('external');
             expect(memory).toHaveProperty('totalAvailableSize');
+            expect(applicationInsights.trackMetric).toHaveBeenCalledWith({
+                name: 'Ratio of RSS Memory to Total Available Size',
+                value: expect.any(Number),
+            });
         });
     });
 });
