@@ -538,7 +538,7 @@ class UserService {
 
         userDocument.bungie = bungie;
 
-        return await this.documents.updateDocument(userCollectionId, userDocument)
+        return await this.documents.updateDocument(userCollectionId, userDocument, userDocument.membershipType)
             .then(() => undefined);
     }
 }
