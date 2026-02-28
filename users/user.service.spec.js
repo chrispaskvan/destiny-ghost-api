@@ -601,7 +601,7 @@ describe('UserService', () => {
                     .then(user1 => {
                         expect(user1).toBeUndefined();
                         expect(documentService.updateDocument)
-                            .toHaveBeenCalledWith(expect.anything(), user);
+                            .toHaveBeenCalledWith(expect.anything(), user, user.membershipType);
                     });
             });
         });
