@@ -1,6 +1,6 @@
 {
     "name": "destiny-ghost-api",
-    "version": "2.8.0",
+    "version": "2.9.1",
     "description": "Node.js API for querying the Destiny database via SMS messages.",
     "main": "start.js",
     "type": "module",
@@ -8,7 +8,7 @@
         "coverage": "npm run test:watch -- --coverage --run",
         "format": "remark . --quiet --frail --output",
         "lint": "eslint --fix .",
-        "start:production": "NODE_ENV=production node --harmony-temporal --permission --allow-fs-read=./ --allow-fs-write=./databases --allow-worker --allow-addons --disable-warning=SecurityWarning --import=./helpers/permission-model-patch.js --require=suppress-experimental-warnings -r dotenv/config --max-old-space-size=8192 --unhandled-rejections=strict start.js",
+        "start:production": "NODE_ENV=production node --harmony-temporal --permission --allow-fs-read=./ --allow-fs-read=/agents/ --allow-fs-write=./databases --allow-fs-write=/var/ --allow-worker --allow-addons --disable-warning=SecurityWarning --import=./helpers/permission-model-patch.js --require=suppress-experimental-warnings -r dotenv/config --max-old-space-size=8192 --unhandled-rejections=strict start.js",
         "start:dev": "NODE_ENV=development npm start",
         "start": "node --harmony-temporal --require=suppress-experimental-warnings -r dotenv/config --max-old-space-size=8192 --unhandled-rejections=strict start.js",
         "swagger": "rm -f openapi.json && swagger-jsdoc -d openapi.cjs ./**/*.routes.js -o openapi.json",
