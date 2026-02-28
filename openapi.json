@@ -2,7 +2,7 @@
   "openapi": "3.1.1",
   "info": {
     "title": "Destiny-Ghost API",
-    "version": "2.9.1",
+    "version": "2.9.2",
     "description": "A Node Express application for receiving SMS/MMS Notifications around changes to the vendor wares in Bungie's Destiny and make ad-hoc queries in the database.",
     "license": {
       "name": "MIT",
