@@ -7,6 +7,17 @@ import manifestResponse from '../mocks/manifestResponse.json';
 import manifest2Response from '../mocks/manifest2Response.json';
 
 vi.mock('../helpers/request');
+vi.mock('../helpers/application-insights', () => ({
+    default: {
+        trackMetric: vi.fn(),
+    },
+}));
+vi.mock('../helpers/log', () => ({
+    default: {
+        error: vi.fn(),
+        info: vi.fn(),
+    },
+}));
 
 const { Response: manifest } = manifestResponse;
 const { Response: manifest2 } = manifest2Response;
@@ -140,6 +151,35 @@ describe('HealthController', () => {
                     },
                 });
             });
+        });
+    });
+
+    describe('getMemoryUsage', () => {
+        it('should return memory usage in megabytes', () => {
+            const result = HealthController.getMemoryUsage();
+
+            expect(result).toHaveProperty('rss');
+            expect(result).toHaveProperty('heapTotal');
+            expect(result).toHaveProperty('heapUsed');
+            expect(result).toHaveProperty('external');
+            expect(result).toHaveProperty('totalAvailableSize');
+            Object.values(result).forEach(value => {
+                expect(typeof value).toBe('number');
+            });
+        });
+    });
+
+    describe('getMetrics', () => {
+        it('should return memory metrics and track them', async () => {
+            const controller = new HealthController();
+
+            const { memory } = await controller.getMetrics();
+
+            expect(memory).toHaveProperty('rss');
+            expect(memory).toHaveProperty('heapTotal');
+            expect(memory).toHaveProperty('heapUsed');
+            expect(memory).toHaveProperty('external');
+            expect(memory).toHaveProperty('totalAvailableSize');
         });
     });
 });

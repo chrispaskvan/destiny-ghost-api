@@ -103,8 +103,8 @@ class World {
     updateManifest(manifest) {
         const { directory: databaseDirectory } = this;
         const { mobileWorldContentPaths: { en: relativeUrl } } = manifest;
-        const fileName = relativeUrl.substring(relativeUrl.lastIndexOf('/') + 1);
-        const databasePath = `${databaseDirectory}/${fileName}`;
+        const fileName = basename(relativeUrl);
+        const databasePath = join(databaseDirectory, fileName);
 
         if (existsSync(databasePath)) {
             return Promise.resolve(manifest);
