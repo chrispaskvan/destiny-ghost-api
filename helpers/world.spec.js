@@ -32,7 +32,7 @@ beforeAll(async () => {
 
 describe('updateManifest path safety', () => {
     afterEach(() => {
-        vi.mocked(existsSync).mockReset();
+        vi.mocked(existsSync).mockClear();
     });
 
     it('should resolve a safe database path from a normal manifest URL', async () => {
