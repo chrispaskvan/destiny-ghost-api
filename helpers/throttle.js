@@ -3,25 +3,30 @@ const sleep = delay => new Promise(resolve => {
 });
 
 export default async function throttle(tasks, concurrency, wait) {
-    const results = [];
+    const results = new Array(tasks.length);
+    const executing = new Set();
+    const hasWait = wait && !Number.isNaN(Number.parseInt(wait, 10));
 
-    async function runTasks(tasksIterator) {
-        for (const [index, task] of tasksIterator) {
-            const [result] = await Promise.allSettled([task]);
+    for (let i = 0; i < tasks.length; i++) {
+        const p = Promise.resolve(tasks[i])
+            .then(
+                value => { results[i] = { status: 'fulfilled', value }; },
+                reason => { results[i] = { status: 'rejected', reason }; },
+            )
+            .finally(() => executing.delete(p));
 
-            results[index] = result;
+        executing.add(p);
 
-            if (wait && !Number.isNaN(Number.parseInt(wait, 10))) {
-                await sleep(wait);
-            }
+        if (executing.size >= concurrency) {
+            await Promise.race(executing);
+        }
+
+        if (hasWait) {
+            await sleep(wait);
         }
     }
 
-    const workers = new Array(concurrency)
-        .fill(tasks.entries())
-        .map(runTasks);
-
-    await Promise.allSettled(workers);
+    await Promise.allSettled(executing);
 
     return results;
 }
