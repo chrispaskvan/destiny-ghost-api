@@ -87,7 +87,7 @@ class UserService {
      */
     async addUserMessage(message) {
         return await this.documents.createDocument(messageCollectionId, {
-            DateTime: Temporal.Now.instant().toString(),
+            DateTime: Temporal.Now.instant().toString({ smallestUnit: 'millisecond' }),
             ...message,
         });
     }

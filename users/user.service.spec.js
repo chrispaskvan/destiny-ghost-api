@@ -75,7 +75,7 @@ describe('UserService', () => {
 
         it('should add the message to the database collection', async () => {
             const inputDateString = '2020-04-25T18:00:00.000Z';
-            const expectedDateString = '2020-04-25T18:00:00Z';
+            const expectedDateString = '2020-04-25T18:00:00.000Z';
             const message = {
                 SmsSid: 'SM11',
                 SmsStatus: 'sent',
