@@ -2,7 +2,7 @@
  * User Service Tests
  */
 import {
-    beforeEach, describe, expect, it, vi,
+    afterEach, beforeEach, describe, expect, it, vi,
 } from 'vitest';
 import Chance from 'chance';
 import cloneDeep from 'lodash/cloneDeep';
@@ -65,6 +65,10 @@ beforeEach(() => {
 describe('UserService', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+    });
+
+    afterEach(() => {
+        vi.restoreAllMocks();
     });
 
     describe('addUserMessage', () => {

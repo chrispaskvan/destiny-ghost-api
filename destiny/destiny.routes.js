@@ -83,9 +83,9 @@ const routes = ({
      *              schema:
      *                type: number
      *            'X-RateLimit-Reset':
-     *              description: Time at which the current period ends.
+     *              description: Unix epoch seconds at which the current period ends.
      *              schema:
-     *                type: string
+     *                type: number
      *        400:
      *          description: Invalid whole number outside the range of 1 to 10.
      *        422:

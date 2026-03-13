@@ -3,6 +3,6 @@
  */
 const getEpoch = () => {
     return Math.floor(Temporal.Now.instant().epochMilliseconds / 1000);
-}
+};
 
 export default getEpoch;

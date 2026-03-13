@@ -2,7 +2,7 @@
  * Destiny Service Tests
  */
 import {
-    beforeEach, describe, expect, it, vi,
+    afterEach, beforeEach, describe, expect, it, vi,
 } from 'vitest';
 import Chance from 'chance';
 import cloneDeep from 'lodash/cloneDeep';
@@ -34,6 +34,10 @@ beforeEach(() => {
         destinyService,
         userService,
     });
+});
+
+afterEach(() => {
+    vi.restoreAllMocks();
 });
 
 const user1 = cloneDeep(mockUser);
