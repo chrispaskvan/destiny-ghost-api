@@ -50,7 +50,7 @@ describe('DestinyCache', () => {
     describe('getManifest', () => {
         describe('when manifest is found', () => {
             it('should return manifest data and meta', async () => {
-                const lastModified = new Date().toISOString();
+                const lastModified = Temporal.Now.instant().toString();
                 const ttl = 11;
 
                 client.get.mockResolvedValueOnce(JSON.stringify({
@@ -125,7 +125,7 @@ describe('DestinyCache', () => {
     });
 
     describe('setManifest', () => {
-        const lastModified = new Date().toISOString();
+        const lastModified = Temporal.Now.instant().toString();
         const ttl = 11;
 
         describe('when given a manifest', () => {

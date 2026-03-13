@@ -2,7 +2,7 @@
  * User Service Tests
  */
 import {
-    afterEach, beforeEach, describe, expect, it, vi,
+    beforeEach, describe, expect, it, vi,
 } from 'vitest';
 import Chance from 'chance';
 import cloneDeep from 'lodash/cloneDeep';
@@ -68,43 +68,27 @@ describe('UserService', () => {
     });
 
     describe('addUserMessage', () => {
-        let currentDate;
-        let realDate;
-
         beforeEach(() => {
-            realDate = Date;
-            global.Date = class extends Date {
-                constructor(date) {
-                    if (date) {
-                        // eslint-disable-next-line constructor-super
-                        return super(date);  
-                    }
-
-                    return currentDate;
-                }
-            };
-
             documentService.updateDocument.mockImplementation(() => Promise.resolve());
             userService.getUserByDisplayName = vi.fn().mockResolvedValue(user);
         });
-        afterEach(() => {
-            global.Date = realDate;
-        });
 
         it('should add the message to the database collection', async () => {
-            const currentDateAsString = '2020-04-25T18:00:00.000Z';
+            const inputDateString = '2020-04-25T18:00:00.000Z';
+            const expectedDateString = '2020-04-25T18:00:00Z';
             const message = {
                 SmsSid: 'SM11',
                 SmsStatus: 'sent',
                 To: '+1234567890',
             };
 
-            currentDate = new Date(currentDateAsString);
+            vi.spyOn(Temporal.Now, 'instant')
+                .mockReturnValueOnce(Temporal.Instant.from(inputDateString));
 
             await userService.addUserMessage(message);
 
             expect(documentService.createDocument).toHaveBeenCalledWith('Messages', {
-                DateTime: currentDateAsString,
+                DateTime: expectedDateString,
                 ...message,
             });
         });

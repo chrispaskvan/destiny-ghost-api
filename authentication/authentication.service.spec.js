@@ -163,8 +163,8 @@ describe('AuthenticationService', () => {
             });
 
             it('refreshes Bungie token', async () => {
-                vi.spyOn(global.Date, 'now')
-                    .mockImplementationOnce(() => now);
+                vi.spyOn(Temporal.Now, 'instant')
+                    .mockReturnValueOnce(Temporal.Instant.fromEpochMilliseconds(now));
 
                 const user = await authenticationService.authenticate({
                     displayName,

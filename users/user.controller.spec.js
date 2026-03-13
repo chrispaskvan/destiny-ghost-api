@@ -359,7 +359,7 @@ describe('UserController', () => {
                     it('should update the registered user', async () => {
                         userService.getUserByMembershipId
                             .mockImplementation(() => Promise.resolve({
-                                dateRegistered: new Date().toISOString(),
+                                dateRegistered: Temporal.Now.instant().toString(),
                                 ...mockUser,
                             }));
 
@@ -422,7 +422,7 @@ describe('UserController', () => {
                     membershipType,
                 }));
                 userService.getUserByEmailAddress.mockImplementation(() => Promise.resolve({
-                    dateRegistered: new Date().toISOString(),
+                    dateRegistered: Temporal.Now.instant().toString(),
                 }));
 
                 const user = await userController.signUp({

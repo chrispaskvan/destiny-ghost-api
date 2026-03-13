@@ -17,7 +17,7 @@ vi.mock('../helpers/tokens', () => ({
     getCode: vi.fn(() => '123456'),
 }));
 vi.mock('../helpers/get-epoch', () => ({
-    default: vi.fn(() => Math.floor(Date.now() / 1000)),
+    default: vi.fn(() => Math.floor(Temporal.Now.instant().epochMilliseconds / 1000)),
 }));
 
 const chance = new Chance();
@@ -498,7 +498,7 @@ describe('UserRouter', () => {
                 const user = {
                     displayName,
                     membershipType,
-                    dateRegistered: new Date().toISOString(),
+                    dateRegistered: Temporal.Now.instant().toString(),
                     emailAddress,
                     phoneNumber,
                 };
@@ -535,7 +535,7 @@ describe('UserRouter', () => {
                 const user = {
                     displayName,
                     membershipType,
-                    dateRegistered: new Date().toISOString(),
+                    dateRegistered: Temporal.Now.instant().toString(),
                     emailAddress,
                     phoneNumber,
                 };
@@ -696,7 +696,7 @@ describe('UserRouter', () => {
                     membership: {
                         tokens: {
                             code,
-                            timeStamp: Math.floor(Date.now() / 1000), // Current timestamp
+                            timeStamp: Math.floor(Temporal.Now.instant().epochMilliseconds / 1000), // Current timestamp
                         },
                     },
                 };
@@ -734,7 +734,7 @@ describe('UserRouter', () => {
                     membership: {
                         tokens: {
                             blob,
-                            timeStamp: Math.floor(Date.now() / 1000), // Current timestamp
+                            timeStamp: Math.floor(Temporal.Now.instant().epochMilliseconds / 1000), // Current timestamp
                         },
                     },
                 };
@@ -798,7 +798,7 @@ describe('UserRouter', () => {
                     membership: {
                         tokens: {
                             code: 'correct-code',
-                            timeStamp: Math.floor(Date.now() / 1000),
+                            timeStamp: Math.floor(Temporal.Now.instant().epochMilliseconds / 1000),
                         },
                     },
                 };
@@ -836,7 +836,7 @@ describe('UserRouter', () => {
                     membership: {
                         tokens: {
                             code,
-                            timeStamp: Math.floor(Date.now() / 1000) - 400, // Expired (older than 300 seconds TTL)
+                            timeStamp: Math.floor(Temporal.Now.instant().epochMilliseconds / 1000) - 400, // Expired (older than 300 seconds TTL)
                         },
                     },
                 };

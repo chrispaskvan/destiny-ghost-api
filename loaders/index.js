@@ -72,7 +72,7 @@ const loaders = {
 
         app.get('/ping', (req, res) => {
             res.json({
-                pong: Date.now(),
+                pong: Temporal.Now.instant().epochMilliseconds,
             });
         });
 

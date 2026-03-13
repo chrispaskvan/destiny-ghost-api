@@ -6,7 +6,7 @@ describe('toTemporalInstant', () => {
         it('should return the corresponding Temporal.Instant', () => {
             const instant = toTemporalInstant('Sat, 25 Apr 2020 17:00:00 GMT');
 
-            expect(instant.epochMilliseconds).toEqual(new Date('2020-04-25T17:00:00.000Z').getTime());
+            expect(instant.epochMilliseconds).toEqual(1587834000000);
         });
     });
 
@@ -14,7 +14,7 @@ describe('toTemporalInstant', () => {
         it('should return the corresponding Temporal.Instant', () => {
             const instant = toTemporalInstant('2020-04-25T17:00:00.000Z');
 
-            expect(instant.epochMilliseconds).toEqual(new Date('2020-04-25T17:00:00.000Z').getTime());
+            expect(instant.epochMilliseconds).toEqual(1587834000000);
         });
     });
 

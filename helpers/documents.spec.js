@@ -10,7 +10,7 @@ import Documents from './documents';
 describe('Documents', () => {
     const collectionId = 'Messages';
     const document = {
-        DateTime: new Date().toISOString(),
+        DateTime: Temporal.Now.instant().toString(),
         SmsSid: 'SM11',
         SmsStatus: 'queued',
         MessageStatus: 'queued',
@@ -61,7 +61,7 @@ describe('Documents', () => {
         expect(fetchedDocument.id).toEqual(createdDocumentId);
         expect(fetchedDocument.To).toEqual(document.To);
 
-        const dateTime = new Date().toISOString();
+        const dateTime = Temporal.Now.instant().toString();
 
         const updatedDocument = await documentService.updateDocument(collectionId, {
             ...document,
