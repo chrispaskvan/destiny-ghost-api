@@ -23,7 +23,7 @@
         "url": "git+https://github.com/chrispaskvan/destiny-ghost-api"
     },
     "engines": {
-        "node": ">=v22.0.0",
+        "node": ">=22.13.0",
         "npm": ">=10.0.0"
     },
     "dependencies": {
