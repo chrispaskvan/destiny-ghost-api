@@ -262,7 +262,7 @@ class UserController {
             return undefined;
         }
 
-        registeredUser.dateRegistered = new Date().toISOString();
+        registeredUser.dateRegistered = Temporal.Now.instant().toString({ smallestUnit: 'millisecond' });
 
         await this.users.updateUser(registeredUser);
 

@@ -14,7 +14,7 @@ function setRateLimitHeaders(rateLimiterRes, res) {
     const headers = {
         'X-RateLimit-Limit': options.points,
         'X-RateLimit-Remaining': rateLimiterRes.remainingPoints,
-        'X-RateLimit-Reset': new Date(Date.now() + rateLimiterRes.msBeforeNext),
+        'X-RateLimit-Reset': Math.ceil(Temporal.Now.instant().add({ milliseconds: rateLimiterRes.msBeforeNext }).epochMilliseconds / 1000),
     };
 
     res.set(headers);

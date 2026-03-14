@@ -38,7 +38,9 @@ const notificationSchema = z.object({
  */
 const userSchema = z.object({
     carrier: z.string().optional(),
-    dateRegistered: z.string().refine(val => !isNaN(Date.parse(val)), {
+    dateRegistered: z.string().refine(val => {
+        try { Temporal.Instant.from(val); return true; } catch { return false; }
+    }, {
         message: 'Invalid date-time format',
     }).optional(),
     emailAddress: z.string().email(),
@@ -85,7 +87,7 @@ class UserService {
      */
     async addUserMessage(message) {
         return await this.documents.createDocument(messageCollectionId, {
-            DateTime: new Date().toISOString(),
+            DateTime: Temporal.Now.instant().toString({ smallestUnit: 'millisecond' }),
             ...message,
         });
     }

@@ -207,9 +207,9 @@
                 }
               },
               "X-RateLimit-Reset": {
-                "description": "Time at which the current period ends.",
+                "description": "Unix epoch seconds at which the current period ends.",
                 "schema": {
-                  "type": "string"
+                  "type": "number"
                 }
               }
             }

@@ -63,7 +63,7 @@ class AuthenticationService {
             } = {},
             dateRegistered,
         } = user;
-        const now = Date.now();
+        const now = Temporal.Now.instant().epochMilliseconds;
 
         if (!accessToken) {
             return Promise.resolve();

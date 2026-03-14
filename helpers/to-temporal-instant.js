@@ -6,9 +6,16 @@
  * @returns {Temporal.Instant}
  */
 function toTemporalInstant(dateString) {
-    const ms = new Date(dateString ?? null).getTime();
+    if (!dateString) return Temporal.Instant.fromEpochMilliseconds(0);
 
-    return Temporal.Instant.fromEpochMilliseconds(Number.isNaN(ms) ? 0 : ms);
+    try {
+        return Temporal.Instant.from(dateString);
+    } catch {
+        // Fall back to Date parsing for non-ISO formats (e.g. HTTP date headers)
+        const ms = new Date(dateString).getTime();
+
+        return Temporal.Instant.fromEpochMilliseconds(Number.isNaN(ms) ? 0 : ms);
+    }
 }
 
 export default toTemporalInstant;

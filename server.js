@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { createServer as createSecureServer } from 'node:https';
 import { cpus } from 'node:os';
+import { performance } from 'node:perf_hooks';
 import express from 'express';
 import { createTerminus } from '@godaddy/terminus';
 
@@ -21,7 +22,7 @@ let insecureConnection;
 let secureConnection;
 
 const startServer = async () => {
-    const start = Date.now();
+    const start = performance.now();
     const app = express();
 
     await loaders.init({ app });
@@ -71,7 +72,7 @@ const startServer = async () => {
 
     insecureConnection = insecureServer.listen(port, () => {
         const cpuCount = cpus().length;
-        const duration = Date.now() - start;
+        const duration = Math.round(performance.now() - start);
 
         applicationInsights.trackMetric({ name: 'startup-time', value: duration });
 
