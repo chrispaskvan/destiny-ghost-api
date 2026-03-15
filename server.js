@@ -70,7 +70,10 @@ const startServer = async () => {
             await processExternalPromisesWithTimeout(
                 shutdownTasks.map(([label, task]) => task
                     .then(() => log.info(`${label} shut down`))
-                    .catch(err => log.error({ err }, `${label} failed to shut down`))),
+                    .catch(err => {
+                        log.error({ err }, `${label} failed to shut down`);
+                        throw err;
+                    })),
                 3000,
             );
             insecureServer.close();
