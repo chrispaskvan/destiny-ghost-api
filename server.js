@@ -58,7 +58,7 @@ const startServer = async () => {
     createTerminus(insecureServer, {
         signals: ['SIGINT', 'SIGTERM'],
         onSignal: async () => {
-            console.log('Interuption or termination signal received. Shutting down the server ...');
+            console.log('Interruption or termination signal received. Shutting down the server ...');
 
             const shutdownTasks = [
                 ['Cache', cache.quit()],
