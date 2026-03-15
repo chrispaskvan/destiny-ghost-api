@@ -2,7 +2,9 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Database from 'better-sqlite3';
 import worker from './worker';
 
-vi.mock('better-sqlite3');
+vi.mock('better-sqlite3', () => ({
+    default: vi.fn(),
+}));
 
 describe('worker', () => {
     const databasePath = 'test.db';
@@ -19,7 +21,9 @@ describe('worker', () => {
             prepare: mockPrepare,
             close: vi.fn(),
         };
-        Database.mockImplementation(() => mockDatabase);
+        Database.mockImplementation(function () {
+            return mockDatabase;
+        });
     });
 
     afterEach(() => {
@@ -40,7 +44,7 @@ describe('worker', () => {
     });
 
     it('should throw an error if database loading fails', async () => {
-        Database.mockImplementation(() => {
+        Database.mockImplementation(function () {
             throw new Error('Database error');
         });
 

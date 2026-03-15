@@ -60,10 +60,10 @@ const startServer = async () => {
         onSignal: async () => {
             console.log('Interuption or termination signal received. Shutting down the server ...');
             await processExternalPromisesWithTimeout([
-                cache.quit(),
-                jobs.quit(),
-                pool.close(),
-                subscriber.close(),
+                cache.quit().then(() => log.info('Cache shut down')),
+                jobs.quit().then(() => log.info('Job queue processor quit')),
+                pool.close().then(() => log.info('Worker pool shut down')),
+                subscriber.close().then(() => log.info('Subscriber closed')),
             ], 3000);
             insecureServer.close();
         },

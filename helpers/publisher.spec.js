@@ -4,12 +4,12 @@ import {
 import Chance from 'chance';
 
 vi.mock('bullmq', () => ({
-    Queue: vi.fn().mockImplementation(() => ({
-        add: vi.fn().mockResolvedValue('some-job'),
-    })),
-    QueueEvents: vi.fn().mockImplementation(() => ({
-        on: vi.fn(),
-    })),
+    Queue: class {
+        add = vi.fn().mockResolvedValue('some-job');
+    },
+    QueueEvents: class {
+        on = vi.fn();
+    },
 }));
 
 import publisher from './publisher';

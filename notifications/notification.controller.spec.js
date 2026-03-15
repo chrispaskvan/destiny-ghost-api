@@ -74,7 +74,7 @@ beforeEach(() => {
     vi.clearAllMocks();
     
     // Setup ClaimCheck mock
-    ClaimCheck.mockImplementation(() => mockClaimCheck);
+    ClaimCheck.mockImplementation(function () { return mockClaimCheck; });
     ClaimCheck.getClaimCheck = vi.fn();
     ClaimCheck.updatePhoneNumber = vi.fn();
     

@@ -8,9 +8,9 @@ import { createResponse, createRequest } from 'node-mocks-http';
 import UserRouter from './user.routes';
 
 vi.mock('../helpers/postmaster', () => ({
-    default: vi.fn().mockImplementation(() => ({
-        confirm: vi.fn().mockResolvedValue({ messageId: 'test-email-id' }),
-    })),
+    default: class {
+        confirm = vi.fn().mockResolvedValue({ messageId: 'test-email-id' });
+    },
 }));
 vi.mock('../helpers/tokens', () => ({
     getBlob: vi.fn(() => 'test-blob-token'),

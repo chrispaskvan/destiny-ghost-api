@@ -2,17 +2,12 @@ import {
     describe, it, expect, vi, beforeEach,
 } from 'vitest';
 
-vi.mock('bullmq', () => {
-    const mockWorkerInstance = {
-        close: vi.fn().mockResolvedValue(),
-        on: vi.fn(),
-    };
-    const MockWorkerConstructor = vi.fn().mockImplementation(() => mockWorkerInstance);
-    
-    return {
-        Worker: MockWorkerConstructor,
-    };
-});
+vi.mock('bullmq', () => ({
+    Worker: vi.fn().mockImplementation(class {
+        close = vi.fn().mockResolvedValue();
+        on = vi.fn();
+    }),
+}));
 
 vi.mock('./jobs.js', () => ({
     default: { host: 'localhost', port: 6379 },
@@ -43,7 +38,7 @@ describe('Subscriber', () => {
             close: vi.fn().mockResolvedValue(),
             on: vi.fn(),
         };
-        MockWorkerConstructor.mockImplementation(() => mockWorkerInstance);
+        MockWorkerConstructor.mockImplementation(function () { return mockWorkerInstance; });
     });
 
     describe('when a new worker is created', () => {

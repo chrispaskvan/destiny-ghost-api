@@ -6,9 +6,9 @@ import getEpoch from '../helpers/get-epoch';
 import UserController from './user.controller';
 
 vi.mock('../helpers/postmaster', () => ({
-    default: vi.fn().mockReturnValue({
-        register: vi.fn(),
-    }),
+    default: class {
+        register = vi.fn();
+    },
 }));
 
 const chance = new Chance();

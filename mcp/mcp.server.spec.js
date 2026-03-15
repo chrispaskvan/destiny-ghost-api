@@ -4,13 +4,11 @@ import {
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { createMcpServer } from './mcp.server.js';
 
-vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => {
-    const McpServer = vi.fn();
-
-    McpServer.prototype.registerTool = vi.fn();
-
-    return { McpServer };
-});
+vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
+    McpServer: vi.fn().mockImplementation(class {
+        registerTool = vi.fn();
+    }),
+}));
 
 describe('createMcpServer', () => {
     let mockDestinyController;
@@ -32,7 +30,7 @@ describe('createMcpServer', () => {
             registerTool: vi.fn(),
         };
 
-        McpServer.mockImplementation(() => mockServerInstance);
+        McpServer.mockImplementation(function () { return mockServerInstance; });
     });
 
     it('should create and configure an McpServer instance', () => {
