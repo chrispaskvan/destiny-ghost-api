@@ -2,14 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import aiInstance from './ai';
 
 vi.mock('@google/genai', () => ({
-    GoogleGenAI: vi.fn().mockImplementation(() => ({
-        files: {
-            upload: vi.fn(),
-        },
-        models: {
-            generateContent: vi.fn(),
-        },
-    })),
+    GoogleGenAI: class {
+        files = { upload: vi.fn() };
+        models = { generateContent: vi.fn() };
+    },
 }));
 vi.mock('./config', () => ({
     default: {

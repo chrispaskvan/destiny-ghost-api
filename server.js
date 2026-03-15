@@ -58,13 +58,24 @@ const startServer = async () => {
     createTerminus(insecureServer, {
         signals: ['SIGINT', 'SIGTERM'],
         onSignal: async () => {
-            console.log('Interuption or termination signal received. Shutting down the server ...');
-            await processExternalPromisesWithTimeout([
-                cache.quit(),
-                jobs.quit(),
-                pool.close(),
-                subscriber.close(),
-            ], 3000);
+            console.log('Interruption or termination signal received. Shutting down the server ...');
+
+            const shutdownTasks = [
+                ['Cache', cache.quit()],
+                ['Job queue', jobs.quit()],
+                ['Worker pool', pool.close()],
+                ['Subscriber', subscriber.close()],
+            ];
+
+            await processExternalPromisesWithTimeout(
+                shutdownTasks.map(([label, task]) => task
+                    .then(() => log.info(`${label} shut down`))
+                    .catch(err => {
+                        log.error({ err }, `${label} failed to shut down`);
+                        throw err;
+                    })),
+                3000,
+            );
             insecureServer.close();
         },
         logger: log.error.bind(log),
