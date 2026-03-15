@@ -59,12 +59,20 @@ const startServer = async () => {
         signals: ['SIGINT', 'SIGTERM'],
         onSignal: async () => {
             console.log('Interuption or termination signal received. Shutting down the server ...');
-            await processExternalPromisesWithTimeout([
-                cache.quit().then(() => log.info('Cache shut down')),
-                jobs.quit().then(() => log.info('Job queue processor quit')),
-                pool.close().then(() => log.info('Worker pool shut down')),
-                subscriber.close().then(() => log.info('Subscriber closed')),
-            ], 3000);
+
+            const shutdownTasks = [
+                ['Cache', cache.quit()],
+                ['Job queue', jobs.quit()],
+                ['Worker pool', pool.close()],
+                ['Subscriber', subscriber.close()],
+            ];
+
+            await processExternalPromisesWithTimeout(
+                shutdownTasks.map(([label, task]) => task
+                    .then(() => log.info(`${label} shut down`))
+                    .catch(err => log.error({ err }, `${label} failed to shut down`))),
+                3000,
+            );
             insecureServer.close();
         },
         logger: log.error.bind(log),
