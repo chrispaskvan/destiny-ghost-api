@@ -5,7 +5,7 @@ import {
     beforeEach, describe, expect, it, vi,
 } from 'vitest';
 
-vi.mock('./config', () => ({
+vi.mock('./config.js', () => ({
     default: {
         bitly: {
             accessToken: 'test-access-token',
@@ -13,7 +13,7 @@ vi.mock('./config', () => ({
     },
 }));
 
-vi.mock('./request', () => ({
+vi.mock('./request.js', () => ({
     post: vi.fn(),
 }));
 
@@ -24,8 +24,8 @@ describe('Bitly', () => {
     beforeEach(async () => {
         vi.clearAllMocks();
 
-        const bitlyModule = await import('./bitly');
-        const requestModule = await import('./request');
+        const bitlyModule = await import('./bitly.js');
+        const requestModule = await import('./request.js');
 
         getShortUrl = bitlyModule.default;
         mockPost = requestModule.post;

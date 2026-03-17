@@ -3,7 +3,7 @@ import {
 } from 'vitest';
 import ResponseError from './response.error';
 
-vi.mock('./log', () => ({
+vi.mock('./log.js', () => ({
     default: {
         error: vi.fn(),
     },
