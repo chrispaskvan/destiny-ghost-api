@@ -1,3 +1,5 @@
+const TIMEOUT_SENTINEL = Symbol('timeout');
+
 async function processExternalPromisesWithTimeout(externalPromises, timeout) {
     const controller = new AbortController();
     const { signal } = controller;
@@ -11,7 +13,7 @@ async function processExternalPromisesWithTimeout(externalPromises, timeout) {
                         externalPromise,
                         new Promise((_, rj) => signal.addEventListener(
                             'abort',
-                            () => rj(new Error('Promise timed out')),
+                            () => rj(TIMEOUT_SENTINEL),
                             { once: true },
                         )),
                     ]).then(resolve, reject);
@@ -24,7 +26,7 @@ async function processExternalPromisesWithTimeout(externalPromises, timeout) {
                 return { status: 'fulfilled', value: r.value };
             }
 
-            if (r.reason?.message === 'Promise timed out') {
+            if (r.reason === TIMEOUT_SENTINEL) {
                 return { status: 'timed-out' };
             }
 

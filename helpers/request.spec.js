@@ -15,7 +15,7 @@ describe('request', () => {
 
     beforeEach(async () => {
         vi.clearAllMocks();
-        global.fetch = vi.fn();
+        vi.stubGlobal('fetch', vi.fn());
 
         const mod = await import('./request');
 
@@ -24,7 +24,7 @@ describe('request', () => {
     });
 
     afterEach(() => {
-        delete global.fetch;
+        vi.unstubAllGlobals();
     });
 
     function mockResponse({ status = 200, body, contentType, headers = {} } = {}) {
