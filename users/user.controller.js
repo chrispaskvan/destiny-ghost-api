@@ -422,7 +422,7 @@ class UserController {
             throw new Error('precondition failed');
         }
 
-        const userCopy = JSON.parse(JSON.stringify(user));
+        const userCopy = structuredClone(user);
 
         applyPatch(user, UserController.#scrubOperations(patches));
 

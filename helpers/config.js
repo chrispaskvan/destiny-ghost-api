@@ -1,11 +1,10 @@
 import { readFileSync, readdirSync } from 'node:fs';
-import camelCase from 'lodash/camelCase.js';
 
 function loadFile(file) {
     const data = readFileSync(`./settings/${file}`, 'utf8');
 
     return {
-        [camelCase(file.split('.')[0])]: JSON.parse(data),
+        [file.split('.')[0].replace(/[-_](.)/g, (_, c) => c.toUpperCase())]: JSON.parse(data),
     };
 }
 

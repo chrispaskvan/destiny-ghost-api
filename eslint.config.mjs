@@ -28,7 +28,10 @@ export default [
                 exports: "writable",
                 URL: "readonly",
                 AbortController: "readonly",
+                AbortSignal: "readonly",
                 fetch: "readonly",
+                Headers: "readonly",
+                structuredClone: "readonly",
                 Temporal: "readonly",
             },
         },
@@ -39,6 +42,7 @@ export default [
             "arrow-parens": ["error", "as-needed"],
             indent: [2, 4],
             "no-return-await": "off",
+            "no-unused-vars": ["error", { "varsIgnorePattern": "^_" }],
         },
     },
 ];

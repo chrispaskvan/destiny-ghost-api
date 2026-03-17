@@ -8,6 +8,7 @@ import DestinyController from './destiny.controller.js';
 import authorizeUser from '../authorization/authorization.middleware.js';
 import getMaxAgeFromCacheControl from '../helpers/get-max-age-from-cache-control.js';
 import toTemporalInstant from '../helpers/to-temporal-instant.js';
+import configuration from '../helpers/config.js';
 
 /**
  * Destiny Routes
@@ -36,7 +37,7 @@ const routes = ({
     });
 
     destinyRouter.route('/signIn/')
-        .get(cors(),
+        .get(cors(configuration.cors),
             async (req, res) => {
                 const { state, url } = await destinyController.getAuthorizationUrl();
 
@@ -92,7 +93,7 @@ const routes = ({
      *          description: Unrecognized whole number.
      */
     destinyRouter.route('/grimoireCards/:numberOfCards')
-        .get(cors(),
+        .get(cors(configuration.cors),
             async (req, res) => {
                 const { params: { numberOfCards } } = req;
                 const count = parseInt(numberOfCards, 10);

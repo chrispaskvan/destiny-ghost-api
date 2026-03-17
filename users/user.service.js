@@ -1,4 +1,3 @@
-import isEmpty from 'lodash/isEmpty.js';
 import { z } from 'zod';
 import QueryBuilder from '../helpers/queryBuilder.js';
 import log from '../helpers/log.js';
@@ -321,7 +320,7 @@ class UserService {
      * @returns {Promise}
      */
     async getUserByEmailAddress(emailAddress) {
-        if (typeof emailAddress !== 'string' || isEmpty(emailAddress)) {
+        if (typeof emailAddress !== 'string' || !emailAddress) {
             return Promise.reject(new Error('emailAddress string is required'));
         }
 
@@ -357,7 +356,7 @@ class UserService {
      * @returns {Promise}
      */
     async getUserByEmailAddressToken(emailAddressToken) {
-        if (typeof emailAddressToken !== 'string' || isEmpty(emailAddressToken)) {
+        if (typeof emailAddressToken !== 'string' || !emailAddressToken) {
             return Promise.reject(new Error('emailAddressToken string is required.'));
         }
 
@@ -388,7 +387,7 @@ class UserService {
     async getUserById(userId) {
         let user;
 
-        if (typeof userId !== 'string' || isEmpty(userId)) {
+        if (typeof userId !== 'string' || !userId) {
             return Promise.reject(new Error('userId string is required'));
         }
 
@@ -419,7 +418,7 @@ class UserService {
     async getUserByMembershipId(membershipId) {
         let user;
 
-        if (typeof membershipId !== 'string' || isEmpty(membershipId)) {
+        if (typeof membershipId !== 'string' || !membershipId) {
             return Promise.reject(new Error('membershipId string is required'));
         }
 
@@ -448,7 +447,7 @@ class UserService {
      * @returns {Promise}
      */
     async getUserByPhoneNumber(phoneNumber) {
-        if (typeof phoneNumber !== 'string' || isEmpty(phoneNumber)) {
+        if (typeof phoneNumber !== 'string' || !phoneNumber) {
             return Promise.reject(Error('phoneNumber string is required'));
         }
 

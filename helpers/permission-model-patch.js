@@ -33,11 +33,7 @@ import { builtinModules } from 'node:module';
 
 process.binding = function binding(name) {
     if (name === 'natives') {
-        return builtinModules.reduce((natives, mod) => {
-            natives[mod] = '';
-
-            return natives;
-        }, {});
+        return Object.fromEntries(builtinModules.map(mod => [mod, '']));
     }
 
     throw new Error(`process.binding('${name}') is not supported with the permission model`);

@@ -1,7 +1,9 @@
 .DS_store
 .artillery/
 .claude/
+.claudeignore
 .clinic/
+.cursorignore
 .env
 .vscode/
 coverage/*
@@ -10,4 +12,3 @@ databases/
 node_modules/
 security/
 settings/
-*/settings

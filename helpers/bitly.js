@@ -12,7 +12,6 @@
  * @requires request
  * @requires util
  */
-import { format } from 'node:util';
 import configuration from './config.js';
 import { post } from './request.js';
 
@@ -24,7 +23,7 @@ import { post } from './request.js';
  */
 async function getShortUrl(longUrl) {
     const options = {
-        url: format('https://api-ssl.bitly.com/v4/shorten'),
+        url: 'https://api-ssl.bitly.com/v4/shorten',
         data: {
             domain: 'bit.ly',
             group_id: '',

@@ -51,35 +51,35 @@ describe('updateManifest path safety', () => {
         expect(result).toEqual(manifest);
     });
 
-    it('should reject manifest URLs that resolve to . or ..', () => {
+    it('should reject manifest URLs that resolve to . or ..', async () => {
         const w = new World({ pool });
         w.directory = '/app/databases/destiny';
 
-        expect(() => w.updateManifest({
+        await expect(w.updateManifest({
             mobileWorldContentPaths: { en: '/path/to/..' },
-        })).toThrow('Invalid manifest path');
+        })).rejects.toThrow('Invalid manifest path');
 
-        expect(() => w.updateManifest({
+        await expect(w.updateManifest({
             mobileWorldContentPaths: { en: '.' },
-        })).toThrow('Invalid manifest path');
+        })).rejects.toThrow('Invalid manifest path');
     });
 
-    it('should reject manifest with empty relative URL', () => {
+    it('should reject manifest with empty relative URL', async () => {
         const w = new World({ pool });
         w.directory = '/app/databases/destiny';
 
-        expect(() => w.updateManifest({
+        await expect(w.updateManifest({
             mobileWorldContentPaths: { en: '' },
-        })).toThrow('Invalid manifest path');
+        })).rejects.toThrow('Invalid manifest path');
     });
 
-    it('should reject manifest with undefined relative URL', () => {
+    it('should reject manifest with undefined relative URL', async () => {
         const w = new World({ pool });
         w.directory = '/app/databases/destiny';
 
-        expect(() => w.updateManifest({
+        await expect(w.updateManifest({
             mobileWorldContentPaths: { en: undefined },
-        })).toThrow('Invalid manifest path');
+        })).rejects.toThrow('Invalid manifest path');
     });
 
     it('should use only the basename when URL contains traversal', async () => {
@@ -119,6 +119,28 @@ describe('It\'s Bungie\'s 1st world. You\'re just querying it.', () => {
             const numberOfCards = 'foo';
 
             await expect(world.getGrimoireCards(numberOfCards)).rejects.toThrow('numberOfCards must be a number');
+        });
+
+        it('should throw for NaN', async () => {
+            await expect(world.getGrimoireCards(NaN)).rejects.toThrow('numberOfCards must be a number');
+        });
+
+        it('should throw for Infinity', async () => {
+            await expect(world.getGrimoireCards(Infinity)).rejects.toThrow('numberOfCards must be a number');
+        });
+    });
+
+    describe('if numberOfCards is zero or negative', () => {
+        it('should return an empty array for 0', async () => {
+            const cards = await world.getGrimoireCards(0);
+
+            expect(cards).toEqual([]);
+        });
+
+        it('should return an empty array for negative numbers', async () => {
+            const cards = await world.getGrimoireCards(-5);
+
+            expect(cards).toEqual([]);
         });
     });
 

@@ -6,7 +6,6 @@ import {
 } from 'node:fs';
 import { basename, join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
-import sampleSize from 'lodash/sampleSize.js';
 import { open } from 'yauzl';
 import log from './log.js';
 import sanitizeDirectory from './sanitize-directory.js';
@@ -70,13 +69,27 @@ class World {
      * @returns {Promise}
      */
     async getGrimoireCards(numberOfCards) {
-        if (typeof numberOfCards !== 'number') {
+        if (typeof numberOfCards !== 'number' || !Number.isFinite(numberOfCards)) {
             throw new Error('numberOfCards must be a number');
+        }
+
+        numberOfCards = Math.trunc(numberOfCards);
+
+        if (numberOfCards <= 0) {
+            return [];
         }
 
         await this.bootstrapped;
 
-        return sampleSize(this.grimoireCards, numberOfCards);
+        const cards = [...this.grimoireCards];
+
+        for (let i = cards.length - 1; i > cards.length - 1 - numberOfCards && i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+
+            [cards[i], cards[j]] = [cards[j], cards[i]];
+        }
+
+        return cards.slice(-numberOfCards);
     }
 
     /**
@@ -100,7 +113,7 @@ class World {
      * @param manifest
      * @returns {*}
      */
-    updateManifest(manifest) {
+    async updateManifest(manifest) {
         const { directory: databaseDirectory } = this;
         const { mobileWorldContentPaths: { en: relativeUrl } } = manifest;
         const fileName = basename(relativeUrl || '');
@@ -180,22 +193,20 @@ class World {
             });
         };
 
-        return downloadFile(`https://www.bungie.net${relativeUrl}`, `${databasePath}.zip`)
-            .then(() => {
-                log.info(`Content downloaded from ${relativeUrl}`);
+        try {
+            await downloadFile(`https://www.bungie.net${relativeUrl}`, `${databasePath}.zip`);
+            log.info(`Content downloaded from ${relativeUrl}`);
 
-                return unzipFile(`${databasePath}.zip`, databaseDirectory);
-            })
-            .then(() => {
-                this.bootstrap(fileName);
+            await unzipFile(`${databasePath}.zip`, databaseDirectory);
+            this.bootstrapped = this.bootstrap(fileName);
+            await this.bootstrapped;
 
-                return manifest;
-            })
-            .catch(err => {
-                log.error('Error updating manifest:', err);
+            return manifest;
+        } catch (err) {
+            log.error('Error updating manifest:', err);
 
-                throw err;
-            });
+            throw err;
+        }
     }
 }
 

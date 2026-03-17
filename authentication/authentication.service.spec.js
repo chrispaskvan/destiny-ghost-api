@@ -5,7 +5,6 @@ import {
     afterEach, beforeEach, describe, expect, it, vi,
 } from 'vitest';
 import Chance from 'chance';
-import cloneDeep from 'lodash/cloneDeep';
 import AuthenticationService from './authentication.service';
 import usersJson from '../mocks/users.json';
 
@@ -40,7 +39,7 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
-const user1 = cloneDeep(mockUser);
+const user1 = structuredClone(mockUser);
 
 describe('AuthenticationService', () => {
     describe('constructor', () => {
