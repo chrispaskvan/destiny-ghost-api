@@ -192,7 +192,8 @@ class World {
             log.info(`Content downloaded from ${relativeUrl}`);
 
             await unzipFile(`${databasePath}.zip`, databaseDirectory);
-            this.bootstrap(fileName);
+            this.bootstrapped = this.bootstrap(fileName);
+            await this.bootstrapped;
 
             return manifest;
         } catch (err) {
