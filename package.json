@@ -59,7 +59,7 @@
         "pino": "^10.3.1",
         "pino-http": "^11.0.0",
         "qs": "^6.15.0",
-        "rate-limiter-flexible": "^10.0.0",
+        "rate-limiter-flexible": "^10.0.1",
         "redis": "^5.11.0",
         "resolve": "^1.22.11",
         "rfc6902": "^5.2.0",
