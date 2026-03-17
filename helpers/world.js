@@ -75,7 +75,15 @@ class World {
 
         await this.bootstrapped;
 
-        return [...this.grimoireCards].sort(() => Math.random() - 0.5).slice(0, numberOfCards);
+        const cards = [...this.grimoireCards];
+
+        for (let i = cards.length - 1; i > cards.length - 1 - numberOfCards && i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+
+            [cards[i], cards[j]] = [cards[j], cards[i]];
+        }
+
+        return cards.slice(-numberOfCards);
     }
 
     /**

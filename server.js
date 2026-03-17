@@ -72,10 +72,14 @@ const startServer = async () => {
             );
 
             shutdownTasks.forEach(([label], index) => {
-                if (results === null || results[index] === null) {
+                const result = results[index];
+
+                if (result.status === 'fulfilled') {
+                    log.info(`${label} shut down`);
+                } else if (result.status === 'timed-out') {
                     log.error(`${label} failed to shut down in time`);
                 } else {
-                    log.info(`${label} shut down`);
+                    log.error({ err: result.reason }, `${label} failed to shut down`);
                 }
             });
 

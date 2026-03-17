@@ -1,32 +1,38 @@
 async function processExternalPromisesWithTimeout(externalPromises, timeout) {
-    const signal = AbortSignal.timeout(timeout);
+    const controller = new AbortController();
+    const { signal } = controller;
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
 
-    const results = await Promise.allSettled(
-        externalPromises.map(async externalPromise => {
-            return new Promise((resolve, reject) => {
-                Promise.race([
-                    externalPromise,
-                    new Promise((_, rj) => signal.addEventListener('abort', () => rj(new Error('Promise timed out')))),
-                ]).then(resolve, reject);
-            });
-        })
-    );
+    try {
+        const results = await Promise.allSettled(
+            externalPromises.map(async externalPromise => {
+                return new Promise((resolve, reject) => {
+                    Promise.race([
+                        externalPromise,
+                        new Promise((_, rj) => signal.addEventListener(
+                            'abort',
+                            () => rj(new Error('Promise timed out')),
+                            { once: true },
+                        )),
+                    ]).then(resolve, reject);
+                });
+            })
+        );
 
-    const hasTimedOut = results.some(r => r.status === 'rejected' && r.reason?.message === 'Promise timed out');
+        return results.map(r => {
+            if (r.status === 'fulfilled') {
+                return { status: 'fulfilled', value: r.value };
+            }
 
-    if (hasTimedOut) {
-        console.error('At least one external promise timed out');
+            if (r.reason?.message === 'Promise timed out') {
+                return { status: 'timed-out' };
+            }
+
+            return { status: 'rejected', reason: r.reason };
+        });
+    } finally {
+        clearTimeout(timeoutId);
     }
-
-    const errors = results
-        .filter(r => r.status === 'rejected' && r.reason?.message !== 'Promise timed out')
-        .map(r => r.reason);
-
-    if (errors.length) {
-        console.error('Error in processExternalPromisesWithTimeout:', errors);
-    }
-
-    return results.map(r => (r.status === 'fulfilled' ? r.value : null));
 }
 
 export default processExternalPromisesWithTimeout;

@@ -13,10 +13,13 @@ describe('processExternalPromisesWithTimeout', () => {
 
         const results = await processExternalPromisesWithTimeout(promises, 500);
 
-        expect(results).toEqual(['result1', 'result2']);
+        expect(results).toEqual([
+            { status: 'fulfilled', value: 'result1' },
+            { status: 'fulfilled', value: 'result2' },
+        ]);
     });
 
-    it('should return null for promises that take longer than the timeout', async () => {
+    it('should return timed-out for promises that take longer than the timeout', async () => {
         const promises = [
             new Promise(resolve => setTimeout(() => resolve('result1'), 100)),
             new Promise(resolve => setTimeout(() => resolve('result2'), 2000)),
@@ -24,7 +27,10 @@ describe('processExternalPromisesWithTimeout', () => {
 
         const results = await processExternalPromisesWithTimeout(promises, 500);
 
-        expect(results).toEqual(['result1', null]);
+        expect(results).toEqual([
+            { status: 'fulfilled', value: 'result1' },
+            { status: 'timed-out' },
+        ]);
     });
 
     it('should handle empty array of promises', async () => {
@@ -33,7 +39,7 @@ describe('processExternalPromisesWithTimeout', () => {
         expect(results).toEqual([]);
     });
 
-    it('should return null for promises that reject', async () => {
+    it('should return rejected with reason for promises that reject', async () => {
         const promises = [
             new Promise((_, reject) => setTimeout(() => reject(new Error('error1')), 100)),
             new Promise(resolve => setTimeout(() => resolve('result2'), 200)),
@@ -41,6 +47,9 @@ describe('processExternalPromisesWithTimeout', () => {
 
         const results = await processExternalPromisesWithTimeout(promises, 500);
 
-        expect(results).toEqual([null, 'result2']);
+        expect(results).toEqual([
+            { status: 'rejected', reason: new Error('error1') },
+            { status: 'fulfilled', value: 'result2' },
+        ]);
     });
 });
