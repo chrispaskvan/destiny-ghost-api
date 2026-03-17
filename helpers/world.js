@@ -69,9 +69,11 @@ class World {
      * @returns {Promise}
      */
     async getGrimoireCards(numberOfCards) {
-        if (typeof numberOfCards !== 'number') {
+        if (typeof numberOfCards !== 'number' || !Number.isFinite(numberOfCards)) {
             throw new Error('numberOfCards must be a number');
         }
+
+        numberOfCards = Math.trunc(numberOfCards);
 
         if (numberOfCards <= 0) {
             return [];

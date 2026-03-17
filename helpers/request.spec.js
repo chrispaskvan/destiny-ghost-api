@@ -1,7 +1,7 @@
 import {
     afterEach, beforeEach, describe, expect, it, vi,
 } from 'vitest';
-import ResponseError from './response.error';
+import ResponseError from './response.error.js';
 
 vi.mock('./log.js', () => ({
     default: {
@@ -17,7 +17,7 @@ describe('request', () => {
         vi.clearAllMocks();
         vi.stubGlobal('fetch', vi.fn());
 
-        const mod = await import('./request');
+        const mod = await import('./request.js');
 
         get = mod.get;
         post = mod.post;

@@ -120,6 +120,14 @@ describe('It\'s Bungie\'s 1st world. You\'re just querying it.', () => {
 
             await expect(world.getGrimoireCards(numberOfCards)).rejects.toThrow('numberOfCards must be a number');
         });
+
+        it('should throw for NaN', async () => {
+            await expect(world.getGrimoireCards(NaN)).rejects.toThrow('numberOfCards must be a number');
+        });
+
+        it('should throw for Infinity', async () => {
+            await expect(world.getGrimoireCards(Infinity)).rejects.toThrow('numberOfCards must be a number');
+        });
     });
 
     describe('if numberOfCards is zero or negative', () => {
