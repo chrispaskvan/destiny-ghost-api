@@ -4,9 +4,6 @@
  * @module twilioController
  * @author Chris Paskvan
  */
-import groupBy from 'lodash/groupBy.js';
-import sortBy from 'lodash/sortBy.js';
-
 import ClaimCheck from '../helpers/claim-check.js';
 import getShortUrl from '../helpers/bitly.js';
 import log from '../helpers/log.js';
@@ -58,10 +55,7 @@ class TwilioController {
         const itemCategories = await Promise.all(itemCategoryHashes.map(async itemCategoryHash => await this.world
             .getItemCategory(itemCategoryHash)));
         const filteredCategories = itemCategories.filter(({ hash1 }) => hash1 > 1);
-        const sortedCategories = sortBy(
-            filteredCategories,
-            itemCategory => itemCategory.hash,
-        );
+        const sortedCategories = filteredCategories.toSorted((a, b) => a.hash - b.hash);
         const itemCategory = sortedCategories.reduce((memo, { shortTitle }) => (`${memo + shortTitle} `), ' ')
             .trim();
         let damageType;
@@ -195,7 +189,7 @@ class TwilioController {
 
         if (items.length > 0) {
             if (items.length > 1) {
-                const groups = groupBy(items, item => item.itemName);
+                const groups = Object.groupBy(items, item => item.itemName);
                 const keys = Object.keys(groups);
 
                 if (keys.length === 1) {
@@ -278,7 +272,7 @@ class TwilioController {
             };
         }
         default: {
-            const groups = groupBy(items, item => item.itemName);
+            const groups = Object.groupBy(items, item => item.itemName);
             const keys = Object.keys(groups);
             const result = keys.reduce((memo, key) => `${memo}\n${key} ${groups[key][0].itemCategory}`, ' ').trim();
 

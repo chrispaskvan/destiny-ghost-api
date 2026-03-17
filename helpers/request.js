@@ -2,19 +2,6 @@ import ResponseError from './response.error.js';
 import log from './log.js';
 
 /**
- * Convert a fetch Headers object to a plain object.
- */
-function headersToObject(headers) {
-    const obj = {};
-
-    headers.forEach((value, key) => {
-        obj[key] = value;
-    });
-
-    return obj;
-}
-
-/**
  * HTTP Request Client
  *
  * @param {object} options
@@ -28,14 +15,10 @@ async function request({ url, method, headers = {}, data: body, ...rest } = {}) 
     const init = { method, headers: { ...headers }, ...rest };
 
     if (body !== undefined) {
-        if (typeof body === 'string') {
-            init.body = body;
-        } else {
-            init.body = JSON.stringify(body);
+        init.body = typeof body === 'string' ? body : JSON.stringify(body);
 
-            if (!('Content-Type' in init.headers)) {
-                init.headers['Content-Type'] = 'application/json';
-            }
+        if (typeof body !== 'string' && !('Content-Type' in init.headers)) {
+            init.headers['Content-Type'] = 'application/json';
         }
     }
 
@@ -54,30 +37,22 @@ async function request({ url, method, headers = {}, data: body, ...rest } = {}) 
             },
         });
 
-        log.error({
-            err: responseError,
-        }, 'HTTP request failed!');
+        log.error({ err: responseError }, 'HTTP request failed!');
 
         throw responseError;
     }
 
-    return { data, headers: headersToObject(response.headers) };
+    return { data, headers: Object.fromEntries(response.headers) };
 }
 
 async function get(options, includeHeaders = false) {
-    const { data, headers } = await request({
-        method: 'get',
-        ...options,
-    });
+    const result = await request({ method: 'get', ...options });
 
-    return includeHeaders ? { data, headers } : data;
+    return includeHeaders ? result : result.data;
 }
 
 async function post(options) {
-    const { data } = await request({
-        method: 'post',
-        ...options,
-    });
+    const { data } = await request({ method: 'post', ...options });
 
     return data;
 }

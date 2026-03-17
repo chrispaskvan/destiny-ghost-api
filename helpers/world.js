@@ -6,7 +6,6 @@ import {
 } from 'node:fs';
 import { basename, join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
-import sampleSize from 'lodash/sampleSize.js';
 import { open } from 'yauzl';
 import log from './log.js';
 import sanitizeDirectory from './sanitize-directory.js';
@@ -76,7 +75,7 @@ class World {
 
         await this.bootstrapped;
 
-        return sampleSize(this.grimoireCards, numberOfCards);
+        return [...this.grimoireCards].sort(() => Math.random() - 0.5).slice(0, numberOfCards);
     }
 
     /**
@@ -100,7 +99,7 @@ class World {
      * @param manifest
      * @returns {*}
      */
-    updateManifest(manifest) {
+    async updateManifest(manifest) {
         const { directory: databaseDirectory } = this;
         const { mobileWorldContentPaths: { en: relativeUrl } } = manifest;
         const fileName = basename(relativeUrl || '');
@@ -180,22 +179,19 @@ class World {
             });
         };
 
-        return downloadFile(`https://www.bungie.net${relativeUrl}`, `${databasePath}.zip`)
-            .then(() => {
-                log.info(`Content downloaded from ${relativeUrl}`);
+        try {
+            await downloadFile(`https://www.bungie.net${relativeUrl}`, `${databasePath}.zip`);
+            log.info(`Content downloaded from ${relativeUrl}`);
 
-                return unzipFile(`${databasePath}.zip`, databaseDirectory);
-            })
-            .then(() => {
-                this.bootstrap(fileName);
+            await unzipFile(`${databasePath}.zip`, databaseDirectory);
+            this.bootstrap(fileName);
 
-                return manifest;
-            })
-            .catch(err => {
-                log.error('Error updating manifest:', err);
+            return manifest;
+        } catch (err) {
+            log.error('Error updating manifest:', err);
 
-                throw err;
-            });
+            throw err;
+        }
     }
 }
 

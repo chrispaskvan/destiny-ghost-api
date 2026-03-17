@@ -83,7 +83,7 @@ const routes = ({
     });
     const userRouter = Router();
 
-    userRouter.all('/', cors(configuration.cors));
+    userRouter.use(cors(configuration.cors));
 
     /**
      * @openapi

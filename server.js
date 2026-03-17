@@ -66,16 +66,19 @@ const startServer = async () => {
                 ['Worker pool', pool.close()],
                 ['Subscriber', subscriber.close()],
             ];
-
-            await processExternalPromisesWithTimeout(
-                shutdownTasks.map(([label, task]) => task
-                    .then(() => log.info(`${label} shut down`))
-                    .catch(err => {
-                        log.error({ err }, `${label} failed to shut down`);
-                        throw err;
-                    })),
+            const results = await processExternalPromisesWithTimeout(
+                shutdownTasks.map(([, task]) => task),
                 3000,
             );
+
+            shutdownTasks.forEach(([label], index) => {
+                if (results === null || results[index] === null) {
+                    log.error(`${label} failed to shut down in time`);
+                } else {
+                    log.info(`${label} shut down`);
+                }
+            });
+
             insecureServer.close();
         },
         logger: log.error.bind(log),

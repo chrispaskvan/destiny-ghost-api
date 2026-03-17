@@ -51,35 +51,35 @@ describe('updateManifest path safety', () => {
         expect(result).toEqual(manifest);
     });
 
-    it('should reject manifest URLs that resolve to . or ..', () => {
+    it('should reject manifest URLs that resolve to . or ..', async () => {
         const w = new World({ pool });
         w.directory = '/app/databases/destiny';
 
-        expect(() => w.updateManifest({
+        await expect(w.updateManifest({
             mobileWorldContentPaths: { en: '/path/to/..' },
-        })).toThrow('Invalid manifest path');
+        })).rejects.toThrow('Invalid manifest path');
 
-        expect(() => w.updateManifest({
+        await expect(w.updateManifest({
             mobileWorldContentPaths: { en: '.' },
-        })).toThrow('Invalid manifest path');
+        })).rejects.toThrow('Invalid manifest path');
     });
 
-    it('should reject manifest with empty relative URL', () => {
+    it('should reject manifest with empty relative URL', async () => {
         const w = new World({ pool });
         w.directory = '/app/databases/destiny';
 
-        expect(() => w.updateManifest({
+        await expect(w.updateManifest({
             mobileWorldContentPaths: { en: '' },
-        })).toThrow('Invalid manifest path');
+        })).rejects.toThrow('Invalid manifest path');
     });
 
-    it('should reject manifest with undefined relative URL', () => {
+    it('should reject manifest with undefined relative URL', async () => {
         const w = new World({ pool });
         w.directory = '/app/databases/destiny';
 
-        expect(() => w.updateManifest({
+        await expect(w.updateManifest({
             mobileWorldContentPaths: { en: undefined },
-        })).toThrow('Invalid manifest path');
+        })).rejects.toThrow('Invalid manifest path');
     });
 
     it('should use only the basename when URL contains traversal', async () => {

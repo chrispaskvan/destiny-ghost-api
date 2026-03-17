@@ -5,8 +5,6 @@ import {
     afterEach, beforeEach, describe, expect, it, vi,
 } from 'vitest';
 import Chance from 'chance';
-import cloneDeep from 'lodash/cloneDeep';
-import omit from 'lodash/omit';
 import UserService from './user.service';
 
 const cacheService = {
@@ -108,7 +106,9 @@ describe('UserService', () => {
             it('should reject the anonymous user', async () => {
                 userService.getUserByDisplayName = vi.fn().mockResolvedValue(anonymousUser);
 
-                await expect(userService.createAnonymousUser(omit(anonymousUser, 'membershipId')))
+                const { membershipId: _membershipId, ...anonymousUserWithoutMembershipId } = anonymousUser;
+
+                await expect(userService.createAnonymousUser(anonymousUserWithoutMembershipId))
                     .rejects.toThrow(undefined);
             });
         });
@@ -144,7 +144,9 @@ describe('UserService', () => {
 
         describe('when user is invalid', () => {
             it('should reject the user', async () => {
-                await expect(userService.createUser(omit(user, 'phoneNumber'))).rejects.toThrow(undefined);
+                const { phoneNumber: _phoneNumber, ...userWithoutPhoneNumber } = user;
+
+                await expect(userService.createUser(userWithoutPhoneNumber)).rejects.toThrow(undefined);
             });
         });
     });
@@ -543,7 +545,7 @@ describe('UserService', () => {
         describe('when user exists', () => {
             describe('and user update is valid', () => {
                 it('should resolve undefined', () => {
-                    const user1 = cloneDeep(user);
+                    const user1 = structuredClone(user);
                     documentService.updateDocument.mockImplementation(() => Promise.resolve());
 
                     user1.firstName = chance.first();
