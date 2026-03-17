@@ -148,7 +148,7 @@ describe('request', () => {
         });
 
         it('should handle response with no content-type header', async () => {
-            global.fetch.mockResolvedValue(mockResponse({ body: '', contentType: '' }));
+            global.fetch.mockResolvedValue(mockResponse({ body: '' }));
 
             const result = await post({ url: 'https://example.com/api' });
 
