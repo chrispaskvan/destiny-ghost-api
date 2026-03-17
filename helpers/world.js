@@ -73,6 +73,10 @@ class World {
             throw new Error('numberOfCards must be a number');
         }
 
+        if (numberOfCards <= 0) {
+            return [];
+        }
+
         await this.bootstrapped;
 
         const cards = [...this.grimoireCards];

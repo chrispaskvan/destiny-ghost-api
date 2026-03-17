@@ -122,6 +122,20 @@ describe('It\'s Bungie\'s 1st world. You\'re just querying it.', () => {
         });
     });
 
+    describe('if numberOfCards is zero or negative', () => {
+        it('should return an empty array for 0', async () => {
+            const cards = await world.getGrimoireCards(0);
+
+            expect(cards).toEqual([]);
+        });
+
+        it('should return an empty array for negative numbers', async () => {
+            const cards = await world.getGrimoireCards(-5);
+
+            expect(cards).toEqual([]);
+        });
+    });
+
     itif(
         'should return the icon of the Agent of Nine',
         () => existsSync(directory),
