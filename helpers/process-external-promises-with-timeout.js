@@ -7,17 +7,15 @@ async function processExternalPromisesWithTimeout(externalPromises, timeout) {
 
     try {
         const results = await Promise.allSettled(
-            externalPromises.map(async externalPromise => {
-                return new Promise((resolve, reject) => {
-                    Promise.race([
-                        externalPromise,
-                        new Promise((_, rj) => signal.addEventListener(
-                            'abort',
-                            () => rj(TIMEOUT_SENTINEL),
-                            { once: true },
-                        )),
-                    ]).then(resolve, reject);
-                });
+            externalPromises.map(externalPromise => {
+                return Promise.race([
+                    externalPromise,
+                    new Promise((_, rj) => signal.addEventListener(
+                        'abort',
+                        () => rj(TIMEOUT_SENTINEL),
+                        { once: true },
+                    )),
+                ]);
             })
         );
 
