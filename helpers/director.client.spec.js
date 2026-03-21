@@ -20,7 +20,7 @@ describe('DirectorClient', () => {
     beforeEach(async () => {
         vi.clearAllMocks();
 
-        const requestModule = await import('./request');
+        const requestModule = await import('./request.js');
 
         mockPost = requestModule.post;
         directorClient = new DirectorClient();
