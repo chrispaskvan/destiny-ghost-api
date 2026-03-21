@@ -6,6 +6,7 @@ import {
 } from 'vitest';
 import Postmaster from './postmaster';
 import users from '../mocks/users.json';
+import { withRetry, isTransientSmtpError } from './retry.js';
 
 vi.mock('./retry.js', () => ({
     withRetry: vi.fn(fn => fn()),
@@ -33,6 +34,15 @@ describe('Postmaster delivery test', () => {
     });
 
     describe('register method', () => {
+        it('Should wrap sendMail with retry using isTransientSmtpError', async () => {
+            await postmaster.register(users[0], image, url);
+
+            expect(withRetry).toHaveBeenCalledWith(
+                expect.any(Function),
+                { shouldRetry: isTransientSmtpError },
+            );
+        });
+
         it('Should return a message Id', async () => {
             const user = users[0];
             const response = await postmaster.register(user, image, url);

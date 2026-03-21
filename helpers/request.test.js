@@ -222,7 +222,7 @@ describe('request retry logic', () => {
 });
 
 describe('ResponseError.isTransient', () => {
-    test.each([429, 500, 502, 503, 504])('status %i is transient', async status => {
+    test.each([408, 429, 500, 502, 503, 504])('status %i is transient', async status => {
         const fetchMock = vi.fn()
             .mockImplementation(() => Promise.resolve(makeResponse(status, 'error', { contentType: 'text/plain' })));
 

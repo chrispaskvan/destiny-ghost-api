@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import aiInstance from './ai';
+import { withRetry, isTransientError } from './retry.js';
 
 vi.mock('@google/genai', () => ({
     GoogleGenAI: class {
@@ -49,6 +50,24 @@ describe('AI', () => {
     });
 
     describe('getPlayersFromFile', () => {
+        it('should wrap file upload and content generation with retry', async () => {
+            mockUpload.mockResolvedValue({
+                mimeType: testMimeType,
+                uri: testFileUri,
+            });
+            mockGenerateContent.mockResolvedValue({
+                text: testPlayerNames,
+            });
+
+            await aiInstance.getPlayersFromFile(testFilePath);
+
+            expect(withRetry).toHaveBeenCalledTimes(2);
+            expect(withRetry).toHaveBeenCalledWith(
+                expect.any(Function),
+                { shouldRetry: isTransientError },
+            );
+        });
+
         it('should successfully extract player names from uploaded file', async () => {
             mockUpload.mockResolvedValue({
                 mimeType: testMimeType,

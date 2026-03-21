@@ -33,6 +33,7 @@ function parseRetryAfter(value) {
  * @returns {Promise<{ data: *, headers: object }>}
  */
 async function request({ url, method, headers = {}, data: body, ...rest } = {}, { maxRetries = 3, baseDelay = 1000, maxDelay = 15000 } = {}) {
+    const retries = Math.max(0, Math.trunc(maxRetries) || 0);
     const init = { method, headers: { ...headers }, ...rest };
 
     if (body !== undefined) {
@@ -43,13 +44,13 @@ async function request({ url, method, headers = {}, data: body, ...rest } = {}, 
         }
     }
 
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    for (let attempt = 0; attempt <= retries; attempt++) {
         let response;
 
         try {
             response = await fetch(url, init);
         } catch (networkErr) {
-            if (attempt < maxRetries) {
+            if (attempt < retries) {
                 const delay = getBackoffDelay(attempt, baseDelay, maxDelay);
 
                 log.warn({ attempt: attempt + 1, delay, err: networkErr, url }, 'Retrying HTTP request after network error');

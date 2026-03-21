@@ -1,5 +1,3 @@
-const TRANSIENT_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
-
 /**
  * Destiny Error Class
  */
@@ -12,7 +10,7 @@ class ResponseError extends Error {
 
         Object.assign(this, {
             data,
-            isTransient: TRANSIENT_STATUS_CODES.has(status),
+            isTransient: status === 408 || status === 429 || status >= 500,
             name: 'RequestError',
             status,
             statusText,
