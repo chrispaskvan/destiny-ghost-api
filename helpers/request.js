@@ -1,6 +1,6 @@
 import ResponseError from './response.error.js';
 import log from './log.js';
-import { getBackoffDelay } from './retry.js';
+import { getBackoffDelay, isTransientError } from './retry.js';
 
 /**
  * Parse a Retry-After header value into milliseconds.
@@ -50,7 +50,7 @@ async function request({ url, method, headers = {}, data: body, ...rest } = {}, 
         try {
             response = await fetch(url, init);
         } catch (networkErr) {
-            if (attempt < retries) {
+            if (attempt < retries && isTransientError(networkErr)) {
                 const delay = getBackoffDelay(attempt, baseDelay, maxDelay);
 
                 log.warn({ attempt: attempt + 1, delay, err: networkErr, url }, 'Retrying HTTP request after network error');
@@ -76,7 +76,7 @@ async function request({ url, method, headers = {}, data: body, ...rest } = {}, 
                 },
             });
 
-            if (responseError.isTransient && attempt < maxRetries) {
+            if (responseError.isTransient && attempt < retries) {
                 const retryAfterHeader = response.headers.get('retry-after');
                 const delay = (retryAfterHeader && parseRetryAfter(retryAfterHeader))
                     ?? getBackoffDelay(attempt, baseDelay, maxDelay);
