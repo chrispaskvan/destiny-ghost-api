@@ -77,18 +77,22 @@ class Publisher {
         this.#queueEvents.on('failed', async ({ jobId, failedReason }) => {
             log.error({ jobId, failedReason }, 'Job failed');
 
-            const job = await this.#queue.getJob(jobId);
-            if (job && job.attemptsMade >= job.opts.attempts) {
-                log.error({
-                    jobId,
-                    failedReason,
-                    attemptsMade: job.attemptsMade,
-                }, 'Job exhausted all retries');
+            try {
+                const job = await this.#queue.getJob(jobId);
+                if (job && job.attemptsMade >= (job.opts?.attempts ?? Infinity)) {
+                    log.error({
+                        jobId,
+                        failedReason,
+                        attemptsMade: job.attemptsMade,
+                    }, 'Job exhausted all retries');
 
-                applicationInsights.trackMetric({
-                    name: 'notification-job-exhausted',
-                    value: 1,
-                });
+                    applicationInsights.trackMetric({
+                        name: 'notification-job-exhausted',
+                        value: 1,
+                    });
+                }
+            } catch (handlerErr) {
+                log.error({ jobId, error: handlerErr.message }, 'Error in failed event handler');
             }
         });
     }

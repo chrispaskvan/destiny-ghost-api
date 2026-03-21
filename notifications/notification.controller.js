@@ -4,6 +4,7 @@ import { isTransientError } from '../helpers/retry.js';
 import subscriber from '../helpers/subscriber.js';
 import NotificationError from './notification.error.js';
 import notificationTypes from './notification.types.js';
+import DestinyError from '../destiny/destiny.error.js';
 import XurUnavailableError from './xur-unavailable.error.js';
 import ClaimCheck from '../helpers/claim-check.js';
 import log from '../helpers/log.js';
@@ -53,7 +54,10 @@ class NotificationController {
                         );
                     } catch (xurErr) {
                         if (isTransientError(xurErr)) throw xurErr;
-                        throw new XurUnavailableError(xurErr.message);
+                        if (xurErr instanceof DestinyError) {
+                            throw new XurUnavailableError(xurErr.message);
+                        }
+                        throw xurErr;
                     }
 
                     const weaponCategory = await this.world.getWeaponCategory();
@@ -74,6 +78,7 @@ class NotificationController {
                         notificationType,
                     });
                     log.info(JSON.stringify(status));
+                    await ClaimCheck.updatePhoneNumber(claimCheckNumber, phoneNumber, status);
                     return;
                 }
 
@@ -81,7 +86,11 @@ class NotificationController {
                     throw err;
                 }
 
-                throw new UnrecoverableError(err.message);
+                if (err instanceof UnrecoverableError) {
+                    throw err;
+                }
+
+                throw new UnrecoverableError(err.message, { cause: err });
             }
         }
     }

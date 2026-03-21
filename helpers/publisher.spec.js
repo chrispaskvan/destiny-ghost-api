@@ -116,5 +116,26 @@ describe('Publisher', () => {
 
             expect(applicationInsights.trackMetric).not.toHaveBeenCalled();
         });
+
+        it('should not throw when getJob rejects', async () => {
+            mocks.getJob.mockRejectedValue(new Error('Redis connection lost'));
+
+            await expect(failedHandler({ jobId: 'job-1', failedReason: 'Some error' }))
+                .resolves.not.toThrow();
+
+            expect(applicationInsights.trackMetric).not.toHaveBeenCalled();
+        });
+
+        it('should handle missing opts gracefully', async () => {
+            mocks.getJob.mockResolvedValue({
+                attemptsMade: 3,
+                opts: undefined,
+            });
+
+            await expect(failedHandler({ jobId: 'job-1', failedReason: 'Some error' }))
+                .resolves.not.toThrow();
+
+            expect(applicationInsights.trackMetric).not.toHaveBeenCalled();
+        });
     });
 });

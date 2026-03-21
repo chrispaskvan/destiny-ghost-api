@@ -13,8 +13,8 @@ import throttle from '../helpers/throttle.js';
 
 vi.mock('bullmq', () => ({
     UnrecoverableError: class UnrecoverableError extends Error {
-        constructor(message) {
-            super(message);
+        constructor(message, options) {
+            super(message, options);
             this.name = 'UnrecoverableError';
         }
     },
@@ -47,8 +47,13 @@ vi.mock('../helpers/retry.js', async importOriginal => {
         isTransientError: vi.fn(),
     };
 });
+vi.mock('../destiny/destiny.error.js', async importOriginal => {
+    const original = await importOriginal();
+    return { default: original.default };
+});
 
 import { isTransientError } from '../helpers/retry.js';
+import DestinyError from '../destiny/destiny.error.js';
 
 const chance = new Chance();
 const phoneNumber = chance.phone();
@@ -306,14 +311,15 @@ describe('NotificationController', () => {
         });
 
         describe('when getXur fails with a business-logic error', () => {
-            it('should send fallback message for non-transient getXur error', async () => {
-                const xurError = new Error('DestinyVendorNotFound');
+            it('should send fallback message for DestinyError from getXur', async () => {
+                const xurError = new DestinyError('DestinyVendorNotFound', 'DestinyVendorNotFound', 1627);
                 isTransientError.mockReturnValue(false);
 
                 authenticationService.authenticate.mockResolvedValue({ bungie: { access_token: accessToken } });
                 destinyService.getProfile.mockResolvedValue([mockCharacter]);
                 destinyService.getXur.mockRejectedValue(xurError);
                 notificationService.sendMessage.mockResolvedValue({ status: 'sent' });
+                ClaimCheck.updatePhoneNumber.mockResolvedValue();
 
                 await sendMethod(mockUser, {
                     claimCheckNumber,
@@ -327,6 +333,29 @@ describe('NotificationController', () => {
                     { claimCheckNumber, notificationType: notificationTypes.Xur }
                 );
                 expect(log.info).toHaveBeenCalledWith(JSON.stringify('sent'));
+                expect(ClaimCheck.updatePhoneNumber).toHaveBeenCalledWith(
+                    claimCheckNumber,
+                    phoneNumber,
+                    'sent'
+                );
+            });
+
+            it('should throw UnrecoverableError for non-DestinyError non-transient getXur error', async () => {
+                const genericError = new Error('Unexpected failure');
+                isTransientError.mockReturnValue(false);
+
+                authenticationService.authenticate.mockResolvedValue({ bungie: { access_token: accessToken } });
+                destinyService.getProfile.mockResolvedValue([mockCharacter]);
+                destinyService.getXur.mockRejectedValue(genericError);
+
+                const rejection = await sendMethod(mockUser, {
+                    claimCheckNumber,
+                    notificationType: notificationTypes.Xur,
+                }).catch(err => err);
+
+                expect(rejection.name).toBe('UnrecoverableError');
+                expect(rejection.message).toBe('Unexpected failure');
+                expect(notificationService.sendMessage).not.toHaveBeenCalled();
             });
         });
 
@@ -381,16 +410,11 @@ describe('NotificationController', () => {
         });
 
         describe('when a permanent error occurs', () => {
-            it('should throw UnrecoverableError for permanent authentication failure', async () => {
+            it('should throw UnrecoverableError for permanent authentication failure with cause', async () => {
                 const permanentError = new Error('Invalid credentials');
                 isTransientError.mockReturnValue(false);
 
                 authenticationService.authenticate.mockRejectedValue(permanentError);
-
-                await expect(sendMethod(mockUser, {
-                    claimCheckNumber,
-                    notificationType: notificationTypes.Xur,
-                })).rejects.toThrow('Invalid credentials');
 
                 const rejection = await sendMethod(mockUser, {
                     claimCheckNumber,
@@ -398,10 +422,12 @@ describe('NotificationController', () => {
                 }).catch(err => err);
 
                 expect(rejection.name).toBe('UnrecoverableError');
+                expect(rejection.message).toBe('Invalid credentials');
+                expect(rejection.cause).toBe(permanentError);
                 expect(notificationService.sendMessage).not.toHaveBeenCalled();
             });
 
-            it('should throw UnrecoverableError for permanent getProfile failure', async () => {
+            it('should throw UnrecoverableError for permanent getProfile failure with cause', async () => {
                 const permanentError = new Error('Account not found');
                 isTransientError.mockReturnValue(false);
 
@@ -415,6 +441,7 @@ describe('NotificationController', () => {
 
                 expect(rejection.name).toBe('UnrecoverableError');
                 expect(rejection.message).toBe('Account not found');
+                expect(rejection.cause).toBe(permanentError);
                 expect(notificationService.sendMessage).not.toHaveBeenCalled();
             });
         });
