@@ -10,6 +10,7 @@ class ResponseError extends Error {
 
         Object.assign(this, {
             data,
+            isTransient: status === 408 || status === 429 || status >= 500,
             name: 'RequestError',
             status,
             statusText,

@@ -1,0 +1,119 @@
+import log from './log.js';
+
+/**
+ * Calculate exponential backoff delay with jitter.
+ *
+ * @param {number} attempt - Zero-based attempt index.
+ * @param {number} [baseDelay=1000] - Base delay in milliseconds.
+ * @param {number} [maxDelay=15000] - Maximum delay in milliseconds.
+ * @returns {number} Delay in milliseconds.
+ */
+function getBackoffDelay(attempt, baseDelay = 1000, maxDelay = 15000) {
+    const exponential = baseDelay * 2 ** attempt;
+    const jitter = Math.random() * baseDelay;
+
+    return Math.min(exponential + jitter, maxDelay);
+}
+
+/**
+ * Retry an async function with exponential backoff.
+ *
+ * @param {Function} fn - Async function to retry.
+ * @param {object} [options]
+ * @param {number} [options.maxRetries=3]
+ * @param {number} [options.baseDelay=1000]
+ * @param {number} [options.maxDelay=15000]
+ * @param {Function} [options.shouldRetry] - Predicate receiving the error; return false to skip retrying.
+ * @returns {Promise<*>}
+ */
+async function withRetry(fn, { maxRetries = 3, baseDelay = 1000, maxDelay = 15000, shouldRetry } = {}) {
+    const retries = Number.isFinite(maxRetries)
+        ? Math.max(0, Math.trunc(maxRetries))
+        : 0;
+    let lastErr;
+
+    for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+            return await fn();
+        } catch (err) {
+            lastErr = err;
+
+            const canRetry = attempt < retries && (!shouldRetry || shouldRetry(err));
+
+            if (!canRetry) break;
+
+            const delay = getBackoffDelay(attempt, baseDelay, maxDelay);
+
+            log.warn({ attempt: attempt + 1, delay, err }, 'Retrying after transient error');
+
+            await new Promise(resolve => setTimeout(resolve, delay));
+        }
+    }
+
+    throw lastErr;
+}
+
+/**
+ * Transient network error codes (Node.js / undici).
+ * @type {Set<string>}
+ */
+const TRANSIENT_NETWORK_CODES = new Set([
+    'ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'ECONNABORTED',
+    'EHOSTUNREACH', 'ENETUNREACH', 'EAI_AGAIN', 'EPIPE',
+    'UND_ERR_CONNECT_TIMEOUT',
+]);
+
+/**
+ * HTTP-status-based transient error check.
+ * Works for any SDK error that exposes a numeric `status` property
+ * (Twilio RestException, Google GenAI ApiError, etc.).
+ *
+ * - numeric status 408, 429, ≥500 → transient
+ * - known network/timeout error codes → transient
+ * - TypeError "fetch failed" (Node native fetch) → transient
+ * - everything else → permanent
+ *
+ * @param {Error} err
+ * @returns {boolean}
+ */
+function isTransientError(err) {
+    const { status, code } = err;
+
+    if (typeof status === 'number') {
+        return status === 408 || status === 429 || status >= 500;
+    }
+
+    if (err instanceof TypeError && /fetch failed/i.test(err.message)) return true;
+
+    return code !== undefined && TRANSIENT_NETWORK_CODES.has(code);
+}
+
+/**
+ * SMTP-aware transient error check for Nodemailer.
+ *
+ * Transient when:
+ * - err.code is a connection/timeout category (ETIMEDOUT, ESOCKET, ECONNECTION, EDNS)
+ * - err.responseCode is a 4xx SMTP code (421, 450, 451, 452)
+ *
+ * Permanent when:
+ * - err.code is EAUTH, ENOAUTH, EENVELOPE (config/credential errors)
+ * - err.responseCode is 5xx (550, 553, etc.)
+ *
+ * @param {Error} err
+ * @returns {boolean}
+ */
+const TRANSIENT_SMTP_CODES = new Set(['ECONNECTION', 'ECONNRESET', 'EDNS', 'EHOSTUNREACH', 'ESOCKET', 'ETIMEDOUT']);
+const PERMANENT_SMTP_CODES = new Set(['EAUTH', 'EENVELOPE', 'ENOAUTH']);
+
+function isTransientSmtpError(err) {
+    if (PERMANENT_SMTP_CODES.has(err.code)) return false;
+    if (TRANSIENT_SMTP_CODES.has(err.code)) return true;
+
+    const { responseCode } = err;
+
+    if (responseCode >= 400 && responseCode < 500) return true;
+
+    return false;
+}
+
+export { withRetry, getBackoffDelay, isTransientError, isTransientSmtpError };

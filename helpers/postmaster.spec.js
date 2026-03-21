@@ -6,17 +6,19 @@ import {
 } from 'vitest';
 import Postmaster from './postmaster';
 import users from '../mocks/users.json';
+import { withRetry } from './retry.js';
+
+vi.mock('./retry.js', () => ({
+    withRetry: vi.fn(fn => fn()),
+}));
 
 // Mock nodemailer
 vi.mock('nodemailer', () => ({
     createTransport: vi.fn(() => ({
-        sendMail: vi.fn((options, callback) => {
-            // Simulate successful email sending
-            callback(null, { 
-                accepted: [options.to],
-                messageId: 'mock-message-id'
-            });
-        })
+        sendMail: vi.fn(options => Promise.resolve({
+            accepted: [options.to],
+            messageId: 'mock-message-id'
+        }))
     }))
 }));
 
@@ -31,6 +33,22 @@ describe('Postmaster delivery test', () => {
     });
 
     describe('register method', () => {
+        it('Should wrap sendMail with retry limited to connection errors', async () => {
+            await postmaster.register(users[0], image, url);
+
+            expect(withRetry).toHaveBeenCalledWith(
+                expect.any(Function),
+                { shouldRetry: expect.any(Function), maxRetries: 1 },
+            );
+
+            const { shouldRetry } = withRetry.mock.calls[0][1];
+
+            expect(shouldRetry({ code: 'ECONNECTION' })).toBe(true);
+            expect(shouldRetry({ code: 'ETIMEDOUT' })).toBe(true);
+            expect(shouldRetry({ code: 'EAUTH' })).toBe(false);
+            expect(shouldRetry({ code: 'ESOCKET' })).toBe(false);
+        });
+
         it('Should return a message Id', async () => {
             const user = users[0];
             const response = await postmaster.register(user, image, url);
@@ -53,14 +71,14 @@ describe('Postmaster delivery test', () => {
         });
 
         it('Should generate correct email content for registration', async () => {
-            const mockSendMail = vi.fn((options, callback) => {
-                callback(null, { accepted: [users[0].emailAddress] });
-            });
-            
+            const mockSendMail = vi.fn(() => Promise.resolve({
+                accepted: [users[0].emailAddress],
+            }));
+
             postmaster.transporter.sendMail = mockSendMail;
-            
+
             await postmaster.register(users[0], image, url);
-            
+
             const [mailOptions] = mockSendMail.mock.calls[0];
 
             expect(mailOptions.subject).toBe('Destiny Ghost Registration');
@@ -70,14 +88,14 @@ describe('Postmaster delivery test', () => {
         });
 
         it('Should include random color in HTML when image is provided', async () => {
-            const mockSendMail = vi.fn((options, callback) => {
-                callback(null, { accepted: [users[0].emailAddress] });
-            });
-            
+            const mockSendMail = vi.fn(() => Promise.resolve({
+                accepted: [users[0].emailAddress],
+            }));
+
             postmaster.transporter.sendMail = mockSendMail;
-            
+
             await postmaster.register(users[0], image, url);
-            
+
             const [mailOptions] = mockSendMail.mock.calls[0];
 
             expect(mailOptions.html).toMatch(/background-color: #[0-9A-F]{6}/);
@@ -85,9 +103,9 @@ describe('Postmaster delivery test', () => {
         });
 
         it('Should not include image tag when image is not provided', async () => {
-            const mockSendMail = vi.fn((options, callback) => {
-                callback(null, { accepted: [users[0].emailAddress] });
-            });
+            const mockSendMail = vi.fn(() => Promise.resolve({
+                accepted: [users[0].emailAddress],
+            }));
             
             postmaster.transporter.sendMail = mockSendMail;
             
@@ -106,9 +124,9 @@ describe('Postmaster delivery test', () => {
         });
 
         it('Should generate correct email content for confirmation', async () => {
-            const mockSendMail = vi.fn((options, callback) => {
-                callback(null, { accepted: [users[0].emailAddress] });
-            });
+            const mockSendMail = vi.fn(() => Promise.resolve({
+                accepted: [users[0].emailAddress],
+            }));
             
             postmaster.transporter.sendMail = mockSendMail;
             
@@ -132,9 +150,7 @@ describe('Postmaster delivery test', () => {
 
     describe('error handling', () => {
         it('Should handle email sending errors in register', async () => {
-            const mockSendMail = vi.fn((options, callback) => {
-                callback(new Error('SMTP connection failed'), null);
-            });
+            const mockSendMail = vi.fn(() => Promise.reject(new Error('SMTP connection failed')));
             
             postmaster.transporter.sendMail = mockSendMail;
             
@@ -144,9 +160,7 @@ describe('Postmaster delivery test', () => {
         });
 
         it('Should handle email sending errors in confirm', async () => {
-            const mockSendMail = vi.fn((options, callback) => {
-                callback(new Error('Invalid recipient'), null);
-            });
+            const mockSendMail = vi.fn(() => Promise.reject(new Error('Invalid recipient')));
             
             postmaster.transporter.sendMail = mockSendMail;
             
@@ -158,9 +172,9 @@ describe('Postmaster delivery test', () => {
 
     describe('email content validation', () => {
         it('Should include user token in email URL', async () => {
-            const mockSendMail = vi.fn((options, callback) => {
-                callback(null, { accepted: [users[0].emailAddress] });
-            });
+            const mockSendMail = vi.fn(() => Promise.resolve({
+                accepted: [users[0].emailAddress],
+            }));
             
             postmaster.transporter.sendMail = mockSendMail;
             
@@ -174,9 +188,9 @@ describe('Postmaster delivery test', () => {
         });
 
         it('Should include user firstName in email content', async () => {
-            const mockSendMail = vi.fn((options, callback) => {
-                callback(null, { accepted: [users[0].emailAddress] });
-            });
+            const mockSendMail = vi.fn(() => Promise.resolve({
+                accepted: [users[0].emailAddress],
+            }));
             
             postmaster.transporter.sendMail = mockSendMail;
             
@@ -189,9 +203,9 @@ describe('Postmaster delivery test', () => {
         });
 
         it('Should set correct mail options properties', async () => {
-            const mockSendMail = vi.fn((options, callback) => {
-                callback(null, { accepted: [users[0].emailAddress] });
-            });
+            const mockSendMail = vi.fn(() => Promise.resolve({
+                accepted: [users[0].emailAddress],
+            }));
             
             postmaster.transporter.sendMail = mockSendMail;
             

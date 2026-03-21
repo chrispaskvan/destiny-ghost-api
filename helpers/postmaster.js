@@ -1,9 +1,12 @@
 import { createTransport } from 'nodemailer';
 import smtpTransport from 'nodemailer-smtp-transport';
 import configuration from './config.js';
+import { withRetry } from './retry.js';
 
 const { smtp: smtpConfiguration } = configuration;
 const website = process.env.WEBSITE;
+
+const SMTP_CONNECTION_ERRORS = new Set(['ECONNECTION', 'ETIMEDOUT', 'EHOSTUNREACH', 'ECONNRESET']);
 
 /**
  * Postmaster Class
@@ -42,30 +45,26 @@ class Postmaster {
      */
     #sendEmail(user, image, url, action) {
         const { emailAddress, firstName, membership: { tokens: { blob } } } = user;
-        
-        return new Promise((resolve, reject) => {
-            const actionText = action === 'registration' ? 'registration' : 'confirmation';
-            const actionTitle = actionText.charAt(0).toUpperCase() + actionText.slice(1);
-            
-            const mailOptions = {
-                from: smtpConfiguration.from,
-                tls: {
-                    rejectUnauthorized: false,
-                },
-                subject: `Destiny Ghost ${actionTitle}`,
-                text: `Hi ${firstName},\r\n\r\nOpen the link below to continue the ${actionText} process.\r\n\r\n${website}${url}?token=${blob}`,
-                to: emailAddress,
-                html: `${(image ? `<img src='${image}' style='background-color: ${Postmaster.#getRandomColor()};'><br /><br />` : '')}Hi ${firstName},<br /><br />Please click the link below to continue the ${actionText} process.<br /><br />${website}${url}?token=${blob}`,
-            };
+        const actionText = action === 'registration' ? 'registration' : 'confirmation';
+        const actionTitle = actionText.charAt(0).toUpperCase() + actionText.slice(1);
+        const mailOptions = {
+            from: smtpConfiguration.from,
+            tls: {
+                rejectUnauthorized: false,
+            },
+            subject: `Destiny Ghost ${actionTitle}`,
+            text: `Hi ${firstName},\r\n\r\nOpen the link below to continue the ${actionText} process.\r\n\r\n${website}${url}?token=${blob}`,
+            to: emailAddress,
+            html: `${(image ? `<img src='${image}' style='background-color: ${Postmaster.#getRandomColor()};'><br /><br />` : '')}Hi ${firstName},<br /><br />Please click the link below to continue the ${actionText} process.<br /><br />${website}${url}?token=${blob}`,
+        };
 
-            this.transporter.sendMail(mailOptions, (err, response) => {
-                if (err) {
-                    reject(err);
-                }
-
-                resolve(response);
-            });
-        });
+        return withRetry(
+            () => this.transporter.sendMail(mailOptions),
+            {
+                shouldRetry: err => SMTP_CONNECTION_ERRORS.has(err.code),
+                maxRetries: 1,
+            },
+        );
     }
 
     /**

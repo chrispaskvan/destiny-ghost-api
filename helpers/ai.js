@@ -1,6 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 import configuration from './config';
 import log from './log';
+import { withRetry, isTransientError } from './retry.js';
 
 const { gemini: { apiKey, model } } = configuration;
 
@@ -16,7 +17,7 @@ class AI {
     }
 
     async getPlayersFromFile(path) {
-        const { mimeType, uri: fileUri } = await this.ai.files.upload({ file: path });
+        const { mimeType, uri: fileUri } = await withRetry(() => this.ai.files.upload({ file: path }), { shouldRetry: isTransientError });
 
         log.info({ fileUri, mimeType, path }, 'File uploaded to the AI');
 
@@ -47,11 +48,11 @@ class AI {
                 ],
             },
         ];
-        const result = await this.ai.models.generateContent({
+        const result = await withRetry(() => this.ai.models.generateContent({
             model,
             config,
             contents,
-        });
+        }), { shouldRetry: isTransientError });
 
         return result?.text.split(',');
     }

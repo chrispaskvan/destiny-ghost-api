@@ -3,6 +3,12 @@ import {
 } from 'vitest';
 import mockTwilioCreateMessageResponse from '../mocks/twilioCreateMessageResponse.json';
 import Notifications from './notification.service';
+import { withRetry, isTransientError } from '../helpers/retry.js';
+
+vi.mock('../helpers/retry.js', () => ({
+    withRetry: vi.fn(fn => fn()),
+    isTransientError: vi.fn(),
+}));
 
 const client = {
     messages: {
@@ -17,6 +23,15 @@ beforeEach(() => {
 });
 
 describe('Notifications', () => {
+    it('wraps sendMessage with retry using isTransientError', async () => {
+        await notificationService.sendMessage('Aegis of the Reef', '+11111111111');
+
+        expect(withRetry).toHaveBeenCalledWith(
+            expect.any(Function),
+            { shouldRetry: isTransientError, maxRetries: 0 },
+        );
+    });
+
     it('sendMessage', async () => {
         const { sid, dateCreated, status } = await notificationService.sendMessage('Aegis of the Reef', '+11111111111');
 

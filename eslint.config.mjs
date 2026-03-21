@@ -31,6 +31,7 @@ export default [
                 AbortSignal: "readonly",
                 fetch: "readonly",
                 Headers: "readonly",
+                Response: "readonly",
                 structuredClone: "readonly",
                 Temporal: "readonly",
             },
