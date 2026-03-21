@@ -11,7 +11,7 @@ import { getBackoffDelay } from './retry.js';
 function parseRetryAfter(value) {
     const seconds = Number(value);
 
-    if (!Number.isNaN(seconds)) return seconds * 1000;
+    if (!Number.isNaN(seconds)) return Math.max(0, seconds * 1000);
 
     const ms = new Date(value) - Date.now();
 
@@ -26,7 +26,7 @@ function parseRetryAfter(value) {
  * @param {string} options.method - The HTTP method.
  * @param {object} [options.headers] - Request headers.
  * @param {*} [options.data] - Request body.
- * @param {object} [retryOptions]
+ * @param {object} [retryOptions] - Retry configuration (second argument).
  * @param {number} [retryOptions.maxRetries=3]
  * @param {number} [retryOptions.baseDelay=1000]
  * @param {number} [retryOptions.maxDelay=15000]

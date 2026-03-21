@@ -160,13 +160,37 @@ describe('withRetry', () => {
         await vi.runAllTimersAsync();
         await assertion;
     });
+
+    test('normalizes negative maxRetries to 0 (single attempt)', async () => {
+        const fn = vi.fn().mockRejectedValue(new Error('fail'));
+
+        await expect(withRetry(fn, { maxRetries: -1 })).rejects.toThrow('fail');
+
+        expect(fn).toHaveBeenCalledTimes(1);
+    });
+
+    test('normalizes NaN maxRetries to 0 (single attempt)', async () => {
+        const fn = vi.fn().mockRejectedValue(new Error('fail'));
+
+        await expect(withRetry(fn, { maxRetries: NaN })).rejects.toThrow('fail');
+
+        expect(fn).toHaveBeenCalledTimes(1);
+    });
+
+    test('normalizes fractional maxRetries by truncating', async () => {
+        const fn = vi.fn().mockRejectedValue(new Error('fail'));
+
+        const promise = withRetry(fn, { maxRetries: 1.9 });
+        const assertion = expect(promise).rejects.toThrow('fail');
+
+        await vi.runAllTimersAsync();
+        await assertion;
+
+        expect(fn).toHaveBeenCalledTimes(2); // 1 initial + 1 retry (truncated to 1)
+    });
 });
 
 describe('isTransientError', () => {
-    test('returns true when status is undefined (connection error)', () => {
-        expect(isTransientError(new Error('connection failed'))).toBe(true);
-    });
-
     test.each([408, 429, 500, 502, 503, 504])('returns true for status %i', status => {
         const err = Object.assign(new Error(), { status });
 
@@ -177,6 +201,34 @@ describe('isTransientError', () => {
         const err = Object.assign(new Error(), { status });
 
         expect(isTransientError(err)).toBe(false);
+    });
+
+    test.each([
+        'ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'ECONNABORTED',
+        'EHOSTUNREACH', 'ENETUNREACH', 'EAI_AGAIN', 'EPIPE',
+        'UND_ERR_CONNECT_TIMEOUT',
+    ])('returns true for network error code %s', code => {
+        const err = Object.assign(new Error(), { code });
+
+        expect(isTransientError(err)).toBe(true);
+    });
+
+    test('returns true for TypeError "fetch failed"', () => {
+        expect(isTransientError(new TypeError('fetch failed'))).toBe(true);
+    });
+
+    test('returns false for plain Error with no status or code', () => {
+        expect(isTransientError(new Error('something broke'))).toBe(false);
+    });
+
+    test('returns false for ENOENT (not a network error)', () => {
+        const err = Object.assign(new Error(), { code: 'ENOENT' });
+
+        expect(isTransientError(err)).toBe(false);
+    });
+
+    test('returns false for non-TypeError with "fetch failed" message', () => {
+        expect(isTransientError(new Error('fetch failed'))).toBe(false);
     });
 });
 

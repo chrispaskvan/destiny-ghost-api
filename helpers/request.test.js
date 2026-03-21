@@ -114,6 +114,26 @@ describe('request retry logic', () => {
         expect(result).toEqual({ ok: true });
     });
 
+    test('clamps negative Retry-After to zero delay', async () => {
+        const fetchMock = vi.fn()
+            .mockResolvedValueOnce(makeResponse(429, 'rate limited', {
+                contentType: 'text/plain',
+                headers: { 'retry-after': '-5' },
+            }))
+            .mockResolvedValueOnce(makeResponse(200, { ok: true }));
+
+        vi.stubGlobal('fetch', fetchMock);
+
+        const promise = get({ url: 'https://example.com/api' });
+
+        await vi.runAllTimersAsync();
+
+        const result = await promise;
+
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        expect(result).toEqual({ ok: true });
+    });
+
     test('exhausts retries and throws on persistent transient errors', async () => {
         const fetchMock = vi.fn()
             .mockImplementation(() => Promise.resolve(makeResponse(503, 'error', { contentType: 'text/plain' })));

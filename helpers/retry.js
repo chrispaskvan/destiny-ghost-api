@@ -27,15 +27,16 @@ function getBackoffDelay(attempt, baseDelay = 1000, maxDelay = 15000) {
  * @returns {Promise<*>}
  */
 async function withRetry(fn, { maxRetries = 3, baseDelay = 1000, maxDelay = 15000, shouldRetry } = {}) {
+    const retries = Math.max(0, Math.trunc(maxRetries) || 0);
     let lastErr;
 
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    for (let attempt = 0; attempt <= retries; attempt++) {
         try {
             return await fn();
         } catch (err) {
             lastErr = err;
 
-            const canRetry = attempt < maxRetries && (!shouldRetry || shouldRetry(err));
+            const canRetry = attempt < retries && (!shouldRetry || shouldRetry(err));
 
             if (!canRetry) break;
 
@@ -51,23 +52,38 @@ async function withRetry(fn, { maxRetries = 3, baseDelay = 1000, maxDelay = 1500
 }
 
 /**
+ * Transient network error codes (Node.js / undici).
+ * @type {Set<string>}
+ */
+const TRANSIENT_NETWORK_CODES = new Set([
+    'ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'ECONNABORTED',
+    'EHOSTUNREACH', 'ENETUNREACH', 'EAI_AGAIN', 'EPIPE',
+    'UND_ERR_CONNECT_TIMEOUT',
+]);
+
+/**
  * HTTP-status-based transient error check.
  * Works for any SDK error that exposes a numeric `status` property
  * (Twilio RestException, Google GenAI ApiError, etc.).
  *
- * - undefined status (connection/timeout errors) → transient
- * - 408, 429, ≥500 → transient
+ * - numeric status 408, 429, ≥500 → transient
+ * - known network/timeout error codes → transient
+ * - TypeError "fetch failed" (Node native fetch) → transient
  * - everything else → permanent
  *
  * @param {Error} err
  * @returns {boolean}
  */
 function isTransientError(err) {
-    const { status } = err;
+    const { status, code } = err;
 
-    if (status === undefined) return true;
+    if (typeof status === 'number') {
+        return status === 408 || status === 429 || status >= 500;
+    }
 
-    return status === 408 || status === 429 || status >= 500;
+    if (err instanceof TypeError && /fetch failed/i.test(err.message)) return true;
+
+    return code !== undefined && TRANSIENT_NETWORK_CODES.has(code);
 }
 
 /**
