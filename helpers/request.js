@@ -33,7 +33,9 @@ function parseRetryAfter(value) {
  * @returns {Promise<{ data: *, headers: object }>}
  */
 async function request({ url, method, headers = {}, data: body, ...rest } = {}, { maxRetries = 3, baseDelay = 1000, maxDelay = 15000 } = {}) {
-    const retries = Math.max(0, Math.trunc(maxRetries) || 0);
+    const retries = Number.isFinite(maxRetries)
+        ? Math.max(0, Math.trunc(maxRetries))
+        : 0;
     const init = { method, headers: { ...headers }, ...rest };
 
     if (body !== undefined) {
@@ -103,7 +105,7 @@ async function get(options, includeHeaders = false) {
 }
 
 async function post(options) {
-    const { data } = await request({ method: 'post', ...options });
+    const { data } = await request({ method: 'post', ...options }, { maxRetries: 0 });
 
     return data;
 }

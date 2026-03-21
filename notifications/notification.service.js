@@ -43,7 +43,10 @@ class Notifications {
             message.mediaUrl = mediaUrl;
         }
 
-        return await withRetry(() => this.client.messages.create(message), { shouldRetry: isTransientError });
+        return await withRetry(
+            () => this.client.messages.create(message),
+            { shouldRetry: isTransientError, maxRetries: 1 },
+        );
     }
 }
 

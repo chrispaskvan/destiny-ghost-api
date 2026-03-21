@@ -27,7 +27,9 @@ function getBackoffDelay(attempt, baseDelay = 1000, maxDelay = 15000) {
  * @returns {Promise<*>}
  */
 async function withRetry(fn, { maxRetries = 3, baseDelay = 1000, maxDelay = 15000, shouldRetry } = {}) {
-    const retries = Math.max(0, Math.trunc(maxRetries) || 0);
+    const retries = Number.isFinite(maxRetries)
+        ? Math.max(0, Math.trunc(maxRetries))
+        : 0;
     let lastErr;
 
     for (let attempt = 0; attempt <= retries; attempt++) {

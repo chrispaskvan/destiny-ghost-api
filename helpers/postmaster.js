@@ -56,7 +56,10 @@ class Postmaster {
             html: `${(image ? `<img src='${image}' style='background-color: ${Postmaster.#getRandomColor()};'><br /><br />` : '')}Hi ${firstName},<br /><br />Please click the link below to continue the ${actionText} process.<br /><br />${website}${url}?token=${blob}`,
         };
 
-        return withRetry(() => this.transporter.sendMail(mailOptions), { shouldRetry: isTransientSmtpError });
+        return withRetry(
+            () => this.transporter.sendMail(mailOptions),
+            { shouldRetry: isTransientSmtpError, maxRetries: 1 },
+        );
     }
 
     /**

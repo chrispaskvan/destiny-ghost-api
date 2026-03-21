@@ -188,6 +188,14 @@ describe('withRetry', () => {
 
         expect(fn).toHaveBeenCalledTimes(2); // 1 initial + 1 retry (truncated to 1)
     });
+
+    test('normalizes Infinity maxRetries to 0 (single attempt)', async () => {
+        const fn = vi.fn().mockRejectedValue(new Error('fail'));
+
+        await expect(withRetry(fn, { maxRetries: Infinity })).rejects.toThrow('fail');
+
+        expect(fn).toHaveBeenCalledTimes(1);
+    });
 });
 
 describe('isTransientError', () => {

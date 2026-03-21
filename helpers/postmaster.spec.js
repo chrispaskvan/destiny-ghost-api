@@ -39,7 +39,7 @@ describe('Postmaster delivery test', () => {
 
             expect(withRetry).toHaveBeenCalledWith(
                 expect.any(Function),
-                { shouldRetry: isTransientSmtpError },
+                { shouldRetry: isTransientSmtpError, maxRetries: 1 },
             );
         });
 
