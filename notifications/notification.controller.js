@@ -54,8 +54,8 @@ class NotificationController {
                         );
                     } catch (xurErr) {
                         if (isTransientError(xurErr)) throw xurErr;
-                        if (xurErr instanceof DestinyError) {
-                            throw new XurUnavailableError(xurErr.message);
+                        if (xurErr instanceof DestinyError && xurErr.status === 'DestinyVendorNotFound') {
+                            throw new XurUnavailableError(xurErr.message, { cause: xurErr });
                         }
                         throw xurErr;
                     }

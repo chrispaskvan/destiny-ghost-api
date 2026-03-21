@@ -312,7 +312,7 @@ describe('NotificationController', () => {
 
         describe('when getXur fails with a business-logic error', () => {
             it('should send fallback message for DestinyError from getXur', async () => {
-                const xurError = new DestinyError('DestinyVendorNotFound', 'DestinyVendorNotFound', 1627);
+                const xurError = new DestinyError(1627, 'DestinyVendorNotFound', 'DestinyVendorNotFound');
                 isTransientError.mockReturnValue(false);
 
                 authenticationService.authenticate.mockResolvedValue({ bungie: { access_token: accessToken } });
@@ -355,6 +355,24 @@ describe('NotificationController', () => {
 
                 expect(rejection.name).toBe('UnrecoverableError');
                 expect(rejection.message).toBe('Unexpected failure');
+                expect(notificationService.sendMessage).not.toHaveBeenCalled();
+            });
+
+            it('should throw UnrecoverableError for non-VendorNotFound DestinyError from getXur', async () => {
+                const destinyErr = new DestinyError(7, 'DestinyAccountNotFound', 'DestinyAccountNotFound');
+                isTransientError.mockReturnValue(false);
+
+                authenticationService.authenticate.mockResolvedValue({ bungie: { access_token: accessToken } });
+                destinyService.getProfile.mockResolvedValue([mockCharacter]);
+                destinyService.getXur.mockRejectedValue(destinyErr);
+
+                const rejection = await sendMethod(mockUser, {
+                    claimCheckNumber,
+                    notificationType: notificationTypes.Xur,
+                }).catch(err => err);
+
+                expect(rejection.name).toBe('UnrecoverableError');
+                expect(rejection.cause).toBe(destinyErr);
                 expect(notificationService.sendMessage).not.toHaveBeenCalled();
             });
         });

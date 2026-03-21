@@ -5,8 +5,8 @@
  * cannot be retrieved (e.g., vendor not present in-game).
  */
 class XurUnavailableError extends Error {
-    constructor(message) {
-        super(message);
+    constructor(message, options) {
+        super(message, options);
 
         Object.assign(this, {
             name: 'XurUnavailableError',
