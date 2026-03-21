@@ -80,8 +80,12 @@ async function request({ url, method, headers = {}, data: body, ...rest } = {}, 
 
             if (responseError.isTransient && attempt < retries) {
                 const retryAfterHeader = response.headers.get('retry-after');
-                const delay = (retryAfterHeader && parseRetryAfter(retryAfterHeader))
-                    ?? getBackoffDelay(attempt, baseDelay, maxDelay);
+                const parsed = retryAfterHeader != null
+                    ? parseRetryAfter(retryAfterHeader)
+                    : null;
+                const delay = parsed != null
+                    ? Math.min(parsed, maxDelay)
+                    : getBackoffDelay(attempt, baseDelay, maxDelay);
 
                 log.warn({ attempt: attempt + 1, delay, status: response.status, url }, 'Retrying HTTP request');
 
