@@ -102,8 +102,8 @@ function isTransientError(err) {
  * @param {Error} err
  * @returns {boolean}
  */
-const TRANSIENT_SMTP_CODES = new Set(['ETIMEDOUT', 'ESOCKET', 'ECONNECTION', 'EDNS']);
-const PERMANENT_SMTP_CODES = new Set(['EAUTH', 'ENOAUTH', 'EENVELOPE']);
+const TRANSIENT_SMTP_CODES = new Set(['ECONNECTION', 'ECONNRESET', 'EDNS', 'EHOSTUNREACH', 'ESOCKET', 'ETIMEDOUT']);
+const PERMANENT_SMTP_CODES = new Set(['EAUTH', 'EENVELOPE', 'ENOAUTH']);
 
 function isTransientSmtpError(err) {
     if (PERMANENT_SMTP_CODES.has(err.code)) return false;
