@@ -61,7 +61,7 @@ class Postmaster {
         return withRetry(
             () => this.transporter.sendMail(mailOptions),
             {
-                shouldRetry: (err) => SMTP_CONNECTION_ERRORS.has(err.code),
+                shouldRetry: err => SMTP_CONNECTION_ERRORS.has(err.code),
                 maxRetries: 1,
             },
         );
