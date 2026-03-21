@@ -8,6 +8,7 @@
  * recording the message, and updating the message status.
  */
 import configuration from '../helpers/config.js';
+import { withRetry, isTransientError } from '../helpers/retry.js';
 import { MAX_SMS_MESSAGE_LENGTH } from '../twilio/twilio.constants.js';
 
 /**
@@ -42,7 +43,7 @@ class Notifications {
             message.mediaUrl = mediaUrl;
         }
 
-        return await this.client.messages.create(message);
+        return await withRetry(() => this.client.messages.create(message), { shouldRetry: isTransientError });
     }
 }
 

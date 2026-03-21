@@ -4,6 +4,11 @@ import {
 import mockTwilioCreateMessageResponse from '../mocks/twilioCreateMessageResponse.json';
 import Notifications from './notification.service';
 
+vi.mock('../helpers/retry.js', () => ({
+    withRetry: vi.fn(fn => fn()),
+    isTransientError: vi.fn(),
+}));
+
 const client = {
     messages: {
         create: vi.fn(() => Promise.resolve(mockTwilioCreateMessageResponse)),

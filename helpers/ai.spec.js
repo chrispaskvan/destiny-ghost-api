@@ -18,7 +18,12 @@ vi.mock('./config', () => ({
 vi.mock('./log', () => ({
     default: {
         info: vi.fn(),
+        warn: vi.fn(),
     },
+}));
+vi.mock('./retry.js', () => ({
+    withRetry: vi.fn(fn => fn()),
+    isTransientError: vi.fn(),
 }));
 
 describe('AI', () => {
