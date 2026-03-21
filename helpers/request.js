@@ -115,14 +115,14 @@ async function request({ url, method, headers = {}, data: body, ...rest } = {}, 
     }
 }
 
-async function get(options, includeHeaders = false) {
-    const result = await request({ method: 'get', ...options });
+async function get(options, includeHeaders = false, retryOptions) {
+    const result = await request({ method: 'get', ...options }, retryOptions);
 
     return includeHeaders ? result : result.data;
 }
 
-async function post(options) {
-    const { data } = await request({ method: 'post', ...options }, { maxRetries: 0 });
+async function post(options, retryOptions) {
+    const { data } = await request({ method: 'post', ...options }, { maxRetries: 0, ...retryOptions });
 
     return data;
 }
