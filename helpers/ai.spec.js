@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import aiInstance from './ai';
+import aiInstance from './ai.js';
 import { withRetry, isTransientError } from './retry.js';
 
 vi.mock('@google/genai', () => ({
@@ -8,7 +8,7 @@ vi.mock('@google/genai', () => ({
         models = { generateContent: vi.fn() };
     },
 }));
-vi.mock('./config', () => ({
+vi.mock('./config.js', () => ({
     default: {
         gemini: {
             apiKey: 'test-api-key',
@@ -16,7 +16,7 @@ vi.mock('./config', () => ({
         },
     },
 }));
-vi.mock('./log', () => ({
+vi.mock('./log.js', () => ({
     default: {
         info: vi.fn(),
         warn: vi.fn(),

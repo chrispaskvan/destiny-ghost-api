@@ -20,7 +20,7 @@ vi.mock('./log.js', () => ({
     },
 }));
 
-import subscriber from './subscriber';
+import subscriber from './subscriber.js';
 
 describe('Subscriber', () => {
     let MockWorkerConstructor;

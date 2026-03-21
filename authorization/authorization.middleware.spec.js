@@ -2,8 +2,8 @@ import {
     beforeEach, describe, expect, it, vi,
 } from 'vitest';
 import { createResponse, createRequest } from 'node-mocks-http';
-import configuration from '../helpers/config';
-import authorizeUser from './authorization.middleware';
+import configuration from '../helpers/config.js';
+import authorizeUser from './authorization.middleware.js';
 import { StatusCodes } from 'http-status-codes';
 
 describe('authorizeUser', () => {

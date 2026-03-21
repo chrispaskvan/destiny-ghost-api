@@ -5,7 +5,7 @@ import {
     afterEach, beforeEach, describe, expect, it, vi,
 } from 'vitest';
 import Chance from 'chance';
-import UserService from './user.service';
+import UserService from './user.service.js';
 
 const cacheService = {
     getUser: vi.fn(),

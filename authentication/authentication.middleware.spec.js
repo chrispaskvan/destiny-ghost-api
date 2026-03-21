@@ -2,7 +2,7 @@ import {
     describe, expect, it, vi,
 } from 'vitest';
 import { createRequest, createResponse } from 'node-mocks-http';
-import AuthenticationMiddleware from './authentication.middleware';
+import AuthenticationMiddleware from './authentication.middleware.js';
 
 describe('authorizeUser', () => {
     describe('when user is found', () => {

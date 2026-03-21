@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Database from 'better-sqlite3';
-import worker from './worker';
+import worker from './worker.js';
 
 vi.mock('better-sqlite3', () => ({
     default: vi.fn(),

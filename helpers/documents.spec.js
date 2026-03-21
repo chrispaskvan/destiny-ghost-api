@@ -4,8 +4,8 @@
 import {
     describe, expect, it, vi,
 } from 'vitest';
-import QueryBuilder from './queryBuilder';
-import Documents from './documents';
+import QueryBuilder from './queryBuilder.js';
+import Documents from './documents.js';
 
 describe('Documents', () => {
     const collectionId = 'Messages';

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import DirectorClient from './director.client';
+import DirectorClient from './director.client.js';
 
-vi.mock('./request', () => ({
+vi.mock('./request.js', () => ({
     post: vi.fn(),
 }));
 
@@ -20,7 +20,7 @@ describe('DirectorClient', () => {
     beforeEach(async () => {
         vi.clearAllMocks();
 
-        const requestModule = await import('./request');
+        const requestModule = await import('./request.js');
 
         mockPost = requestModule.post;
         directorClient = new DirectorClient();

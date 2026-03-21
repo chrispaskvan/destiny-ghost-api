@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import toTemporalInstant from './to-temporal-instant';
+import toTemporalInstant from './to-temporal-instant.js';
 
 describe('toTemporalInstant', () => {
     describe('when given a valid HTTP date string', () => {

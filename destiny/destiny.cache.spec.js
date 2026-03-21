@@ -2,7 +2,7 @@ import {
     afterEach, beforeEach, describe, expect, it, vi,
 } from 'vitest';
 import RedisErrors from 'redis-errors';
-import DestinyCache from './destiny.cache';
+import DestinyCache from './destiny.cache.js';
 import mockManifestResponse from '../mocks/manifestResponse.json';
 import mockXurResponse from '../mocks/xurResponse.json';
 

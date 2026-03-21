@@ -2,26 +2,26 @@ import {
     beforeEach, describe, expect, it, vi,
 } from 'vitest';
 import Chance from 'chance';
-import publisher from '../helpers/publisher';
-import subscriber from '../helpers/subscriber';
-import NotificationController from './notification.controller';
-import NotificationError from './notification.error';
-import notificationTypes from './notification.types';
-import ClaimCheck from '../helpers/claim-check';
-import log from '../helpers/log';
-import throttle from '../helpers/throttle';
+import publisher from '../helpers/publisher.js';
+import subscriber from '../helpers/subscriber.js';
+import NotificationController from './notification.controller.js';
+import NotificationError from './notification.error.js';
+import notificationTypes from './notification.types.js';
+import ClaimCheck from '../helpers/claim-check.js';
+import log from '../helpers/log.js';
+import throttle from '../helpers/throttle.js';
 
-vi.mock('../helpers/publisher');
-vi.mock('../helpers/subscriber');
-vi.mock('./notification.error');
-vi.mock('../helpers/claim-check');
-vi.mock('../helpers/log', () => ({
+vi.mock('../helpers/publisher.js');
+vi.mock('../helpers/subscriber.js');
+vi.mock('./notification.error.js');
+vi.mock('../helpers/claim-check.js');
+vi.mock('../helpers/log.js', () => ({
     default: {
         info: vi.fn(),
         error: vi.fn(),
     },
 }));
-vi.mock('../helpers/throttle');
+vi.mock('../helpers/throttle.js');
 
 const chance = new Chance();
 const phoneNumber = chance.phone();

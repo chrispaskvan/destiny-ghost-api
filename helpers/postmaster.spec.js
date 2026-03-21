@@ -4,7 +4,7 @@
 import {
     describe, expect, it, vi, beforeEach,
 } from 'vitest';
-import Postmaster from './postmaster';
+import Postmaster from './postmaster.js';
 import users from '../mocks/users.json';
 import { withRetry } from './retry.js';
 

@@ -1,7 +1,7 @@
 import {
     beforeEach, describe, expect, it, vi,
 } from 'vitest';
-import Destiny2Cache, { charactersExpiration, playerStatisticsExpiration } from './destiny2.cache';
+import Destiny2Cache, { charactersExpiration, playerStatisticsExpiration } from './destiny2.cache.js';
 import mockProfileCharactersResponse from '../mocks/profileCharactersResponse.json';
 import mockPlayerStatisticsResponse from '../mocks/playerStatisticsResponse.json';
 

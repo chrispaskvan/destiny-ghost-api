@@ -2,7 +2,7 @@ import {
     describe, expect, it,
 } from 'vitest';
 
-import processExternalPromisesWithTimeout from './process-external-promises-with-timeout';
+import processExternalPromisesWithTimeout from './process-external-promises-with-timeout.js';
 
 describe('processExternalPromisesWithTimeout', () => {
     it('should resolve all promises within the timeout', async () => {

@@ -3,7 +3,7 @@ import { sep } from 'node:path';
 import {
     afterEach, beforeEach, describe, expect, it, vi,
 } from 'vitest';
-import sanitizeDirectory from './sanitize-directory';
+import sanitizeDirectory from './sanitize-directory.js';
 
 vi.mock('node:fs', () => ({
     realpathSync: vi.fn(),

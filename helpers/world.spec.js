@@ -5,10 +5,10 @@ import { existsSync } from 'node:fs';
 import {
     afterEach, beforeAll, describe, expect, it, vi,
 } from 'vitest';
-import World from './world';
-import itif from './itif';
-import { postmasterHash } from '../destiny/destiny.constants';
-import pool from './pool';
+import World from './world.js';
+import itif from './itif.js';
+import { postmasterHash } from '../destiny/destiny.constants.js';
+import pool from './pool.js';
 
 vi.mock('node:fs', async importOriginal => {
     const actual = await importOriginal();

@@ -2,10 +2,10 @@ import {
     beforeEach, describe, expect, it, vi,
 } from 'vitest';
 import Chance from 'chance';
-import Destiny2Controller from './destiny2.controller';
+import Destiny2Controller from './destiny2.controller.js';
 import manifest2Response from '../mocks/manifest2Response.json';
 
-vi.mock('../helpers/request');
+vi.mock('../helpers/request.js');
 
 const { Response: manifest } = manifest2Response;
 const chance = new Chance();

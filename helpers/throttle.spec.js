@@ -4,7 +4,7 @@
 import {
     afterEach, beforeEach, describe, expect, it, vi,
 } from 'vitest';
-import throttle from './throttle';
+import throttle from './throttle.js';
 
 describe('throttle()', () => {
     describe('when throttling tasks', () => {

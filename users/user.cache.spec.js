@@ -1,7 +1,7 @@
 import {
     afterEach, beforeEach, describe, expect, it, vi,
 } from 'vitest';
-import UserCache from './user.cache';
+import UserCache from './user.cache.js';
 import mockUsers from '../mocks/users.json';
 
 const [mockUser] = mockUsers;

@@ -1,10 +1,10 @@
 import {
     describe, expect, it, beforeEach, afterEach, vi,
 } from 'vitest';
-import ClaimCheck, { claimCheckExpiration } from './claim-check';
-import cache from './cache';
+import ClaimCheck, { claimCheckExpiration } from './claim-check.js';
+import cache from './cache.js';
 
-vi.mock('./cache', () => ({
+vi.mock('./cache.js', () => ({
     default: {
         hSet: vi.fn(),
         hGet: vi.fn(),

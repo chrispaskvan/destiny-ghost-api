@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import cache from './cache';
-import { getIdempotencyKey, setIdempotencyKey } from './idempotency-keys';
+import cache from './cache.js';
+import { getIdempotencyKey, setIdempotencyKey } from './idempotency-keys.js';
 
-vi.mock('./cache');
+vi.mock('./cache.js');
 
 describe('idempotency-keys', () => {
     beforeEach(() => {
