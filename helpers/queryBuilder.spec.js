@@ -4,7 +4,7 @@
 import {
     describe, expect, it,
 } from 'vitest';
-import QueryBuilder from './queryBuilder';
+import QueryBuilder from './queryBuilder.js';
 
 describe('QueryBuilder', () => {
     it('should select all fields from root where userName matches criteria', () => {

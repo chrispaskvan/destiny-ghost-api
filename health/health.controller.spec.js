@@ -1,9 +1,9 @@
 import {
     beforeEach, describe, expect, it, vi,
 } from 'vitest';
-import { get } from '../helpers/request';
-import applicationInsights from '../helpers/application-insights';
-import HealthController from './health.controller';
+import { get } from '../helpers/request.js';
+import applicationInsights from '../helpers/application-insights.js';
+import HealthController from './health.controller.js';
 import manifestResponse from '../mocks/manifestResponse.json';
 import manifest2Response from '../mocks/manifest2Response.json';
 

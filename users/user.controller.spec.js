@@ -2,8 +2,8 @@ import {
     beforeEach, describe, expect, it, vi,
 } from 'vitest';
 import Chance from 'chance';
-import getEpoch from '../helpers/get-epoch';
-import UserController from './user.controller';
+import getEpoch from '../helpers/get-epoch.js';
+import UserController from './user.controller.js';
 
 vi.mock('../helpers/postmaster', () => ({
     default: class {

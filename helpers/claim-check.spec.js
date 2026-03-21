@@ -1,8 +1,8 @@
 import {
     describe, expect, it, beforeEach, afterEach, vi,
 } from 'vitest';
-import ClaimCheck, { claimCheckExpiration } from './claim-check';
-import cache from './cache';
+import ClaimCheck, { claimCheckExpiration } from './claim-check.js';
+import cache from './cache.js';
 
 vi.mock('./cache', () => ({
     default: {

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import DirectorClient from './director.client';
+import DirectorClient from './director.client.js';
 
 vi.mock('./request', () => ({
     post: vi.fn(),

@@ -4,8 +4,8 @@ import {
 } from 'vitest';
 import { StatusCodes } from 'http-status-codes';
 import { createResponse, createRequest } from 'node-mocks-http';
-import { get } from '../helpers/request';
-import HealthRouter from './health.routes';
+import { get } from '../helpers/request.js';
+import HealthRouter from './health.routes.js';
 import manifestResponse from '../mocks/manifestResponse.json';
 import manifest2Response from '../mocks/manifest2Response.json';
 

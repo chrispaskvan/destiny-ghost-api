@@ -5,10 +5,10 @@ import { existsSync } from 'node:fs';
 import {
     beforeAll, describe, expect,
 } from 'vitest';
-import World from './world2';
-import itif from './itif';
-import pool from './pool';
-import { xurHash } from '../destiny2/destiny2.constants';
+import World from './world2.js';
+import itif from './itif.js';
+import pool from './pool.js';
+import { xurHash } from '../destiny2/destiny2.constants.js';
 
 const directory = process.env.DESTINY2_DATABASE_DIR;
 let world;

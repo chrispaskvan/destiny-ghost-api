@@ -5,7 +5,7 @@ import {
 import { StatusCodes } from 'http-status-codes';
 import Chance from 'chance';
 import { createResponse, createRequest } from 'node-mocks-http';
-import UserRouter from './user.routes';
+import UserRouter from './user.routes.js';
 
 vi.mock('../helpers/postmaster', () => ({
     default: class {

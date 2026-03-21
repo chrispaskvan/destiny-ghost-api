@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import aiInstance from './ai';
+import aiInstance from './ai.js';
 import { withRetry, isTransientError } from './retry.js';
 
 vi.mock('@google/genai', () => ({

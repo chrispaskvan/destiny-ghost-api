@@ -3,7 +3,7 @@ import { StatusCodes } from 'http-status-codes';
 import {
     afterAll, afterEach, beforeAll, describe, expect, test, vi,
 } from 'vitest';
-import { startServer, stopServer } from '../server';
+import { startServer, stopServer } from '../server.js';
 
 vi.mock('../helpers/subscriber');
 

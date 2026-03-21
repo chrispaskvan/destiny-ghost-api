@@ -1,6 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
-import configuration from './config';
-import log from './log';
+import configuration from './config.js';
+import log from './log.js';
 import { withRetry, isTransientError } from './retry.js';
 
 const { gemini: { apiKey, model } } = configuration;

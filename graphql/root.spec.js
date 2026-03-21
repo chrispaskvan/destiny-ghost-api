@@ -2,7 +2,7 @@ import Chance from 'chance';
 import {
     describe, expect, it, vi,
 } from 'vitest';
-import root from './root';
+import root from './root.js';
 
 vi.mock('../helpers/throttle');
 

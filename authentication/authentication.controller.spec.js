@@ -2,8 +2,8 @@ import {
     beforeEach, describe, expect, it, vi,
 } from 'vitest';
 import Chance from 'chance';
-import AuthenticationController from './authentication.controller';
-import config from '../helpers/config';
+import AuthenticationController from './authentication.controller.js';
+import config from '../helpers/config.js';
 import usersJson from '../mocks/users.json';
 
 const [mockUser] = usersJson;

@@ -5,9 +5,9 @@ import {
     beforeEach, describe, expect, it, vi,
 } from 'vitest';
 import Chance from 'chance';
-import { get } from '../helpers/request';
-import DestinyError from './destiny.error';
-import DestinyService from './destiny.service';
+import { get } from '../helpers/request.js';
+import DestinyError from './destiny.error.js';
+import DestinyService from './destiny.service.js';
 import mockManifestResponse from '../mocks/manifestResponse.json';
 
 vi.mock('../helpers/request');

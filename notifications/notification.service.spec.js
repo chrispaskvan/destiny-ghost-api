@@ -2,7 +2,7 @@ import {
     beforeEach, describe, expect, it, vi,
 } from 'vitest';
 import mockTwilioCreateMessageResponse from '../mocks/twilioCreateMessageResponse.json';
-import Notifications from './notification.service';
+import Notifications from './notification.service.js';
 import { withRetry, isTransientError } from '../helpers/retry.js';
 
 vi.mock('../helpers/retry.js', () => ({

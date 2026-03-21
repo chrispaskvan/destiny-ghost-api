@@ -4,7 +4,7 @@
 import {
     describe, expect, it,
 } from 'vitest';
-import { getBlob, getCode } from './tokens';
+import { getBlob, getCode } from './tokens.js';
 
 describe('Tokens', () => {
     describe('getBlob', () => {

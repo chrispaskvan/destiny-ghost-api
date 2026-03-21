@@ -5,8 +5,8 @@ import { Readable } from 'node:stream';
 import {
     afterAll, afterEach, beforeAll, describe, expect, test, vi,
 } from 'vitest';
-import { startServer, stopServer } from '../server';
-import configuration from '../helpers/config';
+import { startServer, stopServer } from '../server.js';
+import configuration from '../helpers/config.js';
 
 vi.mock('../helpers/subscriber');
 

@@ -5,7 +5,7 @@ import {
     afterEach, beforeEach, describe, expect, it, vi,
 } from 'vitest';
 import Chance from 'chance';
-import AuthenticationService from './authentication.service';
+import AuthenticationService from './authentication.service.js';
 import usersJson from '../mocks/users.json';
 
 const [mockUser] = usersJson;

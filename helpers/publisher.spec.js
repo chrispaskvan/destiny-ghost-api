@@ -12,7 +12,7 @@ vi.mock('bullmq', () => ({
     },
 }));
 
-import publisher from './publisher';
+import publisher from './publisher.js';
 
 const chance = new Chance();
 

@@ -1,4 +1,4 @@
-import { post } from './request';
+import { post } from './request.js';
 
 class DirectorClient {
     query = 'query FindPlayersHeroNameAndFriends($displayName: String!) { findPlayers(displayName: $displayName) { bungieGlobalDisplayName bungieGlobalDisplayNameCode destinyMemberships { crossSaveOverride membershipType membershipId displayName bungieGlobalDisplayName bungieGlobalDisplayNameCode } destinyMemberships { crossSaveOverride membershipType membershipId displayName bungieGlobalDisplayName bungieGlobalDisplayNameCode } statistics { pvp { kdr highestLightLevel } } user { firstName lastName } } }';

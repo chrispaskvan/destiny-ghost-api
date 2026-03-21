@@ -4,13 +4,13 @@
 import {
     beforeEach, describe, expect, it, vi,
 } from 'vitest';
-import Destiny2Service from './destiny2.service';
-import DestinyError from '../destiny/destiny.error';
+import Destiny2Service from './destiny2.service.js';
+import DestinyError from '../destiny/destiny.error.js';
 import mockManifestResponse from '../mocks/manifestResponse.json';
 import mockProfileCharactersResponse from '../mocks/profileCharactersResponse.json';
 import mockPlayerStatisticsResponse from '../mocks/playerStatisticsResponse.json';
 import mockXurResponse from '../mocks/xurResponse.json';
-import { get, post } from '../helpers/request';
+import { get, post } from '../helpers/request.js';
 
 vi.mock('../helpers/request');
 

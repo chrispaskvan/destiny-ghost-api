@@ -6,7 +6,7 @@ import { StatusCodes } from 'http-status-codes';
 import Chance from 'chance';
 import { createResponse, createRequest } from 'node-mocks-http';
 
-import Destiny2Router from './destiny2.routes';
+import Destiny2Router from './destiny2.routes.js';
 import Destiny2Controller from './destiny2.controller.js';
 import manifest2Response from '../mocks/manifest2Response.json';
 
