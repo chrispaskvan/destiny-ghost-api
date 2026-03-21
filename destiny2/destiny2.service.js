@@ -52,7 +52,7 @@ class Destiny2Service extends DestinyService {
             },
             url: `${servicePlatform}/User/Search/GlobalName/${pageNumber}/`,
         };
-        const responseBody = await post(options);
+        const responseBody = await post(options, { maxRetries: 3 });
 
         if (responseBody.ErrorCode === 1) {
             const { Response: { searchResults } } = responseBody;

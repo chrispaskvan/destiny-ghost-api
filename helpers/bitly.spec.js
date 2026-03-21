@@ -48,7 +48,7 @@ describe('Bitly', () => {
                 headers: {
                     Authorization: 'Bearer test-access-token',
                 },
-            }));
+            }), { maxRetries: 3 });
         });
 
         it('should reject when URL is not a string', async () => {
