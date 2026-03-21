@@ -65,9 +65,22 @@ async function request({ url, method, headers = {}, data: body, ...rest } = {}, 
         }
 
         const contentType = response.headers.get('content-type') ?? '';
-        const data = contentType.includes('application/json')
-            ? await response.json()
-            : await response.text();
+        const rawText = await response.text();
+        let data;
+
+        if (contentType.includes('application/json')) {
+            if (response.ok) {
+                data = JSON.parse(rawText);
+            } else {
+                try {
+                    data = JSON.parse(rawText);
+                } catch {
+                    data = rawText;
+                }
+            }
+        } else {
+            data = rawText;
+        }
 
         if (!response.ok) {
             const responseError = new ResponseError({

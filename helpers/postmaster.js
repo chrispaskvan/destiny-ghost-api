@@ -1,10 +1,12 @@
 import { createTransport } from 'nodemailer';
 import smtpTransport from 'nodemailer-smtp-transport';
 import configuration from './config.js';
-import { withRetry, isTransientSmtpError } from './retry.js';
+import { withRetry } from './retry.js';
 
 const { smtp: smtpConfiguration } = configuration;
 const website = process.env.WEBSITE;
+
+const SMTP_CONNECTION_ERRORS = new Set(['ECONNECTION', 'ETIMEDOUT', 'EHOSTUNREACH', 'ECONNRESET']);
 
 /**
  * Postmaster Class
@@ -58,7 +60,10 @@ class Postmaster {
 
         return withRetry(
             () => this.transporter.sendMail(mailOptions),
-            { shouldRetry: isTransientSmtpError, maxRetries: 1 },
+            {
+                shouldRetry: (err) => SMTP_CONNECTION_ERRORS.has(err.code),
+                maxRetries: 1,
+            },
         );
     }
 

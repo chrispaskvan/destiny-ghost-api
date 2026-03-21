@@ -6,11 +6,10 @@ import {
 } from 'vitest';
 import Postmaster from './postmaster';
 import users from '../mocks/users.json';
-import { withRetry, isTransientSmtpError } from './retry.js';
+import { withRetry } from './retry.js';
 
 vi.mock('./retry.js', () => ({
     withRetry: vi.fn(fn => fn()),
-    isTransientSmtpError: vi.fn(),
 }));
 
 // Mock nodemailer
@@ -34,13 +33,20 @@ describe('Postmaster delivery test', () => {
     });
 
     describe('register method', () => {
-        it('Should wrap sendMail with retry using isTransientSmtpError', async () => {
+        it('Should wrap sendMail with retry limited to connection errors', async () => {
             await postmaster.register(users[0], image, url);
 
             expect(withRetry).toHaveBeenCalledWith(
                 expect.any(Function),
-                { shouldRetry: isTransientSmtpError, maxRetries: 1 },
+                { shouldRetry: expect.any(Function), maxRetries: 1 },
             );
+
+            const { shouldRetry } = withRetry.mock.calls[0][1];
+
+            expect(shouldRetry({ code: 'ECONNECTION' })).toBe(true);
+            expect(shouldRetry({ code: 'ETIMEDOUT' })).toBe(true);
+            expect(shouldRetry({ code: 'EAUTH' })).toBe(false);
+            expect(shouldRetry({ code: 'ESOCKET' })).toBe(false);
         });
 
         it('Should return a message Id', async () => {

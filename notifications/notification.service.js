@@ -45,7 +45,7 @@ class Notifications {
 
         return await withRetry(
             () => this.client.messages.create(message),
-            { shouldRetry: isTransientError, maxRetries: 1 },
+            { shouldRetry: isTransientError, maxRetries: 0 },
         );
     }
 }

@@ -28,7 +28,7 @@ describe('Notifications', () => {
 
         expect(withRetry).toHaveBeenCalledWith(
             expect.any(Function),
-            { shouldRetry: isTransientError, maxRetries: 1 },
+            { shouldRetry: isTransientError, maxRetries: 0 },
         );
     });
 
