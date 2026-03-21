@@ -121,21 +121,24 @@ describe('Publisher', () => {
             mocks.getJob.mockRejectedValue(new Error('Redis connection lost'));
 
             await expect(failedHandler({ jobId: 'job-1', failedReason: 'Some error' }))
-                .resolves.not.toThrow();
+                .resolves.toBeUndefined();
 
             expect(applicationInsights.trackMetric).not.toHaveBeenCalled();
         });
 
-        it('should handle missing opts gracefully', async () => {
+        it('should emit metric when opts is missing (falls back to default attempts of 1)', async () => {
             mocks.getJob.mockResolvedValue({
                 attemptsMade: 3,
                 opts: undefined,
             });
 
             await expect(failedHandler({ jobId: 'job-1', failedReason: 'Some error' }))
-                .resolves.not.toThrow();
+                .resolves.toBeUndefined();
 
-            expect(applicationInsights.trackMetric).not.toHaveBeenCalled();
+            expect(applicationInsights.trackMetric).toHaveBeenCalledWith({
+                name: 'notification-job-exhausted',
+                value: 1,
+            });
         });
     });
 });

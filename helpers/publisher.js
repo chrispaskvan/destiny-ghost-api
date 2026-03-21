@@ -79,7 +79,7 @@ class Publisher {
 
             try {
                 const job = await this.#queue.getJob(jobId);
-                if (job && job.attemptsMade >= (job.opts?.attempts ?? Infinity)) {
+                if (job && job.attemptsMade >= (job.opts?.attempts ?? 1)) {
                     log.error({
                         jobId,
                         failedReason,
