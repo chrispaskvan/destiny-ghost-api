@@ -227,7 +227,8 @@ describe('request retry logic', () => {
         }
     });
 
-    it('retries on 429 and respects Retry-After header', async () => {
+    it('retries on 429 and respects Retry-After header delay', async () => {
+        const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
         const fetchMock = vi.fn()
             .mockResolvedValueOnce(makeResponse(429, 'rate limited', {
                 contentType: 'text/plain',
@@ -245,6 +246,11 @@ describe('request retry logic', () => {
 
         expect(fetchMock).toHaveBeenCalledTimes(2);
         expect(result).toEqual({ ok: true });
+
+        const retryCall = setTimeoutSpy.mock.calls.find(([, ms]) => ms === 2000);
+
+        expect(retryCall).toBeDefined();
+        setTimeoutSpy.mockRestore();
     });
 
     it('falls back to backoff delay when Retry-After header is unparseable', async () => {

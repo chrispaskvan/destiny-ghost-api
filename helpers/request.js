@@ -84,7 +84,7 @@ async function request({ url, method, headers = {}, data: body, ...rest } = {}, 
                     ? parseRetryAfter(retryAfterHeader)
                     : null;
                 const delay = parsed != null
-                    ? Math.min(parsed, maxDelay)
+                    ? parsed
                     : getBackoffDelay(attempt, baseDelay, maxDelay);
 
                 log.warn({ attempt: attempt + 1, delay, status: response.status, url }, 'Retrying HTTP request');
