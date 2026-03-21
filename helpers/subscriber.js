@@ -70,10 +70,12 @@ class Subscriber {
             log.info({ jobId: job.id }, 'Job completed');
         });
         worker.on('failed', (job, err) => {
-            log.error({ 
-                jobId: job?.id, 
+            log.error({
+                jobId: job?.id,
                 error: err.message,
-                stack: err.stack 
+                stack: err.stack,
+                attemptsMade: job?.attemptsMade,
+                maxAttempts: job?.opts?.attempts,
             }, 'Job failed');
         });
         worker.on('error', err => {

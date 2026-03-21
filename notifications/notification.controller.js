@@ -1,7 +1,10 @@
+import { UnrecoverableError } from 'bullmq';
 import publisher from '../helpers/publisher.js';
+import { isTransientError } from '../helpers/retry.js';
 import subscriber from '../helpers/subscriber.js';
 import NotificationError from './notification.error.js';
 import notificationTypes from './notification.types.js';
+import XurUnavailableError from './xur-unavailable.error.js';
 import ClaimCheck from '../helpers/claim-check.js';
 import log from '../helpers/log.js';
 import throttle from '../helpers/throttle.js';
@@ -40,12 +43,19 @@ class NotificationController {
                 const characters = await this.destiny.getProfile(membershipId, membershipType);
 
                 if (characters && characters.length) {
-                    const itemHashes = await this.destiny.getXur(
-                        membershipId,
-                        membershipType,
-                        characters[0].characterId,
-                        accessToken,
-                    );
+                    let itemHashes;
+                    try {
+                        itemHashes = await this.destiny.getXur(
+                            membershipId,
+                            membershipType,
+                            characters[0].characterId,
+                            accessToken,
+                        );
+                    } catch (xurErr) {
+                        if (isTransientError(xurErr)) throw xurErr;
+                        throw new XurUnavailableError(xurErr.message);
+                    }
+
                     const weaponCategory = await this.world.getWeaponCategory();
                     const items = await Promise.all(itemHashes.map(itemHash => this.world.getItemByHash(itemHash)));
                     const message = items
@@ -57,12 +67,21 @@ class NotificationController {
                     });
                     await ClaimCheck.updatePhoneNumber(claimCheckNumber, phoneNumber, status);
                 }
-            } catch {
-                const { status } = await this.notifications.sendMessage('Xur has closed shop. He\'ll return Friday.', phoneNumber, null, {
-                    claimCheckNumber,
-                    notificationType,
-                });
-                log.info(JSON.stringify(status));
+            } catch (err) {
+                if (err instanceof XurUnavailableError) {
+                    const { status } = await this.notifications.sendMessage('Xur has closed shop. He\'ll return Friday.', phoneNumber, null, {
+                        claimCheckNumber,
+                        notificationType,
+                    });
+                    log.info(JSON.stringify(status));
+                    return;
+                }
+
+                if (isTransientError(err)) {
+                    throw err;
+                }
+
+                throw new UnrecoverableError(err.message);
             }
         }
     }
