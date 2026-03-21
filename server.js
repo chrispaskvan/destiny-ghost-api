@@ -13,7 +13,6 @@ import applicationInsights from './helpers/application-insights.js';
 import cache from './helpers/cache.js';
 import jobs from './helpers/jobs.js';
 import loaders from './loaders/index.js';
-import log from './helpers/log.js';
 import subscriber from './helpers/subscriber.js';
 import processExternalPromisesWithTimeout from './helpers/process-external-promises-with-timeout.js';
 import pool from './helpers/pool.js';
@@ -75,17 +74,17 @@ const startServer = async () => {
                 const result = results[index];
 
                 if (result.status === 'fulfilled') {
-                    log.info(`${label} shut down`);
+                    console.log(`${label} shut down`);
                 } else if (result.status === 'timed-out') {
-                    log.error(`${label} failed to shut down in time`);
+                    console.error(`${label} failed to shut down in time`);
                 } else {
-                    log.error({ err: result.reason }, `${label} failed to shut down`);
+                    console.error(`${label} failed to shut down`, result.reason);
                 }
             });
 
             insecureServer.close();
         },
-        logger: log.error.bind(log),
+        logger: console.error,
     });
 
     insecureConnection = insecureServer.listen(port, () => {
