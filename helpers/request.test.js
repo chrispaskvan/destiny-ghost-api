@@ -1,4 +1,3 @@
-/* global Response */
 import {
     afterEach, beforeEach, describe, expect, test, vi,
 } from 'vitest';
