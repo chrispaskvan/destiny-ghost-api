@@ -10,7 +10,7 @@ import DestinyError from './destiny.error.js';
 import DestinyService from './destiny.service.js';
 import mockManifestResponse from '../mocks/manifestResponse.json';
 
-vi.mock('../helpers/request');
+vi.mock('../helpers/request.js');
 
 let destinyService;
 

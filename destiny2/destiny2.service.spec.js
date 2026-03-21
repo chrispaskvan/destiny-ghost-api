@@ -12,7 +12,7 @@ import mockPlayerStatisticsResponse from '../mocks/playerStatisticsResponse.json
 import mockXurResponse from '../mocks/xurResponse.json';
 import { get, post } from '../helpers/request.js';
 
-vi.mock('../helpers/request');
+vi.mock('../helpers/request.js');
 
 const mockUser = {
     membershipId: '11',

@@ -11,17 +11,17 @@ import ClaimCheck from '../helpers/claim-check.js';
 import log from '../helpers/log.js';
 import throttle from '../helpers/throttle.js';
 
-vi.mock('../helpers/publisher');
-vi.mock('../helpers/subscriber');
-vi.mock('./notification.error');
-vi.mock('../helpers/claim-check');
-vi.mock('../helpers/log', () => ({
+vi.mock('../helpers/publisher.js');
+vi.mock('../helpers/subscriber.js');
+vi.mock('./notification.error.js');
+vi.mock('../helpers/claim-check.js');
+vi.mock('../helpers/log.js', () => ({
     default: {
         info: vi.fn(),
         error: vi.fn(),
     },
 }));
-vi.mock('../helpers/throttle');
+vi.mock('../helpers/throttle.js');
 
 const chance = new Chance();
 const phoneNumber = chance.phone();

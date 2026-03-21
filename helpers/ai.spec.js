@@ -8,7 +8,7 @@ vi.mock('@google/genai', () => ({
         models = { generateContent: vi.fn() };
     },
 }));
-vi.mock('./config', () => ({
+vi.mock('./config.js', () => ({
     default: {
         gemini: {
             apiKey: 'test-api-key',
@@ -16,7 +16,7 @@ vi.mock('./config', () => ({
         },
     },
 }));
-vi.mock('./log', () => ({
+vi.mock('./log.js', () => ({
     default: {
         info: vi.fn(),
         warn: vi.fn(),

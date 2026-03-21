@@ -7,13 +7,13 @@ import HealthController from './health.controller.js';
 import manifestResponse from '../mocks/manifestResponse.json';
 import manifest2Response from '../mocks/manifest2Response.json';
 
-vi.mock('../helpers/request');
-vi.mock('../helpers/application-insights', () => ({
+vi.mock('../helpers/request.js');
+vi.mock('../helpers/application-insights.js', () => ({
     default: {
         trackMetric: vi.fn(),
     },
 }));
-vi.mock('../helpers/log', () => ({
+vi.mock('../helpers/log.js', () => ({
     default: {
         error: vi.fn(),
         info: vi.fn(),

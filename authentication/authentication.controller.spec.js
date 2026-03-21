@@ -8,7 +8,7 @@ import usersJson from '../mocks/users.json';
 
 const [mockUser] = usersJson;
 
-vi.mock('../helpers/request');
+vi.mock('../helpers/request.js');
 
 const chance = new Chance();
 const authenticationService = {

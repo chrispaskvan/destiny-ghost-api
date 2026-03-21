@@ -7,16 +7,16 @@ import Chance from 'chance';
 import { createResponse, createRequest } from 'node-mocks-http';
 import UserRouter from './user.routes.js';
 
-vi.mock('../helpers/postmaster', () => ({
+vi.mock('../helpers/postmaster.js', () => ({
     default: class {
         confirm = vi.fn().mockResolvedValue({ messageId: 'test-email-id' });
     },
 }));
-vi.mock('../helpers/tokens', () => ({
+vi.mock('../helpers/tokens.js', () => ({
     getBlob: vi.fn(() => 'test-blob-token'),
     getCode: vi.fn(() => '123456'),
 }));
-vi.mock('../helpers/get-epoch', () => ({
+vi.mock('../helpers/get-epoch.js', () => ({
     default: vi.fn(() => Math.floor(Temporal.Now.instant().epochMilliseconds / 1000)),
 }));
 

@@ -5,7 +5,7 @@ import Chance from 'chance';
 import getEpoch from '../helpers/get-epoch.js';
 import UserController from './user.controller.js';
 
-vi.mock('../helpers/postmaster', () => ({
+vi.mock('../helpers/postmaster.js', () => ({
     default: class {
         register = vi.fn();
     },

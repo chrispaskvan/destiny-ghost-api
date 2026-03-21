@@ -4,7 +4,7 @@ import {
 } from 'vitest';
 import root from './root.js';
 
-vi.mock('../helpers/throttle');
+vi.mock('../helpers/throttle.js');
 
 const chance = new Chance();
 const mockPlayer = {
