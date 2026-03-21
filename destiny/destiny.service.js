@@ -113,7 +113,7 @@ class DestinyService {
             url: `${servicePlatform}/app/oauth/token/`,
         };
 
-        return await post(options);
+        return await post(options, { maxRetries: 3 });
     }
 
     /**

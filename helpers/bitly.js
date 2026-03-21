@@ -38,7 +38,7 @@ async function getShortUrl(longUrl) {
         return Promise.reject(new Error('URL is not a string'));
     }
 
-    const { link: shortUrl } = await post(options);
+    const { link: shortUrl } = await post(options, { maxRetries: 3 });
 
     return shortUrl;
 }
