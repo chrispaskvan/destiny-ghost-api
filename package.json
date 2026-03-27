@@ -54,7 +54,7 @@
         "http-status-codes": "^2.3.0",
         "ioredis": "^5.10.0",
         "lru-cache": "^11.2.7",
-        "nodemailer": "^8.0.2",
+        "nodemailer": "^8.0.4",
         "nodemailer-smtp-transport": "^2.7.4",
         "pino": "^10.3.1",
         "pino-http": "^11.0.0",
