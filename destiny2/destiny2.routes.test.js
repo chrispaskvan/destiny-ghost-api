@@ -1,4 +1,4 @@
-import StreamArray from 'stream-json/streamers/StreamArray';
+import streamArray from 'stream-json/streamers/stream-array.js';
 import nock from 'nock';
 import { StatusCodes } from 'http-status-codes';
 import { Readable } from 'node:stream';
@@ -134,7 +134,7 @@ describe('/destiny2', () => {
                     }
 
                     const stream = Readable.fromWeb(getResponse.body);
-                    const objectsStream = stream.pipe(StreamArray.withParser());
+                    const objectsStream = stream.pipe(streamArray.withParserAsStream());
                     const items = [];
 
                     await new Promise((resolve, reject) => {
