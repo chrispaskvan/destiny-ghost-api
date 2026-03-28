@@ -7,6 +7,7 @@
  * @requires azure
  */
 import { Queue, QueueEvents } from 'bullmq';
+import applicationInsights from './application-insights.js';
 import client from './jobs.js';
 import context from './async-context.js';
 import log from './log.js';
@@ -39,6 +40,21 @@ class Publisher {
     constructor(topic = 'notifications') {
         this.#queue = new Queue(topic, {
             connection: client,
+            defaultJobOptions: {
+                attempts: 3,
+                backoff: {
+                    type: 'exponential',
+                    delay: 5000,
+                },
+                removeOnComplete: {
+                    age: 86_400,
+                    count: 1000,
+                },
+                removeOnFail: {
+                    age: 604_800,
+                    count: 500,
+                },
+            },
         });
         this.#queueEvents = new QueueEvents(topic, {
             connection: client,
@@ -58,8 +74,26 @@ class Publisher {
         this.#queueEvents.on('completed', ({ jobId }) => {
             log.info({ jobId }, 'Job completed');
         });
-        this.#queueEvents.on('failed', ({ jobId, failedReason }) => {
+        this.#queueEvents.on('failed', async ({ jobId, failedReason }) => {
             log.error({ jobId, failedReason }, 'Job failed');
+
+            try {
+                const job = await this.#queue.getJob(jobId);
+                if (job && job.attemptsMade >= (job.opts?.attempts ?? 1)) {
+                    log.error({
+                        jobId,
+                        failedReason,
+                        attemptsMade: job.attemptsMade,
+                    }, 'Job exhausted all retries');
+
+                    applicationInsights.trackMetric({
+                        name: 'notification-job-exhausted',
+                        value: 1,
+                    });
+                }
+            } catch (handlerErr) {
+                log.error({ jobId, error: handlerErr.message }, 'Error in failed event handler');
+            }
         });
     }
 
