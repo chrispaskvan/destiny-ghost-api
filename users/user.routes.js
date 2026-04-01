@@ -22,8 +22,7 @@ function signIn(req, res, user, next) {
         req.session.membershipType = user.membershipType;
         req.session.state = undefined;
 
-        res.status(StatusCodes.OK)
-            .json({ displayName: user.displayName });
+        res.redirect(`${process.env.WEBSITE}/?auth=success`);
     });
 }
 
@@ -331,11 +330,10 @@ const routes = ({
             } = req;
 
             if (displayName) {
-                return res.status(StatusCodes.OK)
-                    .json({ displayName });
+                return res.redirect(`${process.env.WEBSITE}/?auth=success`);
             }
             if (sessionState !== queryState) {
-                return res.sendStatus(StatusCodes.UNAUTHORIZED);
+                return res.redirect(`${process.env.WEBSITE}/?error=unauthorized`);
             }
 
             const user = await userController.signIn({
@@ -345,7 +343,7 @@ const routes = ({
                 sessionState,
             });
             if (!user) {
-                return res.status(StatusCodes.NOT_FOUND).end();
+                return res.redirect(`${process.env.WEBSITE}/?error=auth_failed`);
             }
 
             return signIn(req, res, user, next);

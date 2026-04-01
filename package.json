@@ -29,10 +29,10 @@
     "dependencies": {
         "@azure/cosmos": "^4.9.2",
         "@godaddy/terminus": "^4.12.1",
-        "@google/genai": "^1.46.0",
+        "@google/genai": "^1.47.0",
         "@grpc/grpc-js": "^1.14.3",
         "@grpc/proto-loader": "^0.8.0",
-        "@modelcontextprotocol/sdk": "^1.28.0",
+        "@modelcontextprotocol/sdk": "^1.29.0",
         "@paralleldrive/cuid2": "^3.3.0",
         "@snyk/protect": "^1.1303.2",
         "applicationinsights": "^3.14.0",
@@ -65,7 +65,7 @@
         "swagger-ui-express": "^5.0.0",
         "tinypool": "^2.1.0",
         "twilio": "^5.13.1",
-        "yauzl": "^3.2.1",
+        "yauzl": "^3.3.0",
         "zod": "^4.3.6"
     },
     "overrides": {
@@ -87,7 +87,7 @@
         "remark-lint-list-item-indent": "^4.0.1",
         "remark-preset-lint-consistent": "^6.0.1",
         "remark-preset-lint-recommended": "^7.0.1",
-        "stream-json": "^2.0.0",
+        "stream-json": "^2.1.0",
         "swagger-jsdoc": "^6.2.8",
         "v8": "^0.1.0",
         "vitest": "^4.1.2"
