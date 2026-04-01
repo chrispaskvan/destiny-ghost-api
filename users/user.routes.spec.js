@@ -33,13 +33,16 @@ const authenticationController = {
     },
 };
 const destinyService = {
+    getAccessTokenFromCode: vi.fn(),
     getCurrentUser: vi.fn(),
 };
 const notificationService = {
     sendMessage: vi.fn(),
 };
 const userService = {
+    createAnonymousUser: vi.fn(),
     getUserByDisplayName: vi.fn(),
+    getUserByMembershipId: vi.fn(),
     updateUser: vi.fn(),
 };
 const worldRepository = {
@@ -875,6 +878,245 @@ describe('UserRouter', () => {
                     try {
                         expect(res.statusCode).toEqual(StatusCodes.NOT_FOUND);
                         expect(res._getData()).toContain('Invalid cipher');
+                        done();
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
+
+                userRouter(req, res, next);
+            }));
+        });
+    });
+
+    describe('GET /users/signIn/Bungie', () => {
+        const queryState = 'test-state-value';
+
+        describe('when user is already authenticated (displayName in session)', () => {
+            it('should redirect a browser client to the website', () => new Promise((done, reject) => {
+                const req = createRequest({
+                    method: 'GET',
+                    url: '/signIn/Bungie',
+                    headers: { accept: 'text/html' },
+                    query: { code: 'oauth-code', state: queryState },
+                    session: { displayName, state: queryState },
+                });
+
+                res.on('end', () => {
+                    try {
+                        expect(res.statusCode).toEqual(StatusCodes.MOVED_TEMPORARILY);
+                        expect(res._getRedirectUrl()).toContain('auth=success');
+                        done();
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
+
+                userRouter(req, res, next);
+            }));
+
+            it('should return JSON to an API client', () => new Promise((done, reject) => {
+                const req = createRequest({
+                    method: 'GET',
+                    url: '/signIn/Bungie',
+                    headers: { accept: 'application/json' },
+                    query: { code: 'oauth-code', state: queryState },
+                    session: { displayName, state: queryState },
+                });
+
+                res.on('end', () => {
+                    try {
+                        expect(res.statusCode).toEqual(StatusCodes.OK);
+                        expect(JSON.parse(res._getData())).toEqual({ displayName });
+                        done();
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
+
+                userRouter(req, res, next);
+            }));
+        });
+
+        describe('when state does not match', () => {
+            it('should redirect a browser client with an error', () => new Promise((done, reject) => {
+                const req = createRequest({
+                    method: 'GET',
+                    url: '/signIn/Bungie',
+                    headers: { accept: 'text/html' },
+                    query: { code: 'oauth-code', state: 'different-state' },
+                    session: { state: queryState },
+                });
+
+                res.on('end', () => {
+                    try {
+                        expect(res.statusCode).toEqual(StatusCodes.MOVED_TEMPORARILY);
+                        expect(res._getRedirectUrl()).toContain('error=unauthorized');
+                        done();
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
+
+                userRouter(req, res, next);
+            }));
+
+            it('should return 401 to an API client', () => new Promise((done, reject) => {
+                const req = createRequest({
+                    method: 'GET',
+                    url: '/signIn/Bungie',
+                    headers: { accept: 'application/json' },
+                    query: { code: 'oauth-code', state: 'different-state' },
+                    session: { state: queryState },
+                });
+
+                res.on('end', () => {
+                    try {
+                        expect(res.statusCode).toEqual(StatusCodes.UNAUTHORIZED);
+                        done();
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
+
+                userRouter(req, res, next);
+            }));
+        });
+
+        describe('when userController.signIn returns undefined (user not found)', () => {
+            beforeEach(() => {
+                destinyService.getAccessTokenFromCode.mockResolvedValue({ access_token: 'token' });
+                destinyService.getCurrentUser.mockResolvedValue(undefined);
+            });
+
+            it('should redirect a browser client with an auth_failed error', () => new Promise((done, reject) => {
+                const req = createRequest({
+                    method: 'GET',
+                    url: '/signIn/Bungie',
+                    headers: { accept: 'text/html' },
+                    query: { code: 'oauth-code', state: queryState },
+                    session: { state: queryState },
+                });
+
+                res.on('end', () => {
+                    try {
+                        expect(res.statusCode).toEqual(StatusCodes.MOVED_TEMPORARILY);
+                        expect(res._getRedirectUrl()).toContain('error=auth_failed');
+                        done();
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
+
+                userRouter(req, res, next);
+            }));
+
+            it('should return 404 to an API client', () => new Promise((done, reject) => {
+                const req = createRequest({
+                    method: 'GET',
+                    url: '/signIn/Bungie',
+                    headers: { accept: 'application/json' },
+                    query: { code: 'oauth-code', state: queryState },
+                    session: { state: queryState },
+                });
+
+                res.on('end', () => {
+                    try {
+                        expect(res.statusCode).toEqual(StatusCodes.NOT_FOUND);
+                        done();
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
+
+                userRouter(req, res, next);
+            }));
+        });
+
+        describe('when sign-in succeeds', () => {
+            const bungieUser = {
+                displayName,
+                membershipId: 'membership-123',
+                membershipType,
+                profilePicturePath: '/path/to/pic',
+            };
+
+            beforeEach(() => {
+                destinyService.getAccessTokenFromCode.mockResolvedValue({ access_token: 'token' });
+                destinyService.getCurrentUser.mockResolvedValue(bungieUser);
+                userService.getUserByMembershipId.mockResolvedValue({
+                    ...bungieUser,
+                    dateRegistered: Temporal.Now.instant().toString(),
+                });
+                userService.updateUser.mockResolvedValue(bungieUser);
+            });
+
+            it('should redirect a browser client to the website on success', () => new Promise((done, reject) => {
+                const req = createRequest({
+                    method: 'GET',
+                    url: '/signIn/Bungie',
+                    headers: { accept: 'text/html' },
+                    query: { code: 'oauth-code', state: queryState },
+                    session: {
+                        state: queryState,
+                        regenerate: vi.fn((cb) => { cb(null); }),
+                    },
+                });
+
+                res.on('end', () => {
+                    try {
+                        expect(res.statusCode).toEqual(StatusCodes.MOVED_TEMPORARILY);
+                        expect(res._getRedirectUrl()).toContain('auth=success');
+                        done();
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
+
+                userRouter(req, res, next);
+            }));
+
+            it('should return JSON with displayName to an API client on success', () => new Promise((done, reject) => {
+                const req = createRequest({
+                    method: 'GET',
+                    url: '/signIn/Bungie',
+                    headers: { accept: 'application/json' },
+                    query: { code: 'oauth-code', state: queryState },
+                    session: {
+                        state: queryState,
+                        regenerate: vi.fn((cb) => { cb(null); }),
+                    },
+                });
+
+                res.on('end', () => {
+                    try {
+                        expect(res.statusCode).toEqual(StatusCodes.OK);
+                        expect(JSON.parse(res._getData())).toEqual({ displayName });
+                        done();
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
+
+                userRouter(req, res, next);
+            }));
+
+            it('should return JSON to an API client with Accept: */* (not redirect)', () => new Promise((done, reject) => {
+                const req = createRequest({
+                    method: 'GET',
+                    url: '/signIn/Bungie',
+                    headers: { accept: '*/*' },
+                    query: { code: 'oauth-code', state: queryState },
+                    session: {
+                        state: queryState,
+                        regenerate: vi.fn((cb) => { cb(null); }),
+                    },
+                });
+
+                res.on('end', () => {
+                    try {
+                        expect(res.statusCode).toEqual(StatusCodes.OK);
+                        expect(JSON.parse(res._getData())).toEqual({ displayName });
                         done();
                     } catch (err) {
                         reject(err);
