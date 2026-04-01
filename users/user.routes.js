@@ -16,13 +16,18 @@ import log from '../helpers/log.js';
  */
 function signIn(req, res, user, next) {
     req.session.regenerate(err => {
-        if (err) next(err);
+        if (err) return next(err);
 
         req.session.displayName = user.displayName;
         req.session.membershipType = user.membershipType;
         req.session.state = undefined;
 
-        res.redirect(`${process.env.WEBSITE}/?auth=success`);
+        const wantsHtml = req.accepts('html') && !req.xhr;
+        if (wantsHtml) {
+            res.redirect(`${process.env.WEBSITE}/?auth=success`);
+        } else {
+            res.status(StatusCodes.OK).json({ displayName: user.displayName });
+        }
     });
 }
 
@@ -329,11 +334,15 @@ const routes = ({
                 session: { displayName, state: sessionState },
             } = req;
 
+            const wantsHtml = req.accepts('html') && !req.xhr;
+
             if (displayName) {
-                return res.redirect(`${process.env.WEBSITE}/?auth=success`);
+                if (wantsHtml) return res.redirect(`${process.env.WEBSITE}/?auth=success`);
+                return res.status(StatusCodes.OK).json({ displayName });
             }
             if (sessionState !== queryState) {
-                return res.redirect(`${process.env.WEBSITE}/?error=unauthorized`);
+                if (wantsHtml) return res.redirect(`${process.env.WEBSITE}/?error=unauthorized`);
+                return res.sendStatus(StatusCodes.UNAUTHORIZED);
             }
 
             const user = await userController.signIn({
@@ -343,7 +352,8 @@ const routes = ({
                 sessionState,
             });
             if (!user) {
-                return res.redirect(`${process.env.WEBSITE}/?error=auth_failed`);
+                if (wantsHtml) return res.redirect(`${process.env.WEBSITE}/?error=auth_failed`);
+                return res.status(StatusCodes.NOT_FOUND).end();
             }
 
             return signIn(req, res, user, next);
