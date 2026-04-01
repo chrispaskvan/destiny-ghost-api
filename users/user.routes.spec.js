@@ -1059,7 +1059,7 @@ describe('UserRouter', () => {
                     query: { code: 'oauth-code', state: queryState },
                     session: {
                         state: queryState,
-                        regenerate: vi.fn((cb) => { cb(null); }),
+                        regenerate: vi.fn(cb => { cb(null); }),
                     },
                 });
 
@@ -1084,7 +1084,7 @@ describe('UserRouter', () => {
                     query: { code: 'oauth-code', state: queryState },
                     session: {
                         state: queryState,
-                        regenerate: vi.fn((cb) => { cb(null); }),
+                        regenerate: vi.fn(cb => { cb(null); }),
                     },
                 });
 
@@ -1109,7 +1109,7 @@ describe('UserRouter', () => {
                     query: { code: 'oauth-code', state: queryState },
                     session: {
                         state: queryState,
-                        regenerate: vi.fn((cb) => { cb(null); }),
+                        regenerate: vi.fn(cb => { cb(null); }),
                     },
                 });
 
