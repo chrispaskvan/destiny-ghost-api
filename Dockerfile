@@ -1,5 +1,5 @@
 # Define Node.js version as a build argument
-ARG NODE_VERSION=24.14.0
+ARG NODE_VERSION=24.14.1
 
 # Build stage - includes dev dependencies for OpenAPI generation
 FROM node:${NODE_VERSION}-trixie-slim AS builder
@@ -47,6 +47,12 @@ ENV DOMAIN=$DOMAIN
 
 ARG PORT=1100
 ENV PORT=$PORT
+
+ARG PROTOCOL=https
+ENV PROTOCOL=$PROTOCOL
+
+ARG WEBSITE=https://app.destiny-ghost.com
+ENV WEBSITE=$WEBSITE
 
 EXPOSE $PORT
 

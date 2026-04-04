@@ -16,14 +16,17 @@ import log from '../helpers/log.js';
  */
 function signIn(req, res, user, next) {
     req.session.regenerate(err => {
-        if (err) next(err);
+        if (err) return next(err);
 
         req.session.displayName = user.displayName;
         req.session.membershipType = user.membershipType;
         req.session.state = undefined;
 
-        res.status(StatusCodes.OK)
-            .json({ displayName: user.displayName });
+        if (req.accepts(['json', 'html']) === 'html') {
+            res.redirect(`${process.env.WEBSITE}/?auth=success`);
+        } else {
+            res.status(StatusCodes.OK).json({ displayName: user.displayName });
+        }
     });
 }
 
@@ -329,12 +332,20 @@ const routes = ({
                 query: { code, state: queryState },
                 session: { displayName, state: sessionState },
             } = req;
+            const wantsHtml = req.accepts(['json', 'html']) === 'html';
 
             if (displayName) {
-                return res.status(StatusCodes.OK)
-                    .json({ displayName });
+                if (wantsHtml) {
+                    return res.redirect(`${process.env.WEBSITE}/?auth=success`);
+                }
+
+                return res.status(StatusCodes.OK).json({ displayName });
             }
             if (sessionState !== queryState) {
+                if (wantsHtml) {
+                    return res.redirect(`${process.env.WEBSITE}/?error=unauthorized`);
+                }
+
                 return res.sendStatus(StatusCodes.UNAUTHORIZED);
             }
 
@@ -345,6 +356,10 @@ const routes = ({
                 sessionState,
             });
             if (!user) {
+                if (wantsHtml) {
+                    return res.redirect(`${process.env.WEBSITE}/?error=auth_failed`);
+                }
+
                 return res.status(StatusCodes.NOT_FOUND).end();
             }
 
