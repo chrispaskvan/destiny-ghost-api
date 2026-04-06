@@ -5,8 +5,10 @@ service ItemService {
 }
 
 message PageRequest {
-    int32 page = 1;
-    int32 size = 2;
+    // 1-based page number; must be >= 1.
+    uint32 page = 1;
+    // Page size; must be >= 1 and <= 100.
+    uint32 size = 2;
 }
 
 message Item {

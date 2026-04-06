@@ -34,9 +34,25 @@ const startServer = () => {
             }
 
             const items = world.items;
+
+            if (!items?.length) {
+                return callback({ code: grpc.status.UNAVAILABLE });
+            }
+
             const page = call.request.page || 1;
             const size = call.request.size || 11;
+            const MAX_SIZE = 100;
+
+            if (page < 1 || size < 1 || size > MAX_SIZE) {
+                return callback({ code: grpc.status.INVALID_ARGUMENT });
+            }
+
             const pages = Math.ceil(items.length / size);
+
+            if (page > pages) {
+                return callback({ code: grpc.status.OUT_OF_RANGE });
+            }
+
             const data = items.slice((page - 1) * size, page * size);
 
             callback(null, {
