@@ -7,7 +7,7 @@ service ItemService {
 message PageRequest {
     // 1-based page number; must be >= 1.
     uint32 page = 1;
-    // Page size; must be >= 1 and <= 100.
+    // Page size; must be >= 1.
     uint32 size = 2;
 }
 

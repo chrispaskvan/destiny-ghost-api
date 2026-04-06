@@ -41,9 +41,8 @@ const startServer = () => {
 
             const page = call.request.page || 1;
             const size = call.request.size || 11;
-            const MAX_SIZE = 100;
 
-            if (page < 1 || size < 1 || size > MAX_SIZE) {
+            if (page < 1 || size < 1) {
                 return callback({ code: grpc.status.INVALID_ARGUMENT });
             }
 
