@@ -39,8 +39,8 @@ const startServer = () => {
                 return callback({ code: grpc.status.UNAVAILABLE });
             }
 
-            const page = call.request.page || 1;
-            const size = call.request.size || 11;
+            const page = call.request.page ?? 1;
+            const size = call.request.size ?? 11;
 
             if (page < 1 || size < 1) {
                 return callback({ code: grpc.status.INVALID_ARGUMENT });
