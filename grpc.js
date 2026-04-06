@@ -25,18 +25,32 @@ const startServer = () => {
     server = new grpc.Server();
     server.addService(itemsProto.ItemService.service, {
         getAll: (call, callback) => {
-            Object.entries(configuration.notificationHeaders).forEach(entry => {
-                const [key, value1] = entry;
+            for (const [key, value1] of Object.entries(configuration.notificationHeaders)) {
                 const [value2] = call.metadata.get(key);
 
                 if (value1 !== value2) {
-                    callback({
-                        code: grpc.status.UNAUTHENTICATED,
-                    });
+                    return callback({ code: grpc.status.UNAUTHENTICATED });
                 }
-            });
+            }
 
-            callback(null, { items: world.items });
+            const items = world.items;
+            const page = call.request.page || 1;
+            const size = call.request.size || 11;
+            const pages = Math.ceil(items.length / size);
+            const data = items.slice((page - 1) * size, page * size);
+
+            callback(null, {
+                data,
+                links: {
+                    next: page < pages ? String(page + 1) : '',
+                },
+                page: {
+                    size,
+                    total: items.length,
+                    pages,
+                    number: page,
+                },
+            });
         },
     });
 

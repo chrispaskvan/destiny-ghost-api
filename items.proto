@@ -1,10 +1,13 @@
 syntax = "proto3";
 
 service ItemService {
-    rpc GetAll (Empty) returns (ItemList) {}
+    rpc GetAll (PageRequest) returns (ItemPage) {}
 }
 
-message Empty {}
+message PageRequest {
+    int32 page = 1;
+    int32 size = 2;
+}
 
 message Item {
     message DisplayProperties {
@@ -37,6 +40,19 @@ message Item {
     int32 hash = 18;
 }
 
-message ItemList {
-    repeated Item items = 1;
+message Links {
+    string next = 1;
+}
+
+message PageInfo {
+    int32 size = 1;
+    int32 total = 2;
+    int32 pages = 3;
+    int32 number = 4;
+}
+
+message ItemPage {
+    repeated Item data = 1;
+    Links links = 2;
+    PageInfo page = 3;
 }
