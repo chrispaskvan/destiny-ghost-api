@@ -7,6 +7,50 @@ import pool from './helpers/pool.js';
 
 let server;
 
+const createGetAllHandler = (world) => (call, callback) => {
+    for (const [key, value1] of Object.entries(configuration.notificationHeaders)) {
+        const [value2] = call.metadata.get(key);
+
+        if (value1 !== value2) {
+            return callback({ code: grpc.status.UNAUTHENTICATED });
+        }
+    }
+
+    const items = world.items;
+
+    if (!items?.length) {
+        return callback({ code: grpc.status.UNAVAILABLE });
+    }
+
+    const page = call.request.page ?? 1;
+    const size = call.request.size ?? 11;
+
+    if (page < 1 || size < 1) {
+        return callback({ code: grpc.status.INVALID_ARGUMENT });
+    }
+
+    const pages = Math.ceil(items.length / size);
+
+    if (page > pages) {
+        return callback({ code: grpc.status.OUT_OF_RANGE });
+    }
+
+    const data = items.slice((page - 1) * size, page * size);
+
+    callback(null, {
+        data,
+        links: {
+            next: page < pages ? String(page + 1) : '',
+        },
+        page: {
+            size,
+            total: items.length,
+            pages,
+            number: page,
+        },
+    });
+};
+
 const startServer = () => {
     const packageDefinition = protoLoader.loadSync('./items.proto', {
         keepCase: true,
@@ -24,49 +68,7 @@ const startServer = () => {
 
     server = new grpc.Server();
     server.addService(itemsProto.ItemService.service, {
-        getAll: (call, callback) => {
-            for (const [key, value1] of Object.entries(configuration.notificationHeaders)) {
-                const [value2] = call.metadata.get(key);
-
-                if (value1 !== value2) {
-                    return callback({ code: grpc.status.UNAUTHENTICATED });
-                }
-            }
-
-            const items = world.items;
-
-            if (!items?.length) {
-                return callback({ code: grpc.status.UNAVAILABLE });
-            }
-
-            const page = call.request.page ?? 1;
-            const size = call.request.size ?? 11;
-
-            if (page < 1 || size < 1) {
-                return callback({ code: grpc.status.INVALID_ARGUMENT });
-            }
-
-            const pages = Math.ceil(items.length / size);
-
-            if (page > pages) {
-                return callback({ code: grpc.status.OUT_OF_RANGE });
-            }
-
-            const data = items.slice((page - 1) * size, page * size);
-
-            callback(null, {
-                data,
-                links: {
-                    next: page < pages ? String(page + 1) : '',
-                },
-                page: {
-                    size,
-                    total: items.length,
-                    pages,
-                    number: page,
-                },
-            });
-        },
+        getAll: createGetAllHandler(world),
     });
 
     server.bindAsync(`127.0.0.1:${port}`, grpc.ServerCredentials.createInsecure(), () => {
@@ -79,6 +81,7 @@ const stopServer = () => {
 };
 
 export {
+    createGetAllHandler,
     startServer,
     stopServer,
 };

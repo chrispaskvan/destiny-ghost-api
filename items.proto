@@ -47,10 +47,10 @@ message Links {
 }
 
 message PageInfo {
-    int32 size = 1;
-    int32 total = 2;
-    int32 pages = 3;
-    int32 number = 4;
+    uint32 size = 1;
+    uint64 total = 2;
+    uint32 pages = 3;
+    uint32 number = 4;
 }
 
 message ItemPage {
