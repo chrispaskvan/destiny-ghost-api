@@ -12,9 +12,9 @@ vi.mock('./helpers/config.js', () => ({
 vi.mock('./helpers/pool.js', () => ({ default: {} }));
 vi.mock('./helpers/world2.js', () => ({ default: vi.fn() }));
 
-const createCall = ({ headerValue = 'test-value', page = null, size = null } = {}) => ({
+const createCall = ({ headerValue = 'test-value', page = undefined, size = undefined } = {}) => ({
     metadata: {
-        get: (key) => (key === 'x-test-header' ? [headerValue] : []),
+        get: key => (key === 'x-test-header' ? [headerValue] : []),
     },
     request: { page, size },
 });
@@ -34,7 +34,10 @@ describe('createGetAllHandler', () => {
 
             handler(createCall({ headerValue: 'wrong' }), callback);
 
-            expect(callback).toHaveBeenCalledWith({ code: grpc.status.UNAUTHENTICATED });
+            expect(callback).toHaveBeenCalledWith({
+                code: grpc.status.UNAUTHENTICATED,
+                message: 'Invalid or missing metadata for "x-test-header".',
+            });
         });
     });
 
@@ -44,7 +47,10 @@ describe('createGetAllHandler', () => {
 
             handler(createCall(), callback);
 
-            expect(callback).toHaveBeenCalledWith({ code: grpc.status.UNAVAILABLE });
+            expect(callback).toHaveBeenCalledWith({
+                code: grpc.status.UNAVAILABLE,
+                message: 'No items are currently available.',
+            });
         });
 
         it('returns UNAVAILABLE when items is empty', () => {
@@ -52,7 +58,10 @@ describe('createGetAllHandler', () => {
 
             handler(createCall(), callback);
 
-            expect(callback).toHaveBeenCalledWith({ code: grpc.status.UNAVAILABLE });
+            expect(callback).toHaveBeenCalledWith({
+                code: grpc.status.UNAVAILABLE,
+                message: 'No items are currently available.',
+            });
         });
     });
 
@@ -62,7 +71,10 @@ describe('createGetAllHandler', () => {
 
             handler(createCall({ page: 0 }), callback);
 
-            expect(callback).toHaveBeenCalledWith({ code: grpc.status.INVALID_ARGUMENT });
+            expect(callback).toHaveBeenCalledWith({
+                code: grpc.status.INVALID_ARGUMENT,
+                message: 'page and size must be greater than or equal to 1.',
+            });
         });
 
         it('returns INVALID_ARGUMENT when size is 0', () => {
@@ -70,7 +82,10 @@ describe('createGetAllHandler', () => {
 
             handler(createCall({ size: 0 }), callback);
 
-            expect(callback).toHaveBeenCalledWith({ code: grpc.status.INVALID_ARGUMENT });
+            expect(callback).toHaveBeenCalledWith({
+                code: grpc.status.INVALID_ARGUMENT,
+                message: 'page and size must be greater than or equal to 1.',
+            });
         });
 
         it('returns OUT_OF_RANGE when page exceeds total pages', () => {
@@ -78,7 +93,10 @@ describe('createGetAllHandler', () => {
 
             handler(createCall({ page: 999, size: 10 }), callback);
 
-            expect(callback).toHaveBeenCalledWith({ code: grpc.status.OUT_OF_RANGE });
+            expect(callback).toHaveBeenCalledWith({
+                code: grpc.status.OUT_OF_RANGE,
+                message: 'Requested page 999 exceeds available pages (4).',
+            });
         });
     });
 
@@ -106,24 +124,24 @@ describe('createGetAllHandler', () => {
             expect(response.data).toHaveLength(10);
         });
 
-        it('sets links.next to the next page number when more pages exist', () => {
+        it('sets links.next_page to the next page number when more pages exist', () => {
             const handler = createGetAllHandler(world);
 
             handler(createCall({ page: 1, size: 10 }), callback);
 
             const [, response] = callback.mock.calls[0];
 
-            expect(response.links.next).toBe('2');
+            expect(response.links.next_page).toBe('2');
         });
 
-        it('sets links.next to empty string on the last page', () => {
+        it('sets links.next_page to empty string on the last page', () => {
             const handler = createGetAllHandler(world);
 
             handler(createCall({ page: 4, size: 10 }), callback);
 
             const [, response] = callback.mock.calls[0];
 
-            expect(response.links.next).toBe('');
+            expect(response.links.next_page).toBe('');
         });
 
         it('returns correct page metadata', () => {

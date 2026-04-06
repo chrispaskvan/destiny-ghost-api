@@ -43,7 +43,8 @@ message Item {
 }
 
 message Links {
-    string next = 1;
+    // 1-based next page number as a string; empty when there is no next page.
+    string next_page = 1;
 }
 
 message PageInfo {

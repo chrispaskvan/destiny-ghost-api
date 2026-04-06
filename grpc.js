@@ -7,32 +7,44 @@ import pool from './helpers/pool.js';
 
 let server;
 
-const createGetAllHandler = (world) => (call, callback) => {
+const createGetAllHandler = world => (call, callback) => {
     for (const [key, value1] of Object.entries(configuration.notificationHeaders)) {
         const [value2] = call.metadata.get(key);
 
         if (value1 !== value2) {
-            return callback({ code: grpc.status.UNAUTHENTICATED });
+            return callback({
+                code: grpc.status.UNAUTHENTICATED,
+                message: `Invalid or missing metadata for "${key}".`,
+            });
         }
     }
 
     const items = world.items;
 
     if (!items?.length) {
-        return callback({ code: grpc.status.UNAVAILABLE });
+        return callback({
+            code: grpc.status.UNAVAILABLE,
+            message: 'No items are currently available.',
+        });
     }
 
     const page = call.request.page ?? 1;
     const size = call.request.size ?? 11;
 
     if (page < 1 || size < 1) {
-        return callback({ code: grpc.status.INVALID_ARGUMENT });
+        return callback({
+            code: grpc.status.INVALID_ARGUMENT,
+            message: 'page and size must be greater than or equal to 1.',
+        });
     }
 
     const pages = Math.ceil(items.length / size);
 
     if (page > pages) {
-        return callback({ code: grpc.status.OUT_OF_RANGE });
+        return callback({
+            code: grpc.status.OUT_OF_RANGE,
+            message: `Requested page ${page} exceeds available pages (${pages}).`,
+        });
     }
 
     const data = items.slice((page - 1) * size, page * size);
@@ -40,7 +52,7 @@ const createGetAllHandler = (world) => (call, callback) => {
     callback(null, {
         data,
         links: {
-            next: page < pages ? String(page + 1) : '',
+            next_page: page < pages ? String(page + 1) : '',
         },
         page: {
             size,
