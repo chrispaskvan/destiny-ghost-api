@@ -1,5 +1,6 @@
 .DS_store
 .artillery/
+.bruno/
 .claude/
 .claudeignore
 .clinic/
