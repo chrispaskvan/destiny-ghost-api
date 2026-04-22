@@ -47,7 +47,7 @@ const routes = ({
         From: z.string(),
         To: z.string(),
         Body: z.string().max(1600),
-        NumMedia: z.number().int().min(0),
+        NumMedia: z.coerce.number().int().min(0),
     });
 
     twilioRouter.route('/destiny/r').post(
