@@ -177,6 +177,18 @@ describe('AI', () => {
             expect(result).toBeUndefined();
         });
 
+        it('should handle undefined text in AI response', async () => {
+            mockUpload.mockResolvedValue({
+                mimeType: testMimeType,
+                uri: testFileUri,
+            });
+            mockGenerateContent.mockResolvedValue({});
+
+            const result = await aiInstance.getPlayersFromFile(testFilePath);
+
+            expect(result).toBeUndefined();
+        });
+
         it('should handle file upload failure', async () => {
             const uploadError = new Error('File upload failed');
 

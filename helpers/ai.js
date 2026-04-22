@@ -65,7 +65,7 @@ class AI {
             { shouldRetry: isTransientError },
         );
 
-        return result?.text.split(',');
+        return result?.text?.split(',');
     }
 }
 
