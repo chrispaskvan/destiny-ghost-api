@@ -1,41 +1,41 @@
 {
-  "Response": {
-    "version": "56578.17.04.12.1251-6",
-    "mobileAssetContentPath": "/common/destiny_content/sqlite/asset/asset_sql_content_fd24e5f944d34a326e0e21817ea353ea.content",
-    "mobileGearAssetDataBases": [
-      {
-        "version": 0,
-        "path": "/common/destiny_content/sqlite/asset/asset_sql_content_fd24e5f944d34a326e0e21817ea353ea.content"
-      },
-      {
-        "version": 1,
-        "path": "/common/destiny_content/sqlite/asset/asset_sql_content_e563ae481f48cf708da20f4ab86ba8ed.content"
-      },
-      {
-        "version": 2,
-        "path": "/common/destiny_content/sqlite/asset/asset_sql_content_e563ae481f48cf708da20f4ab86ba8ed.content"
-      }
-    ],
-    "mobileWorldContentPaths": {
-      "en": "/common/destiny_content/sqlite/en/world_sql_content_b6c7590005d9365b2723f8995f361e3f.content",
-      "fr": "/common/destiny_content/sqlite/fr/world_sql_content_05245760417482b56015edf8d2d2c930.content",
-      "es": "/common/destiny_content/sqlite/es/world_sql_content_6e9c2053def5cbb182a6a6d33334eedf.content",
-      "de": "/common/destiny_content/sqlite/de/world_sql_content_8572411b2402746f7045ab6c6f196d28.content",
-      "it": "/common/destiny_content/sqlite/it/world_sql_content_64b0ab8a5473efbafba751abd3538cc4.content",
-      "ja": "/common/destiny_content/sqlite/ja/world_sql_content_56f77018fa8c6c9e9aa9689cc965adf1.content",
-      "pt-br": "/common/destiny_content/sqlite/pt-br/world_sql_content_e2ccceda6c271e34ec1edc4054fae278.content"
+    "Response": {
+        "version": "56578.17.04.12.1251-6",
+        "mobileAssetContentPath": "/common/destiny_content/sqlite/asset/asset_sql_content_fd24e5f944d34a326e0e21817ea353ea.content",
+        "mobileGearAssetDataBases": [
+            {
+                "version": 0,
+                "path": "/common/destiny_content/sqlite/asset/asset_sql_content_fd24e5f944d34a326e0e21817ea353ea.content"
+            },
+            {
+                "version": 1,
+                "path": "/common/destiny_content/sqlite/asset/asset_sql_content_e563ae481f48cf708da20f4ab86ba8ed.content"
+            },
+            {
+                "version": 2,
+                "path": "/common/destiny_content/sqlite/asset/asset_sql_content_e563ae481f48cf708da20f4ab86ba8ed.content"
+            }
+        ],
+        "mobileWorldContentPaths": {
+            "en": "/common/destiny_content/sqlite/en/world_sql_content_b6c7590005d9365b2723f8995f361e3f.content",
+            "fr": "/common/destiny_content/sqlite/fr/world_sql_content_05245760417482b56015edf8d2d2c930.content",
+            "es": "/common/destiny_content/sqlite/es/world_sql_content_6e9c2053def5cbb182a6a6d33334eedf.content",
+            "de": "/common/destiny_content/sqlite/de/world_sql_content_8572411b2402746f7045ab6c6f196d28.content",
+            "it": "/common/destiny_content/sqlite/it/world_sql_content_64b0ab8a5473efbafba751abd3538cc4.content",
+            "ja": "/common/destiny_content/sqlite/ja/world_sql_content_56f77018fa8c6c9e9aa9689cc965adf1.content",
+            "pt-br": "/common/destiny_content/sqlite/pt-br/world_sql_content_e2ccceda6c271e34ec1edc4054fae278.content"
+        },
+        "mobileGearCDN": {
+            "Geometry": "/common/destiny_content/geometry/platform/mobile/geometry",
+            "Texture": "/common/destiny_content/geometry/platform/mobile/textures",
+            "PlateRegion": "/common/destiny_content/geometry/platform/mobile/plated_textures",
+            "Gear": "/common/destiny_content/geometry/gear",
+            "Shader": "/common/destiny_content/geometry/platform/mobile/shaders"
+        }
     },
-    "mobileGearCDN": {
-      "Geometry": "/common/destiny_content/geometry/platform/mobile/geometry",
-      "Texture": "/common/destiny_content/geometry/platform/mobile/textures",
-      "PlateRegion": "/common/destiny_content/geometry/platform/mobile/plated_textures",
-      "Gear": "/common/destiny_content/geometry/gear",
-      "Shader": "/common/destiny_content/geometry/platform/mobile/shaders"
-    }
-  },
-  "ErrorCode": 1,
-  "ThrottleSeconds": 0,
-  "ErrorStatus": "Success",
-  "Message": "Ok",
-  "MessageData": {}
+    "ErrorCode": 1,
+    "ThrottleSeconds": 0,
+    "ErrorStatus": "Success",
+    "Message": "Ok",
+    "MessageData": {}
 }

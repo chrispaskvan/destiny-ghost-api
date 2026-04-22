@@ -19,11 +19,7 @@ import configuration from '../helpers/config.js';
  * @param worldRepository
  * @returns {*}
  */
-const routes = ({
-    destinyService,
-    userService,
-    worldRepository,
-}) => {
+const routes = ({ destinyService, userService, worldRepository }) => {
     const destinyRouter = Router();
 
     /**
@@ -36,14 +32,12 @@ const routes = ({
         worldRepository,
     });
 
-    destinyRouter.route('/signIn/')
-        .get(cors(configuration.cors),
-            async (req, res) => {
-                const { state, url } = await destinyController.getAuthorizationUrl();
+    destinyRouter.route('/signIn/').get(cors(configuration.cors), async (req, res) => {
+        const { state, url } = await destinyController.getAuthorizationUrl();
 
-                req.session.state = state;
-                res.send(url);
-            });
+        req.session.state = state;
+        res.send(url);
+    });
 
     /**
      * @openapi
@@ -92,25 +86,27 @@ const routes = ({
      *        422:
      *          description: Unrecognized whole number.
      */
-    destinyRouter.route('/grimoireCards/:numberOfCards')
-        .get(cors(configuration.cors),
-            async (req, res) => {
-                const { params: { numberOfCards } } = req;
-                const count = parseInt(numberOfCards, 10);
+    destinyRouter
+        .route('/grimoireCards/:numberOfCards')
+        .get(cors(configuration.cors), async (req, res) => {
+            const {
+                params: { numberOfCards },
+            } = req;
+            const count = parseInt(numberOfCards, 10);
 
-                if (Number.isNaN(count)) {
-                    return res.status(StatusCodes.UNPROCESSABLE_ENTITY).end();
-                }
+            if (Number.isNaN(count)) {
+                return res.status(StatusCodes.UNPROCESSABLE_ENTITY).end();
+            }
 
-                if (count < 1 || count > 10) {
-                    return res.status(StatusCodes.BAD_REQUEST)
-                        .send('Must be a whole number less than or equal to 10.');
-                }
+            if (count < 1 || count > 10) {
+                return res
+                    .status(StatusCodes.BAD_REQUEST)
+                    .send('Must be a whole number less than or equal to 10.');
+            }
 
-                const grimoireCards = await destinyController.getGrimoireCards(count);
-                res.status(StatusCodes.OK).json(grimoireCards);
-            },
-        );
+            const grimoireCards = await destinyController.getGrimoireCards(count);
+            res.status(StatusCodes.OK).json(grimoireCards);
+        });
 
     /**
      * @openapi
@@ -157,11 +153,13 @@ const routes = ({
      *              schema:
      *                type: string
      */
-    destinyRouter.route('/manifest')
-        .get(async (req, res, next) => {
+    destinyRouter.route('/manifest').get(
+        async (req, res, next) => {
             const cacheControl = req.headers['cache-control'];
-            const skipCache = cacheControl && (getMaxAgeFromCacheControl(cacheControl) === 0
-                || cacheControl.split(',').includes('no-cache'));
+            const skipCache =
+                cacheControl &&
+                (getMaxAgeFromCacheControl(cacheControl) === 0 ||
+                    cacheControl.split(',').includes('no-cache'));
 
             res.locals.skipCache = skipCache;
             if (skipCache) {
@@ -169,16 +167,12 @@ const routes = ({
             } else {
                 next();
             }
-        }, async (req, res) => {
+        },
+        async (req, res) => {
             const result = await destinyController.getManifest(res.locals.skipCache);
             const {
-                data: {
-                    manifest,
-                },
-                meta: {
-                    lastModified,
-                    maxAge,
-                },
+                data: { manifest },
+                meta: { lastModified, maxAge },
             } = result;
             const ifModifiedSince = toTemporalInstant(req.headers['if-modified-since']);
             const lastModifiedInstant = toTemporalInstant(lastModified);
@@ -187,10 +181,13 @@ const routes = ({
                 'Last-Modified': lastModified,
                 'Cache-Control': `max-age=${maxAge}`,
             });
-            res.status(Temporal.Instant.compare(ifModifiedSince, lastModifiedInstant) > 0
-                ? StatusCodes.NOT_MODIFIED : StatusCodes.OK)
-                .json(manifest);
-        });
+            res.status(
+                Temporal.Instant.compare(ifModifiedSince, lastModifiedInstant) > 0
+                    ? StatusCodes.NOT_MODIFIED
+                    : StatusCodes.OK,
+            ).json(manifest);
+        },
+    );
 
     /**
      * @openapi
@@ -207,13 +204,11 @@ const routes = ({
      *        200:
      *          description: Returns the Destiny Manifest definition.
      */
-    destinyRouter.route('/manifest')
-        .post(authorizeUser,
-            async (req, res) => {
-                const manifest = await destinyController.upsertManifest();
+    destinyRouter.route('/manifest').post(authorizeUser, async (_req, res) => {
+        const manifest = await destinyController.upsertManifest();
 
-                res.status(StatusCodes.OK).json(manifest);
-            });
+        res.status(StatusCodes.OK).json(manifest);
+    });
 
     return destinyRouter;
 };

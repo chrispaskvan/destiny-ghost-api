@@ -1,9 +1,7 @@
 /**
  * Destiny Service Tests
  */
-import {
-    beforeEach, describe, expect, it, vi,
-} from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Chance from 'chance';
 import { get } from '../helpers/request.js';
 import DestinyError from './destiny.error.js';
@@ -36,14 +34,16 @@ describe('DestinyService', () => {
             it('should return an array of characters', async () => {
                 const characters = [];
 
-                get.mockImplementation(() => Promise.resolve({
-                    ErrorCode: 1,
-                    Response: {
-                        data: {
-                            characters,
+                get.mockImplementation(() =>
+                    Promise.resolve({
+                        ErrorCode: 1,
+                        Response: {
+                            data: {
+                                characters,
+                            },
                         },
-                    },
-                }));
+                    }),
+                );
 
                 const result = await destinyService.getCharacters();
 
@@ -53,9 +53,11 @@ describe('DestinyService', () => {
 
         describe('when an error response is returned', () => {
             it('should throw', async () => {
-                get.mockImplementation(() => Promise.resolve({
-                    ErrorCode: 2,
-                }));
+                get.mockImplementation(() =>
+                    Promise.resolve({
+                        ErrorCode: 2,
+                    }),
+                );
 
                 await expect(destinyService.getCharacters()).rejects.toThrow(DestinyError);
             });
@@ -71,22 +73,24 @@ describe('DestinyService', () => {
                     const membershipType = 2;
                     const profilePicturePath = '/img/profile/avatars/Destiny26.jpg';
 
-                    get.mockImplementation(() => Promise.resolve({
-                        ErrorCode: 1,
-                        Response: {
-                            destinyMemberships: [
-                                {
-                                    crossSaveOverride: membershipType,
-                                    displayName,
-                                    membershipId,
-                                    membershipType,
+                    get.mockImplementation(() =>
+                        Promise.resolve({
+                            ErrorCode: 1,
+                            Response: {
+                                destinyMemberships: [
+                                    {
+                                        crossSaveOverride: membershipType,
+                                        displayName,
+                                        membershipId,
+                                        membershipType,
+                                    },
+                                ],
+                                bungieNetUser: {
+                                    profilePicturePath,
                                 },
-                            ],
-                            bungieNetUser: {
-                                profilePicturePath,
                             },
-                        },
-                    }));
+                        }),
+                    );
 
                     const currentUser = await destinyService.getCurrentUser();
 
@@ -101,14 +105,16 @@ describe('DestinyService', () => {
 
             describe('when ErrorCode is not 1', () => {
                 it('should throw', async () => {
-                    get.mockImplementation(() => Promise.resolve({
-                        ErrorCode: 0,
-                        Message: 'Ok',
-                        Response: {
-                            destinyMemberships: [],
-                        },
-                        Status: 'Failed',
-                    }));
+                    get.mockImplementation(() =>
+                        Promise.resolve({
+                            ErrorCode: 0,
+                            Message: 'Ok',
+                            Response: {
+                                destinyMemberships: [],
+                            },
+                            Status: 'Failed',
+                        }),
+                    );
 
                     await expect(destinyService.getCurrentUser()).rejects.toThrow(DestinyError);
                 });
@@ -122,13 +128,15 @@ describe('DestinyService', () => {
         const maxAge = 90;
 
         beforeEach(() => {
-            get.mockImplementation(() => Promise.resolve({
-                data: mockManifestResponse,
-                headers: {
-                    'cache-control': `public, max-age=${maxAge}`,
-                    'last-modified': lastModified,
-                },
-            }));
+            get.mockImplementation(() =>
+                Promise.resolve({
+                    data: mockManifestResponse,
+                    headers: {
+                        'cache-control': `public, max-age=${maxAge}`,
+                        'last-modified': lastModified,
+                    },
+                }),
+            );
         });
 
         describe('when manifest is cached', () => {
@@ -141,18 +149,16 @@ describe('DestinyService', () => {
                         lastModified,
                         maxAge,
                         wasCached: true,
-
                     },
                 };
 
                 cacheService.getManifest.mockImplementation(() => Promise.resolve(result1));
 
-                return destinyService.getManifest()
-                    .then(result => {
-                        expect(result).toEqual(result1);
-                        expect(cacheService.getManifest).toBeCalledTimes(1);
-                        expect(cacheService.setManifest).not.toBeCalled();
-                    });
+                return destinyService.getManifest().then(result => {
+                    expect(result).toEqual(result1);
+                    expect(cacheService.getManifest).toBeCalledTimes(1);
+                    expect(cacheService.setManifest).not.toBeCalled();
+                });
             });
         });
 
@@ -168,13 +174,12 @@ describe('DestinyService', () => {
                     },
                 };
 
-                return destinyService.getManifest()
-                    .then(result => {
-                        expect(result).toEqual(result1);
-                        expect(result.meta.wasCached).toBeFalsy();
-                        expect(cacheService.getManifest).toBeCalledTimes(1);
-                        expect(cacheService.setManifest).toBeCalledTimes(1);
-                    });
+                return destinyService.getManifest().then(result => {
+                    expect(result).toEqual(result1);
+                    expect(result.meta.wasCached).toBeFalsy();
+                    expect(cacheService.getManifest).toBeCalledTimes(1);
+                    expect(cacheService.setManifest).toBeCalledTimes(1);
+                });
             });
         });
     });

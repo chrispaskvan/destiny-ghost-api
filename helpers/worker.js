@@ -13,11 +13,9 @@ export default async function ({ databasePath, queries }) {
         database.close();
 
         return results;
-    }
-    catch (err) {
+    } catch (err) {
         throw new Error(`Failed to load the database: ${err.message}`, { cause: err });
-    }
-    finally {
+    } finally {
         if (database) {
             database.close();
         }

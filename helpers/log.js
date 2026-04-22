@@ -26,8 +26,7 @@ if (process.env.NODE_ENV !== 'production') {
                 // Worker threads do not support V8 flags like --max-old-space-size or any --harmony* flags.
                 // This intentionally strips flags such as --harmony-temporal that may be used by the main process.
                 execArgv: process.execArgv.filter(
-                    arg => !arg.startsWith('--max-old-space-size')
-                        && !arg.startsWith('--harmony'),
+                    arg => !arg.startsWith('--max-old-space-size') && !arg.startsWith('--harmony'),
                 ),
             },
         },
@@ -45,7 +44,7 @@ const log = new Proxy(logger, {
         return Reflect.get(target, property, receiver);
     },
 });
-const contextMiddleware = (req, res, next) => {
+const contextMiddleware = (_req, _res, next) => {
     const child = logger.child({ traceId: createId() });
     const store = new Map();
 

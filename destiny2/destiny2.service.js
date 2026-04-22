@@ -16,7 +16,9 @@ import log from '../helpers/log.js';
 import { strangeGearOffersHash } from './destiny2.constants.js';
 import { get, post } from '../helpers/request.js';
 
-const { bungie: { apiKey, host } } = configuration;
+const {
+    bungie: { apiKey, host },
+} = configuration;
 
 /**
  * @constant
@@ -55,7 +57,9 @@ class Destiny2Service extends DestinyService {
         const responseBody = await post(options, { maxRetries: 3 });
 
         if (responseBody.ErrorCode === 1) {
-            const { Response: { searchResults } } = responseBody;
+            const {
+                Response: { searchResults },
+            } = responseBody;
 
             return searchResults;
         }
@@ -175,7 +179,11 @@ class Destiny2Service extends DestinyService {
             const responseBody = await get(options);
 
             if (responseBody.ErrorCode === 1) {
-                const { Response: { characters: { data } } } = responseBody;
+                const {
+                    Response: {
+                        characters: { data },
+                    },
+                } = responseBody;
 
                 characters = Object.values(data).map(character => character);
                 await this.cacheService.setCharacters(membershipId, characters);
@@ -215,11 +223,14 @@ class Destiny2Service extends DestinyService {
     async getXur(membershipId, membershipType, characterId, accessToken) {
         const vendor = await this.cacheService.getVendor(strangeGearOffersHash);
 
-        log.info({
-            membershipId,
-            membershipType,
-            characterId,
-        }, 'Fetching Xur\'s inventory ...');
+        log.info(
+            {
+                membershipId,
+                membershipType,
+                characterId,
+            },
+            "Fetching Xur's inventory ...",
+        );
 
         if (vendor) {
             return vendor;
@@ -235,7 +246,11 @@ class Destiny2Service extends DestinyService {
         const responseBody = await get(options);
 
         if (responseBody.ErrorCode === 1) {
-            const { Response: { sales: { data } } } = responseBody;
+            const {
+                Response: {
+                    sales: { data },
+                },
+            } = responseBody;
             const itemHashes = Object.entries(data).map(([, value]) => value.itemHash);
 
             this.cacheService.setVendor(strangeGearOffersHash, itemHashes);

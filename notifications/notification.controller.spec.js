@@ -1,6 +1,4 @@
-import {
-    beforeEach, describe, expect, it, vi,
-} from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Chance from 'chance';
 import publisher from '../helpers/publisher.js';
 import subscriber from '../helpers/subscriber.js';
@@ -34,7 +32,7 @@ const mockUser = {
     phoneNumber,
     membershipId,
     membershipType,
-    bungie: { access_token: accessToken }
+    bungie: { access_token: accessToken },
 };
 const mockCharacter = {
     characterId,
@@ -42,48 +40,51 @@ const mockCharacter = {
 const mockItem = {
     hash: 123456,
     displayProperties: { name: 'Test Weapon' },
-    itemCategoryHashes: [1] // Weapon category
+    itemCategoryHashes: [1], // Weapon category
 };
 const mockClaimCheck = {
     number: claimCheckNumber,
     addPhoneNumber: vi.fn(),
-    updatePhoneNumber: vi.fn()
+    updatePhoneNumber: vi.fn(),
 };
 const authenticationService = {
-    authenticate: vi.fn()
+    authenticate: vi.fn(),
 };
 const destinyService = {
     getProfile: vi.fn(),
-    getXur: vi.fn()
+    getXur: vi.fn(),
 };
 const notificationService = {
-    sendMessage: vi.fn()
+    sendMessage: vi.fn(),
 };
 const userService = {
     getSubscribedUsers: vi.fn(),
-    getUserByPhoneNumber: vi.fn()
+    getUserByPhoneNumber: vi.fn(),
 };
 const worldRepository = {
     getWeaponCategory: vi.fn(),
-    getItemByHash: vi.fn()
+    getItemByHash: vi.fn(),
 };
 
 let notificationController;
 
 beforeEach(() => {
     vi.clearAllMocks();
-    
+
     // Setup ClaimCheck mock
-    ClaimCheck.mockImplementation(function () { return mockClaimCheck; });
+    // biome-ignore lint/complexity/useArrowFunction: function expression required — `new` ignores return value of arrow functions
+    ClaimCheck.mockImplementation(function () {
+        return mockClaimCheck;
+    });
     ClaimCheck.getClaimCheck = vi.fn();
     ClaimCheck.updatePhoneNumber = vi.fn();
-    
+
     // Setup subscriber mock
     subscriber.listen = vi.fn();
-    
+
     // Setup throttle mock
     throttle.mockImplementation(promises => Promise.all(promises));
-    
+
     notificationController = new NotificationController({
         authenticationService,
         destinyService,
@@ -119,9 +120,10 @@ describe('NotificationController', () => {
 
                 userService.getUserByPhoneNumber.mockResolvedValue(null);
 
-                await expect(notificationController.create(subscription, phoneNumber))
-                    .rejects.toThrow(NotificationError);
-                
+                await expect(
+                    notificationController.create(subscription, phoneNumber),
+                ).rejects.toThrow(NotificationError);
+
                 expect(NotificationError).toHaveBeenCalledWith('user not found');
             });
 
@@ -131,8 +133,9 @@ describe('NotificationController', () => {
 
                 userService.getUserByPhoneNumber.mockResolvedValue(userWithoutPhone);
 
-                await expect(notificationController.create(subscription, phoneNumber))
-                    .rejects.toThrow(NotificationError);
+                await expect(
+                    notificationController.create(subscription, phoneNumber),
+                ).rejects.toThrow(NotificationError);
             });
         });
 
@@ -180,8 +183,10 @@ describe('NotificationController', () => {
             it('should send Xur inventory notification successfully', async () => {
                 const weaponCategoryHash = 1;
                 const itemHashes = [123456, 789012];
-                
-                authenticationService.authenticate.mockResolvedValue({ bungie: { access_token: accessToken } });
+
+                authenticationService.authenticate.mockResolvedValue({
+                    bungie: { access_token: accessToken },
+                });
                 destinyService.getProfile.mockResolvedValue([mockCharacter]);
                 destinyService.getXur.mockResolvedValue(itemHashes);
                 worldRepository.getWeaponCategory.mockResolvedValue(weaponCategoryHash);
@@ -195,12 +200,15 @@ describe('NotificationController', () => {
                 });
 
                 expect(authenticationService.authenticate).toHaveBeenCalledWith(mockUser);
-                expect(destinyService.getProfile).toHaveBeenCalledWith(membershipId, membershipType);
+                expect(destinyService.getProfile).toHaveBeenCalledWith(
+                    membershipId,
+                    membershipType,
+                );
                 expect(destinyService.getXur).toHaveBeenCalledWith(
                     membershipId,
                     membershipType,
                     characterId,
-                    accessToken
+                    accessToken,
                 );
                 expect(worldRepository.getWeaponCategory).toHaveBeenCalled();
                 expect(worldRepository.getItemByHash).toHaveBeenCalledTimes(itemHashes.length);
@@ -208,12 +216,12 @@ describe('NotificationController', () => {
                     'Test Weapon\nTest Weapon',
                     phoneNumber,
                     null,
-                    { claimCheckNumber, notificationType: notificationTypes.Xur }
+                    { claimCheckNumber, notificationType: notificationTypes.Xur },
                 );
                 expect(ClaimCheck.updatePhoneNumber).toHaveBeenCalledWith(
                     claimCheckNumber,
                     phoneNumber,
-                    'sent'
+                    'sent',
                 );
             });
 
@@ -222,11 +230,13 @@ describe('NotificationController', () => {
                 const nonWeaponItem = {
                     ...mockItem,
                     itemCategoryHashes: [2], // Different weapon category
-                    displayProperties: { name: 'Non-Weapon Item' }
+                    displayProperties: { name: 'Non-Weapon Item' },
                 };
                 const itemHashes = [123456];
-                
-                authenticationService.authenticate.mockResolvedValue({ bungie: { access_token: accessToken } });
+
+                authenticationService.authenticate.mockResolvedValue({
+                    bungie: { access_token: accessToken },
+                });
                 destinyService.getProfile.mockResolvedValue([mockCharacter]);
                 destinyService.getXur.mockResolvedValue(itemHashes);
                 worldRepository.getWeaponCategory.mockResolvedValue(weaponCategoryHash);
@@ -242,7 +252,7 @@ describe('NotificationController', () => {
                     '', // Empty message since no weapons found
                     phoneNumber,
                     null,
-                    { claimCheckNumber, notificationType: notificationTypes.Xur }
+                    { claimCheckNumber, notificationType: notificationTypes.Xur },
                 );
             });
 
@@ -256,16 +266,18 @@ describe('NotificationController', () => {
                 });
 
                 expect(notificationService.sendMessage).toHaveBeenCalledWith(
-                    'Xur has closed shop. He\'ll return Friday.',
+                    "Xur has closed shop. He'll return Friday.",
                     phoneNumber,
                     null,
-                    { claimCheckNumber, notificationType: notificationTypes.Xur }
+                    { claimCheckNumber, notificationType: notificationTypes.Xur },
                 );
                 expect(log.info).toHaveBeenCalledWith(JSON.stringify('sent'));
             });
 
             it('should send fallback message when getProfile fails', async () => {
-                authenticationService.authenticate.mockResolvedValue({ bungie: { access_token: accessToken } });
+                authenticationService.authenticate.mockResolvedValue({
+                    bungie: { access_token: accessToken },
+                });
                 destinyService.getProfile.mockRejectedValue(new Error('Profile failed'));
                 notificationService.sendMessage.mockResolvedValue({ status: 'sent' });
 
@@ -275,15 +287,17 @@ describe('NotificationController', () => {
                 });
 
                 expect(notificationService.sendMessage).toHaveBeenCalledWith(
-                    'Xur has closed shop. He\'ll return Friday.',
+                    "Xur has closed shop. He'll return Friday.",
                     phoneNumber,
                     null,
-                    { claimCheckNumber, notificationType: notificationTypes.Xur }
+                    { claimCheckNumber, notificationType: notificationTypes.Xur },
                 );
             });
 
             it('should not send any message when no characters found', async () => {
-                authenticationService.authenticate.mockResolvedValue({ bungie: { access_token: accessToken } });
+                authenticationService.authenticate.mockResolvedValue({
+                    bungie: { access_token: accessToken },
+                });
                 destinyService.getProfile.mockResolvedValue([]); // No characters
 
                 await sendMethod(mockUser, {
@@ -297,7 +311,9 @@ describe('NotificationController', () => {
             });
 
             it('should not send any message when characters is null', async () => {
-                authenticationService.authenticate.mockResolvedValue({ bungie: { access_token: accessToken } });
+                authenticationService.authenticate.mockResolvedValue({
+                    bungie: { access_token: accessToken },
+                });
                 destinyService.getProfile.mockResolvedValue(null); // Null characters
 
                 await sendMethod(mockUser, {
@@ -311,7 +327,9 @@ describe('NotificationController', () => {
             });
 
             it('should send fallback message when getXur fails', async () => {
-                authenticationService.authenticate.mockResolvedValue({ bungie: { access_token: accessToken } });
+                authenticationService.authenticate.mockResolvedValue({
+                    bungie: { access_token: accessToken },
+                });
                 destinyService.getProfile.mockResolvedValue([mockCharacter]);
                 destinyService.getXur.mockRejectedValue(new Error('Xur failed'));
                 notificationService.sendMessage.mockResolvedValue({ status: 'sent' });
@@ -322,10 +340,10 @@ describe('NotificationController', () => {
                 });
 
                 expect(notificationService.sendMessage).toHaveBeenCalledWith(
-                    'Xur has closed shop. He\'ll return Friday.',
+                    "Xur has closed shop. He'll return Friday.",
                     phoneNumber,
                     null,
-                    { claimCheckNumber, notificationType: notificationTypes.Xur }
+                    { claimCheckNumber, notificationType: notificationTypes.Xur },
                 );
             });
         });

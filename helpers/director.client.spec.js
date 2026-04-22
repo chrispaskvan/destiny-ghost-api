@@ -12,7 +12,8 @@ describe('DirectorClient', () => {
         bungie_auth: 'test-auth-token',
         csrf_token: 'test-csrf-456',
     };
-    const expectedQuery = 'query FindPlayersHeroNameAndFriends($displayName: String!) { findPlayers(displayName: $displayName) { bungieGlobalDisplayName bungieGlobalDisplayNameCode destinyMemberships { crossSaveOverride membershipType membershipId displayName bungieGlobalDisplayName bungieGlobalDisplayNameCode } destinyMemberships { crossSaveOverride membershipType membershipId displayName bungieGlobalDisplayName bungieGlobalDisplayNameCode } statistics { pvp { kdr highestLightLevel } } user { firstName lastName } } }';
+    const expectedQuery =
+        'query FindPlayersHeroNameAndFriends($displayName: String!) { findPlayers(displayName: $displayName) { bungieGlobalDisplayName bungieGlobalDisplayNameCode destinyMemberships { crossSaveOverride membershipType membershipId displayName bungieGlobalDisplayName bungieGlobalDisplayNameCode } destinyMemberships { crossSaveOverride membershipType membershipId displayName bungieGlobalDisplayName bungieGlobalDisplayNameCode } statistics { pvp { kdr highestLightLevel } } user { firstName lastName } } }';
 
     let directorClient;
     let mockPost;
@@ -176,7 +177,7 @@ describe('DirectorClient', () => {
         it('should properly format cookies header', async () => {
             const complexCookies = {
                 'session-id': 'complex-session-123',
-                'special_cookie': 'value-with-dashes',
+                special_cookie: 'value-with-dashes',
                 'another.cookie': 'dot.separated.value',
             };
             const mockResponseBody = { data: { findPlayers: [] } };
@@ -190,7 +191,7 @@ describe('DirectorClient', () => {
                     headers: expect.objectContaining({
                         cookie: 'session-id=complex-session-123; special_cookie=value-with-dashes; another.cookie=dot.separated.value',
                     }),
-                })
+                }),
             );
         });
 
@@ -207,7 +208,7 @@ describe('DirectorClient', () => {
                     headers: expect.objectContaining({
                         cookie: '',
                     }),
-                })
+                }),
             );
         });
 
@@ -224,7 +225,7 @@ describe('DirectorClient', () => {
                     headers: expect.objectContaining({
                         cookie: 'token=single-value',
                     }),
-                })
+                }),
             );
         });
 
@@ -233,7 +234,9 @@ describe('DirectorClient', () => {
 
             mockPost.mockRejectedValue(networkError);
 
-            await expect(directorClient.findPlayers(testDisplayName, testCookies)).rejects.toThrow('Network connection failed');
+            await expect(directorClient.findPlayers(testDisplayName, testCookies)).rejects.toThrow(
+                'Network connection failed',
+            );
         });
 
         it('should handle GraphQL errors in response', async () => {
@@ -249,7 +252,9 @@ describe('DirectorClient', () => {
 
             mockPost.mockResolvedValue(errorResponse);
 
-            await expect(directorClient.findPlayers(testDisplayName, testCookies)).rejects.toThrow();
+            await expect(
+                directorClient.findPlayers(testDisplayName, testCookies),
+            ).rejects.toThrow();
         });
 
         it('should handle malformed response', async () => {
@@ -259,7 +264,9 @@ describe('DirectorClient', () => {
 
             mockPost.mockResolvedValue(malformedResponse);
 
-            await expect(directorClient.findPlayers(testDisplayName, testCookies)).rejects.toThrow();
+            await expect(
+                directorClient.findPlayers(testDisplayName, testCookies),
+            ).rejects.toThrow();
         });
 
         it('should use correct environment protocol', async () => {
@@ -274,7 +281,7 @@ describe('DirectorClient', () => {
             expect(mockPost).toHaveBeenCalledWith(
                 expect.objectContaining({
                     url: 'https://api2.destiny-ghost.com/director',
-                })
+                }),
             );
 
             process.env.PROTOCOL = originalProtocol;

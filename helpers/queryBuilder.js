@@ -20,8 +20,9 @@ class QueryBuilder {
             if (selections.length === 0) {
                 throw new Error('select string is empty');
             }
-        } else if (Object.prototype.toString
-            .call(selections) === Object.prototype.toString.call([])) {
+        } else if (
+            Object.prototype.toString.call(selections) === Object.prototype.toString.call([])
+        ) {
             if (selections.length === 0) {
                 throw new Error('select array is empty');
             }
@@ -104,12 +105,14 @@ class QueryBuilder {
      */
     getQuery() {
         const tableAlias = this.table ? this.table[0].toLowerCase() : 'r';
-        const fields = (this.fields.length ? `${tableAlias}.${this.fields.join(`, ${tableAlias}.`)}` : '*');
+        const fields = this.fields.length
+            ? `${tableAlias}.${this.fields.join(`, ${tableAlias}.`)}`
+            : '*';
         let childAlias;
         const parameters = [];
         let sql;
 
-        sql = `SELECT ${fields} FROM ${(this.table || 'root')} ${tableAlias}`;
+        sql = `SELECT ${fields} FROM ${this.table || 'root'} ${tableAlias}`;
 
         this.joins.forEach(table => {
             childAlias = table[0].toLowerCase();

@@ -2,9 +2,7 @@
  * World Model Tests
  */
 import { existsSync } from 'node:fs';
-import {
-    beforeAll, describe, expect,
-} from 'vitest';
+import { beforeAll, describe, expect } from 'vitest';
 import World from './world2.js';
 import itif from './itif.js';
 import pool from './pool.js';
@@ -22,12 +20,14 @@ beforeAll(async () => {
     await world.bootstrapped;
 });
 
-describe('It\'s Bungie\'s 2nd world. You\'re just querying it.', () => {
+describe("It's Bungie's 2nd world. You're just querying it.", () => {
     itif(
         'should return the lore for Ghost Primus',
         () => existsSync(directory),
         async () => {
-            const { displayProperties: { name } } = await world.getLore(2505533224);
+            const {
+                displayProperties: { name },
+            } = await world.getLore(2505533224);
 
             expect(name).toEqual('Ghost Primus');
         },
@@ -37,7 +37,9 @@ describe('It\'s Bungie\'s 2nd world. You\'re just querying it.', () => {
         'should return the item category Hand Cannon',
         () => existsSync(directory),
         async () => {
-            const { displayProperties: { name } } = await world.getItemCategory(6);
+            const {
+                displayProperties: { name },
+            } = await world.getItemCategory(6);
 
             expect(name).toEqual('Hand Cannon');
         },
@@ -47,7 +49,9 @@ describe('It\'s Bungie\'s 2nd world. You\'re just querying it.', () => {
         'should return the Hunter character class',
         () => existsSync(directory),
         async () => {
-            const { displayProperties: { name } } = await world.getClassByHash(671679327);
+            const {
+                displayProperties: { name },
+            } = await world.getClassByHash(671679327);
 
             expect(name).toEqual('Hunter');
         },

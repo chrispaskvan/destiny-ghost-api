@@ -1,8 +1,6 @@
 import { realpathSync } from 'node:fs';
 import { sep } from 'node:path';
-import {
-    afterEach, beforeEach, describe, expect, it, vi,
-} from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import sanitizeDirectory from './sanitize-directory.js';
 
 vi.mock('node:fs', () => ({
@@ -29,7 +27,9 @@ describe('sanitizeDirectory', () => {
     });
 
     it('should throw when realpathSync fails (non-existent path)', () => {
-        realpathSync.mockImplementation(() => { throw new Error('ENOENT'); });
+        realpathSync.mockImplementation(() => {
+            throw new Error('ENOENT');
+        });
 
         expect(() => sanitizeDirectory('data/databases')).toThrow('Invalid database directory');
     });
@@ -47,7 +47,9 @@ describe('sanitizeDirectory', () => {
     });
 
     it('should reject deeply nested traversal attempts', () => {
-        expect(() => sanitizeDirectory('../../../../../../../etc/shadow')).toThrow('Invalid database directory');
+        expect(() => sanitizeDirectory('../../../../../../../etc/shadow')).toThrow(
+            'Invalid database directory',
+        );
     });
 
     it('should reject absolute paths', () => {

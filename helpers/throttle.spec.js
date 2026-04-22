@@ -1,9 +1,7 @@
 /**
  * Token Tests
  */
-import {
-    afterEach, beforeEach, describe, expect, it, vi,
-} from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import throttle from './throttle.js';
 
 describe('throttle()', () => {
@@ -63,10 +61,7 @@ describe('throttle()', () => {
         });
 
         it('should delay between tasks when wait is provided', async () => {
-            const tasks = [
-                Promise.resolve('a'),
-                Promise.resolve('b'),
-            ];
+            const tasks = [Promise.resolve('a'), Promise.resolve('b')];
             const promise = throttle(tasks, 1, 100);
 
             await vi.advanceTimersByTimeAsync(200);
@@ -80,10 +75,7 @@ describe('throttle()', () => {
 
         it('should call setTimeout with the wait value', async () => {
             const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
-            const tasks = [
-                Promise.resolve('a'),
-                Promise.resolve('b'),
-            ];
+            const tasks = [Promise.resolve('a'), Promise.resolve('b')];
             const promise = throttle(tasks, 1, 50);
 
             await vi.advanceTimersByTimeAsync(200);
@@ -95,10 +87,7 @@ describe('throttle()', () => {
 
         it('should not delay when wait is not a valid number', async () => {
             const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
-            const tasks = [
-                Promise.resolve('a'),
-                Promise.resolve('b'),
-            ];
+            const tasks = [Promise.resolve('a'), Promise.resolve('b')];
             const promise = throttle(tasks, 1, 'invalid');
 
             await vi.advanceTimersByTimeAsync(100);

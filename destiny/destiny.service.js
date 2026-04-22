@@ -15,9 +15,7 @@ import DestinyError from './destiny.error.js';
 import configuration from '../helpers/config.js';
 
 const {
-    bungie: {
-        apiKey, host, clientId, clientSecret,
-    },
+    bungie: { apiKey, host, clientId, clientSecret },
 } = configuration;
 
 /**
@@ -58,10 +56,7 @@ class DestinyService {
             },
             url: `${servicePlatform}/${this._api}/Manifest`,
         };
-        const {
-            data: responseBody,
-            headers,
-        } = await get(options, true);
+        const { data: responseBody, headers } = await get(options, true);
         const lastModified = headers['last-modified'];
         const matches = headers['cache-control'].match(/max-age=(\d+)/);
         const maxAge = matches ? parseInt(matches[1], 10) : 0;
@@ -148,7 +143,9 @@ class DestinyService {
      * @returns {Promise}
      */
     getAuthorizationUrl(state) {
-        return Promise.resolve(`${host}/en/Oauth/Authorize?client_id=${clientId}&response_type=code&state=${state}`);
+        return Promise.resolve(
+            `${host}/en/Oauth/Authorize?client_id=${clientId}&response_type=code&state=${state}`,
+        );
     }
 
     /**
@@ -168,7 +165,11 @@ class DestinyService {
         const responseBody = await get(options);
 
         if (responseBody.ErrorCode === 1) {
-            const { Response: { data: { characters } } } = responseBody;
+            const {
+                Response: {
+                    data: { characters },
+                },
+            } = responseBody;
 
             return characters;
         }
@@ -203,17 +204,9 @@ class DestinyService {
             throw new DestinyError(errorCode, message, status);
         }
 
-        const {
-            destinyMemberships,
-            bungieNetUser: {
-                profilePicturePath,
-            } = {},
-        } = user;
-        const {
-            displayName,
-            membershipId,
-            membershipType,
-        } = this.#getPreferredMembership(destinyMemberships);
+        const { destinyMemberships, bungieNetUser: { profilePicturePath } = {} } = user;
+        const { displayName, membershipId, membershipType } =
+            this.#getPreferredMembership(destinyMemberships);
 
         return {
             displayName,
@@ -248,8 +241,10 @@ class DestinyService {
     #getPreferredMembership(memberships) {
         const [{ crossSaveOverride }] = memberships;
 
-        return memberships.find(({ membershipType }) => membershipType === crossSaveOverride)
-            || memberships[0];
+        return (
+            memberships.find(({ membershipType }) => membershipType === crossSaveOverride) ||
+            memberships[0]
+        );
     }
 }
 

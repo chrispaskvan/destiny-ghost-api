@@ -27,19 +27,17 @@ class NotificationController {
      * @returns {Promise<void>}
      * @private
      */
-    async #send(user, {
-        claimCheckNumber,
-        notificationType,
-    }) {
+    async #send(user, { claimCheckNumber, notificationType }) {
         const { membershipId, membershipType, phoneNumber } = user;
 
         if (notificationType === notificationTypes.Xur) {
             try {
-                const { bungie: { access_token: accessToken } } = await this
-                    .authentication.authenticate(user);
+                const {
+                    bungie: { access_token: accessToken },
+                } = await this.authentication.authenticate(user);
                 const characters = await this.destiny.getProfile(membershipId, membershipType);
 
-                if (characters && characters.length) {
+                if (characters?.length) {
                     const itemHashes = await this.destiny.getXur(
                         membershipId,
                         membershipType,
@@ -47,21 +45,36 @@ class NotificationController {
                         accessToken,
                     );
                     const weaponCategory = await this.world.getWeaponCategory();
-                    const items = await Promise.all(itemHashes.map(itemHash => this.world.getItemByHash(itemHash)));
+                    const items = await Promise.all(
+                        itemHashes.map(itemHash => this.world.getItemByHash(itemHash)),
+                    );
                     const message = items
-                        .filter(({ itemCategoryHashes }) => itemCategoryHashes.includes(weaponCategory))
-                        .map(({ displayProperties: { name } }) => name).join('\n');
-                    const { status } = await this.notifications.sendMessage(message, phoneNumber, null, {
-                        claimCheckNumber,
-                        notificationType,
-                    });
+                        .filter(({ itemCategoryHashes }) =>
+                            itemCategoryHashes.includes(weaponCategory),
+                        )
+                        .map(({ displayProperties: { name } }) => name)
+                        .join('\n');
+                    const { status } = await this.notifications.sendMessage(
+                        message,
+                        phoneNumber,
+                        null,
+                        {
+                            claimCheckNumber,
+                            notificationType,
+                        },
+                    );
                     await ClaimCheck.updatePhoneNumber(claimCheckNumber, phoneNumber, status);
                 }
             } catch {
-                const { status } = await this.notifications.sendMessage('Xur has closed shop. He\'ll return Friday.', phoneNumber, null, {
-                    claimCheckNumber,
-                    notificationType,
-                });
+                const { status } = await this.notifications.sendMessage(
+                    "Xur has closed shop. He'll return Friday.",
+                    phoneNumber,
+                    null,
+                    {
+                        claimCheckNumber,
+                        notificationType,
+                    },
+                );
                 log.info(JSON.stringify(status));
             }
         }
@@ -80,7 +93,7 @@ class NotificationController {
         if (phoneNumber) {
             const user = await this.users.getUserByPhoneNumber(phoneNumber);
 
-            if (user && user.phoneNumber) {
+            if (user?.phoneNumber) {
                 await this.publisher.sendNotification(user, {
                     notificationType: subscription,
                     claimCheckNumber,
@@ -95,13 +108,17 @@ class NotificationController {
 
         const users = await this.users.getSubscribedUsers(subscription);
 
-        throttle(users.map(async user => {
-            await this.publisher.sendNotification(user, {
-                notificationType: subscription,
-                claimCheckNumber,
-            });
-            await claimCheck.addPhoneNumber(user.phoneNumber);
-        }), 2, 500);
+        throttle(
+            users.map(async user => {
+                await this.publisher.sendNotification(user, {
+                    notificationType: subscription,
+                    claimCheckNumber,
+                });
+                await claimCheck.addPhoneNumber(user.phoneNumber);
+            }),
+            2,
+            500,
+        );
 
         return claimCheckNumber;
     }

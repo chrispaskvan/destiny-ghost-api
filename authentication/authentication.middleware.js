@@ -13,7 +13,7 @@ class AuthenticationMiddleware {
         const schema = z.object({
             authenticationController: z.object({}),
         });
-        
+
         schema.parse(options);
 
         this.authentication = options.authenticationController;

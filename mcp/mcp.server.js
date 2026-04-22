@@ -12,10 +12,7 @@ import { z } from 'zod';
  * @returns {McpServer} A new McpServer instance configured for the given user.
  */
 
-export function createMcpServer({
-    destinyController,
-    user,
-}) {
+export function createMcpServer({ destinyController, user }) {
     const server = new McpServer({
         name: 'destiny-ghost',
         version: process.env.npm_package_version,
@@ -37,10 +34,13 @@ export function createMcpServer({
         {
             title: 'Get Destiny 2 Characters',
             description: 'Return the list of Destiny 2 characters for the authenticated user.',
-            outputSchema: { characters: z.array(characterSchema)},
+            outputSchema: { characters: z.array(characterSchema) },
         },
         async () => {
-            const characters = await destinyController.getCharacters(user.displayName, user.membershipType);
+            const characters = await destinyController.getCharacters(
+                user.displayName,
+                user.membershipType,
+            );
             const validation = z.array(characterSchema).safeParse(characters);
 
             if (!validation.success) {
@@ -49,21 +49,25 @@ export function createMcpServer({
 
             return {
                 content: [{ type: 'text', text: `Retrieved ${characters.length} characters.` }],
-                structuredContent: { characters }
+                structuredContent: { characters },
             };
-        }
+        },
     );
 
     server.registerTool(
         'get-xur-inventory-for-character',
         {
-            title: 'Get Xur\'s Inventory for a Character',
+            title: "Get Xur's Inventory for a Character",
             description: 'Return the list of items Xur is selling for a character.',
             inputSchema: { characterId: z.string() },
-            outputSchema: { items: z.array(itemSchema)},
+            outputSchema: { items: z.array(itemSchema) },
         },
         async ({ characterId }) => {
-            const items = await destinyController.getXur(user.displayName, user.membershipType, characterId);
+            const items = await destinyController.getXur(
+                user.displayName,
+                user.membershipType,
+                characterId,
+            );
             const validation = z.array(itemSchema).safeParse(items);
             if (!validation.success) {
                 throw new Error('Validation of Xur inventory failed');
@@ -71,9 +75,9 @@ export function createMcpServer({
 
             return {
                 content: [{ type: 'text', text: `Retrieved ${items.length} items.` }],
-                structuredContent: { items }
+                structuredContent: { items },
             };
-        }
+        },
     );
 
     return server;

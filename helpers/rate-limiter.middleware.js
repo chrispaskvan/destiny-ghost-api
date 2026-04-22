@@ -14,7 +14,10 @@ function setRateLimitHeaders(rateLimiterRes, res) {
     const headers = {
         'X-RateLimit-Limit': options.points,
         'X-RateLimit-Remaining': rateLimiterRes.remainingPoints,
-        'X-RateLimit-Reset': Math.ceil(Temporal.Now.instant().add({ milliseconds: rateLimiterRes.msBeforeNext }).epochMilliseconds / 1000),
+        'X-RateLimit-Reset': Math.ceil(
+            Temporal.Now.instant().add({ milliseconds: rateLimiterRes.msBeforeNext })
+                .epochMilliseconds / 1000,
+        ),
     };
 
     res.set(headers);
@@ -25,7 +28,8 @@ const rateLimiterMiddleware = (req, res, next) => {
     const key = membershipId || ip;
     const pointsToConsume = dateRegistered ? 1 : 10;
 
-    rateLimiter.consume(key, pointsToConsume)
+    rateLimiter
+        .consume(key, pointsToConsume)
         .then(rateLimiterRes => {
             setRateLimitHeaders(rateLimiterRes, res);
             next();

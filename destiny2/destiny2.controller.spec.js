@@ -1,6 +1,4 @@
-import {
-    beforeEach, describe, expect, it, vi,
-} from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Chance from 'chance';
 import Destiny2Controller from './destiny2.controller.js';
 import manifest2Response from '../mocks/manifest2Response.json';
@@ -74,8 +72,10 @@ describe('Destiny2Controller', () => {
                         membershipId: '1',
                     });
 
-                    const [{ className }] = await destiny2Controller
-                        .getCharacters(displayName, membershipType);
+                    const [{ className }] = await destiny2Controller.getCharacters(
+                        displayName,
+                        membershipType,
+                    );
 
                     expect(className).toEqual('Hunter');
                 });
@@ -90,9 +90,7 @@ describe('Destiny2Controller', () => {
                     const accessToken = 'some-access-token';
                     const membershipId = '1';
 
-                    destiny2Service.getXur = vi.fn().mockResolvedValue([
-                        'some-item-hash',
-                    ]);
+                    destiny2Service.getXur = vi.fn().mockResolvedValue(['some-item-hash']);
                     userService.getUserByDisplayName = vi.fn().mockResolvedValue({
                         bungie: {
                             access_token: accessToken,
@@ -100,16 +98,21 @@ describe('Destiny2Controller', () => {
                         membershipId,
                     });
 
-                    const saleItems = await destiny2Controller
-                        .getXur(displayName, membershipType);
+                    const saleItems = await destiny2Controller.getXur(displayName, membershipType);
 
-                    expect(saleItems).toEqual([{
-                        displayProperties: {
-                            name: 'Eyasluna',
+                    expect(saleItems).toEqual([
+                        {
+                            displayProperties: {
+                                name: 'Eyasluna',
+                            },
                         },
-                    }]);
-                    expect(destiny2Service.getXur)
-                        .toHaveBeenCalledWith(membershipId, membershipType, characterId, accessToken);
+                    ]);
+                    expect(destiny2Service.getXur).toHaveBeenCalledWith(
+                        membershipId,
+                        membershipType,
+                        characterId,
+                        accessToken,
+                    );
                 });
             });
         });

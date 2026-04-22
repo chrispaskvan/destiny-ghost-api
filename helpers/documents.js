@@ -7,7 +7,9 @@
  */
 import configuration from './config.js';
 
-const { documents: { databaseId } } = configuration;
+const {
+    documents: { databaseId },
+} = configuration;
 
 class Documents {
     constructor(options = {}) {
@@ -26,9 +28,7 @@ class Documents {
      * @private
      */
     async #getCollection(collectionId) {
-        return this.client
-            .database(databaseId)
-            .container(collectionId);
+        return this.client.database(databaseId).container(collectionId);
     }
 
     /**
@@ -69,9 +69,7 @@ class Documents {
      */
     async getDocuments(collectionId, query, options) {
         const container = await this.#getCollection(collectionId);
-        const { resources: items } = await container.items
-            .query(query, options)
-            .fetchAll();
+        const { resources: items } = await container.items.query(query, options).fetchAll();
 
         return items;
     }

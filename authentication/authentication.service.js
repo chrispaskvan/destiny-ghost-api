@@ -14,7 +14,7 @@ class AuthenticationService {
             destinyService: z.object({}),
             userService: z.object({}),
         });
-        
+
         schema.parse(options);
 
         this.cacheService = options.cacheService;
@@ -73,8 +73,8 @@ class AuthenticationService {
             try {
                 user = await this.destinyService.getCurrentUser(accessToken);
             } catch {
-                const bungie = await this.destinyService
-                    .getAccessTokenFromRefreshToken(refreshToken);
+                const bungie =
+                    await this.destinyService.getAccessTokenFromRefreshToken(refreshToken);
 
                 bungie._ttl = now + bungie.expires_in * 1000;
                 user.bungie = bungie;

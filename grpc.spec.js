@@ -1,6 +1,4 @@
-import {
-    beforeEach, describe, expect, it, vi,
-} from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import grpc from '@grpc/grpc-js';
 import { createGetAllHandler } from './grpc.js';
 

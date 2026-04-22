@@ -11,19 +11,25 @@ import rateLimiterMiddleware from '../helpers/rate-limiter.middleware.js';
 import store from '../helpers/store.js';
 
 export default app => {
-    app.use(express.json({
-        limit: '1mb',
-    }));
-    app.use(express.urlencoded({
-        limit: '1mb',
-        extended: true,
-        parameterLimit: 51,
-    }));
+    app.use(
+        express.json({
+            limit: '1mb',
+        }),
+    );
+    app.use(
+        express.urlencoded({
+            limit: '1mb',
+            extended: true,
+            parameterLimit: 51,
+        }),
+    );
     app.use(compression());
     app.use(cookieParser());
-    app.use(helmet.crossOriginResourcePolicy({
-        policy: 'cross-origin',
-    }));
+    app.use(
+        helmet.crossOriginResourcePolicy({
+            policy: 'cross-origin',
+        }),
+    );
 
     /**
      * Disable etag and x-powered-by headers.
@@ -33,7 +39,7 @@ export default app => {
     /**
      * Set Access Headers
      */
-    app.use((req, res, next) => {
+    app.use((_req, res, next) => {
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, PATCH, DELETE');
         res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
         res.setHeader('Access-Control-Allow-Credentials', true);

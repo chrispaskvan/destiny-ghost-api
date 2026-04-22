@@ -1,9 +1,7 @@
 /**
  * Bitly Tests
  */
-import {
-    beforeEach, describe, expect, it, vi,
-} from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('./config.js', () => ({
     default: {
@@ -38,17 +36,20 @@ describe('Bitly', () => {
             const url = await getShortUrl('http://db.planetdestiny.com/items/view/3164616404');
 
             expect(url).toBe('https://bit.ly/abc123');
-            expect(mockPost).toHaveBeenCalledWith(expect.objectContaining({
-                url: 'https://api-ssl.bitly.com/v4/shorten',
-                data: {
-                    domain: 'bit.ly',
-                    group_id: '',
-                    long_url: 'http://db.planetdestiny.com/items/view/3164616404',
-                },
-                headers: {
-                    Authorization: 'Bearer test-access-token',
-                },
-            }), { maxRetries: 3 });
+            expect(mockPost).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    url: 'https://api-ssl.bitly.com/v4/shorten',
+                    data: {
+                        domain: 'bit.ly',
+                        group_id: '',
+                        long_url: 'http://db.planetdestiny.com/items/view/3164616404',
+                    },
+                    headers: {
+                        Authorization: 'Bearer test-access-token',
+                    },
+                }),
+                { maxRetries: 3 },
+            );
         });
 
         it('should reject when URL is not a string', async () => {

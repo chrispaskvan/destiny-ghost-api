@@ -35,7 +35,7 @@ class Postmaster {
 
     /**
      * Send email with user token
-     * 
+     *
      * @param {Object} user - User object with emailAddress, firstName, and membership.tokens.blob
      * @param {string} image - Optional image URL
      * @param {string} url - URL path for the action
@@ -44,7 +44,13 @@ class Postmaster {
      * @private
      */
     #sendEmail(user, image, url, action) {
-        const { emailAddress, firstName, membership: { tokens: { blob } } } = user;
+        const {
+            emailAddress,
+            firstName,
+            membership: {
+                tokens: { blob },
+            },
+        } = user;
         const actionText = action === 'registration' ? 'registration' : 'confirmation';
         const actionTitle = actionText.charAt(0).toUpperCase() + actionText.slice(1);
         const mailOptions = {
@@ -55,16 +61,13 @@ class Postmaster {
             subject: `Destiny Ghost ${actionTitle}`,
             text: `Hi ${firstName},\r\n\r\nOpen the link below to continue the ${actionText} process.\r\n\r\n${website}${url}?token=${blob}`,
             to: emailAddress,
-            html: `${(image ? `<img src='${image}' style='background-color: ${Postmaster.#getRandomColor()};'><br /><br />` : '')}Hi ${firstName},<br /><br />Please click the link below to continue the ${actionText} process.<br /><br />${website}${url}?token=${blob}`,
+            html: `${image ? `<img src='${image}' style='background-color: ${Postmaster.#getRandomColor()};'><br /><br />` : ''}Hi ${firstName},<br /><br />Please click the link below to continue the ${actionText} process.<br /><br />${website}${url}?token=${blob}`,
         };
 
-        return withRetry(
-            () => this.transporter.sendMail(mailOptions),
-            {
-                shouldRetry: err => SMTP_CONNECTION_ERRORS.has(err.code),
-                maxRetries: 1,
-            },
-        );
+        return withRetry(() => this.transporter.sendMail(mailOptions), {
+            shouldRetry: err => SMTP_CONNECTION_ERRORS.has(err.code),
+            maxRetries: 1,
+        });
     }
 
     /**

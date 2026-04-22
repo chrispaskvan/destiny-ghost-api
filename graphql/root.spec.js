@@ -1,7 +1,5 @@
 import Chance from 'chance';
-import {
-    describe, expect, it, vi,
-} from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import root from './root.js';
 
 vi.mock('../helpers/throttle.js');
@@ -34,9 +32,12 @@ const mockContext = {
 describe('root', () => {
     describe('findPlayers', () => {
         it('should return players with statistics and user with throttle', async () => {
-            const players = await root.findPlayers({
-                displayName: mockPlayer.destinyMemberships[0].displayName,
-            }, mockContext);
+            const players = await root.findPlayers(
+                {
+                    displayName: mockPlayer.destinyMemberships[0].displayName,
+                },
+                mockContext,
+            );
 
             expect(players).toEqual(mockPlayers);
             expect(mockContext.destiny2Service.getPlayerStatistics).toHaveBeenCalledWith(
@@ -52,9 +53,12 @@ describe('root', () => {
         it.skip('should return players with statistics and no user', async () => {
             mockContext.isAdministrator = false;
 
-            const players = await root.findPlayers({
-                displayName: mockPlayer.destinyMemberships[0].displayName,
-            }, mockContext);
+            const players = await root.findPlayers(
+                {
+                    displayName: mockPlayer.destinyMemberships[0].displayName,
+                },
+                mockContext,
+            );
 
             expect(players).toEqual(mockPlayers);
             expect(mockContext.destiny2Service.getPlayerStatistics).toHaveBeenCalledWith(

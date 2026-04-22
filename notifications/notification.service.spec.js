@@ -1,6 +1,4 @@
-import {
-    beforeEach, describe, expect, it, vi,
-} from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import mockTwilioCreateMessageResponse from '../mocks/twilioCreateMessageResponse.json';
 import Notifications from './notification.service.js';
 import { withRetry, isTransientError } from '../helpers/retry.js';
@@ -26,14 +24,17 @@ describe('Notifications', () => {
     it('wraps sendMessage with retry using isTransientError', async () => {
         await notificationService.sendMessage('Aegis of the Reef', '+11111111111');
 
-        expect(withRetry).toHaveBeenCalledWith(
-            expect.any(Function),
-            { shouldRetry: isTransientError, maxRetries: 0 },
-        );
+        expect(withRetry).toHaveBeenCalledWith(expect.any(Function), {
+            shouldRetry: isTransientError,
+            maxRetries: 0,
+        });
     });
 
     it('sendMessage', async () => {
-        const { sid, dateCreated, status } = await notificationService.sendMessage('Aegis of the Reef', '+11111111111');
+        const { sid, dateCreated, status } = await notificationService.sendMessage(
+            'Aegis of the Reef',
+            '+11111111111',
+        );
 
         expect(sid).toEqual(mockTwilioCreateMessageResponse.sid);
         expect(dateCreated).toEqual(mockTwilioCreateMessageResponse.dateCreated);

@@ -21,6 +21,7 @@ describe('worker', () => {
             prepare: mockPrepare,
             close: vi.fn(),
         };
+        // biome-ignore lint/complexity/useArrowFunction: function expression required — `new` ignores return value of arrow functions
         Database.mockImplementation(function () {
             return mockDatabase;
         });
@@ -44,11 +45,14 @@ describe('worker', () => {
     });
 
     it('should throw an error if database loading fails', async () => {
+        // biome-ignore lint/complexity/useArrowFunction: function expression required — `new` ignores return value of arrow functions
         Database.mockImplementation(function () {
             throw new Error('Database error');
         });
 
-        await expect(worker({ databasePath, queries })).rejects.toThrow('Failed to load the database: Database error');
+        await expect(worker({ databasePath, queries })).rejects.toThrow(
+            'Failed to load the database: Database error',
+        );
     });
 
     it('should close the database in the finally block', async () => {
@@ -56,7 +60,9 @@ describe('worker', () => {
             throw new Error('Query error');
         });
 
-        await expect(worker({ databasePath, queries })).rejects.toThrow('Failed to load the database: Query error');
+        await expect(worker({ databasePath, queries })).rejects.toThrow(
+            'Failed to load the database: Query error',
+        );
 
         expect(mockDatabase.close).toHaveBeenCalled();
     });

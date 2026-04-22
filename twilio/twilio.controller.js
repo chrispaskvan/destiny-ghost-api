@@ -40,44 +40,49 @@ class TwilioController {
     async #getItem(item) {
         const {
             defaultDamageTypeHash,
-            displayProperties: {
-                icon,
-                name,
-            } = {},
+            displayProperties: { icon, name } = {},
             hash,
-            inventory: {
-                tierTypeName = '',
-            } = {},
+            inventory: { tierTypeName = '' } = {},
             itemCategoryHashes,
             itemType,
             itemTypeDisplayName,
         } = item;
-        const itemCategories = await Promise.all(itemCategoryHashes.map(async itemCategoryHash => await this.world
-            .getItemCategory(itemCategoryHash)));
+        const itemCategories = await Promise.all(
+            itemCategoryHashes.map(
+                async itemCategoryHash => await this.world.getItemCategory(itemCategoryHash),
+            ),
+        );
         const filteredCategories = itemCategories.filter(({ hash1 }) => hash1 > 1);
         const sortedCategories = filteredCategories.toSorted((a, b) => a.hash - b.hash);
-        const itemCategory = sortedCategories.reduce((memo, { shortTitle }) => (`${memo + shortTitle} `), ' ')
+        const itemCategory = sortedCategories
+            .reduce((memo, { shortTitle }) => `${memo + shortTitle} `, ' ')
             .trim();
         let damageType;
 
         if (defaultDamageTypeHash) {
-            ({ displayProperties: { name: damageType } = {} } = await this.world
-                .getDamageTypeByHash(defaultDamageTypeHash));
+            ({
+                displayProperties: { name: damageType } = {},
+            } = await this.world.getDamageTypeByHash(defaultDamageTypeHash));
         }
 
-        return [{
-            itemCategory: `${tierTypeName} ${damageType ? `${damageType} ` : ''}${itemCategory}${
-                filteredCategories.length < 2 ? `${itemTypeDisplayName}` : ''}`,
-            icon: `https://www.bungie.net${icon}`,
-            itemHash: hash,
-            itemName: name,
-            itemType,
-        }];
+        return [
+            {
+                itemCategory: `${tierTypeName} ${damageType ? `${damageType} ` : ''}${itemCategory}${
+                    filteredCategories.length < 2 ? `${itemTypeDisplayName}` : ''
+                }`,
+                icon: `https://www.bungie.net${icon}`,
+                itemHash: hash,
+                itemName: name,
+                itemType,
+            },
+        ];
     }
 
     static async getMore(itemHash, cookies = {}) {
         if (itemHash) {
-            const shortURL = await getShortUrl(`https://destinytracker.com/destiny-2/db/items/${itemHash}`);
+            const shortURL = await getShortUrl(
+                `https://destinytracker.com/destiny-2/db/items/${itemHash}`,
+            );
 
             return {
                 cookies,
@@ -100,8 +105,8 @@ class TwilioController {
         const responses = [
             'Sorry. I lost your message in the Ascendant realm. Blame Oryx.',
             'Skolas escaped the Prison of Elders again. He must be responsible for this mishap.',
-            'Have you seen that fragment of Crota\'s soul laying around? Uh oh.',
-            'Atheon\'s plugged into the power grid again. We\'re experiencing intermittent outages.',
+            "Have you seen that fragment of Crota's soul laying around? Uh oh.",
+            "Atheon's plugged into the power grid again. We're experiencing intermittent outages.",
         ];
 
         return responses[Math.floor(Math.random() * responses.length)];
@@ -114,9 +119,9 @@ class TwilioController {
      */
     static getRandomResponseForNoResults() {
         const responses = [
-            'Are you sure that\'s how it\'s spelled?',
+            "Are you sure that's how it's spelled?",
             'Does it look like a Gjallarhorn?',
-            'Sorry, I\'ve got nothing.',
+            "Sorry, I've got nothing.",
         ];
 
         return responses[Math.floor(Math.random() * responses.length)];
@@ -133,22 +138,32 @@ class TwilioController {
     async getXur(user, cookies) {
         try {
             const {
-                bungie: {
-                    access_token: accessToken,
-                },
+                bungie: { access_token: accessToken },
                 membershipId,
                 membershipType,
             } = await this.authentication.authenticate(user);
             const characters = await this.destiny.getProfile(membershipId, membershipType);
 
-            if (characters && characters.length) {
-                const itemHashes = await this.destiny
-                    .getXur(membershipId, membershipType, characters[0].characterId, accessToken);
+            if (characters?.length) {
+                const itemHashes = await this.destiny.getXur(
+                    membershipId,
+                    membershipType,
+                    characters[0].characterId,
+                    accessToken,
+                );
                 const weaponCategory = await this.world.getWeaponCategory();
-                const items = await Promise.all(itemHashes.map(itemHash => this.world.getItemByHash(itemHash)));
-                const weapons = items
-                    .filter(({ itemCategoryHashes }) => itemCategoryHashes.includes(weaponCategory));
-                const result = weapons.reduce((memo, { displayProperties }) => (`${memo + displayProperties.name}\n`), ' ').trim();
+                const items = await Promise.all(
+                    itemHashes.map(itemHash => this.world.getItemByHash(itemHash)),
+                );
+                const weapons = items.filter(({ itemCategoryHashes }) =>
+                    itemCategoryHashes.includes(weaponCategory),
+                );
+                const result = weapons
+                    .reduce(
+                        (memo, { displayProperties }) => `${memo + displayProperties.name}\n`,
+                        ' ',
+                    )
+                    .trim();
 
                 return {
                     cookies: { ...cookies, itemHash: undefined },
@@ -183,9 +198,10 @@ class TwilioController {
      * @returns {Promise}
      */
     async queryItem(itemName) {
-        const allItems = await this.world.getItemByName(itemName.replace(/[\u2018\u2019]/g, '\''));
-        const items = allItems.filter(({ itemType }) => !itemName.includes('Catalyst')
-            && [2, 3, 4].includes(itemType));
+        const allItems = await this.world.getItemByName(itemName.replace(/[\u2018\u2019]/g, "'"));
+        const items = allItems.filter(
+            ({ itemType }) => !itemName.includes('Catalyst') && [2, 3, 4].includes(itemType),
+        );
 
         if (items.length > 0) {
             if (items.length > 1) {
@@ -223,7 +239,7 @@ class TwilioController {
         let responseCookies = {};
         const user = await this.users.getUserByPhoneNumber(body.From);
 
-        if (!user || !user.dateRegistered) {
+        if (!user?.dateRegistered) {
             if (!cookies.isRegistered) {
                 return {
                     message: `Register your phone at ${process.env.WEBSITE}/register`, // ToDo
@@ -255,32 +271,37 @@ class TwilioController {
         const items = await this.queryItem(searchTerm);
 
         switch (items.length) {
-        case 0: {
-            return {
-                cookies: responseCookies,
-                message: TwilioController.getRandomResponseForNoResults(),
-            };
-        }
-        case 1: {
-            responseCookies = { itemHash: items[0].itemHash, ...responseCookies };
-            items[0].itemCategory = items[0].itemCategory.replace(/Weapon/g, '').trim();
+            case 0: {
+                return {
+                    cookies: responseCookies,
+                    message: TwilioController.getRandomResponseForNoResults(),
+                };
+            }
+            case 1: {
+                responseCookies = { itemHash: items[0].itemHash, ...responseCookies };
+                items[0].itemCategory = items[0].itemCategory.replace(/Weapon/g, '').trim();
 
-            return {
-                cookies: responseCookies,
-                message: `${items[0].itemName} ${items[0].itemCategory}`.substring(0, MAX_SMS_MESSAGE_LENGTH),
-                media: user.type === 'landline' ? undefined : items[0].icon,
-            };
-        }
-        default: {
-            const groups = Object.groupBy(items, item => item.itemName);
-            const keys = Object.keys(groups);
-            const result = keys.reduce((memo, key) => `${memo}\n${key} ${groups[key][0].itemCategory}`, ' ').trim();
+                return {
+                    cookies: responseCookies,
+                    message: `${items[0].itemName} ${items[0].itemCategory}`.substring(
+                        0,
+                        MAX_SMS_MESSAGE_LENGTH,
+                    ),
+                    media: user.type === 'landline' ? undefined : items[0].icon,
+                };
+            }
+            default: {
+                const groups = Object.groupBy(items, item => item.itemName);
+                const keys = Object.keys(groups);
+                const result = keys
+                    .reduce((memo, key) => `${memo}\n${key} ${groups[key][0].itemCategory}`, ' ')
+                    .trim();
 
-            return {
-                cookies: { itemHash: undefined, ...responseCookies },
-                message: result.substring(0, MAX_SMS_MESSAGE_LENGTH),
-            };
-        }
+                return {
+                    cookies: { itemHash: undefined, ...responseCookies },
+                    message: result.substring(0, MAX_SMS_MESSAGE_LENGTH),
+                };
+            }
         }
     }
 
@@ -290,11 +311,7 @@ class TwilioController {
      * @param res
      */
     async statusCallback(message) {
-        const {
-            ClaimCheck: claimCheck,
-            MessageStatus: status,
-            To: phoneNumber,
-        } = message;
+        const { ClaimCheck: claimCheck, MessageStatus: status, To: phoneNumber } = message;
         const user = await this.users.getUserByPhoneNumber(phoneNumber);
 
         if (user) {

@@ -42,7 +42,9 @@ class DestinyController {
      */
     async getCurrentUser(displayName, membershipType) {
         const currentUser = await this.users.getUserByDisplayName(displayName, membershipType);
-        const { bungie: { access_token: accessToken } } = currentUser;
+        const {
+            bungie: { access_token: accessToken },
+        } = currentUser;
 
         return await this.destiny.getCurrentUser(accessToken);
     }
@@ -69,7 +71,9 @@ class DestinyController {
      * Insert or update the Destiny manifest if needed.
      */
     async upsertManifest() {
-        const { data: { manifest } } = await this.destiny.getManifest(true);
+        const {
+            data: { manifest },
+        } = await this.destiny.getManifest(true);
 
         return await this.world.updateManifest(manifest);
     }

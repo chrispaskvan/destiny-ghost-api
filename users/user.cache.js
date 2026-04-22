@@ -88,12 +88,7 @@ class UserCache {
      * @returns {*}
      */
     async setUser(user = {}) {
-        const {
-            displayName,
-            emailAddress,
-            membershipType,
-            phoneNumber,
-        } = user;
+        const { displayName, emailAddress, membershipType, phoneNumber } = user;
 
         if (!displayName) {
             return Promise.reject(new Error('displayName not found'));
@@ -103,11 +98,7 @@ class UserCache {
         }
 
         const key = UserCache.#getCacheKey(displayName, membershipType);
-        const promise1 = await this.client.setEx(
-            key,
-            60 * 60,
-            JSON.stringify(user),
-        );
+        const promise1 = await this.client.setEx(key, 60 * 60, JSON.stringify(user));
 
         let promise2;
 
