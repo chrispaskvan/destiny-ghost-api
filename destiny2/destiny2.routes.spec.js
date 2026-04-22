@@ -1,7 +1,5 @@
 import { EventEmitter } from 'node:events';
-import {
-    beforeEach, describe, expect, it, vi,
-} from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { StatusCodes } from 'http-status-codes';
 import Chance from 'chance';
 import { createResponse, createRequest } from 'node-mocks-http';
@@ -71,39 +69,64 @@ describe('Destiny2Router', () => {
     describe('getCharacters', () => {
         describe('when session displayName and membershipType are defined', () => {
             describe('when user and destiny services return a user', () => {
-                it('should return list of characters', () => new Promise((done, reject) => {
+                it('should return list of characters', () =>
+                    new Promise((done, reject) => {
+                        const req = createRequest({
+                            method: 'GET',
+                            url: '/characters',
+                            session: {
+                                displayName,
+                                membershipType,
+                            },
+                        });
+
+                        destiny2Service.getProfile = vi.fn().mockResolvedValue([
+                            {
+                                characterId: '1111111111111111111',
+                                classHash: '671679327',
+                                light: 284,
+                                links: [
+                                    {
+                                        rel: 'Character',
+                                        href: '/characters/1111111111111111111',
+                                    },
+                                ],
+                            },
+                        ]);
+                        userService.getUserByDisplayName = vi.fn().mockResolvedValue({
+                            membershipId: '1',
+                        });
+
+                        res.on('end', () => {
+                            const data = JSON.parse(res._getData());
+
+                            try {
+                                expect(res.statusCode).toEqual(StatusCodes.OK);
+                                expect(data[0].className).toEqual('Hunter');
+                                done();
+                            } catch (err) {
+                                reject(err);
+                            }
+                        });
+
+                        destiny2Router(req, res, next);
+                    }));
+            });
+        });
+
+        describe('when session displayName and membershipType are not defined', () => {
+            it('should respond with unauthorized', () =>
+                new Promise((done, reject) => {
                     const req = createRequest({
                         method: 'GET',
                         url: '/characters',
-                        session: {
-                            displayName,
-                            membershipType,
-                        },
+                        session: {},
                     });
 
-                    destiny2Service.getProfile = vi.fn().mockResolvedValue([
-                        {
-                            characterId: '1111111111111111111',
-                            classHash: '671679327',
-                            light: 284,
-                            links: [
-                                {
-                                    rel: 'Character',
-                                    href: '/characters/1111111111111111111',
-                                },
-                            ],
-                        },
-                    ]);
-                    userService.getUserByDisplayName = vi.fn().mockResolvedValue({
-                        membershipId: '1',
-                    });
-
+                    authenticationController.authenticate = vi.fn().mockResolvedValue(undefined);
                     res.on('end', () => {
-                        const data = JSON.parse(res._getData());
-
                         try {
-                            expect(res.statusCode).toEqual(StatusCodes.OK);
-                            expect(data[0].className).toEqual('Hunter');
+                            expect(res.statusCode).toEqual(StatusCodes.UNAUTHORIZED);
                             done();
                         } catch (err) {
                             reject(err);
@@ -112,29 +135,6 @@ describe('Destiny2Router', () => {
 
                     destiny2Router(req, res, next);
                 }));
-            });
-        });
-
-        describe('when session displayName and membershipType are not defined', () => {
-            it('should respond with unauthorized', () => new Promise((done, reject) => {
-                const req = createRequest({
-                    method: 'GET',
-                    url: '/characters',
-                    session: {},
-                });
-
-                authenticationController.authenticate = vi.fn().mockResolvedValue(undefined);
-                res.on('end', () => {
-                    try {
-                        expect(res.statusCode).toEqual(StatusCodes.UNAUTHORIZED);
-                        done();
-                    } catch (err) {
-                        reject(err);
-                    }
-                });
-
-                destiny2Router(req, res, next);
-            }));
         });
     });
 });

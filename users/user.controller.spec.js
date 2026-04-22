@@ -1,6 +1,4 @@
-import {
-    beforeEach, describe, expect, it, vi,
-} from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Chance from 'chance';
 import getEpoch from '../helpers/get-epoch.js';
 import UserController from './user.controller.js';
@@ -49,7 +47,12 @@ const worldRepository = {
 let userController;
 
 beforeEach(() => {
-    userController = new UserController({ destinyService, notificationService, userService, worldRepository });
+    userController = new UserController({
+        destinyService,
+        notificationService,
+        userService,
+        worldRepository,
+    });
 });
 
 describe('UserController', () => {
@@ -62,13 +65,11 @@ describe('UserController', () => {
             });
 
             it('should throw if the user is missing', async () => {
-                await expect(userController.deleteUserMessages())
-                    .rejects.toThrow();
+                await expect(userController.deleteUserMessages()).rejects.toThrow();
             });
 
             it('should throw if the user is missing a phone number', async () => {
-                await expect(userController.deleteUserMessages({}))
-                    .rejects.toThrow();
+                await expect(userController.deleteUserMessages({})).rejects.toThrow();
             });
         });
     });
@@ -79,32 +80,39 @@ describe('UserController', () => {
                 it('should return the current user', async () => {
                     const ETag = chance.guid();
 
-                    destinyService.getCurrentUser.mockImplementation(() => Promise.resolve({
-                        displayName: 'l',
-                        membershipType: 2,
-                        links: [
-                            {
-                                rel: 'characters',
-                                href: '/destiny/characters',
+                    destinyService.getCurrentUser.mockImplementation(() =>
+                        Promise.resolve({
+                            displayName: 'l',
+                            membershipType: 2,
+                            links: [
+                                {
+                                    rel: 'characters',
+                                    href: '/destiny/characters',
+                                },
+                            ],
+                        }),
+                    );
+                    userService.getUserByDisplayName.mockImplementation(() =>
+                        Promise.resolve({
+                            _etag: ETag,
+                            bungie: {
+                                accessToken: {
+                                    value: '11',
+                                },
                             },
-                        ],
-                    }));
-                    userService.getUserByDisplayName.mockImplementation(() => Promise.resolve({
-                        _etag: ETag,
-                        bungie: {
-                            accessToken: {
-                                value: '11',
-                            },
-                        },
-                        notifications: [
-                            {
-                                enabled: true,
-                                type: 'Xur',
-                            }
-                        ],
-                    }));
+                            notifications: [
+                                {
+                                    enabled: true,
+                                    type: 'Xur',
+                                },
+                            ],
+                        }),
+                    );
 
-                    const currentUser = await userController.getCurrentUser(displayName, membershipType);
+                    const currentUser = await userController.getCurrentUser(
+                        displayName,
+                        membershipType,
+                    );
 
                     expect(currentUser.ETag).toEqual(ETag);
                     expect(currentUser.user).not.toBeUndefined();
@@ -115,15 +123,20 @@ describe('UserController', () => {
             describe('when destiny service returns undefined', () => {
                 it('should not return a user', async () => {
                     destinyService.getCurrentUser.mockImplementation(() => Promise.resolve());
-                    userService.getUserByDisplayName.mockImplementation(() => Promise.resolve({
-                        bungie: {
-                            accessToken: {
-                                value: '11',
+                    userService.getUserByDisplayName.mockImplementation(() =>
+                        Promise.resolve({
+                            bungie: {
+                                accessToken: {
+                                    value: '11',
+                                },
                             },
-                        },
-                    }));
+                        }),
+                    );
 
-                    const { user } = await userController.getCurrentUser(displayName, membershipType);
+                    const { user } = await userController.getCurrentUser(
+                        displayName,
+                        membershipType,
+                    );
 
                     expect(user).toBeUndefined();
                 });
@@ -131,19 +144,24 @@ describe('UserController', () => {
 
             describe('when user service returns undefined', () => {
                 it('should not return a user', async () => {
-                    destinyService.getCurrentUser.mockImplementation(() => Promise.resolve({
-                        displayName: 'l',
-                        membershipType: 2,
-                        links: [
-                            {
-                                rel: 'characters',
-                                href: '/destiny/characters',
-                            },
-                        ],
-                    }));
+                    destinyService.getCurrentUser.mockImplementation(() =>
+                        Promise.resolve({
+                            displayName: 'l',
+                            membershipType: 2,
+                            links: [
+                                {
+                                    rel: 'characters',
+                                    href: '/destiny/characters',
+                                },
+                            ],
+                        }),
+                    );
                     userService.getUserByDisplayName.mockImplementation(() => Promise.resolve());
 
-                    const { user } = await userController.getCurrentUser(displayName, membershipType);
+                    const { user } = await userController.getCurrentUser(
+                        displayName,
+                        membershipType,
+                    );
 
                     expect(user).toBeUndefined();
                 });
@@ -167,26 +185,35 @@ describe('UserController', () => {
                 it('should return the user', async () => {
                     const version = 1;
 
-                    userService.getUserById.mockImplementation(() => Promise.resolve({
-                        ...mockUser,
-                        firstName: 'Failsafe v3.0',
-                        version: 3,
-                        patches: [{
-                            patch: [{
-                                op: 'replace',
-                                path: '/firstName',
-                                value: 'Failsafe v2.0',
-                            }],
-                            version: 2,
-                        }, {
-                            patch: [{
-                                op: 'replace',
-                                path: '/firstName',
-                                value: 'Failsafe',
-                            }],
-                            version: 1,
-                        }],
-                    }));
+                    userService.getUserById.mockImplementation(() =>
+                        Promise.resolve({
+                            ...mockUser,
+                            firstName: 'Failsafe v3.0',
+                            version: 3,
+                            patches: [
+                                {
+                                    patch: [
+                                        {
+                                            op: 'replace',
+                                            path: '/firstName',
+                                            value: 'Failsafe v2.0',
+                                        },
+                                    ],
+                                    version: 2,
+                                },
+                                {
+                                    patch: [
+                                        {
+                                            op: 'replace',
+                                            path: '/firstName',
+                                            value: 'Failsafe',
+                                        },
+                                    ],
+                                    version: 1,
+                                },
+                            ],
+                        }),
+                    );
 
                     const user = await userController.getUserById(chance.guid(), version);
 
@@ -231,21 +258,23 @@ describe('UserController', () => {
 
             describe('when the token has expired', () => {
                 it('should return undefined', async () => {
-                    userService.getUserByEmailAddressToken.mockImplementation(() => Promise.resolve({
-                        membership: {
-                            tokens: {
-                                timeStamp: getEpoch() - 1000,
-                                code,
+                    userService.getUserByEmailAddressToken.mockImplementation(() =>
+                        Promise.resolve({
+                            membership: {
+                                tokens: {
+                                    timeStamp: getEpoch() - 1000,
+                                    code,
+                                },
                             },
-                        },
-                    }));
+                        }),
+                    );
 
                     const user = await userController.join({
                         tokens: {
                             phoneNumber: code,
                         },
                     });
-    
+
                     expect(userService.getUserByEmailAddressToken).toHaveBeenCalled();
                     expect(user).toBeUndefined();
                     expect(userService.updateUser).not.toHaveBeenCalled();
@@ -254,14 +283,16 @@ describe('UserController', () => {
 
             describe('when the code is invalid', () => {
                 it('should return undefined', async () => {
-                    userService.getUserByEmailAddressToken.mockImplementation(() => Promise.resolve({
-                        membership: {
-                            tokens: {
-                                timeStamp: getEpoch(),
-                                code,
+                    userService.getUserByEmailAddressToken.mockImplementation(() =>
+                        Promise.resolve({
+                            membership: {
+                                tokens: {
+                                    timeStamp: getEpoch(),
+                                    code,
+                                },
                             },
-                        },
-                    }));
+                        }),
+                    );
 
                     const user = await userController.join({
                         tokens: {
@@ -277,8 +308,8 @@ describe('UserController', () => {
 
             describe('when the code and token are valid', () => {
                 it('should return the user', async () => {
-                    userService.getUserByEmailAddressToken.mockImplementation(() => Promise.resolve(
-                        {
+                    userService.getUserByEmailAddressToken.mockImplementation(() =>
+                        Promise.resolve({
                             membership: {
                                 tokens: {
                                     timeStamp: getEpoch(),
@@ -286,8 +317,8 @@ describe('UserController', () => {
                                 },
                             },
                             ...mockUser,
-                        },
-                    ));
+                        }),
+                    );
 
                     const user = await userController.join({
                         tokens: {
@@ -305,9 +336,11 @@ describe('UserController', () => {
 
     describe('signIn', () => {
         beforeEach(() => {
-            destinyService.getAccessTokenFromCode.mockImplementation(() => Promise.resolve({
-                access_token: 'some-access-token',
-            }));
+            destinyService.getAccessTokenFromCode.mockImplementation(() =>
+                Promise.resolve({
+                    access_token: 'some-access-token',
+                }),
+            );
         });
 
         describe('when current user is not found', () => {
@@ -320,8 +353,7 @@ describe('UserController', () => {
 
         describe('when current user is found', () => {
             beforeEach(() => {
-                destinyService.getCurrentUser
-                    .mockImplementation(() => Promise.resolve(mockUser));
+                destinyService.getCurrentUser.mockImplementation(() => Promise.resolve(mockUser));
             });
             describe('when current user is a first time visitor', () => {
                 it('should create anonymous user', async () => {
@@ -340,8 +372,9 @@ describe('UserController', () => {
             describe('when current user is a repeat visitor', () => {
                 describe('when current user is anonymous', () => {
                     it('should update the anonymous user', async () => {
-                        userService.getUserByMembershipId
-                            .mockImplementation(() => Promise.resolve(mockUser));
+                        userService.getUserByMembershipId.mockImplementation(() =>
+                            Promise.resolve(mockUser),
+                        );
 
                         const currentUser = await userController.signIn({});
 
@@ -357,11 +390,12 @@ describe('UserController', () => {
 
                 describe('when current user is registered', () => {
                     it('should update the registered user', async () => {
-                        userService.getUserByMembershipId
-                            .mockImplementation(() => Promise.resolve({
+                        userService.getUserByMembershipId.mockImplementation(() =>
+                            Promise.resolve({
                                 dateRegistered: Temporal.Now.instant().toString(),
                                 ...mockUser,
-                            }));
+                            }),
+                        );
 
                         const currentUser = await userController.signIn({});
 
@@ -404,26 +438,32 @@ describe('UserController', () => {
                     userService.getUserByEmailAddress.mockImplementation(() => Promise.resolve());
                     userService.getUserByPhoneNumber.mockImplementation(() => Promise.resolve());
 
-                    await expect(userController.signUp({
-                        displayName,
-                        membershipType,
-                        user: {
-                            phoneNumber: '+86 10 1234 5678',
-                        },
-                    })).rejects.toThrow(Error);
+                    await expect(
+                        userController.signUp({
+                            displayName,
+                            membershipType,
+                            user: {
+                                phoneNumber: '+86 10 1234 5678',
+                            },
+                        }),
+                    ).rejects.toThrow(Error);
                 });
             });
         });
 
         describe('when user is registered', () => {
             it('should not return a user', async () => {
-                userService.getUserByDisplayName.mockImplementation(() => Promise.resolve({
-                    displayName,
-                    membershipType,
-                }));
-                userService.getUserByEmailAddress.mockImplementation(() => Promise.resolve({
-                    dateRegistered: Temporal.Now.instant().toString(),
-                }));
+                userService.getUserByDisplayName.mockImplementation(() =>
+                    Promise.resolve({
+                        displayName,
+                        membershipType,
+                    }),
+                );
+                userService.getUserByEmailAddress.mockImplementation(() =>
+                    Promise.resolve({
+                        dateRegistered: Temporal.Now.instant().toString(),
+                    }),
+                );
 
                 const user = await userController.signUp({
                     displayName,

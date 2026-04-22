@@ -31,7 +31,8 @@ describe('AI', () => {
     const testFilePath = '/path/to/test/image.png';
     const testMimeType = 'image/png';
     const testFileUri = 'gs://test-bucket/test-file-uri';
-    const testPlayerNames = 'Player1,Player2,Player3,Player4,Player5,Player6,Player7,Player8,Player9,Player10,Player11,Player12';
+    const testPlayerNames =
+        'Player1,Player2,Player3,Player4,Player5,Player6,Player7,Player8,Player9,Player10,Player11,Player12';
 
     let mockUpload;
     let mockGenerateContent;
@@ -62,10 +63,9 @@ describe('AI', () => {
             await aiInstance.getPlayersFromFile(testFilePath);
 
             expect(withRetry).toHaveBeenCalledTimes(2);
-            expect(withRetry).toHaveBeenCalledWith(
-                expect.any(Function),
-                { shouldRetry: isTransientError },
-            );
+            expect(withRetry).toHaveBeenCalledWith(expect.any(Function), {
+                shouldRetry: isTransientError,
+            });
         });
 
         it('should successfully extract player names from uploaded file', async () => {
@@ -96,7 +96,7 @@ describe('AI', () => {
                                 },
                             },
                             {
-                                text: 'The image is a list of players in a video game player versus player match. The player\'s display name is followed by the player\'s clan in square brackets.',
+                                text: "The image is a list of players in a video game player versus player match. The player's display name is followed by the player's clan in square brackets.",
                             },
                         ],
                     },
@@ -112,13 +112,24 @@ describe('AI', () => {
             });
 
             expect(result).toEqual([
-                'Player1', 'Player2', 'Player3', 'Player4', 'Player5', 'Player6',
-                'Player7', 'Player8', 'Player9', 'Player10', 'Player11', 'Player12'
+                'Player1',
+                'Player2',
+                'Player3',
+                'Player4',
+                'Player5',
+                'Player6',
+                'Player7',
+                'Player8',
+                'Player9',
+                'Player10',
+                'Player11',
+                'Player12',
             ]);
         });
 
         it('should handle player names with special characters and spaces', async () => {
-            const specialPlayerNames = 'Player One,Player-Two,Player_Three,[CLAN]Player4,Player 5 With Spaces,Player#Six';
+            const specialPlayerNames =
+                'Player One,Player-Two,Player_Three,[CLAN]Player4,Player 5 With Spaces,Player#Six';
 
             mockUpload.mockResolvedValue({
                 mimeType: testMimeType,
@@ -136,7 +147,7 @@ describe('AI', () => {
                 'Player_Three',
                 '[CLAN]Player4',
                 'Player 5 With Spaces',
-                'Player#Six'
+                'Player#Six',
             ]);
         });
 
@@ -166,12 +177,26 @@ describe('AI', () => {
             expect(result).toBeUndefined();
         });
 
+        it('should handle undefined text in AI response', async () => {
+            mockUpload.mockResolvedValue({
+                mimeType: testMimeType,
+                uri: testFileUri,
+            });
+            mockGenerateContent.mockResolvedValue({});
+
+            const result = await aiInstance.getPlayersFromFile(testFilePath);
+
+            expect(result).toBeUndefined();
+        });
+
         it('should handle file upload failure', async () => {
             const uploadError = new Error('File upload failed');
 
             mockUpload.mockRejectedValue(uploadError);
 
-            await expect(aiInstance.getPlayersFromFile(testFilePath)).rejects.toThrow('File upload failed');
+            await expect(aiInstance.getPlayersFromFile(testFilePath)).rejects.toThrow(
+                'File upload failed',
+            );
             expect(mockGenerateContent).not.toHaveBeenCalled();
         });
 
@@ -185,7 +210,9 @@ describe('AI', () => {
 
             mockGenerateContent.mockRejectedValue(generationError);
 
-            await expect(aiInstance.getPlayersFromFile(testFilePath)).rejects.toThrow('Content generation failed');
+            await expect(aiInstance.getPlayersFromFile(testFilePath)).rejects.toThrow(
+                'Content generation failed',
+            );
         });
 
         it('should log file upload information', async () => {
@@ -201,12 +228,13 @@ describe('AI', () => {
 
             await aiInstance.getPlayersFromFile(testFilePath);
 
-            expect(log.info).toHaveBeenCalledWith({
-                fileUri: testFileUri,
-                mimeType: testMimeType,
-                path: testFilePath,
-            },
-            'File uploaded to the AI'
+            expect(log.info).toHaveBeenCalledWith(
+                {
+                    fileUri: testFileUri,
+                    mimeType: testMimeType,
+                    path: testFilePath,
+                },
+                'File uploaded to the AI',
             );
         });
 
@@ -239,7 +267,7 @@ describe('AI', () => {
                             ]),
                         }),
                     ]),
-                })
+                }),
             );
             expect(result).toEqual(testPlayerNames.split(','));
         });

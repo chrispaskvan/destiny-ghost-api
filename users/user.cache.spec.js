@@ -1,6 +1,4 @@
-import {
-    afterEach, beforeEach, describe, expect, it, vi,
-} from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import UserCache from './user.cache.js';
 import mockUsers from '../mocks/users.json';
 
@@ -47,8 +45,7 @@ describe('UserCache', () => {
             describe('when cache is found', () => {
                 it('resolves value', async () => {
                     client = {
-                        get:
-                        vi.fn(() => Promise.resolve(JSON.stringify(mockUser))),
+                        get: vi.fn(() => Promise.resolve(JSON.stringify(mockUser))),
                     };
 
                     cacheService = new UserCache({ client });
@@ -86,8 +83,7 @@ describe('UserCache', () => {
 
                 cacheService = new UserCache({ client });
 
-                await expect(cacheService.getCache(cacheKey))
-                    .rejects.toThrow(errMessage);
+                await expect(cacheService.getCache(cacheKey)).rejects.toThrow(errMessage);
             });
         });
     });
@@ -107,8 +103,7 @@ describe('UserCache', () => {
         describe('when cached user is found', () => {
             describe('when membershipId is found', () => {
                 it('returns user', async () => {
-                    vi.spyOn(cacheService, 'getCache')
-                        .mockResolvedValueOnce(mockUser);
+                    vi.spyOn(cacheService, 'getCache').mockResolvedValueOnce(mockUser);
 
                     const user = await cacheService.getUser();
 
@@ -136,8 +131,7 @@ describe('UserCache', () => {
 
         describe('when cached user is not found', () => {
             it('return undefined', async () => {
-                cacheService.getCache = vi.fn()
-                    .mockImplementation(() => Promise.resolve());
+                cacheService.getCache = vi.fn().mockImplementation(() => Promise.resolve());
 
                 const user = await cacheService.getUser();
 
@@ -158,15 +152,19 @@ describe('UserCache', () => {
 
             describe('when display name is not found', () => {
                 it('rejects', async () => {
-                    await expect(cacheService.setUser()).rejects.toThrow(new Error('displayName not found'));
+                    await expect(cacheService.setUser()).rejects.toThrow(
+                        new Error('displayName not found'),
+                    );
                 });
             });
 
             describe('when display name is found, but membership type is not', () => {
                 it('rejects', async () => {
-                    await expect(cacheService.setUser({
-                        displayName: 11,
-                    })).rejects.toThrow(new Error('membershipType not found'));
+                    await expect(
+                        cacheService.setUser({
+                            displayName: 11,
+                        }),
+                    ).rejects.toThrow(new Error('membershipType not found'));
                 });
             });
 
@@ -216,8 +214,7 @@ describe('UserCache', () => {
                 };
                 cacheService = new UserCache({ client });
 
-                await expect(cacheService.setUser(mockUser))
-                    .rejects.toThrow(errMessage);
+                await expect(cacheService.setUser(mockUser)).rejects.toThrow(errMessage);
             });
         });
     });

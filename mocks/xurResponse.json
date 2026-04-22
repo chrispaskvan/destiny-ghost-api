@@ -1,88 +1,88 @@
 {
-  "Response": {
-      "vendor": {
-          "privacy": 2
-      },
-      "categories": {
-          "privacy": 2
-      },
-      "sales": {
-          "data": {
-              "14": {
-                  "saleStatus": 0,
-                  "failureIndexes": [],
-                  "augments": 0,
-                  "vendorItemIndex": 14,
-                  "itemHash": 4124984448,
-                  "quantity": 1,
-                  "costs": [
-                      {
-                          "itemHash": 1022552290,
-                          "quantity": 29
-                      }
-                  ]
-              },
-              "44": {
-                  "saleStatus": 0,
-                  "failureIndexes": [],
-                  "augments": 0,
-                  "vendorItemIndex": 44,
-                  "itemHash": 1474735276,
-                  "quantity": 1,
-                  "costs": [
-                      {
-                          "itemHash": 1022552290,
-                          "quantity": 23
-                      }
-                  ]
-              },
-              "58": {
-                  "saleStatus": 0,
-                  "failureIndexes": [],
-                  "augments": 0,
-                  "vendorItemIndex": 58,
-                  "itemHash": 1192890598,
-                  "quantity": 1,
-                  "costs": [
-                      {
-                          "itemHash": 1022552290,
-                          "quantity": 23
-                      }
-                  ]
-              },
-              "105": {
-                  "saleStatus": 0,
-                  "failureIndexes": [],
-                  "augments": 0,
-                  "vendorItemIndex": 105,
-                  "itemHash": 1096253259,
-                  "quantity": 1,
-                  "costs": [
-                      {
-                          "itemHash": 1022552290,
-                          "quantity": 23
-                      }
-                  ]
-              },
-              "108": {
-                  "saleStatus": 128,
-                  "failureIndexes": [],
-                  "augments": 0,
-                  "vendorItemIndex": 108,
-                  "itemHash": 4285666432,
-                  "quantity": 1,
-                  "costs": []
-              }
-          },
-          "privacy": 2
-      },
-      "currencyLookups": {
-          "privacy": 2
-      }
-  },
-  "ErrorCode": 1,
-  "ThrottleSeconds": 0,
-  "ErrorStatus": "Success",
-  "Message": "Ok",
-  "MessageData": {}
+    "Response": {
+        "vendor": {
+            "privacy": 2
+        },
+        "categories": {
+            "privacy": 2
+        },
+        "sales": {
+            "data": {
+                "14": {
+                    "saleStatus": 0,
+                    "failureIndexes": [],
+                    "augments": 0,
+                    "vendorItemIndex": 14,
+                    "itemHash": 4124984448,
+                    "quantity": 1,
+                    "costs": [
+                        {
+                            "itemHash": 1022552290,
+                            "quantity": 29
+                        }
+                    ]
+                },
+                "44": {
+                    "saleStatus": 0,
+                    "failureIndexes": [],
+                    "augments": 0,
+                    "vendorItemIndex": 44,
+                    "itemHash": 1474735276,
+                    "quantity": 1,
+                    "costs": [
+                        {
+                            "itemHash": 1022552290,
+                            "quantity": 23
+                        }
+                    ]
+                },
+                "58": {
+                    "saleStatus": 0,
+                    "failureIndexes": [],
+                    "augments": 0,
+                    "vendorItemIndex": 58,
+                    "itemHash": 1192890598,
+                    "quantity": 1,
+                    "costs": [
+                        {
+                            "itemHash": 1022552290,
+                            "quantity": 23
+                        }
+                    ]
+                },
+                "105": {
+                    "saleStatus": 0,
+                    "failureIndexes": [],
+                    "augments": 0,
+                    "vendorItemIndex": 105,
+                    "itemHash": 1096253259,
+                    "quantity": 1,
+                    "costs": [
+                        {
+                            "itemHash": 1022552290,
+                            "quantity": 23
+                        }
+                    ]
+                },
+                "108": {
+                    "saleStatus": 128,
+                    "failureIndexes": [],
+                    "augments": 0,
+                    "vendorItemIndex": 108,
+                    "itemHash": 4285666432,
+                    "quantity": 1,
+                    "costs": []
+                }
+            },
+            "privacy": 2
+        },
+        "currencyLookups": {
+            "privacy": 2
+        }
+    },
+    "ErrorCode": 1,
+    "ThrottleSeconds": 0,
+    "ErrorStatus": "Success",
+    "Message": "Ok",
+    "MessageData": {}
 }

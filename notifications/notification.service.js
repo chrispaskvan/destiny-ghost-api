@@ -25,13 +25,11 @@ class Notifications {
      * @param mediaUrl {string}
      * @returns {*}
      */
-    async sendMessage(body, to, mediaUrl, {
-        claimCheckNumber,
-        notificationType,
-    } = {}) {
-        const query = claimCheckNumber && notificationType
-            ? `?claim-check-number=${claimCheckNumber}&notification-type=${notificationType}`
-            : '';
+    async sendMessage(body, to, mediaUrl, { claimCheckNumber, notificationType } = {}) {
+        const query =
+            claimCheckNumber && notificationType
+                ? `?claim-check-number=${claimCheckNumber}&notification-type=${notificationType}`
+                : '';
         const message = {
             to,
             from: configuration.twilio.phoneNumber,
@@ -43,10 +41,10 @@ class Notifications {
             message.mediaUrl = mediaUrl;
         }
 
-        return await withRetry(
-            () => this.client.messages.create(message),
-            { shouldRetry: isTransientError, maxRetries: 0 },
-        );
+        return await withRetry(() => this.client.messages.create(message), {
+            shouldRetry: isTransientError,
+            maxRetries: 0,
+        });
     }
 }
 

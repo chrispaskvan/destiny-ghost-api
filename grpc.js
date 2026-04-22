@@ -92,8 +92,4 @@ const stopServer = () => {
     server.forceShutdown();
 };
 
-export {
-    createGetAllHandler,
-    startServer,
-    stopServer,
-};
+export { createGetAllHandler, startServer, stopServer };

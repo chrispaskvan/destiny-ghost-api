@@ -1,6 +1,4 @@
-import {
-    beforeEach, describe, expect, it, vi,
-} from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createResponse, createRequest } from 'node-mocks-http';
 import configuration from '../helpers/config.js';
 import authorizeUser from './authorization.middleware.js';

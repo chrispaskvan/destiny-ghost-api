@@ -1,6 +1,7 @@
-const sleep = delay => new Promise(resolve => {
-    setTimeout(resolve, delay);
-});
+const sleep = delay =>
+    new Promise(resolve => {
+        setTimeout(resolve, delay);
+    });
 
 export default async function throttle(tasks, concurrency, wait) {
     const results = [];
@@ -17,9 +18,7 @@ export default async function throttle(tasks, concurrency, wait) {
         }
     }
 
-    const workers = new Array(concurrency)
-        .fill(tasks.entries())
-        .map(runTasks);
+    const workers = new Array(concurrency).fill(tasks.entries()).map(runTasks);
 
     await Promise.allSettled(workers);
 

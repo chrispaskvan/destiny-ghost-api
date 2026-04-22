@@ -13,8 +13,13 @@ import AuthenticationMiddleWare from '../authentication/authentication.middlewar
 import TwilioController from './twilio.controller.js';
 import configuration from '../helpers/config.js';
 
-const { twiml: { MessagingResponse }, validateRequest } = twilio;
-const { twilio: { attributes, authToken } } = configuration;
+const {
+    twiml: { MessagingResponse },
+    validateRequest,
+} = twilio;
+const {
+    twilio: { attributes, authToken },
+} = configuration;
 
 const routes = ({
     authenticationController,
@@ -26,7 +31,10 @@ const routes = ({
     const middleware = new AuthenticationMiddleWare({ authenticationController });
     const twilioRouter = Router();
     const twilioController = new TwilioController({
-        authenticationService, destinyService, userService, worldRepository,
+        authenticationService,
+        destinyService,
+        userService,
+        worldRepository,
     });
 
     // Define a schema for the expected body parameters
@@ -39,114 +47,117 @@ const routes = ({
         From: z.string(),
         To: z.string(),
         Body: z.string().max(1600),
-        NumMedia: z.number().int().min(0),
+        NumMedia: z.coerce.number().int().min(0),
     });
 
-    twilioRouter.route('/destiny/r')
-        .post(async (req, res, next) => await middleware.authenticateUser(req, res, next),
-            async (req, res) => {
-                const header = req.headers['x-twilio-signature'];
-                const {
-                    body,
-                    cookies: requestCookies = {},
-                } = req;
-
-                try {
-                    bodySchema.parse(body);
-                } catch (err) {
-                    return res.status(StatusCodes.BAD_REQUEST).json({ error: err.issues[0].message });
-                }
-
-                // Reconstruct the URL using known, trusted components
-                const reconstructedUrl = `${process.env.PROTOCOL}://${process.env.DOMAIN}/twilio/destiny/r`;
-
-                if (!validateRequest(authToken, header, reconstructedUrl, body)) {
-                    res.writeHead(StatusCodes.FORBIDDEN);
-
-                    return res.end();
-                }
-
-                const { cookies = {}, media, message } = await twilioController.request({
-                    body,
-                    cookies: requestCookies,
-                });
-
-                if (!message) {
-                    res.writeHead(StatusCodes.FORBIDDEN);
-
-                    return res.end();
-                }
-
-                for (const [key, value] of Object.entries(cookies)) {
-                    if (value) {
-                        res.cookie(key, value);
-                    } else {
-                        res.clearCookie(key);
-                    }
-                }
-
-                const twiml = new MessagingResponse();
-
-                if (media) {
-                    twiml.message(attributes, message).media(media);
-                } else {
-                    twiml.message(attributes, message);
-                }
-                res.writeHead(StatusCodes.OK, {
-                    'Content-Type': 'text/xml',
-                });
-
-                return res.end(twiml.toString());
-            });
-
-    twilioRouter.route('/destiny/s')
-        .post(async (req, res) => {
+    twilioRouter.route('/destiny/r').post(
+        async (req, res, next) => await middleware.authenticateUser(req, res, next),
+        async (req, res) => {
             const header = req.headers['x-twilio-signature'];
-            const {
-                body,
-                query = {},
-                originalUrl,
-            } = req;
-            const claimCheck = query['claim-check-number'];
-            const notificationType = query['notification-type'];
-            
+            const { body, cookies: requestCookies = {} } = req;
+
             try {
                 bodySchema.parse(body);
             } catch (err) {
                 return res.status(StatusCodes.BAD_REQUEST).json({ error: err.issues[0].message });
             }
 
-            if (!validateRequest(authToken, header, `${process.env.PROTOCOL}://${process.env.DOMAIN}${originalUrl}`, body)) {
+            // Reconstruct the URL using known, trusted components
+            const reconstructedUrl = `${process.env.PROTOCOL}://${process.env.DOMAIN}/twilio/destiny/r`;
+
+            if (!validateRequest(authToken, header, reconstructedUrl, body)) {
                 res.writeHead(StatusCodes.FORBIDDEN);
 
                 return res.end();
             }
 
-            await twilioController.statusCallback({
-                ...body,
-                ...(claimCheck && { ClaimCheck: claimCheck }),
-                ...(notificationType && { NotificationType: notificationType }),
+            const {
+                cookies = {},
+                media,
+                message,
+            } = await twilioController.request({
+                body,
+                cookies: requestCookies,
             });
+
+            if (!message) {
+                res.writeHead(StatusCodes.FORBIDDEN);
+
+                return res.end();
+            }
+
+            for (const [key, value] of Object.entries(cookies)) {
+                if (value) {
+                    res.cookie(key, value);
+                } else {
+                    res.clearCookie(key);
+                }
+            }
 
             const twiml = new MessagingResponse();
 
+            if (media) {
+                twiml.message(attributes, message).media(media);
+            } else {
+                twiml.message(attributes, message);
+            }
             res.writeHead(StatusCodes.OK, {
                 'Content-Type': 'text/xml',
             });
-            res.end(twiml.toString());
+
+            return res.end(twiml.toString());
+        },
+    );
+
+    twilioRouter.route('/destiny/s').post(async (req, res) => {
+        const header = req.headers['x-twilio-signature'];
+        const { body, query = {}, originalUrl } = req;
+        const claimCheck = query['claim-check-number'];
+        const notificationType = query['notification-type'];
+
+        try {
+            bodySchema.parse(body);
+        } catch (err) {
+            return res.status(StatusCodes.BAD_REQUEST).json({ error: err.issues[0].message });
+        }
+
+        if (
+            !validateRequest(
+                authToken,
+                header,
+                `${process.env.PROTOCOL}://${process.env.DOMAIN}${originalUrl}`,
+                body,
+            )
+        ) {
+            res.writeHead(StatusCodes.FORBIDDEN);
+
+            return res.end();
+        }
+
+        await twilioController.statusCallback({
+            ...body,
+            ...(claimCheck && { ClaimCheck: claimCheck }),
+            ...(notificationType && { NotificationType: notificationType }),
         });
 
-    twilioRouter.route('/destiny/f')
-        .post((req, res) => {
-            const message = TwilioController.fallback();
-            const twiml = new MessagingResponse();
+        const twiml = new MessagingResponse();
 
-            twiml.message(attributes, message);
-            res.writeHead(StatusCodes.OK, {
-                'Content-Type': 'text/xml',
-            });
-            res.end(twiml.toString());
+        res.writeHead(StatusCodes.OK, {
+            'Content-Type': 'text/xml',
         });
+        res.end(twiml.toString());
+    });
+
+    twilioRouter.route('/destiny/f').post((_req, res) => {
+        const message = TwilioController.fallback();
+        const twiml = new MessagingResponse();
+
+        twiml.message(attributes, message);
+        res.writeHead(StatusCodes.OK, {
+            'Content-Type': 'text/xml',
+        });
+        res.end(twiml.toString());
+    });
 
     return twilioRouter;
 };

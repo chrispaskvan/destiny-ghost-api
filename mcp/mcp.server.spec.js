@@ -1,13 +1,13 @@
-import {
-    describe, it, expect, vi, beforeEach,
-} from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { createMcpServer } from './mcp.server.js';
 
 vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
-    McpServer: vi.fn().mockImplementation(class {
-        registerTool = vi.fn();
-    }),
+    McpServer: vi.fn().mockImplementation(
+        class {
+            registerTool = vi.fn();
+        },
+    ),
 }));
 
 describe('createMcpServer', () => {
@@ -30,7 +30,10 @@ describe('createMcpServer', () => {
             registerTool: vi.fn(),
         };
 
-        McpServer.mockImplementation(function () { return mockServerInstance; });
+        // biome-ignore lint/complexity/useArrowFunction: function expression required — `new` ignores return value of arrow functions
+        McpServer.mockImplementation(function () {
+            return mockServerInstance;
+        });
     });
 
     it('should create and configure an McpServer instance', () => {
@@ -54,7 +57,7 @@ describe('createMcpServer', () => {
         expect(mockServerInstance.registerTool).toHaveBeenCalledWith(
             'get-characters',
             expect.any(Object),
-            expect.any(Function)
+            expect.any(Function),
         );
     });
 
@@ -67,7 +70,7 @@ describe('createMcpServer', () => {
         expect(mockServerInstance.registerTool).toHaveBeenCalledWith(
             'get-xur-inventory-for-character',
             expect.any(Object),
-            expect.any(Function)
+            expect.any(Function),
         );
     });
 
@@ -86,13 +89,13 @@ describe('createMcpServer', () => {
             });
 
             const handler = mockServerInstance.registerTool.mock.calls.find(
-                call => call[0] === 'get-characters'
+                call => call[0] === 'get-characters',
             )[2];
             const result = await handler();
 
             expect(mockDestinyController.getCharacters).toHaveBeenCalledWith(
                 mockUser.displayName,
-                mockUser.membershipType
+                mockUser.membershipType,
             );
             expect(result).toEqual({
                 content: [{ type: 'text', text: `Retrieved ${mockCharacters.length} characters.` }],
@@ -111,7 +114,7 @@ describe('createMcpServer', () => {
             });
 
             const handler = mockServerInstance.registerTool.mock.calls.find(
-                call => call[0] === 'get-characters'
+                call => call[0] === 'get-characters',
             )[2];
 
             await expect(handler()).rejects.toThrow('Validation of character list failed');
@@ -122,8 +125,14 @@ describe('createMcpServer', () => {
         it('should call destinyController.getXur and return structured content', async () => {
             const characterId = 'char123';
             const mockItems = [
-                { itemTypeAndTierDisplayName: 'Exotic Engram', displayProperties: { name: 'Exotic Engram' } },
-                { itemTypeAndTierDisplayName: 'Exotic Weapon', displayProperties: { name: 'Gjallarhorn' } },
+                {
+                    itemTypeAndTierDisplayName: 'Exotic Engram',
+                    displayProperties: { name: 'Exotic Engram' },
+                },
+                {
+                    itemTypeAndTierDisplayName: 'Exotic Weapon',
+                    displayProperties: { name: 'Gjallarhorn' },
+                },
             ];
             mockDestinyController.getXur.mockResolvedValue(mockItems);
 
@@ -133,14 +142,14 @@ describe('createMcpServer', () => {
             });
 
             const handler = mockServerInstance.registerTool.mock.calls.find(
-                call => call[0] === 'get-xur-inventory-for-character'
+                call => call[0] === 'get-xur-inventory-for-character',
             )[2];
             const result = await handler({ characterId });
 
             expect(mockDestinyController.getXur).toHaveBeenCalledWith(
                 mockUser.displayName,
                 mockUser.membershipType,
-                characterId
+                characterId,
             );
             expect(result).toEqual({
                 content: [{ type: 'text', text: `Retrieved ${mockItems.length} items.` }],
@@ -159,10 +168,12 @@ describe('createMcpServer', () => {
             });
 
             const handler = mockServerInstance.registerTool.mock.calls.find(
-                call => call[0] === 'get-xur-inventory-for-character'
+                call => call[0] === 'get-xur-inventory-for-character',
             )[2];
 
-            await expect(handler({ characterId: 'char123' })).rejects.toThrow('Validation of Xur inventory failed');
+            await expect(handler({ characterId: 'char123' })).rejects.toThrow(
+                'Validation of Xur inventory failed',
+            );
         });
     });
 });

@@ -8,19 +8,19 @@ describe('DestinyController', () => {
         destinyService = {
             getAuthorizationUrl: vi.fn(),
             getCurrentUser: vi.fn(),
-            getManifest: vi.fn()
+            getManifest: vi.fn(),
         };
         userService = {
-            getUserByDisplayName: vi.fn()
+            getUserByDisplayName: vi.fn(),
         };
         worldRepository = {
             getGrimoireCards: vi.fn(),
-            updateManifest: vi.fn()
+            updateManifest: vi.fn(),
         };
         controller = new DestinyController({
             destinyService,
             userService,
-            worldRepository
+            worldRepository,
         });
     });
 
@@ -39,7 +39,7 @@ describe('DestinyController', () => {
     describe('getCurrentUser', () => {
         it('should get user by displayName and membershipType and fetch current user', async () => {
             userService.getUserByDisplayName.mockResolvedValue({
-                bungie: { access_token: 'token123' }
+                bungie: { access_token: 'token123' },
             });
             destinyService.getCurrentUser.mockResolvedValue({ id: 1, name: 'Test' });
 

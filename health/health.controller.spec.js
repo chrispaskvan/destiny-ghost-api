@@ -1,6 +1,4 @@
-import {
-    beforeEach, describe, expect, it, vi,
-} from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { get } from '../helpers/request.js';
 import applicationInsights from '../helpers/application-insights.js';
 import HealthController from './health.controller.js';
@@ -43,23 +41,31 @@ describe('HealthController', () => {
     describe('getHealth', () => {
         describe('when all services are healthy', () => {
             const world = {
-                getGrimoireCards: () => Promise.resolve([{
-                    cardName: 'Red Hand IX',
-                }]),
+                getGrimoireCards: () =>
+                    Promise.resolve([
+                        {
+                            cardName: 'Red Hand IX',
+                        },
+                    ]),
             };
             const world2 = {
-                getItemByName: () => Promise.resolve([{
-                    itemName: 'Eyasluna',
-                    itemTypeAndTierDisplayName: 'Legendary Hand Cannon',
-                }]),
+                getItemByName: () =>
+                    Promise.resolve([
+                        {
+                            itemName: 'Eyasluna',
+                            itemTypeAndTierDisplayName: 'Legendary Hand Cannon',
+                        },
+                    ]),
             };
 
             beforeEach(() => {
-                get.mockImplementation(() => Promise.resolve({
-                    status: {
-                        description: 'All Systems Go',
-                    },
-                }));
+                get.mockImplementation(() =>
+                    Promise.resolve({
+                        status: {
+                            description: 'All Systems Go',
+                        },
+                    }),
+                );
 
                 healthController = new HealthController({
                     destinyService,
@@ -79,9 +85,13 @@ describe('HealthController', () => {
                     },
                 });
                 documents.getDocuments = vi.fn().mockResolvedValue([2]);
-                store.del = vi.fn().mockImplementation((key, callback) => callback(undefined, 1));
-                store.get = vi.fn().mockImplementation((key, callback) => callback(undefined, 'Thorn'));
-                store.set = vi.fn().mockImplementation((key, value, callback) => callback(undefined, 'OK'));
+                store.del = vi.fn().mockImplementation((_key, callback) => callback(undefined, 1));
+                store.get = vi
+                    .fn()
+                    .mockImplementation((_key, callback) => callback(undefined, 'Thorn'));
+                store.set = vi
+                    .fn()
+                    .mockImplementation((_key, _value, callback) => callback(undefined, 'OK'));
 
                 const { failures, health } = await healthController.getHealth();
 
@@ -114,9 +124,11 @@ describe('HealthController', () => {
             };
 
             beforeEach(() => {
-                get.mockImplementation(() => Promise.rejects({
-                    statusCode: 400,
-                }));
+                get.mockImplementation(() =>
+                    Promise.reject({
+                        statusCode: 400,
+                    }),
+                );
 
                 healthController = new HealthController({
                     destinyService,
@@ -132,9 +144,13 @@ describe('HealthController', () => {
                 destinyService.getManifest = vi.fn().mockRejectedValue(new Error());
                 destiny2Service.getManifest = vi.fn().mockRejectedValue(new Error());
                 documents.getDocuments = vi.fn().mockRejectedValue(new Error());
-                store.del = vi.fn().mockImplementation((key, callback) => callback(undefined, 0));
-                store.get = vi.fn().mockImplementation((key, callback) => callback(undefined, 'Thorn'));
-                store.set = vi.fn().mockImplementation((key, value, callback) => callback(undefined, 'OK'));
+                store.del = vi.fn().mockImplementation((_key, callback) => callback(undefined, 0));
+                store.get = vi
+                    .fn()
+                    .mockImplementation((_key, callback) => callback(undefined, 'Thorn'));
+                store.set = vi
+                    .fn()
+                    .mockImplementation((_key, _value, callback) => callback(undefined, 'OK'));
 
                 const { failures, health } = await healthController.getHealth();
 

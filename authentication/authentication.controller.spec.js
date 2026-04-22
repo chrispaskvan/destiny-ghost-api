@@ -1,6 +1,4 @@
-import {
-    beforeEach, describe, expect, it, vi,
-} from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Chance from 'chance';
 import AuthenticationController from './authentication.controller.js';
 import config from '../helpers/config.js';
@@ -32,8 +30,7 @@ describe('AuthenticationController', () => {
                     body: { From: phoneNumber },
                     session: {},
                 };
-                const user = await authenticationController
-                    .authenticate(req);
+                const user = await authenticationController.authenticate(req);
 
                 expect(user).toEqual(mockUser);
                 expect(req.session.displayName).toEqual(mockUser.displayName);
@@ -45,11 +42,10 @@ describe('AuthenticationController', () => {
     describe('isAdministrator', () => {
         describe('when user is not an administrator', () => {
             it('should return false', async () => {
-                const isAdministrator = await AuthenticationController
-                    .isAdministrator({
-                        displayName: chance.name(),
-                        membershipType: chance.integer(),
-                    });
+                const isAdministrator = await AuthenticationController.isAdministrator({
+                    displayName: chance.name(),
+                    membershipType: chance.integer(),
+                });
 
                 expect(isAdministrator).toBeFalsy();
             });
@@ -59,8 +55,7 @@ describe('AuthenticationController', () => {
             it('should return true', async () => {
                 vi.spyOn(config, 'administrators', 'get').mockReturnValue([mockUser]);
 
-                const isAdministrator = await AuthenticationController
-                    .isAdministrator(mockUser);
+                const isAdministrator = await AuthenticationController.isAdministrator(mockUser);
 
                 expect(isAdministrator).toBeTruthy();
             });

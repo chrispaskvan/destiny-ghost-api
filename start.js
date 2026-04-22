@@ -20,7 +20,6 @@ process.on('uncaughtException', err => {
     exitOnError(err);
 });
 
-start()
-    .catch(err => {
-        exitOnError(err);
-    });
+start().catch(err => {
+    exitOnError(err);
+});

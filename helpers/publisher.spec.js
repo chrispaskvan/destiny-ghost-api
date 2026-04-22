@@ -1,6 +1,4 @@
-import {
-    describe, expect, it, vi,
-} from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import Chance from 'chance';
 
 vi.mock('bullmq', () => ({
@@ -23,7 +21,10 @@ describe('Publisher', () => {
                 name: chance.name(),
                 email: chance.email(),
             };
-            const result = await publisher.sendNotification(user, { notificationType: 'Xur', claimCheckNumber: '11' });
+            const result = await publisher.sendNotification(user, {
+                notificationType: 'Xur',
+                claimCheckNumber: '11',
+            });
 
             expect(result).toBe('some-job');
         });

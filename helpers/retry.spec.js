@@ -1,6 +1,4 @@
-import {
-    afterEach, beforeEach, describe, expect, test, vi,
-} from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { getBackoffDelay, isTransientError, isTransientSmtpError, withRetry } from './retry.js';
 
 vi.mock('./log.js', () => ({
@@ -77,9 +75,7 @@ describe('withRetry', () => {
     });
 
     test('retries on failure and succeeds', async () => {
-        const fn = vi.fn()
-            .mockRejectedValueOnce(new Error('fail'))
-            .mockResolvedValue('ok');
+        const fn = vi.fn().mockRejectedValueOnce(new Error('fail')).mockResolvedValue('ok');
 
         const promise = withRetry(fn);
 
@@ -118,16 +114,13 @@ describe('withRetry', () => {
     test('does not retry when shouldRetry returns false', async () => {
         const fn = vi.fn().mockRejectedValue(new Error('permanent'));
 
-        await expect(withRetry(fn, { shouldRetry: () => false }))
-            .rejects.toThrow('permanent');
+        await expect(withRetry(fn, { shouldRetry: () => false })).rejects.toThrow('permanent');
 
         expect(fn).toHaveBeenCalledTimes(1);
     });
 
     test('retries when shouldRetry returns true', async () => {
-        const fn = vi.fn()
-            .mockRejectedValueOnce(new Error('transient'))
-            .mockResolvedValue('ok');
+        const fn = vi.fn().mockRejectedValueOnce(new Error('transient')).mockResolvedValue('ok');
 
         const promise = withRetry(fn, { shouldRetry: () => true });
 
@@ -212,8 +205,14 @@ describe('isTransientError', () => {
     });
 
     test.each([
-        'ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'ECONNABORTED',
-        'EHOSTUNREACH', 'ENETUNREACH', 'EAI_AGAIN', 'EPIPE',
+        'ETIMEDOUT',
+        'ECONNRESET',
+        'ECONNREFUSED',
+        'ECONNABORTED',
+        'EHOSTUNREACH',
+        'ENETUNREACH',
+        'EAI_AGAIN',
+        'EPIPE',
         'UND_ERR_CONNECT_TIMEOUT',
     ])('returns true for network error code %s', code => {
         const err = Object.assign(new Error(), { code });

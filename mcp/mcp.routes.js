@@ -7,9 +7,7 @@ import { createMcpServer } from './mcp.server.js';
 import configuration from '../helpers/config.js';
 import log from '../helpers/log.js';
 
-const routes = ({
-    destinyController,
-}) => {
+const routes = ({ destinyController }) => {
     const mcpRouter = Router();
     const sessions = new LruCache({
         dispose: (value, key) => {
@@ -35,7 +33,10 @@ const routes = ({
         }
 
         const administrator = configuration.administrators[0];
-        const user = await destinyController.getCurrentUser(administrator.displayName, administrator.membershipType);
+        const user = await destinyController.getCurrentUser(
+            administrator.displayName,
+            administrator.membershipType,
+        );
         const server = createMcpServer({
             destinyController,
             user,

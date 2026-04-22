@@ -86,11 +86,7 @@ class DestinyCache {
      * @param manifest
      * @returns {Promise}
      */
-    async setManifest({
-        lastModified,
-        manifest,
-        maxAge,
-    }) {
+    async setManifest({ lastModified, manifest, maxAge }) {
         if (manifest && typeof manifest === 'object') {
             try {
                 return await this.client.setEx(

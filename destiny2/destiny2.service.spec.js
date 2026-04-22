@@ -1,9 +1,7 @@
 /**
  * Destiny Service Tests
  */
-import {
-    beforeEach, describe, expect, it, vi,
-} from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Destiny2Service from './destiny2.service.js';
 import DestinyError from '../destiny/destiny.error.js';
 import mockManifestResponse from '../mocks/manifestResponse.json';
@@ -78,7 +76,9 @@ describe('Destiny2Service', () => {
 
                 post.mockImplementationOnce(() => Promise.resolve(responseBody));
 
-                await expect(Destiny2Service.findPlayers('some-display-name', 1)).rejects.toThrow(DestinyError);
+                await expect(Destiny2Service.findPlayers('some-display-name', 1)).rejects.toThrow(
+                    DestinyError,
+                );
             });
         });
     });
@@ -104,10 +104,12 @@ describe('Destiny2Service', () => {
                     },
                 };
 
-                get.mockImplementation(() => Promise.resolve({
-                    data: mockManifestResponse,
-                    headers,
-                }));
+                get.mockImplementation(() =>
+                    Promise.resolve({
+                        data: mockManifestResponse,
+                        headers,
+                    }),
+                );
 
                 const result = await destiny2Service.getManifest();
 
@@ -117,15 +119,17 @@ describe('Destiny2Service', () => {
 
         describe('when ErrorCode does not equal 1', () => {
             it('should throw', async () => {
-                get.mockImplementation(() => Promise.resolve({
-                    data: {
-                        ErrorCode: 0,
-                        Message: 'Ok',
-                        Response: {},
-                        Status: 'Failed',
-                    },
-                    headers,
-                }));
+                get.mockImplementation(() =>
+                    Promise.resolve({
+                        data: {
+                            ErrorCode: 0,
+                            Message: 'Ok',
+                            Response: {},
+                            Status: 'Failed',
+                        },
+                        headers,
+                    }),
+                );
 
                 await expect(destiny2Service.getManifest()).rejects.toThrow(DestinyError);
             });
@@ -134,8 +138,8 @@ describe('Destiny2Service', () => {
 
     describe('getPlayerStatistics', () => {
         describe('when ErrorCode equals 1', () => {
-            const allPvP = mockPlayerStatisticsResponse
-                .Response?.mergedAllCharacters?.results?.allPvP;
+            const allPvP =
+                mockPlayerStatisticsResponse.Response?.mergedAllCharacters?.results?.allPvP;
             const {
                 allTime: {
                     combatRating: {
@@ -166,14 +170,17 @@ describe('Destiny2Service', () => {
             };
 
             describe('when player statistics are not cached', () => {
-                it('should return the player\'s statistics', async () => {
-                    cacheService.getPlayerStatistics
-                        .mockImplementationOnce(() => Promise.resolve());
+                it("should return the player's statistics", async () => {
+                    cacheService.getPlayerStatistics.mockImplementationOnce(() =>
+                        Promise.resolve(),
+                    );
 
                     get.mockImplementationOnce(() => Promise.resolve(mockPlayerStatisticsResponse));
 
-                    const result = await destiny2Service
-                        .getPlayerStatistics(mockUser.membershipId, mockUser.membershipType);
+                    const result = await destiny2Service.getPlayerStatistics(
+                        mockUser.membershipId,
+                        mockUser.membershipType,
+                    );
 
                     expect(result).toEqual(playerStatistics);
                     expect(get).toHaveBeenCalledOnce();
@@ -185,14 +192,17 @@ describe('Destiny2Service', () => {
             });
 
             describe('when player statistics are cached', () => {
-                it('should return the cached player\'s statistics', async () => {
-                    cacheService.getPlayerStatistics
-                        .mockImplementationOnce(() => Promise.resolve(playerStatistics));
+                it("should return the cached player's statistics", async () => {
+                    cacheService.getPlayerStatistics.mockImplementationOnce(() =>
+                        Promise.resolve(playerStatistics),
+                    );
 
                     get.mockImplementationOnce(() => Promise.resolve(mockPlayerStatisticsResponse));
 
-                    const result = await destiny2Service
-                        .getPlayerStatistics(mockUser.membershipId, mockUser.membershipType);
+                    const result = await destiny2Service.getPlayerStatistics(
+                        mockUser.membershipId,
+                        mockUser.membershipType,
+                    );
 
                     expect(result).toEqual(playerStatistics);
                     expect(get).not.toHaveBeenCalled();
@@ -203,16 +213,21 @@ describe('Destiny2Service', () => {
 
         describe('when ErrorCode does not equal 1', () => {
             it('should return the latest manifest', async () => {
-                get.mockImplementation(() => Promise.resolve({
-                    ErrorCode: 0,
-                    Message: 'Ok',
-                    Response: {},
-                    Status: 'Failed',
-                }));
+                get.mockImplementation(() =>
+                    Promise.resolve({
+                        ErrorCode: 0,
+                        Message: 'Ok',
+                        Response: {},
+                        Status: 'Failed',
+                    }),
+                );
 
-                await expect(destiny2Service
-                    .getPlayerStatistics(mockUser.membershipId, mockUser.membershipType))
-                    .rejects.toThrow(DestinyError);
+                await expect(
+                    destiny2Service.getPlayerStatistics(
+                        mockUser.membershipId,
+                        mockUser.membershipType,
+                    ),
+                ).rejects.toThrow(DestinyError);
             });
         });
     });
@@ -220,14 +235,21 @@ describe('Destiny2Service', () => {
     describe('getProfile', () => {
         describe('when characters are cached', () => {
             it('should return the cached characters', async () => {
-                const { Response: { characters: { data } } } = mockProfileCharactersResponse;
+                const {
+                    Response: {
+                        characters: { data },
+                    },
+                } = mockProfileCharactersResponse;
                 const mockCharacters = Object.values(data).map(character => character);
 
-                cacheService.getCharacters
-                    .mockImplementation(() => Promise.resolve(mockCharacters));
+                cacheService.getCharacters.mockImplementation(() =>
+                    Promise.resolve(mockCharacters),
+                );
 
-                const characters = await destiny2Service
-                    .getProfile(mockUser.membershipId, mockUser.membershipType);
+                const characters = await destiny2Service.getProfile(
+                    mockUser.membershipId,
+                    mockUser.membershipType,
+                );
 
                 expect(characters).toEqual(mockCharacters);
                 expect(get).not.toHaveBeenCalled();
@@ -235,14 +257,19 @@ describe('Destiny2Service', () => {
         });
 
         describe('when ErrorCode equals 1', () => {
-            it('should return the user\'s list of characters', async () => {
-                get.mockImplementation(() => Promise
-                    .resolve(mockProfileCharactersResponse));
+            it("should return the user's list of characters", async () => {
+                get.mockImplementation(() => Promise.resolve(mockProfileCharactersResponse));
 
-                const { Response: { characters: { data } } } = mockProfileCharactersResponse;
+                const {
+                    Response: {
+                        characters: { data },
+                    },
+                } = mockProfileCharactersResponse;
                 const mockCharacters = Object.values(data).map(character => character);
-                const characters = await destiny2Service
-                    .getProfile(mockUser.membershipId, mockUser.membershipType);
+                const characters = await destiny2Service.getProfile(
+                    mockUser.membershipId,
+                    mockUser.membershipType,
+                );
 
                 expect(characters).toEqual(mockCharacters);
             });
@@ -250,30 +277,38 @@ describe('Destiny2Service', () => {
 
         describe('when ErrorCode does not equal 1', () => {
             it('should return the latest manifest', async () => {
-                get.mockImplementation(() => Promise.resolve({
-                    ErrorCode: 0,
-                    Message: 'Ok',
-                    Response: {},
-                    Status: 'Failed',
-                }));
+                get.mockImplementation(() =>
+                    Promise.resolve({
+                        ErrorCode: 0,
+                        Message: 'Ok',
+                        Response: {},
+                        Status: 'Failed',
+                    }),
+                );
 
-                await expect(destiny2Service
-                    .getProfile(mockUser.membershipId, mockUser.membershipType))
-                    .rejects.toThrow(DestinyError);
+                await expect(
+                    destiny2Service.getProfile(mockUser.membershipId, mockUser.membershipType),
+                ).rejects.toThrow(DestinyError);
             });
         });
     });
 
     describe('getXur', () => {
         describe('when vendor is cached', () => {
-            it('should return the xur\'s inventory', async () => {
-                const { Response: { sales: { data } } } = mockXurResponse;
+            it("should return the xur's inventory", async () => {
+                const {
+                    Response: {
+                        sales: { data },
+                    },
+                } = mockXurResponse;
                 const itemHashes = Object.entries(data).map(([, value]) => value.itemHash);
 
                 cacheService.getVendor.mockImplementation(() => itemHashes);
 
-                const items = await destiny2Service
-                    .getXur(mockUser.membershipId, mockUser.membershipType);
+                const items = await destiny2Service.getXur(
+                    mockUser.membershipId,
+                    mockUser.membershipType,
+                );
 
                 expect(items).toEqual(itemHashes);
                 expect(get).not.toHaveBeenCalled();
@@ -283,15 +318,20 @@ describe('Destiny2Service', () => {
 
         describe('when vendor is not cached', () => {
             describe('when ErrorCode equals 1', () => {
-                it('should return the xur\'s inventory', async () => {
+                it("should return the xur's inventory", async () => {
                     cacheService.getVendor.mockImplementation(() => undefined);
-                    get.mockImplementation(() => Promise
-                        .resolve(mockXurResponse));
+                    get.mockImplementation(() => Promise.resolve(mockXurResponse));
 
-                    const { Response: { sales: { data } } } = mockXurResponse;
+                    const {
+                        Response: {
+                            sales: { data },
+                        },
+                    } = mockXurResponse;
                     const itemHashes = Object.entries(data).map(([, value]) => value.itemHash);
-                    const items = await destiny2Service
-                        .getXur(mockUser.membershipId, mockUser.membershipType);
+                    const items = await destiny2Service.getXur(
+                        mockUser.membershipId,
+                        mockUser.membershipType,
+                    );
 
                     expect(items).toEqual(itemHashes);
                     expect(cacheService.setVendor).toHaveBeenCalled();
@@ -301,16 +341,23 @@ describe('Destiny2Service', () => {
 
         describe('when ErrorCode does not equal 1', () => {
             it('should return the latest manifest', async () => {
-                get.mockImplementation(() => Promise.resolve({
-                    ErrorCode: 0,
-                    Message: 'Ok',
-                    Response: {},
-                    Status: 'Failed',
-                }));
+                get.mockImplementation(() =>
+                    Promise.resolve({
+                        ErrorCode: 0,
+                        Message: 'Ok',
+                        Response: {},
+                        Status: 'Failed',
+                    }),
+                );
 
-                await expect(destiny2Service
-                    .getXur(mockUser.membershipId, mockUser.membershipType, 'some-character-id', 'some-access-token'))
-                    .rejects.toThrow(DestinyError);
+                await expect(
+                    destiny2Service.getXur(
+                        mockUser.membershipId,
+                        mockUser.membershipType,
+                        'some-character-id',
+                        'some-access-token',
+                    ),
+                ).rejects.toThrow(DestinyError);
             });
         });
     });

@@ -51,14 +51,11 @@ const routes = ({
      *        503:
      *          description: Service is unavailable.
      */
-    healthRouter.route('/')
-        .get(async (req, res) => {
-            const { failures, health } = await healthController.getHealth();
+    healthRouter.route('/').get(async (_req, res) => {
+        const { failures, health } = await healthController.getHealth();
 
-            res.status(failures
-                ? StatusCodes.SERVICE_UNAVAILABLE
-                : StatusCodes.OK).json(health);
-        });
+        res.status(failures ? StatusCodes.SERVICE_UNAVAILABLE : StatusCodes.OK).json(health);
+    });
 
     /**
      * @openapi
@@ -73,12 +70,11 @@ const routes = ({
      *        200:
      *          description: Returns measurements.
      */
-    healthRouter.route('/metrics')
-        .get(async (req, res) => {
-            const metrics = await healthController.getMetrics();
+    healthRouter.route('/metrics').get(async (_req, res) => {
+        const metrics = await healthController.getMetrics();
 
-            res.status(StatusCodes.OK).json(metrics);
-        });
+        res.status(StatusCodes.OK).json(metrics);
+    });
 
     return healthRouter;
 };

@@ -3,13 +3,17 @@ import configuration from './config.js';
 import log from './log.js';
 import { withRetry, isTransientError } from './retry.js';
 
-const { gemini: { apiKey, model } } = configuration;
+const {
+    gemini: { apiKey, model },
+} = configuration;
 
 class AI {
     // Static prompt constants that can be used in tests
     static prompts = {
-        imageDescription: 'The image is a list of players in a video game player versus player match. The player\'s display name is followed by the player\'s clan in square brackets.',
-        extractionInstruction: 'List the 12 display names in the image in the order they appear. Respond with a comma delimited string. Do not remove any whitespace between characters and do not add any spaces between commas.'
+        imageDescription:
+            "The image is a list of players in a video game player versus player match. The player's display name is followed by the player's clan in square brackets.",
+        extractionInstruction:
+            'List the 12 display names in the image in the order they appear. Respond with a comma delimited string. Do not remove any whitespace between characters and do not add any spaces between commas.',
     };
 
     constructor() {
@@ -17,7 +21,10 @@ class AI {
     }
 
     async getPlayersFromFile(path) {
-        const { mimeType, uri: fileUri } = await withRetry(() => this.ai.files.upload({ file: path }), { shouldRetry: isTransientError });
+        const { mimeType, uri: fileUri } = await withRetry(
+            () => this.ai.files.upload({ file: path }),
+            { shouldRetry: isTransientError },
+        );
 
         log.info({ fileUri, mimeType, path }, 'File uploaded to the AI');
 
@@ -32,7 +39,7 @@ class AI {
                         fileData: {
                             fileUri,
                             mimeType,
-                        }
+                        },
                     },
                     {
                         text: AI.prompts.imageDescription,
@@ -48,13 +55,17 @@ class AI {
                 ],
             },
         ];
-        const result = await withRetry(() => this.ai.models.generateContent({
-            model,
-            config,
-            contents,
-        }), { shouldRetry: isTransientError });
+        const result = await withRetry(
+            () =>
+                this.ai.models.generateContent({
+                    model,
+                    config,
+                    contents,
+                }),
+            { shouldRetry: isTransientError },
+        );
 
-        return result?.text.split(',');
+        return result?.text?.split(',');
     }
 }
 

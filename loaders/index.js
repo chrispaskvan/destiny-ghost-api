@@ -15,8 +15,10 @@ const loaders = {
         /**
          * Check that the database directories exist.
          */
-        const databases = [path.normalize(process.env.DESTINY_DATABASE_DIR),
-            path.normalize(process.env.DESTINY2_DATABASE_DIR)];
+        const databases = [
+            path.normalize(process.env.DESTINY_DATABASE_DIR),
+            path.normalize(process.env.DESTINY2_DATABASE_DIR),
+        ];
 
         log.info(`DESTINY_DATABASE_DIR=${databases[0]},DESTINY2_DATABASE_DIR=${databases[1]}`);
         if (databases.map(database => database[0]).includes('.')) {
@@ -70,40 +72,44 @@ const loaders = {
             res.sendFile(path.join(`${directory}/../signIn.html`));
         });
 
-        app.get('/ping', (req, res) => {
+        app.get('/ping', (_req, res) => {
             res.json({
                 pong: Temporal.Now.instant().epochMilliseconds,
             });
         });
 
-        app.use((err, req, res, next) => {
-            const {
-                code, message, status, statusText,
-            } = err;
+        app.use((err, _req, res, next) => {
+            const { code, message, status, statusText } = err;
 
             log.error(err);
 
             if (res.status) {
                 if (err instanceof DestinyError) {
                     res.status(StatusCodes.NOT_FOUND).json({
-                        errors: [{
-                            code,
-                            message,
-                            status,
-                        }],
+                        errors: [
+                            {
+                                code,
+                                message,
+                                status,
+                            },
+                        ],
                     });
                 } else if (err instanceof ResponseError) {
                     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-                        errors: [{
-                            status,
-                            statusText,
-                        }],
+                        errors: [
+                            {
+                                status,
+                                statusText,
+                            },
+                        ],
                     });
                 } else {
                     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-                        errors: [{
-                            message,
-                        }],
+                        errors: [
+                            {
+                                message,
+                            },
+                        ],
                     });
                 }
             } else {

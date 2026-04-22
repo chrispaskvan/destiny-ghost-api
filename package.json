@@ -7,7 +7,8 @@
     "scripts": {
         "coverage": "npm run test:watch -- --coverage --run",
         "format": "remark . --quiet --frail --output",
-        "lint": "eslint --fix .",
+        "lint": "biome check --write .",
+        "lint:ci": "biome check .",
         "start:production": "NODE_ENV=production node --harmony-temporal --permission --allow-fs-read=./ --allow-fs-read=/agents/ --allow-fs-write=./databases --allow-fs-write=/var/ --allow-worker --allow-addons --disable-warning=SecurityWarning --disable-warning=ExperimentalWarning --import=./helpers/permission-model-patch.js -r dotenv/config --max-old-space-size=8192 --unhandled-rejections=strict start.js",
         "start:dev": "NODE_ENV=development npm start",
         "start": "node --harmony-temporal --disable-warning=ExperimentalWarning -r dotenv/config --max-old-space-size=8192 --unhandled-rejections=strict start.js",
@@ -74,11 +75,9 @@
         }
     },
     "devDependencies": {
-        "@eslint/js": "^10.0.1",
+        "@biomejs/biome": "2.4.12",
         "@vitest/coverage-v8": "^4.1.4",
         "chance": "^1.1.13",
-        "eslint": "^10.2.1",
-        "eslint-plugin-security": "^4.0.0",
         "husky": "^9.1.7",
         "nock": "^14.0.12",
         "node-mocks-http": "^1.17.2",

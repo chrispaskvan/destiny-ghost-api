@@ -16,28 +16,24 @@
             <span data-bind="text: welcomeMessage"></span>
         </div>
         <div>
-            <button id="signOut1" data-bind="click: signOut">Sign Out</button>
+            <button type="button" id="signOut1" data-bind="click: signOut">Sign Out</button>
         </div>
     </div>
     <script>
-        jQuery(document).ready(function () {
+        jQuery(document).ready(() => {
             var anonymousUserViewModel = function (url) {
-                var self = this;
 
-                self.url = url;
+                this.url = url;
             };
             var authenticatedUserViewModel = function (user) {
-                var self = this;
-                self.welcomeMessage = ko.pureComputed(function () {
-                    return 'Welcome ' + user.displayName;
-                });
-                self.signOut = function () {
+                this.welcomeMessage = ko.pureComputed(() => `Welcome ${user.displayName}`);
+                this.signOut = () => {
                     jQuery.ajax({
                         contentType: 'application/json; charset=utf-8',
                         type: 'POST',
                         url: '/users/signout'
                     })
-                        .always(function () {
+                        .always(() => {
                             window.location = '/';
                         });
                 };
@@ -54,7 +50,7 @@
                     type: 'GET',
                     url: '/destiny/signIn'
                 })
-                    .done(function (url) {
+                    .done((url) => {
                         ko.applyBindings(new anonymousUserViewModel(url), document.getElementById('anonymous1'));
                         jQuery("#anonymous1").fadeIn();
 	                    window.history.replaceState(null, null, window.location.pathname);
@@ -66,7 +62,7 @@
                 jQuery.ajax({
                     contentType: 'application/json; charset=utf-8',
                     type: 'GET',
-                    url: '/users/signin/bungie' + uri.search()
+                    url: `/users/signin/bungie${uri.search()}`
                 })
                     .done(authenticated)
                     .fail(anonymous);

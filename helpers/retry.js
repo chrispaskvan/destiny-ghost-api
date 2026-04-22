@@ -26,10 +26,11 @@ function getBackoffDelay(attempt, baseDelay = 1000, maxDelay = 15000) {
  * @param {Function} [options.shouldRetry] - Predicate receiving the error; return false to skip retrying.
  * @returns {Promise<*>}
  */
-async function withRetry(fn, { maxRetries = 3, baseDelay = 1000, maxDelay = 15000, shouldRetry } = {}) {
-    const retries = Number.isFinite(maxRetries)
-        ? Math.max(0, Math.trunc(maxRetries))
-        : 0;
+async function withRetry(
+    fn,
+    { maxRetries = 3, baseDelay = 1000, maxDelay = 15000, shouldRetry } = {},
+) {
+    const retries = Number.isFinite(maxRetries) ? Math.max(0, Math.trunc(maxRetries)) : 0;
     let lastErr;
 
     for (let attempt = 0; attempt <= retries; attempt++) {
@@ -58,8 +59,14 @@ async function withRetry(fn, { maxRetries = 3, baseDelay = 1000, maxDelay = 1500
  * @type {Set<string>}
  */
 const TRANSIENT_NETWORK_CODES = new Set([
-    'ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'ECONNABORTED',
-    'EHOSTUNREACH', 'ENETUNREACH', 'EAI_AGAIN', 'EPIPE',
+    'ETIMEDOUT',
+    'ECONNRESET',
+    'ECONNREFUSED',
+    'ECONNABORTED',
+    'EHOSTUNREACH',
+    'ENETUNREACH',
+    'EAI_AGAIN',
+    'EPIPE',
     'UND_ERR_CONNECT_TIMEOUT',
 ]);
 
@@ -102,7 +109,14 @@ function isTransientError(err) {
  * @param {Error} err
  * @returns {boolean}
  */
-const TRANSIENT_SMTP_CODES = new Set(['ECONNECTION', 'ECONNRESET', 'EDNS', 'EHOSTUNREACH', 'ESOCKET', 'ETIMEDOUT']);
+const TRANSIENT_SMTP_CODES = new Set([
+    'ECONNECTION',
+    'ECONNRESET',
+    'EDNS',
+    'EHOSTUNREACH',
+    'ESOCKET',
+    'ETIMEDOUT',
+]);
 const PERMANENT_SMTP_CODES = new Set(['EAUTH', 'EENVELOPE', 'ENOAUTH']);
 
 function isTransientSmtpError(err) {
