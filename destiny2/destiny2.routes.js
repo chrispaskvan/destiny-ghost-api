@@ -236,9 +236,7 @@ const routes = ({ authenticationController, destiny2Controller }) => {
      *          description: Forbidden
      */
     destiny2Router.route('/manifest').post(authorizeUser, async (_req, res) => {
-        const {
-            data: { manifest },
-        } = destiny2Controller.upsertManifest();
+        const manifest = await destiny2Controller.upsertManifest();
 
         res.status(StatusCodes.OK).json(manifest);
     });

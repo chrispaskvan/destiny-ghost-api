@@ -10,8 +10,6 @@ export default async function ({ databasePath, queries }) {
         });
         const results = queries.map(query => database.prepare(query).all());
 
-        database.close();
-
         return results;
     } catch (err) {
         throw new Error(`Failed to load the database: ${err.message}`, { cause: err });

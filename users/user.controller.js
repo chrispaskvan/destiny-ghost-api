@@ -228,7 +228,7 @@ class UserController {
 
                 if (patches.length > 0) {
                     const patchedUser = UserController.#applyPatches(
-                        patches.sort(patch => patch.version),
+                        patches.sort((a, b) => a.version - b.version),
                         user,
                     );
 

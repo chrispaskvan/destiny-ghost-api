@@ -125,7 +125,7 @@ describe('HealthController', () => {
 
             beforeEach(() => {
                 get.mockImplementation(() =>
-                    Promise.rejects({
+                    Promise.reject({
                         statusCode: 400,
                     }),
                 );

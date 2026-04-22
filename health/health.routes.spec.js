@@ -118,7 +118,7 @@ describe('HealthRouter', () => {
 
             beforeEach(() => {
                 get.mockImplementation(() =>
-                    Promise.rejects({
+                    Promise.reject({
                         statusCode: StatusCodes.BAD_REQUEST,
                     }),
                 );
