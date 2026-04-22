@@ -136,7 +136,8 @@ const routes = ({ authenticationController, destiny2Controller }) => {
             if (Number.isNaN(page)) page = 1;
             if (Number.isNaN(size)) size = 11;
 
-            const data = items.slice(0, size);
+            const start = (page - 1) * size;
+            const data = items.slice(start, start + size);
             const pages = Math.ceil(items.length / size);
 
             res.status(StatusCodes.OK).json({
@@ -273,7 +274,7 @@ const routes = ({ authenticationController, destiny2Controller }) => {
                 return res.status(StatusCodes.OK).json(items);
             }
 
-            return res.status(StatusCodes.NOT_FOUND);
+            return res.status(StatusCodes.NOT_FOUND).end();
         },
     );
 
