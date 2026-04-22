@@ -144,7 +144,7 @@ const routes = ({ authenticationController, destiny2Controller }) => {
                 data,
                 links: {
                     next:
-                        page === pages
+                        page >= pages
                             ? undefined
                             : `${process.env.PROTOCOL}://${process.env.DOMAIN}/destiny2/inventory?page=${page + 1}&size=${size}`,
                 },
