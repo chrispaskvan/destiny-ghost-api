@@ -37,11 +37,8 @@ import pool from '../helpers/pool.js';
 import McpRouter from '../mcp/mcp.routes.js';
 
 const {
-    documents: {
-        authenticationKey, host,
-    }, twilio: {
-        accountSid, authToken,
-    },
+    documents: { authenticationKey, host },
+    twilio: { accountSid, authToken },
 } = configuration;
 
 export default () => {
@@ -175,10 +172,7 @@ export default () => {
             rootValue: root,
             context: ({ raw: req }) => {
                 const {
-                    session: {
-                        displayName,
-                        membershipType,
-                    },
+                    session: { displayName, membershipType },
                 } = req;
                 const isAdministrator = authenticationController.constructor.isAdministrator({
                     displayName,

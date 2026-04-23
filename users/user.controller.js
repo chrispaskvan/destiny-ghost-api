@@ -5,7 +5,7 @@
  * @author Chris Paskvan
  */
 import { applyPatch, createPatch } from 'rfc6902';
-import { parsePhoneNumber } from 'awesome-phonenumber'
+import { parsePhoneNumber } from 'awesome-phonenumber';
 import Postmaster from '../helpers/postmaster.js';
 import getEpoch from '../helpers/get-epoch.js';
 import { getBlob, getCode } from '../helpers/tokens.js';
@@ -127,7 +127,7 @@ class UserController {
 
     /**
      * Validate a user token.
-     * 
+     *
      * @param {Object} param0
      * @param {string} param0.displayName
      * @param {string} param0.membershipType
@@ -141,11 +141,13 @@ class UserController {
         if (!user) {
             throw new Error('user not found');
         }
-        if (getEpoch() > (user?.membership?.tokens?.timeStamp + ttl)) {
+        if (getEpoch() > user?.membership?.tokens?.timeStamp + ttl) {
             throw new Error('token expired');
         }
-        if ((channel === 'phone' && user?.membership?.tokens?.code !== code)
-            || (channel === 'email' && user?.membership?.tokens?.blob !== code)) {
+        if (
+            (channel === 'phone' && user?.membership?.tokens?.code !== code) ||
+            (channel === 'email' && user?.membership?.tokens?.blob !== code)
+        ) {
             throw new Error('invalid code');
         }
 
@@ -180,14 +182,18 @@ class UserController {
         const user = await this.users.getUserByDisplayName(displayName, membershipType);
 
         if (user) {
-            const { bungie: { access_token: accessToken }, _etag: ETag } = user;
+            const {
+                bungie: { access_token: accessToken },
+                _etag: ETag,
+            } = user;
             const bungieUser = await this.destiny.getCurrentUser(accessToken);
 
             return bungieUser
                 ? {
-                    ETag,
-                    user: UserController.#getUserResponse(user),
-                } : {};
+                      ETag,
+                      user: UserController.#getUserResponse(user),
+                  }
+                : {};
         }
 
         return {};
@@ -221,8 +227,10 @@ class UserController {
                 const patches = user.patches.filter(patch => patch.version <= versionNumber) || [];
 
                 if (patches.length > 0) {
-                    const patchedUser = UserController.#applyPatches(patches
-                        .sort(patch => patch.version), user);
+                    const patchedUser = UserController.#applyPatches(
+                        patches.sort((a, b) => a.version - b.version),
+                        user,
+                    );
 
                     delete patchedUser.patches;
                     delete patchedUser.version;
@@ -253,16 +261,21 @@ class UserController {
      * @param res
      */
     async join(user) {
-        const registeredUser = await this.users
-            .getUserByEmailAddressToken(user?.tokens?.emailAddress);
+        const registeredUser = await this.users.getUserByEmailAddressToken(
+            user?.tokens?.emailAddress,
+        );
 
-        if (!registeredUser
-            || getEpoch() > (registeredUser?.membership?.tokens?.timeStamp + ttl)
-            || user?.tokens?.phoneNumber !== registeredUser?.membership?.tokens?.code) {
+        if (
+            !registeredUser ||
+            getEpoch() > registeredUser?.membership?.tokens?.timeStamp + ttl ||
+            user?.tokens?.phoneNumber !== registeredUser?.membership?.tokens?.code
+        ) {
             return undefined;
         }
 
-        registeredUser.dateRegistered = Temporal.Now.instant().toString({ smallestUnit: 'millisecond' });
+        registeredUser.dateRegistered = Temporal.Now.instant().toString({
+            smallestUnit: 'millisecond',
+        });
 
         await this.users.updateUser(registeredUser);
 
@@ -271,13 +284,13 @@ class UserController {
 
     /**
      * Send a verification code to the user.
-     * 
+     *
      * @param {*} user
      */
     async sendCipher({ displayName, membershipType, channel }) {
         const user = await this.users.getUserByDisplayName(displayName, membershipType);
 
-        if (!(user && user?.dateRegistered && user?.emailAddress && user?.phoneNumber)) {
+        if (!(user?.dateRegistered && user?.emailAddress && user?.phoneNumber)) {
             throw new Error('registration not found');
         }
 
@@ -325,7 +338,7 @@ class UserController {
         const { access_token: accessToken } = bungie;
         const currentUser = await this.destiny.getCurrentUser(accessToken);
 
-        if (!currentUser || !currentUser.membershipId) {
+        if (!currentUser?.membershipId) {
             return undefined;
         }
 
@@ -342,16 +355,16 @@ class UserController {
         const destinyGhostUser = await this.users.getUserByMembershipId(user.membershipId);
 
         if (!destinyGhostUser) {
-            return await this.users.createAnonymousUser(user)
-                .then(() => user);
+            return await this.users.createAnonymousUser(user).then(() => user);
         }
 
         Object.assign(destinyGhostUser, user);
 
-        return (destinyGhostUser.dateRegistered
-            ? this.users.updateUser(destinyGhostUser)
-            : this.users.updateAnonymousUser(destinyGhostUser))
-            .then(() => user);
+        return (
+            destinyGhostUser.dateRegistered
+                ? this.users.updateUser(destinyGhostUser)
+                : this.users.updateAnonymousUser(destinyGhostUser)
+        ).then(() => user);
     }
 
     /**
@@ -378,7 +391,7 @@ class UserController {
             this.users.getUserByPhoneNumber(user.phoneNumber),
         ];
         const users = await Promise.all(userPromises);
-        const registeredUsers = users.filter(user1 => user1 && user1.dateRegistered);
+        const registeredUsers = users.filter(user1 => user1?.dateRegistered);
 
         if (registeredUsers.length) {
             return undefined;
@@ -387,11 +400,13 @@ class UserController {
         const iconUrl = await this.world.getVendorIcon(postmasterHash);
         const promises = [];
 
-        promises.push(this.notifications.sendMessage(
-            `Enter ${user.membership.tokens.code} to verify your phone number.`,
-            user.phoneNumber,
-            user.type === 'mobile' ? iconUrl : '',
-        ));
+        promises.push(
+            this.notifications.sendMessage(
+                `Enter ${user.membership.tokens.code} to verify your phone number.`,
+                user.phoneNumber,
+                user.type === 'mobile' ? iconUrl : '',
+            ),
+        );
         promises.push(this.postmaster.register(user, iconUrl, '/register'));
 
         const result = await Promise.all(promises);

@@ -1,9 +1,7 @@
 /**
  * Document Tests
  */
-import {
-    describe, expect, it, vi,
-} from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import QueryBuilder from './queryBuilder.js';
 import Documents from './documents.js';
 
@@ -21,13 +19,13 @@ describe('Documents', () => {
         resource: document,
     });
     const fetchAllFn = vi.fn().mockResolvedValue({
-        resources: [
-            document,
-        ],
+        resources: [document],
     });
-    const replaceFn = vi.fn().mockImplementation(document1 => Promise.resolve({
-        resource: document1,
-    }));
+    const replaceFn = vi.fn().mockImplementation(document1 =>
+        Promise.resolve({
+            resource: document1,
+        }),
+    );
     const container = {
         item: vi.fn().mockReturnValue({ delete: deleteFn, replace: replaceFn }),
         items: {
@@ -45,8 +43,10 @@ describe('Documents', () => {
     });
 
     it('should create, read, update, and delete a document', async () => {
-        const { id: createdDocumentId } = await documentService
-            .createDocument(collectionId, document);
+        const { id: createdDocumentId } = await documentService.createDocument(
+            collectionId,
+            document,
+        );
 
         expect(createdDocumentId).toBeDefined();
 
@@ -54,8 +54,9 @@ describe('Documents', () => {
 
         qb.where('SmsSid', document.SmsSid);
 
-        const [fetchedDocument] = await documentService
-            .getDocuments(collectionId, qb.getQuery(), { partitionKey: document.To });
+        const [fetchedDocument] = await documentService.getDocuments(collectionId, qb.getQuery(), {
+            partitionKey: document.To,
+        });
 
         expect(fetchedDocument).toBeDefined();
         expect(fetchedDocument.id).toEqual(createdDocumentId);
@@ -63,18 +64,25 @@ describe('Documents', () => {
 
         const dateTime = Temporal.Now.instant().toString();
 
-        const updatedDocument = await documentService.updateDocument(collectionId, {
-            ...document,
-            DateTime: dateTime,
-            SmsStatus: 'sent',
-            MessageStatus: 'sent',
-        }, document.To);
+        const updatedDocument = await documentService.updateDocument(
+            collectionId,
+            {
+                ...document,
+                DateTime: dateTime,
+                SmsStatus: 'sent',
+                MessageStatus: 'sent',
+            },
+            document.To,
+        );
 
         expect(updatedDocument).toBeDefined();
         expect(updatedDocument.DateTime).toEqual(dateTime);
 
-        const result = await documentService
-            .deleteDocumentById(collectionId, createdDocumentId, document.To);
+        const result = await documentService.deleteDocumentById(
+            collectionId,
+            createdDocumentId,
+            document.To,
+        );
 
         expect(result).toBeDefined();
     });

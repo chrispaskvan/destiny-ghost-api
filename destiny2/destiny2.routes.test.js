@@ -1,10 +1,8 @@
-import StreamArray from 'stream-json/streamers/StreamArray';
+import streamArray from 'stream-json/streamers/stream-array.js';
 import nock from 'nock';
 import { StatusCodes } from 'http-status-codes';
 import { Readable } from 'node:stream';
-import {
-    afterAll, afterEach, beforeAll, describe, expect, test, vi,
-} from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from 'vitest';
 import { startServer, stopServer } from '../server.js';
 import configuration from '../helpers/config.js';
 
@@ -73,47 +71,47 @@ describe('/destiny2', () => {
                 test('should receive a response with an array of items, HATEOAS links, and pagination statistics', async () => {
                     const items = [];
                     const limit = 15;
-    
+
                     async function* pageThrough(url) {
                         async function* fetchPage(_url) {
                             const res = await get(_url, {
                                 headers: configuration.notificationHeaders,
                             });
                             const page = await res.json();
-    
+
                             yield page;
-    
+
                             if (page.links.next) {
                                 const { pathname, search } = new URL(page.links.next);
-    
+
                                 yield* fetchPage(`${pathname}${search}`, {
                                     headers: configuration.notificationHeaders,
                                 });
                             }
                         }
-    
+
                         yield* fetchPage(url, {
                             headers: configuration.notificationHeaders,
                         });
                     }
-    
+
                     async function* loadItems(url) {
                         const result = pageThrough(url);
-    
+
                         for await (const page of result) {
                             for (const item of page.data) {
                                 yield item;
                             }
                         }
                     }
-    
+
                     for await (const item of loadItems('/destiny2/inventory?page=1&size=11')) {
                         items.push(item);
                         if (items.length >= limit) {
                             break;
                         }
                     }
-    
+
                     expect(items.length).toEqual(limit);
                 });
             });
@@ -134,7 +132,7 @@ describe('/destiny2', () => {
                     }
 
                     const stream = Readable.fromWeb(getResponse.body);
-                    const objectsStream = stream.pipe(StreamArray.withParser());
+                    const objectsStream = stream.pipe(streamArray.withParserAsStream());
                     const items = [];
 
                     await new Promise((resolve, reject) => {
@@ -180,7 +178,7 @@ describe('/destiny2', () => {
     });
 
     describe('GET /destiny2/xur', () => {
-        describe('when requesting Xur\'s inventory of items', () => {
+        describe("when requesting Xur's inventory of items", () => {
             test('should receive a response with an array of items', async () => {
                 const getResponse = await get('/destiny2/xur');
 

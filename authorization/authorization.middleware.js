@@ -13,9 +13,9 @@ const authorized = headers => {
     const apiKeyEntries = configuration.apiKeys.map(({ header, key }) => [header, key]);
     const apiKeyPresent = apiKeyEntries.some(([header, key]) => headers[header] === key);
     const notificationEntries = Object.entries(configuration.notificationHeaders);
-    const headerEntries = Object.entries(headers)
-        .filter(([key1, value1]) => notificationEntries
-            .find(([key2, value2]) => key1 === key2 && value1 === value2));
+    const headerEntries = Object.entries(headers).filter(([key1, value1]) =>
+        notificationEntries.find(([key2, value2]) => key1 === key2 && value1 === value2),
+    );
 
     return apiKeyPresent || headerEntries.length === notificationEntries.length;
 };

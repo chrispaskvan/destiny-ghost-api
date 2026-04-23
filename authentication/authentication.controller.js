@@ -13,7 +13,7 @@ class AuthenticationController {
         const schema = z.object({
             authenticationService: z.object({}),
         });
-        
+
         schema.parse(options);
 
         this.authentication = options.authenticationService;
@@ -25,7 +25,10 @@ class AuthenticationController {
      * @returns {Promise.<*>}
      */
     async authenticate(req) {
-        const { session: { displayName, membershipType }, body: { From: phoneNumber } = {} } = req;
+        const {
+            session: { displayName, membershipType },
+            body: { From: phoneNumber } = {},
+        } = req;
         const user = await this.authentication.authenticate({
             displayName,
             membershipType,
@@ -54,9 +57,11 @@ class AuthenticationController {
      * @returns {boolean}
      */
     static isAdministrator(user) {
-        return !!configuration.administrators
-            .find(administrator => administrator.displayName === user.displayName
-                && administrator.membershipType === user.membershipType);
+        return !!configuration.administrators.find(
+            administrator =>
+                administrator.displayName === user.displayName &&
+                administrator.membershipType === user.membershipType,
+        );
     }
 }
 

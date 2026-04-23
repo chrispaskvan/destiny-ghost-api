@@ -60,17 +60,19 @@ class Publisher {
             connection: client,
         });
         this.#queueEvents.on('deduplicated', ({ jobId, deduplicationId }, id) => {
-            console.log(`Job ${id} was deduplicated due to existing job ${jobId} with deduplication Id ${deduplicationId}`);
+            console.log(
+                `Job ${id} was deduplicated due to existing job ${jobId} with deduplication Id ${deduplicationId}`,
+            );
         });
         this.#queueEvents.on('added', ({ jobId }) => {
             log.info({ jobId }, 'Job added to queue');
-        });        
+        });
         this.#queueEvents.on('waiting', ({ jobId }) => {
             log.info({ jobId }, 'Job waiting in queue');
-        });        
+        });
         this.#queueEvents.on('active', ({ jobId }) => {
             log.info({ jobId }, 'Job started processing');
-        });        
+        });
         this.#queueEvents.on('completed', ({ jobId }) => {
             log.info({ jobId }, 'Job completed');
         });
@@ -135,22 +137,23 @@ class Publisher {
             },
         };
 
-        const result = await this.#queue.add('notification', message,
+        const result = await this.#queue.add('notification', message, {
+            deduplication: {
+                id: `${notificationType}-${user.phoneNumber}`,
+                ttl: 3_600_000,
+            },
+        });
+
+        log.info(
             {
-                deduplication: {
-                    id: `${notificationType}-${user.phoneNumber}`,
-                    ttl: 3_600_000,
-                }
-            }
+                jobId: result.id,
+                notificationType,
+                phoneNumber: user.phoneNumber,
+                deduplicationId: `${notificationType}-${user.phoneNumber}`,
+            },
+            'Message published to queue',
         );
-        
-        log.info({ 
-            jobId: result.id, 
-            notificationType, 
-            phoneNumber: user.phoneNumber,
-            deduplicationId: `${notificationType}-${user.phoneNumber}`
-        }, 'Message published to queue');
-        
+
         return result;
     }
 }

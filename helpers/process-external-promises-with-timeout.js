@@ -10,13 +10,13 @@ async function processExternalPromisesWithTimeout(externalPromises, timeout) {
             externalPromises.map(externalPromise => {
                 return Promise.race([
                     externalPromise,
-                    new Promise((_, rj) => signal.addEventListener(
-                        'abort',
-                        () => rj(TIMEOUT_SENTINEL),
-                        { once: true },
-                    )),
+                    new Promise((_, rj) =>
+                        signal.addEventListener('abort', () => rj(TIMEOUT_SENTINEL), {
+                            once: true,
+                        }),
+                    ),
                 ]);
-            })
+            }),
         );
 
         return results.map(r => {

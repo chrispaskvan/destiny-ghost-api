@@ -64,7 +64,7 @@ class Destiny2Cache extends DestinyCache {
             throw new Error('membershipId is a required string');
         }
 
-        if (!(characters && characters.length)) {
+        if (!characters?.length) {
             throw new Error('characters is a required and must be a nonempty array');
         }
 

@@ -1,12 +1,12 @@
-import {
-    describe, it, expect, vi, beforeEach,
-} from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('bullmq', () => ({
-    Worker: vi.fn().mockImplementation(class {
-        close = vi.fn().mockResolvedValue();
-        on = vi.fn();
-    }),
+    Worker: vi.fn().mockImplementation(
+        class {
+            close = vi.fn().mockResolvedValue();
+            on = vi.fn();
+        },
+    ),
 }));
 
 vi.mock('./jobs.js', () => ({
@@ -28,17 +28,20 @@ describe('Subscriber', () => {
 
     beforeEach(async () => {
         vi.clearAllMocks();
-        
+
         // Get the mocked Worker constructor
         const { Worker } = await vi.importMock('bullmq');
         MockWorkerConstructor = Worker;
-        
+
         // Get the current mock instance (the factory creates a new one each time)
         mockWorkerInstance = {
             close: vi.fn().mockResolvedValue(),
             on: vi.fn(),
         };
-        MockWorkerConstructor.mockImplementation(function () { return mockWorkerInstance; });
+        // biome-ignore lint/complexity/useArrowFunction: function expression required — `new` ignores return value of arrow functions
+        MockWorkerConstructor.mockImplementation(function () {
+            return mockWorkerInstance;
+        });
     });
 
     describe('when a new worker is created', () => {
@@ -50,7 +53,7 @@ describe('Subscriber', () => {
 
         it('should create worker with default queue name', () => {
             const callback = vi.fn();
-            
+
             subscriber.listen(callback);
 
             expect(MockWorkerConstructor).toHaveBeenCalledWith(
@@ -59,13 +62,13 @@ describe('Subscriber', () => {
                 {
                     connection: { host: 'localhost', port: 6379 },
                     concurrency: 5,
-                }
+                },
             );
         });
 
         it('should create worker with custom queue name', () => {
             const callback = vi.fn();
-            
+
             subscriber.listen(callback, 'custom-queue');
 
             expect(MockWorkerConstructor).toHaveBeenCalledWith(
@@ -74,13 +77,13 @@ describe('Subscriber', () => {
                 {
                     connection: { host: 'localhost', port: 6379 },
                     concurrency: 5,
-                }
+                },
             );
         });
 
         it('should set up event listeners', () => {
             const callback = vi.fn();
-            
+
             subscriber.listen(callback);
 
             expect(mockWorkerInstance.on).toHaveBeenCalledWith('completed', expect.any(Function));
@@ -108,7 +111,7 @@ describe('Subscriber', () => {
 
             // Get the job processor function
             const jobProcessor = MockWorkerConstructor.mock.calls[0][1];
-            
+
             await jobProcessor(mockJob);
 
             expect(callback).toHaveBeenCalledWith(
@@ -116,7 +119,7 @@ describe('Subscriber', () => {
                 {
                     claimCheckNumber: 'claim-456',
                     notificationType: 'Xur',
-                }
+                },
             );
         });
 
@@ -137,7 +140,7 @@ describe('Subscriber', () => {
             subscriber.listen(callback);
 
             const jobProcessor = MockWorkerConstructor.mock.calls[0][1];
-            
+
             await expect(jobProcessor(mockJob)).rejects.toThrow('Processing failed');
         });
 
@@ -158,7 +161,7 @@ describe('Subscriber', () => {
             subscriber.listen(callback);
 
             const jobProcessor = MockWorkerConstructor.mock.calls[0][1];
-            
+
             await expect(jobProcessor(mockJob)).rejects.toThrow();
         });
     });
@@ -166,7 +169,7 @@ describe('Subscriber', () => {
     describe('when closing', () => {
         it('should close all workers', async () => {
             const callback = vi.fn();
-            
+
             // Create multiple workers
             subscriber.listen(callback, 'queue1');
             subscriber.listen(callback, 'queue2');

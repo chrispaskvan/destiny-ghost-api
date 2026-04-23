@@ -1,9 +1,7 @@
 /**
  * Token Tests
  */
-import {
-    describe, expect, it,
-} from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { getBlob, getCode } from './tokens.js';
 
 describe('Tokens', () => {

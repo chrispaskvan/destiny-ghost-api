@@ -1,12 +1,7 @@
 import log from '../helpers/log.js';
 
 class Manifests {
-    constructor({
-        destinyService,
-        destiny2Service,
-        worldRepository,
-        world2Repository,
-    }) {
+    constructor({ destinyService, destiny2Service, worldRepository, world2Repository }) {
         this.destinyService = destinyService;
         this.destiny2Service = destiny2Service;
         this.worldRepository = worldRepository;
@@ -22,7 +17,9 @@ class Manifests {
      * @private
      */
     static async #upsertManifest(destiny, world) {
-        const { data: { manifest } } = await destiny.getManifest(true);
+        const {
+            data: { manifest },
+        } = await destiny.getManifest(true);
 
         await world.updateManifest(manifest);
     }
@@ -43,7 +40,10 @@ class Manifests {
             if (status === 'fulfilled') {
                 log.info({ value }, `Destiny ${index ? '2 ' : ''}manifest updated.`);
             } else {
-                log.error({ reason: reason.message }, `Destiny ${index ? '2 ' : ''}manifest update failed.`);
+                log.error(
+                    { reason: reason.message },
+                    `Destiny ${index ? '2 ' : ''}manifest update failed.`,
+                );
             }
         });
     }

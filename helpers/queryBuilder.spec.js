@@ -1,15 +1,14 @@
 /**
  * QueryBuilder Tests
  */
-import {
-    describe, expect, it,
-} from 'vitest';
+import { describe, expect, it } from 'vitest';
 import QueryBuilder from './queryBuilder.js';
 
 describe('QueryBuilder', () => {
     it('should select all fields from root where userName matches criteria', () => {
         const queryBuilder = new QueryBuilder();
-        const sql = 'SELECT * FROM root r WHERE r.userName = @userName AND r.membershipType = @membershipType';
+        const sql =
+            'SELECT * FROM root r WHERE r.userName = @userName AND r.membershipType = @membershipType';
 
         queryBuilder.where('userName', 'userName1');
         queryBuilder.where('membershipType', 1);
@@ -32,9 +31,7 @@ describe('QueryBuilder', () => {
         const queryBuilder = new QueryBuilder();
         const sql = 'SELECT u.id FROM users u WHERE u.userName = @userName';
 
-        queryBuilder.select('id')
-            .from('users')
-            .where('userName', 'userName1');
+        queryBuilder.select('id').from('users').where('userName', 'userName1');
 
         const query = queryBuilder.getQuery();
 
@@ -48,7 +45,8 @@ describe('QueryBuilder', () => {
     });
     it('should select displayName, membershipType, and phoneNumber from users where notification type is enabled and Xur', () => {
         const queryBuilder = new QueryBuilder();
-        const sql = 'SELECT u.displayName, u.membershipType, u.phoneNumber FROM Users u JOIN n IN u.notifications WHERE n.type = @type AND n.enabled = @enabled';
+        const sql =
+            'SELECT u.displayName, u.membershipType, u.phoneNumber FROM Users u JOIN n IN u.notifications WHERE n.type = @type AND n.enabled = @enabled';
 
         queryBuilder
             .select('displayName')

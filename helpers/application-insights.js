@@ -9,7 +9,9 @@
 import applicationInsights from 'applicationinsights';
 import configuration from './config.js';
 
-const { applicationInsights: { instrumentationKey } } = configuration;
+const {
+    applicationInsights: { instrumentationKey },
+} = configuration;
 const setupTelemetryClient = () => {
     if (process.env.NODE_ENV !== 'production') {
         return {
@@ -17,7 +19,8 @@ const setupTelemetryClient = () => {
         };
     }
 
-    applicationInsights.setup(instrumentationKey)
+    applicationInsights
+        .setup(instrumentationKey)
         .setAutoCollectRequests(false)
         .setAutoCollectPerformance(false, false)
         .setAutoCollectDependencies(false);

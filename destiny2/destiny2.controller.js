@@ -17,38 +17,41 @@ class Destiny2Controller extends DestinyController {
      */
     async getCharacters(displayName, membershipType) {
         const currentUser = await this.users.getUserByDisplayName(displayName, membershipType);
-        const characters = await this.destiny
-            .getProfile(currentUser.membershipId, membershipType, true);
+        const characters = await this.destiny.getProfile(
+            currentUser.membershipId,
+            membershipType,
+            true,
+        );
 
-        return Promise.all(characters.map(async character => {
-            const {
-                emblemBackgroundPath: backgroundPath,
-                characterId,
-                classHash,
-                light: powerLevel,
-                emblemPath: emblem,
-            } = character;
-            const {
-                displayProperties: {
-                    name: className,
-                },
-            } = await this.world.getClassByHash(classHash);
+        return Promise.all(
+            characters.map(async character => {
+                const {
+                    emblemBackgroundPath: backgroundPath,
+                    characterId,
+                    classHash,
+                    light: powerLevel,
+                    emblemPath: emblem,
+                } = character;
+                const {
+                    displayProperties: { name: className },
+                } = await this.world.getClassByHash(classHash);
 
-            return {
-                characterId,
-                classHash,
-                className,
-                emblem,
-                backgroundPath,
-                powerLevel,
-                links: [
-                    {
-                        rel: 'Character',
-                        href: `/characters/${characterId}`,
-                    },
-                ],
-            };
-        }));
+                return {
+                    characterId,
+                    classHash,
+                    className,
+                    emblem,
+                    backgroundPath,
+                    powerLevel,
+                    links: [
+                        {
+                            rel: 'Character',
+                            href: `/characters/${characterId}`,
+                        },
+                    ],
+                };
+            }),
+        );
     }
 
     /**
@@ -81,10 +84,13 @@ class Destiny2Controller extends DestinyController {
      */
     async getXur(displayName, membershipType, characterId) {
         const currentUser = await this.users.getUserByDisplayName(displayName, membershipType);
-        const { bungie: { access_token: accessToken }, membershipId } = currentUser;
+        const {
+            bungie: { access_token: accessToken },
+            membershipId,
+        } = currentUser;
         const characters = await this.destiny.getProfile(membershipId, membershipType);
 
-        if (characters && characters.length) {
+        if (characters?.length) {
             const itemHashes = await this.destiny.getXur(
                 membershipId,
                 membershipType,
@@ -96,7 +102,9 @@ class Destiny2Controller extends DestinyController {
                 return itemHashes;
             }
 
-            const items = await Promise.all(itemHashes.map(async itemHash => await this.world.getItemByHash(itemHash)));
+            const items = await Promise.all(
+                itemHashes.map(async itemHash => await this.world.getItemByHash(itemHash)),
+            );
 
             return items;
         }

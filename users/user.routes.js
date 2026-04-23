@@ -16,70 +16,80 @@ import log from '../helpers/log.js';
  */
 function signIn(req, res, user, next) {
     req.session.regenerate(err => {
-        if (err) next(err);
+        if (err) return next(err);
 
         req.session.displayName = user.displayName;
         req.session.membershipType = user.membershipType;
         req.session.state = undefined;
 
-        res.status(StatusCodes.OK)
-            .json({ displayName: user.displayName });
+        if (req.accepts(['json', 'html']) === 'html') {
+            res.redirect(`${process.env.WEBSITE}/?auth=success`);
+        } else {
+            res.status(StatusCodes.OK).json({ displayName: user.displayName });
+        }
     });
 }
 
 /**
-* @openapi
-*  components:
-*    schemas:
-*      Patch:
-*        type: array
-*        items:
-*          type: object
-*          properties:
-*            op:
-*              type: string
-*              enum: [replace]
-*            path:
-*              type: string
-*            value:
-*              type: string
-*      User:
-*        type: object
-*        required:
-*          - displayName
-*        properties:
-*          dateRegistered:
-*            type: string
-*            format: date-time
-*          displayName:
-*            type: string
-*          emailAddress:
-*            type: string
-*            format: email
-*          firstName:
-*            type: string
-*          lastName:
-*            type: string
-*          links:
-*            type: array
-*            items:
-*              $ref: '#/components/schemas/Link'
-*          notifications:
-*            type: array
-*            items:
-*              $ref: '#/components/schemas/Notification'
-*          phoneNumber:
-*            type: string
-*            format: phone
-*          profilePicturePath:
-*            type: string
-*/
+ * @openapi
+ *  components:
+ *    schemas:
+ *      Patch:
+ *        type: array
+ *        items:
+ *          type: object
+ *          properties:
+ *            op:
+ *              type: string
+ *              enum: [replace]
+ *            path:
+ *              type: string
+ *            value:
+ *              type: string
+ *      User:
+ *        type: object
+ *        required:
+ *          - displayName
+ *        properties:
+ *          dateRegistered:
+ *            type: string
+ *            format: date-time
+ *          displayName:
+ *            type: string
+ *          emailAddress:
+ *            type: string
+ *            format: email
+ *          firstName:
+ *            type: string
+ *          lastName:
+ *            type: string
+ *          links:
+ *            type: array
+ *            items:
+ *              $ref: '#/components/schemas/Link'
+ *          notifications:
+ *            type: array
+ *            items:
+ *              $ref: '#/components/schemas/Notification'
+ *          phoneNumber:
+ *            type: string
+ *            format: phone
+ *          profilePicturePath:
+ *            type: string
+ */
 const routes = ({
-    authenticationController, destinyService, notificationService, userService, worldRepository,
+    authenticationController,
+    destinyService,
+    notificationService,
+    userService,
+    worldRepository,
 }) => {
     const middleware = new AuthenticationMiddleWare({ authenticationController });
     const userController = new UserController({
-        destinyService, notificationService, userService, worldRepository,
+        destinyService,
+        notificationService,
+        userService,
+        worldRepository,
     });
     const userRouter = Router();
 
@@ -113,24 +123,26 @@ const routes = ({
      *        404:
      *          description: Destiny Ghost profile for the current user was not found.
      */
-    userRouter.route('/current')
-        .get(async (req, res, next) => await middleware.authenticateUser(req, res, next),
-            async (req, res) => {
-                const { session: { displayName, membershipType } } = req;
+    userRouter.route('/current').get(
+        async (req, res, next) => await middleware.authenticateUser(req, res, next),
+        async (req, res) => {
+            const {
+                session: { displayName, membershipType },
+            } = req;
 
-                if (!displayName || !membershipType) {
-                    return res.status(StatusCodes.NOT_FOUND).end();
-                }
+            if (!displayName || !membershipType) {
+                return res.status(StatusCodes.NOT_FOUND).end();
+            }
 
-                const { ETag, user } = await userController.getCurrentUser(displayName, membershipType);
+            const { ETag, user } = await userController.getCurrentUser(displayName, membershipType);
 
-                if (user) {
-                    return res.setHeader('ETag', ETag).status(StatusCodes.OK).json(user);
-                }
+            if (user) {
+                return res.setHeader('ETag', ETag).status(StatusCodes.OK).json(user);
+            }
 
-                return res.status(StatusCodes.UNAUTHORIZED).end();
-            },
-        );
+            return res.status(StatusCodes.UNAUTHORIZED).end();
+        },
+    );
 
     /**
      * @openapi
@@ -170,36 +182,37 @@ const routes = ({
      *       429:
      *         description: Too Many Requests. The user has requested codes too frequently.
      */
-    userRouter.route('/current/ciphers')
-        .post(
-            (req, res, next) => middleware.authenticateUser(req, res, next),
-            async (req, res) => {
-                try {
-                    const {
-                        body: { channel },
-                        session: { displayName, membershipType }
-                    } = req;
+    userRouter.route('/current/ciphers').post(
+        (req, res, next) => middleware.authenticateUser(req, res, next),
+        async (req, res) => {
+            try {
+                const {
+                    body: { channel },
+                    session: { displayName, membershipType },
+                } = req;
 
-                    if (!channel || !['email', 'phone'].includes(channel)) {
-                        return res.status(StatusCodes.BAD_REQUEST).send('Invalid channel. Must be "email" or "phone".');
-                    }
-
-                    await userController.sendCipher({ 
-                        displayName, 
-                        membershipType, 
-                        channel 
-                    });
-
-                    return res.status(StatusCodes.ACCEPTED).end();
-                } catch (err) {
-                    if (err.message.includes('not found')) {
-                        return res.status(StatusCodes.BAD_REQUEST).send('User registration not found.');
-                    }
-
-                    throw err;
+                if (!channel || !['email', 'phone'].includes(channel)) {
+                    return res
+                        .status(StatusCodes.BAD_REQUEST)
+                        .send('Invalid channel. Must be "email" or "phone".');
                 }
-            },
-        );
+
+                await userController.sendCipher({
+                    displayName,
+                    membershipType,
+                    channel,
+                });
+
+                return res.status(StatusCodes.ACCEPTED).end();
+            } catch (err) {
+                if (err.message.includes('not found')) {
+                    return res.status(StatusCodes.BAD_REQUEST).send('User registration not found.');
+                }
+
+                throw err;
+            }
+        },
+    );
 
     /**
      * @openapi
@@ -244,33 +257,34 @@ const routes = ({
      *       429:
      *         description: Too Many Requests. The user has requested codes too frequently.
      */
-    userRouter.route('/current/cryptarch')
-        .post(
-            (req, res, next) => middleware.authenticateUser(req, res, next),
-            async (req, res) => {
-                try {
-                    const {
-                        body: { channel, code },
-                        session: { displayName, membershipType }
-                    } = req;
+    userRouter.route('/current/cryptarch').post(
+        (req, res, next) => middleware.authenticateUser(req, res, next),
+        async (req, res) => {
+            try {
+                const {
+                    body: { channel, code },
+                    session: { displayName, membershipType },
+                } = req;
 
-                    if (!channel || !['email', 'phone'].includes(channel)) {
-                        return res.status(StatusCodes.BAD_REQUEST).send('Invalid channel. Must be "email" or "phone".');
-                    }
-
-                    await userController.decipher({ 
-                        displayName, 
-                        membershipType, 
-                        channel, 
-                        code 
-                    });
-
-                    return res.status(StatusCodes.NO_CONTENT).end();
-                } catch {
-                    return res.status(StatusCodes.NOT_FOUND).send('Invalid cipher.');
+                if (!channel || !['email', 'phone'].includes(channel)) {
+                    return res
+                        .status(StatusCodes.BAD_REQUEST)
+                        .send('Invalid channel. Must be "email" or "phone".');
                 }
+
+                await userController.decipher({
+                    displayName,
+                    membershipType,
+                    channel,
+                    code,
+                });
+
+                return res.status(StatusCodes.NO_CONTENT).end();
+            } catch {
+                return res.status(StatusCodes.NOT_FOUND).send('Invalid cipher.');
             }
-        );
+        },
+    );
 
     /**
      * @openapi
@@ -305,51 +319,61 @@ const routes = ({
      *        400:
      *          description: Bad request.
      */
-    userRouter.route('/join')
-        .post(
-            (req, res, next) => middleware.authenticateUser(req, res, next),
-            async (req, res) => {
-                const { body: user } = req;
-                const newUser = await userController.join(user);
+    userRouter.route('/join').post(
+        (req, res, next) => middleware.authenticateUser(req, res, next),
+        async (req, res) => {
+            const { body: user } = req;
+            const newUser = await userController.join(user);
 
-                return newUser
-                    ? res.status(StatusCodes.OK).end()
-                    : res.status(StatusCodes.BAD_REQUEST).end();
-            },
-        );
+            return newUser
+                ? res.status(StatusCodes.OK).end()
+                : res.status(StatusCodes.BAD_REQUEST).end();
+        },
+    );
 
     /**
      * Intentionally excluded from the OpenAPI documentation. This route is used for signing in
      * with Bungie OAuth. It handles the OAuth callback and signs
      * in the user based on the provided code and state.
      */
-    userRouter.route('/signIn/Bungie')
-        .get(async (req, res, next) => {
-            const {
-                query: { code, state: queryState },
-                session: { displayName, state: sessionState },
-            } = req;
+    userRouter.route('/signIn/Bungie').get(async (req, res, next) => {
+        const {
+            query: { code, state: queryState },
+            session: { displayName, state: sessionState },
+        } = req;
+        const wantsHtml = req.accepts(['json', 'html']) === 'html';
 
-            if (displayName) {
-                return res.status(StatusCodes.OK)
-                    .json({ displayName });
-            }
-            if (sessionState !== queryState) {
-                return res.sendStatus(StatusCodes.UNAUTHORIZED);
+        if (displayName) {
+            if (wantsHtml) {
+                return res.redirect(`${process.env.WEBSITE}/?auth=success`);
             }
 
-            const user = await userController.signIn({
-                code,
-                displayName,
-                queryState,
-                sessionState,
-            });
-            if (!user) {
-                return res.status(StatusCodes.NOT_FOUND).end();
+            return res.status(StatusCodes.OK).json({ displayName });
+        }
+        if (sessionState !== queryState) {
+            if (wantsHtml) {
+                return res.redirect(`${process.env.WEBSITE}/?error=unauthorized`);
             }
 
-            return signIn(req, res, user, next);
+            return res.sendStatus(StatusCodes.UNAUTHORIZED);
+        }
+
+        const user = await userController.signIn({
+            code,
+            displayName,
+            queryState,
+            sessionState,
         });
+        if (!user) {
+            if (wantsHtml) {
+                return res.redirect(`${process.env.WEBSITE}/?error=auth_failed`);
+            }
+
+            return res.status(StatusCodes.NOT_FOUND).end();
+        }
+
+        return signIn(req, res, user, next);
+    });
 
     /**
      * @openapi
@@ -368,17 +392,19 @@ const routes = ({
      *        500:
      *          description: Internal Server Error
      */
-    userRouter.route('/signOut')
-        .post((req, res, next) => middleware.authenticateUser(req, res, next),
-            (req, res) => {
-                req.session.destroy(err => {
-                    if (err) {
-                        return res.status(StatusCodes.INTERNAL_SERVER_ERROR)
-                            .json({ error: 'Failed to sign out' });
-                    }
-                    res.status(StatusCodes.NO_CONTENT).end();
-                });
+    userRouter.route('/signOut').post(
+        (req, res, next) => middleware.authenticateUser(req, res, next),
+        (req, res) => {
+            req.session.destroy(err => {
+                if (err) {
+                    return res
+                        .status(StatusCodes.INTERNAL_SERVER_ERROR)
+                        .json({ error: 'Failed to sign out' });
+                }
+                res.status(StatusCodes.NO_CONTENT).end();
             });
+        },
+    );
 
     /**
      * @openapi
@@ -413,21 +439,25 @@ const routes = ({
      *        204:
      *          description: No Content
      */
-    userRouter.route('/signUp')
-        .post((req, res, next) => middleware.authenticateUser(req, res, next),
-            async (req, res) => {
-                const { body: user, session: { displayName, membershipType } } = req;
+    userRouter.route('/signUp').post(
+        (req, res, next) => middleware.authenticateUser(req, res, next),
+        async (req, res) => {
+            const {
+                body: user,
+                session: { displayName, membershipType },
+            } = req;
 
-                if (!(user.firstName && user.lastName && user.phoneNumber && user.emailAddress)) {
-                    return res.status(StatusCodes.UNPROCESSABLE_ENTITY).end();
-                }
+            if (!(user.firstName && user.lastName && user.phoneNumber && user.emailAddress)) {
+                return res.status(StatusCodes.UNPROCESSABLE_ENTITY).end();
+            }
 
-                const newUser = await userController.signUp({ displayName, membershipType, user });
+            const newUser = await userController.signUp({ displayName, membershipType, user });
 
-                log.info(user, newUser ? 'User signed up' : 'User sign up failed due to conflicts');
+            log.info(user, newUser ? 'User signed up' : 'User sign up failed due to conflicts');
 
-                return res.status(StatusCodes.NO_CONTENT).end();
-            });
+            return res.status(StatusCodes.NO_CONTENT).end();
+        },
+    );
 
     /**
      * @openapi
@@ -464,40 +494,39 @@ const routes = ({
      *        204:
      *          description: Returns the updated user profile.
      */
-    userRouter.route('/')
-        .patch(
-            (req, res, next) => middleware.authenticateUser(req, res, next),
-            async (req, res) => {
-                try {
-                    const {
-                        body: patches,
-                        headers: {
-                            'if-match': ETag
-                        },
-                        session: {
-                            displayName,
-                            membershipType
-                        }
-                    } = req;
+    userRouter.route('/').patch(
+        (req, res, next) => middleware.authenticateUser(req, res, next),
+        async (req, res) => {
+            try {
+                const {
+                    body: patches,
+                    headers: { 'if-match': ETag },
+                    session: { displayName, membershipType },
+                } = req;
 
-                    if (!ETag) {
-                        return res.status(StatusCodes.PRECONDITION_REQUIRED).end();
-                    }
-
-                    const user = await userController.update({ ETag, displayName, membershipType, patches });
-
-                    return user
-                        ? res.status(StatusCodes.NO_CONTENT).end()
-                        : res.status(StatusCodes.NOT_FOUND).send('user not found');
-                } catch (err) {
-                    if (err.message === 'precondition failed') {
-                        return res.status(StatusCodes.PRECONDITION_FAILED).end();
-                    }
-
-                    throw err;
+                if (!ETag) {
+                    return res.status(StatusCodes.PRECONDITION_REQUIRED).end();
                 }
-            },
-        );
+
+                const user = await userController.update({
+                    ETag,
+                    displayName,
+                    membershipType,
+                    patches,
+                });
+
+                return user
+                    ? res.status(StatusCodes.NO_CONTENT).end()
+                    : res.status(StatusCodes.NOT_FOUND).send('user not found');
+            } catch (err) {
+                if (err.message === 'precondition failed') {
+                    return res.status(StatusCodes.PRECONDITION_FAILED).end();
+                }
+
+                throw err;
+            }
+        },
+    );
 
     return userRouter;
 };

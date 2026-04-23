@@ -1,6 +1,4 @@
-import {
-    describe, expect, it,
-} from 'vitest';
+import { describe, expect, it } from 'vitest';
 import getMaxAgeFromCacheControl from './get-max-age-from-cache-control.js';
 
 describe('getMaxAgeFromCacheControl()', () => {

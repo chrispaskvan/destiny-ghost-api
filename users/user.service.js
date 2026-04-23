@@ -25,11 +25,13 @@ const anonymousUserSchema = z.object({
  * Schema for user notifications.
  * @private
  */
-const notificationSchema = z.object({
-    enabled: z.boolean(),
-    type: z.string(),
-    messages: z.array(z.string()).default([]),
-}).strict();
+const notificationSchema = z
+    .object({
+        enabled: z.boolean(),
+        type: z.string(),
+        messages: z.array(z.string()).default([]),
+    })
+    .strict();
 
 /**
  * Schema for registered users.
@@ -37,11 +39,22 @@ const notificationSchema = z.object({
  */
 const userSchema = z.object({
     carrier: z.string().optional(),
-    dateRegistered: z.string().refine(val => {
-        try { Temporal.Instant.from(val); return true; } catch { return false; }
-    }, {
-        message: 'Invalid date-time format',
-    }).optional(),
+    dateRegistered: z
+        .string()
+        .refine(
+            val => {
+                try {
+                    Temporal.Instant.from(val);
+                    return true;
+                } catch {
+                    return false;
+                }
+            },
+            {
+                message: 'Invalid date-time format',
+            },
+        )
+        .optional(),
     emailAddress: z.string().email(),
     firstName: z.string(),
     displayName: z.string(),
@@ -69,7 +82,7 @@ class UserService {
             client: z.object({}),
             documentService: z.object({}),
         });
-        
+
         schema.parse(options);
 
         this.cacheService = options.cacheService;
@@ -99,12 +112,15 @@ class UserService {
     async createAnonymousUser(user) {
         try {
             anonymousUserSchema.parse(user);
-        } catch (err) {                
+        } catch (err) {
             return Promise.reject(Error(JSON.stringify(err.issues)));
         }
 
-        const existingUser = await this
-            .getUserByDisplayName(user.displayName, user.membershipType, true);
+        const existingUser = await this.getUserByDisplayName(
+            user.displayName,
+            user.membershipType,
+            true,
+        );
 
         if (existingUser) {
             if (existingUser.dateRegistered) {
@@ -127,14 +143,14 @@ class UserService {
 
         try {
             userSchema.parse(user);
-        } catch (err) {                
+        } catch (err) {
             issues = [...issues, ...err.issues];
         }
 
         user.notifications?.forEach(notification => {
             try {
                 notificationSchema.parse(notification);
-            } catch (err) {                
+            } catch (err) {
                 issues = [...issues, ...err.issues];
             }
         });
@@ -145,12 +161,16 @@ class UserService {
 
         let existingUser = await this.getUserByPhoneNumber(user.phoneNumber);
         if (existingUser) {
-            return Promise.reject(new Error(`The phone number, ${user.phoneNumber}, is already registered.`));
+            return Promise.reject(
+                new Error(`The phone number, ${user.phoneNumber}, is already registered.`),
+            );
         }
 
         existingUser = await this.getUserByEmailAddress(user.emailAddress);
         if (existingUser) {
-            return Promise.reject(new Error(`The email address, ${user.emailAddress}, is already registered.`));
+            return Promise.reject(
+                new Error(`The email address, ${user.emailAddress}, is already registered.`),
+            );
         }
 
         existingUser = await this.getUserByDisplayName(user.displayName, user.membershipType, true);
@@ -163,7 +183,11 @@ class UserService {
         if (existingUser) {
             // User exists (from prior sign-in), merge and update
             existingUser = { ...existingUser, ...user };
-            return await this.documents.updateDocument(userCollectionId, existingUser, user.membershipType);
+            return await this.documents.updateDocument(
+                userCollectionId,
+                existingUser,
+                user.membershipType,
+            );
         }
 
         // Anonymous user record missing, create on the fly
@@ -177,8 +201,7 @@ class UserService {
      * @returns {Promise.<T>}
      */
     async #deleteMessage(messageId, phoneNumber) {
-        return await this.documents
-            .deleteDocumentById(messageCollectionId, messageId, phoneNumber);
+        return await this.documents.deleteDocumentById(messageCollectionId, messageId, phoneNumber);
     }
 
     /**
@@ -187,10 +210,13 @@ class UserService {
      * @param {number} membershipType
      * @returns {Promise.<T>}
      */
-    // eslint-disable-next-line no-unused-private-class-members
+    // biome-ignore lint/correctness/noUnusedPrivateClassMembers: future use
     async #deleteUser(documentId, membershipType) {
-        return await this.documents
-            .deleteDocumentById(userCollectionId, documentId, membershipType);
+        return await this.documents.deleteDocumentById(
+            userCollectionId,
+            documentId,
+            membershipType,
+        );
     }
 
     /**
@@ -205,10 +231,12 @@ class UserService {
         const delivered = new Set();
 
         for (const message of messages) {
-            const received = delivered.has(message.SmsSid) || await this.documents.getDocuments(
-                messageCollectionId,
-                `SELECT * FROM c WHERE c.SmsSid = '${message.SmsSid}' AND c.SmsStatus = 'delivered'`,
-            );
+            const received =
+                delivered.has(message.SmsSid) ||
+                (await this.documents.getDocuments(
+                    messageCollectionId,
+                    `SELECT * FROM c WHERE c.SmsSid = '${message.SmsSid}' AND c.SmsStatus = 'delivered'`,
+                ));
 
             if (received.length) {
                 delivered.add(message.SmsSid);
@@ -225,16 +253,19 @@ class UserService {
      */
     getPhoneNumberType(phoneNumber) {
         return new Promise((resolve, reject) => {
-            this.client.phoneNumbers(phoneNumber).get({
-                countryCode: 'US',
-                type: 'carrier',
-            }, (err, number) => {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve(number.carrier);
-                }
-            });
+            this.client.phoneNumbers(phoneNumber).get(
+                {
+                    countryCode: 'US',
+                    type: 'carrier',
+                },
+                (err, number) => {
+                    if (err) {
+                        reject(err);
+                    } else {
+                        resolve(number.carrier);
+                    }
+                },
+            );
         });
     }
 
@@ -244,8 +275,9 @@ class UserService {
      * @returns {*|Array.User}
      */
     async getSubscribedUsers(notificationType) {
-        const notification = Object.values(notificationTypes)
-            .find(type => notificationType === type);
+        const notification = Object.values(notificationTypes).find(
+            type => notificationType === type,
+        );
 
         if (!notification) {
             return Promise.reject(Error('notificationType is not valid'));
@@ -253,8 +285,7 @@ class UserService {
 
         const qb = new QueryBuilder();
 
-        qb
-            .select('displayName')
+        qb.select('displayName')
             .select('membershipId')
             .select('membershipType')
             .select('phoneNumber')
@@ -283,7 +314,7 @@ class UserService {
 
         try {
             schema.parse({ displayName, membershipType, skipCache });
-        } catch (err) {                
+        } catch (err) {
             const messages = err.issues.map(issue => issue.message);
 
             return Promise.reject(new Error(messages.join(',')));
@@ -303,7 +334,9 @@ class UserService {
 
         if (documents.length) {
             if (documents.length > 1) {
-                throw new Error(`more than 1 document found for displayName ${displayName} and membershipType ${membershipType}`);
+                throw new Error(
+                    `more than 1 document found for displayName ${displayName} and membershipType ${membershipType}`,
+                );
             }
 
             await this.cacheService.setUser(documents[0]);
@@ -370,7 +403,9 @@ class UserService {
         );
         if (documents) {
             if (documents.length > 1) {
-                throw new Error(`more than 1 document found for emailAddressToken ${emailAddressToken}`);
+                throw new Error(
+                    `more than 1 document found for emailAddressToken ${emailAddressToken}`,
+                );
             }
 
             return documents[0];
@@ -485,19 +520,24 @@ class UserService {
     async updateAnonymousUser(anonymousUser) {
         try {
             anonymousUserSchema.parse(anonymousUser);
-        } catch (err) {                
+        } catch (err) {
             return Promise.reject(Error(JSON.stringify(err.issues)));
         }
 
-        const user = await this
-            .getUserByDisplayName(anonymousUser.displayName, anonymousUser.membershipType);
+        const user = await this.getUserByDisplayName(
+            anonymousUser.displayName,
+            anonymousUser.membershipType,
+        );
 
         if (user) {
-            return await this.documents.updateDocument(userCollectionId, anonymousUser)
+            return await this.documents
+                .updateDocument(userCollectionId, anonymousUser)
                 .then(() => this.cacheService.setUser(anonymousUser));
         }
 
-        throw new Error(`User with displayName ${anonymousUser.displayName} and membershipType ${anonymousUser.membershipType} not found`);
+        throw new Error(
+            `User with displayName ${anonymousUser.displayName} and membershipType ${anonymousUser.membershipType} not found`,
+        );
     }
 
     /**
@@ -515,7 +555,9 @@ class UserService {
         const userDocument = await this.getUserByDisplayName(user.displayName, user.membershipType);
 
         if (!userDocument) {
-            throw new Error(`User with displayName ${user.displayName} and membershipType ${user.membershipType} not found`);
+            throw new Error(
+                `User with displayName ${user.displayName} and membershipType ${user.membershipType} not found`,
+            );
         }
 
         Object.assign(userDocument, user);
@@ -539,7 +581,8 @@ class UserService {
 
         userDocument.bungie = bungie;
 
-        return await this.documents.updateDocument(userCollectionId, userDocument, userDocument.membershipType)
+        return await this.documents
+            .updateDocument(userCollectionId, userDocument, userDocument.membershipType)
             .then(() => undefined);
     }
 }

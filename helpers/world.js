@@ -1,9 +1,7 @@
 /**
  * A module for accessing the Destiny World database.
  */
-import {
-    readdirSync, statSync, existsSync, createWriteStream, unlinkSync,
-} from 'node:fs';
+import { readdirSync, statSync, existsSync, createWriteStream, unlinkSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { open } from 'yauzl';
@@ -38,24 +36,27 @@ class World {
      * @private
      */
     async bootstrap(fileName) {
-        const databasePath = fileName
-            ? join(this.directory, basename(fileName)) : undefined;
+        const databasePath = fileName ? join(this.directory, basename(fileName)) : undefined;
 
         log.info(`Loading the first world from ${databasePath}`);
 
         if (databasePath) {
             try {
-                const [grimoireCards, vendorDefinitions] = await this.pool.run({ databasePath, queries: [
-                    'SELECT * FROM DestinyGrimoireCardDefinition',
-                    'SELECT * FROM DestinyVendorDefinition'
-                ]});
+                const [grimoireCards, vendorDefinitions] = await this.pool.run({
+                    databasePath,
+                    queries: [
+                        'SELECT * FROM DestinyGrimoireCardDefinition',
+                        'SELECT * FROM DestinyVendorDefinition',
+                    ],
+                });
 
                 const vendors = vendorDefinitions.map(({ json: vendor }) => JSON.parse(vendor));
 
-                this.grimoireCards = grimoireCards.map(({ json: grimoireCard }) => JSON.parse(grimoireCard));
+                this.grimoireCards = grimoireCards.map(({ json: grimoireCard }) =>
+                    JSON.parse(grimoireCard),
+                );
                 this.vendorHashMap = new Map(vendors.map(vendor => [vendor.hash, vendor]));
-            }
-            catch (err) {
+            } catch (err) {
                 log.error(`Error loading the first world: ${err.message}`);
                 throw err;
             }
@@ -115,7 +116,9 @@ class World {
      */
     async updateManifest(manifest) {
         const { directory: databaseDirectory } = this;
-        const { mobileWorldContentPaths: { en: relativeUrl } } = manifest;
+        const {
+            mobileWorldContentPaths: { en: relativeUrl },
+        } = manifest;
         const fileName = basename(relativeUrl || '');
 
         if (!fileName || fileName === '.' || fileName === '..') {
@@ -145,8 +148,7 @@ class World {
                 const file = createWriteStream(path);
 
                 await pipeline(response.body, file);
-            }
-            catch (err) {
+            } catch (err) {
                 cleanupFile(path);
                 throw err;
             }
@@ -170,7 +172,9 @@ class World {
                             }
 
                             const sanitizedFileName = basename(entry.fileName);
-                            const writeStream = createWriteStream(`${outputPath}/${sanitizedFileName}`);
+                            const writeStream = createWriteStream(
+                                `${outputPath}/${sanitizedFileName}`,
+                            );
 
                             readStream.pipe(writeStream);
 

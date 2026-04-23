@@ -1,9 +1,7 @@
 /**
  * Destiny Service Tests
  */
-import {
-    afterEach, beforeEach, describe, expect, it, vi,
-} from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Chance from 'chance';
 import AuthenticationService from './authentication.service.js';
 import usersJson from '../mocks/users.json';
@@ -153,7 +151,9 @@ describe('AuthenticationService', () => {
         });
 
         describe('when current user requires a refresh', () => {
-            const { bungie: { access_token } } = mockUser;
+            const {
+                bungie: { access_token },
+            } = mockUser;
             const expiresIn = 1;
             const now = 11;
 
@@ -166,8 +166,9 @@ describe('AuthenticationService', () => {
             });
 
             it('refreshes Bungie token', async () => {
-                vi.spyOn(Temporal.Now, 'instant')
-                    .mockReturnValueOnce(Temporal.Instant.fromEpochMilliseconds(now));
+                vi.spyOn(Temporal.Now, 'instant').mockReturnValueOnce(
+                    Temporal.Instant.fromEpochMilliseconds(now),
+                );
 
                 const user = await authenticationService.authenticate({
                     displayName,

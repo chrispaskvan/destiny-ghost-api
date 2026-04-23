@@ -172,9 +172,7 @@
         "equippingSoundHash": 0,
         "hornSoundHash": 0,
         "ammoType": 1,
-        "displayStrings": [
-            ""
-        ]
+        "displayStrings": [""]
     },
     "translationBlock": {
         "weaponPatternHash": 2261046232,
@@ -212,9 +210,7 @@
         "qualityLevel": 0,
         "infusionCategoryName": "2806069436",
         "infusionCategoryHash": 2806069436,
-        "infusionCategoryHashes": [
-            2806069436
-        ],
+        "infusionCategoryHashes": [2806069436],
         "progressionLevelRequirementHash": 3157915980,
         "currentVersion": 0,
         "versions": [
@@ -752,32 +748,19 @@
         "socketCategories": [
             {
                 "socketCategoryHash": 3956125808,
-                "socketIndexes": [
-                    0
-                ]
+                "socketIndexes": [0]
             },
             {
                 "socketCategoryHash": 4241085061,
-                "socketIndexes": [
-                    1,
-                    2,
-                    3,
-                    4,
-                    9
-                ]
+                "socketIndexes": [1, 2, 3, 4, 9]
             },
             {
                 "socketCategoryHash": 2048875504,
-                "socketIndexes": [
-                    5
-                ]
+                "socketIndexes": [5]
             },
             {
                 "socketCategoryHash": 2685412949,
-                "socketIndexes": [
-                    6,
-                    7
-                ]
+                "socketIndexes": [6, 7]
             }
         ]
     },
@@ -875,32 +858,20 @@
     "allowActions": true,
     "doesPostmasterPullHaveSideEffects": false,
     "nonTransferrable": false,
-    "itemCategoryHashes": [
-        3,
-        1,
-        7
-    ],
+    "itemCategoryHashes": [3, 1, 7],
     "specialItemType": 0,
     "itemType": 3,
     "itemSubType": 13,
     "classType": 3,
     "breakerType": 0,
     "equippable": true,
-    "damageTypeHashes": [
-        1847026933
-    ],
-    "damageTypes": [
-        3
-    ],
+    "damageTypeHashes": [1847026933],
+    "damageTypes": [3],
     "defaultDamageType": 3,
     "defaultDamageTypeHash": 1847026933,
     "isWrapper": false,
-    "traitIds": [
-        "item.weapon.pulse_rifle"
-    ],
-    "traitHashes": [
-        1648572040
-    ],
+    "traitIds": ["item.weapon.pulse_rifle"],
+    "traitHashes": [1648572040],
     "hash": 2261046232,
     "index": 11623,
     "redacted": false,

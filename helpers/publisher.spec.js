@@ -1,6 +1,4 @@
-import {
-    describe, expect, it, vi, beforeEach,
-} from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import Chance from 'chance';
 
 const { mocks } = vi.hoisted(() => ({
@@ -68,7 +66,10 @@ describe('Publisher', () => {
                 name: chance.name(),
                 email: chance.email(),
             };
-            const result = await publisher.sendNotification(user, { notificationType: 'Xur', claimCheckNumber: '11' });
+            const result = await publisher.sendNotification(user, {
+                notificationType: 'Xur',
+                claimCheckNumber: '11',
+            });
 
             expect(result).toBe('some-job');
         });

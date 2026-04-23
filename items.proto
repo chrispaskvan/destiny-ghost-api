@@ -1,10 +1,15 @@
 syntax = "proto3";
 
 service ItemService {
-    rpc GetAll (Empty) returns (ItemList) {}
+    rpc GetAll (PageRequest) returns (ItemPage) {}
 }
 
-message Empty {}
+message PageRequest {
+    // 1-based page number; must be >= 1. Omit to use the default (page 1).
+    optional uint32 page = 1;
+    // Page size; must be >= 1. Omit to use the default (size 11).
+    optional uint32 size = 2;
+}
 
 message Item {
     message DisplayProperties {
@@ -37,6 +42,20 @@ message Item {
     int32 hash = 18;
 }
 
-message ItemList {
-    repeated Item items = 1;
+message Links {
+    // 1-based next page number as a string; empty when there is no next page.
+    string next_page = 1;
+}
+
+message PageInfo {
+    uint32 size = 1;
+    uint64 total = 2;
+    uint32 pages = 3;
+    uint32 number = 4;
+}
+
+message ItemPage {
+    repeated Item data = 1;
+    Links links = 2;
+    PageInfo page = 3;
 }

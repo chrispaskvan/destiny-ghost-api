@@ -34,9 +34,7 @@ import configuration from '../helpers/config.js';
  * @param destiny2Controller
  * @returns {*}
  */
-const routes = ({
-    authenticationController, destiny2Controller,
-}) => {
+const routes = ({ authenticationController, destiny2Controller }) => {
     const destiny2Router = Router();
 
     /**
@@ -62,14 +60,20 @@ const routes = ({
      *        401:
      *          description: Unauthorized
      */
-    destiny2Router.route('/characters')
-        .get(async (req, res, next) => await middleware.authenticateUser(req, res, next),
-            async (req, res) => {
-                const { session: { displayName, membershipType } } = req;
-                const characterBases = await destiny2Controller.getCharacters(displayName, membershipType);
+    destiny2Router.route('/characters').get(
+        async (req, res, next) => await middleware.authenticateUser(req, res, next),
+        async (req, res) => {
+            const {
+                session: { displayName, membershipType },
+            } = req;
+            const characterBases = await destiny2Controller.getCharacters(
+                displayName,
+                membershipType,
+            );
 
-                res.json(characterBases);
-            });
+            res.json(characterBases);
+        },
+    );
 
     /**
      * @openapi
@@ -86,69 +90,73 @@ const routes = ({
      *        200:
      *          description: Returns the complete Destiny 2 item inventory.
      */
-    destiny2Router.route('/inventory')
-        .get(authorizeUser,
-            async (req, res) => {
-                let aborted = false;
+    destiny2Router.route('/inventory').get(authorizeUser, async (req, res) => {
+        let aborted = false;
 
-                req.on('close', () => {
-                    if (!res.writableEnded) {
-                        aborted = true;
-                    }
-                });
+        req.on('close', () => {
+            if (!res.writableEnded) {
+                aborted = true;
+            }
+        });
 
-                const items = await destiny2Controller.getInventory();
+        const items = await destiny2Controller.getInventory();
 
-                if (!items?.length) {
-                    return res.status(StatusCodes.SERVICE_UNAVAILABLE).end();
-                }
+        if (!items?.length) {
+            return res.status(StatusCodes.SERVICE_UNAVAILABLE).end();
+        }
 
-                let page = parseInt(req.query.page, 10);
-                let size = parseInt(req.query.size, 10);
+        let page = parseInt(req.query.page, 10);
+        let size = parseInt(req.query.size, 10);
 
-                if (Number.isNaN(page) && Number.isNaN(size)) {
-                    let first = true;
+        if (Number.isNaN(page) && Number.isNaN(size)) {
+            let first = true;
 
-                    res.writeHead(StatusCodes.OK, {
-                        'Content-Type': 'application/json',
-                        'Transfer-Encoding': 'chunked',
-                    });
-
-                    for (const [index, item] of items.entries()) {
-                        if (aborted) {
-                            log.info(`${req.method} ${req.url} request aborted at item ${index} of ${items.length}`);
-                            return res.end();
-                        }
-
-                        res.write(first ? `[${JSON.stringify(item)}` : `,${JSON.stringify(item)}`);
-                        first = false;
-
-                        // Introduce a delay to allow the event loop to process the 'close' event
-                        await new Promise(resolve => setImmediate(resolve));
-                    }
-                    res.write(']');
-                    res.end();
-                } else {
-                    if (Number.isNaN(page)) page = 1;
-                    if (Number.isNaN(size)) size = 11;
-
-                    const data = items.slice(0, size);
-                    const pages = Math.ceil(items.length / size);
-
-                    res.status(StatusCodes.OK).json({
-                        data,
-                        links: {
-                            next: page === pages ? undefined : `${process.env.PROTOCOL}://${process.env.DOMAIN}/destiny2/inventory?page=${page + 1}&size=${size}`,
-                        },
-                        page: {
-                            size,
-                            total: items.length,
-                            pages,
-                            number: page,
-                        },
-                    });
-                }
+            res.writeHead(StatusCodes.OK, {
+                'Content-Type': 'application/json',
+                'Transfer-Encoding': 'chunked',
             });
+
+            for (const [index, item] of items.entries()) {
+                if (aborted) {
+                    log.info(
+                        `${req.method} ${req.url} request aborted at item ${index} of ${items.length}`,
+                    );
+                    return res.end();
+                }
+
+                res.write(first ? `[${JSON.stringify(item)}` : `,${JSON.stringify(item)}`);
+                first = false;
+
+                // Introduce a delay to allow the event loop to process the 'close' event
+                await new Promise(resolve => setImmediate(resolve));
+            }
+            res.write(']');
+            res.end();
+        } else {
+            if (Number.isNaN(page)) page = 1;
+            if (Number.isNaN(size)) size = 11;
+
+            const start = (page - 1) * size;
+            const data = items.slice(start, start + size);
+            const pages = Math.ceil(items.length / size);
+
+            res.status(StatusCodes.OK).json({
+                data,
+                links: {
+                    next:
+                        page >= pages
+                            ? undefined
+                            : `${process.env.PROTOCOL}://${process.env.DOMAIN}/destiny2/inventory?page=${page + 1}&size=${size}`,
+                },
+                page: {
+                    size,
+                    total: items.length,
+                    pages,
+                    number: page,
+                },
+            });
+        }
+    });
 
     /**
      * @openapi
@@ -175,11 +183,13 @@ const routes = ({
      *        200:
      *          description: Returns the Destiny Manifest definition.
      */
-    destiny2Router.route('/manifest')
-        .get(async (req, res, next) => {
+    destiny2Router.route('/manifest').get(
+        async (req, res, next) => {
             const cacheControl = req.headers['cache-control'];
-            const skipCache = cacheControl && (getMaxAgeFromCacheControl(cacheControl) === 0
-                || cacheControl.split(',').includes('no-cache'));
+            const skipCache =
+                cacheControl &&
+                (getMaxAgeFromCacheControl(cacheControl) === 0 ||
+                    cacheControl.split(',').includes('no-cache'));
 
             res.locals.skipCache = skipCache;
             if (skipCache) {
@@ -187,16 +197,12 @@ const routes = ({
             } else {
                 next();
             }
-        }, async (req, res) => {
+        },
+        async (req, res) => {
             const result = await destiny2Controller.getManifest(res.locals.skipCache);
             const {
-                data: {
-                    manifest,
-                },
-                meta: {
-                    lastModified,
-                    maxAge,
-                },
+                data: { manifest },
+                meta: { lastModified, maxAge },
             } = result;
             const ifModifiedSince = toTemporalInstant(req.headers['if-modified-since']);
             const lastModifiedInstant = toTemporalInstant(lastModified);
@@ -205,10 +211,13 @@ const routes = ({
                 'Last-Modified': lastModified,
                 'Cache-Control': `max-age=${maxAge}`,
             });
-            res.status(Temporal.Instant.compare(ifModifiedSince, lastModifiedInstant) > 0
-                ? StatusCodes.NOT_MODIFIED : StatusCodes.OK)
-                .json(manifest);
-        });
+            res.status(
+                Temporal.Instant.compare(ifModifiedSince, lastModifiedInstant) > 0
+                    ? StatusCodes.NOT_MODIFIED
+                    : StatusCodes.OK,
+            ).json(manifest);
+        },
+    );
 
     /**
      * @openapi
@@ -227,13 +236,11 @@ const routes = ({
      *        403:
      *          description: Forbidden
      */
-    destiny2Router.route('/manifest')
-        .post(authorizeUser,
-            async (req, res) => {
-                const { data: { manifest } } = destiny2Controller.upsertManifest()
+    destiny2Router.route('/manifest').post(authorizeUser, async (_req, res) => {
+        const manifest = await destiny2Controller.upsertManifest();
 
-                res.status(StatusCodes.OK).json(manifest);
-            });
+        res.status(StatusCodes.OK).json(manifest);
+    });
 
     /**
      * @openapi
@@ -254,20 +261,22 @@ const routes = ({
      *        404:
      *          description: Xur could not be found.
      */
-    destiny2Router.route('/xur')
-        .get(cors(configuration.cors),
-            async (req, res, next) => await middleware.authenticateUser(req, res, next),
-            async (req, res) => {
-                const { session: { displayName, membershipType } } = req;
-                const items = await destiny2Controller.getXur(displayName, membershipType);
+    destiny2Router.route('/xur').get(
+        cors(configuration.cors),
+        async (req, res, next) => await middleware.authenticateUser(req, res, next),
+        async (req, res) => {
+            const {
+                session: { displayName, membershipType },
+            } = req;
+            const items = await destiny2Controller.getXur(displayName, membershipType);
 
-                if (items) {
-                    return res.status(StatusCodes.OK).json(items);
-                }
+            if (items) {
+                return res.status(StatusCodes.OK).json(items);
+            }
 
-                return res.status(StatusCodes.NOT_FOUND);
-            },
-        );
+            return res.status(StatusCodes.NOT_FOUND).end();
+        },
+    );
 
     return destiny2Router;
 };

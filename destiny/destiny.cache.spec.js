@@ -1,6 +1,4 @@
-import {
-    afterEach, beforeEach, describe, expect, it, vi,
-} from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RedisErrors from 'redis-errors';
 import DestinyCache from './destiny.cache.js';
 import mockManifestResponse from '../mocks/manifestResponse.json';
@@ -53,10 +51,12 @@ describe('DestinyCache', () => {
                 const lastModified = Temporal.Now.instant().toString();
                 const ttl = 11;
 
-                client.get.mockResolvedValueOnce(JSON.stringify({
-                    manifest: mockManifestResponse.Response,
-                    lastModified,
-                }));
+                client.get.mockResolvedValueOnce(
+                    JSON.stringify({
+                        manifest: mockManifestResponse.Response,
+                        lastModified,
+                    }),
+                );
                 client.ttl.mockResolvedValueOnce(ttl);
 
                 const result = await destinyCache.getManifest();
@@ -166,11 +166,13 @@ describe('DestinyCache', () => {
             it('should throw', async () => {
                 client.setEx.mockRejectedValueOnce(new Error());
 
-                await expect(destinyCache.setManifest({
-                    lastModified,
-                    manifest: mockManifestResponse.Response,
-                    maxAge: ttl,
-                })).rejects.toThrow(Error);
+                await expect(
+                    destinyCache.setManifest({
+                        lastModified,
+                        manifest: mockManifestResponse.Response,
+                        maxAge: ttl,
+                    }),
+                ).rejects.toThrow(Error);
             });
         });
 
@@ -216,8 +218,9 @@ describe('DestinyCache', () => {
             it('should throw', async () => {
                 client.setEx.mockRejectedValueOnce(new Error());
 
-                await expect(destinyCache.setVendor(hash, mockXurResponse.Response))
-                    .rejects.toThrow(Error);
+                await expect(
+                    destinyCache.setVendor(hash, mockXurResponse.Response),
+                ).rejects.toThrow(Error);
             });
         });
 

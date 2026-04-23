@@ -1,7 +1,5 @@
 import { EventEmitter } from 'node:events';
-import {
-    beforeEach, describe, expect, it, vi,
-} from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { StatusCodes } from 'http-status-codes';
 import { createResponse, createRequest } from 'node-mocks-http';
 import { get } from '../helpers/request.js';
@@ -38,23 +36,31 @@ describe('HealthRouter', () => {
     describe('getHealth', () => {
         describe('when all services are healthy', () => {
             const world = {
-                getGrimoireCards: () => Promise.resolve([{
-                    cardName: 'Red Hand IX',
-                }]),
+                getGrimoireCards: () =>
+                    Promise.resolve([
+                        {
+                            cardName: 'Red Hand IX',
+                        },
+                    ]),
             };
             const world2 = {
-                getItemByName: () => Promise.resolve([{
-                    itemName: 'Eyasluna',
-                    itemTypeAndTierDisplayName: 'Legendary Hand Cannon',
-                }]),
+                getItemByName: () =>
+                    Promise.resolve([
+                        {
+                            itemName: 'Eyasluna',
+                            itemTypeAndTierDisplayName: 'Legendary Hand Cannon',
+                        },
+                    ]),
             };
 
             beforeEach(() => {
-                get.mockImplementation(() => Promise.resolve({
-                    status: {
-                        description: 'All Systems Go',
-                    },
-                }));
+                get.mockImplementation(() =>
+                    Promise.resolve({
+                        status: {
+                            description: 'All Systems Go',
+                        },
+                    }),
+                );
 
                 healthRouter = HealthRouter({
                     destinyService,
@@ -111,9 +117,11 @@ describe('HealthRouter', () => {
             const world2 = world;
 
             beforeEach(() => {
-                get.mockImplementation(() => Promise.rejects({
-                    statusCode: StatusCodes.BAD_REQUEST,
-                }));
+                get.mockImplementation(() =>
+                    Promise.reject({
+                        statusCode: StatusCodes.BAD_REQUEST,
+                    }),
+                );
 
                 healthRouter = HealthRouter({
                     destinyService,

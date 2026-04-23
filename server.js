@@ -41,14 +41,16 @@ const startServer = async () => {
             key: readFileSync('./security/_wildcard.destiny-ghost.com-key.pem'),
             cert: readFileSync('./security/_wildcard.destiny-ghost.com.pem'),
         };
-        const server = createSecureServer({
-            ...httpsOptions,
-            ...serverOptions,
-        }, app);
+        const server = createSecureServer(
+            {
+                ...httpsOptions,
+                ...serverOptions,
+            },
+            app,
+        );
 
-        secureConnection = server.listen(
-            443,
-            () => console.log('HTTPS server listening on port 443.'),
+        secureConnection = server.listen(443, () =>
+            console.log('HTTPS server listening on port 443.'),
         );
     }
 
@@ -57,7 +59,9 @@ const startServer = async () => {
     createTerminus(insecureServer, {
         signals: ['SIGINT', 'SIGTERM'],
         onSignal: async () => {
-            console.log('Interruption or termination signal received. Shutting down the server ...');
+            console.log(
+                'Interruption or termination signal received. Shutting down the server ...',
+            );
 
             const shutdownTasks = [
                 ['Cache', cache.quit()],
@@ -102,18 +106,16 @@ const startServer = async () => {
     return insecureServer.address();
 };
 
-const stopServer = () => new Promise(resolve => {
-    if (insecureConnection) {
-        insecureConnection.close();
-    }
-    if (secureConnection) {
-        secureConnection.close();
-    }
+const stopServer = () =>
+    new Promise(resolve => {
+        if (insecureConnection) {
+            insecureConnection.close();
+        }
+        if (secureConnection) {
+            secureConnection.close();
+        }
 
-    resolve();
-});
+        resolve();
+    });
 
-export {
-    startServer,
-    stopServer,
-};
+export { startServer, stopServer };

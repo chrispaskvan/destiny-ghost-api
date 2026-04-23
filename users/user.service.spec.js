@@ -1,9 +1,7 @@
 /**
  * User Service Tests
  */
-import {
-    afterEach, beforeEach, describe, expect, it, vi,
-} from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Chance from 'chance';
 import UserService from './user.service.js';
 
@@ -84,8 +82,9 @@ describe('UserService', () => {
                 To: '+1234567890',
             };
 
-            vi.spyOn(Temporal.Now, 'instant')
-                .mockReturnValueOnce(Temporal.Instant.from(inputDateString));
+            vi.spyOn(Temporal.Now, 'instant').mockReturnValueOnce(
+                Temporal.Instant.from(inputDateString),
+            );
 
             await userService.addUserMessage(message);
 
@@ -106,10 +105,12 @@ describe('UserService', () => {
             it('should reject the anonymous user', async () => {
                 userService.getUserByDisplayName = vi.fn().mockResolvedValue(anonymousUser);
 
-                const { membershipId: _membershipId, ...anonymousUserWithoutMembershipId } = anonymousUser;
+                const { membershipId: _membershipId, ...anonymousUserWithoutMembershipId } =
+                    anonymousUser;
 
-                await expect(userService.createAnonymousUser(anonymousUserWithoutMembershipId))
-                    .rejects.toThrow(undefined);
+                await expect(
+                    userService.createAnonymousUser(anonymousUserWithoutMembershipId),
+                ).rejects.toThrow(undefined);
             });
         });
 
@@ -128,10 +129,9 @@ describe('UserService', () => {
                 it('should create the anonymous user', () => {
                     userService.getUserByDisplayName = vi.fn().mockResolvedValue();
 
-                    return userService.createAnonymousUser(anonymousUser)
-                        .then(() => {
-                            expect(documentService.createDocument).toHaveBeenCalled();
-                        });
+                    return userService.createAnonymousUser(anonymousUser).then(() => {
+                        expect(documentService.createDocument).toHaveBeenCalled();
+                    });
                 });
             });
         });
@@ -146,7 +146,9 @@ describe('UserService', () => {
             it('should reject the user', async () => {
                 const { phoneNumber: _phoneNumber, ...userWithoutPhoneNumber } = user;
 
-                await expect(userService.createUser(userWithoutPhoneNumber)).rejects.toThrow(undefined);
+                await expect(userService.createUser(userWithoutPhoneNumber)).rejects.toThrow(
+                    undefined,
+                );
             });
         });
     });
@@ -182,10 +184,12 @@ describe('UserService', () => {
                     },
                 ];
                 documentService.deleteDocumentById.mockResolvedValue();
-                documentService.getDocuments
-                    .mockImplementationOnce(() => Promise.resolve(messages.filter(({ SmsStatus }) => SmsStatus !== 'delivered')));
-                documentService.getDocuments
-                    .mockImplementation(() => Promise.resolve(messages.filter(({ SmsStatus }) => SmsStatus === 'delivered')));
+                documentService.getDocuments.mockImplementationOnce(() =>
+                    Promise.resolve(messages.filter(({ SmsStatus }) => SmsStatus !== 'delivered')),
+                );
+                documentService.getDocuments.mockImplementation(() =>
+                    Promise.resolve(messages.filter(({ SmsStatus }) => SmsStatus === 'delivered')),
+                );
 
                 await userService.deleteUserMessages(phoneNumber);
 
@@ -200,7 +204,8 @@ describe('UserService', () => {
             it('should return cached user', () => {
                 cacheService.getUser.mockImplementation(() => Promise.resolve(user));
 
-                return userService.getUserByDisplayName(user.displayName, user.membershipType)
+                return userService
+                    .getUserByDisplayName(user.displayName, user.membershipType)
                     .then(user1 => {
                         expect(cacheService.getUser).toHaveBeenCalled();
                         expect(user1.displayName).toEqual(user.displayName);
@@ -211,9 +216,11 @@ describe('UserService', () => {
 
         describe('when display name and membership type are not valid', () => {
             it('should throw', async () => {
-                await expect(userService
-                    .getUserByDisplayName(user.membershipType, user.displayName))
-                    .rejects.toThrow('Invalid input: expected string, received number,Invalid input: expected number, received string');
+                await expect(
+                    userService.getUserByDisplayName(user.membershipType, user.displayName),
+                ).rejects.toThrow(
+                    'Invalid input: expected string, received number,Invalid input: expected number, received string',
+                );
             });
         });
 
@@ -222,7 +229,8 @@ describe('UserService', () => {
                 cacheService.getUser.mockImplementation(() => Promise.resolve());
                 documentService.getDocuments.mockImplementation(() => Promise.resolve([user]));
 
-                return userService.getUserByDisplayName(user.displayName, user.membershipType)
+                return userService
+                    .getUserByDisplayName(user.displayName, user.membershipType)
                     .then(user1 => {
                         expect(user1.displayName).toEqual(user.displayName);
                         expect(documentService.getDocuments).toHaveBeenCalled();
@@ -230,11 +238,13 @@ describe('UserService', () => {
             });
 
             it('should fail when more than one existing user is found', async () => {
-                documentService.getDocuments
-                    .mockImplementation(() => Promise.resolve([user, user]));
+                documentService.getDocuments.mockImplementation(() =>
+                    Promise.resolve([user, user]),
+                );
 
-                await expect(userService.getUserByDisplayName(user.displayName, user.membershipType))
-                    .rejects.toThrow();
+                await expect(
+                    userService.getUserByDisplayName(user.displayName, user.membershipType),
+                ).rejects.toThrow();
 
                 expect(documentService.getDocuments).toHaveBeenCalled();
             });
@@ -242,7 +252,8 @@ describe('UserService', () => {
             it('should return undefined if user is not found', () => {
                 documentService.getDocuments.mockImplementation(() => Promise.resolve([]));
 
-                return userService.getUserByDisplayName('unknownDisplayName', user.membershipType)
+                return userService
+                    .getUserByDisplayName('unknownDisplayName', user.membershipType)
                     .then(user1 => {
                         expect(user1).toBeUndefined();
                         expect(documentService.getDocuments).toHaveBeenCalled();
@@ -254,14 +265,17 @@ describe('UserService', () => {
             });
 
             it('should fail when membership type is not a number', async () => {
-                await expect(userService.getUserByDisplayName(user.displayName, '')).rejects.toThrow();
+                await expect(
+                    userService.getUserByDisplayName(user.displayName, ''),
+                ).rejects.toThrow();
             });
 
             it('should fail when no documents are returned', async () => {
                 documentService.getDocuments.mockImplementation(() => Promise.resolve());
 
-                await expect(userService.getUserByDisplayName(user.displayName, user.membershipType))
-                    .rejects.toThrow();
+                await expect(
+                    userService.getUserByDisplayName(user.displayName, user.membershipType),
+                ).rejects.toThrow();
 
                 expect(documentService.getDocuments).toHaveBeenCalled();
             });
@@ -273,19 +287,20 @@ describe('UserService', () => {
             it('should return an existing user', () => {
                 documentService.getDocuments.mockImplementation(() => Promise.resolve([user]));
 
-                return userService.getUserByEmailAddress(user.emailAddress)
-                    .then(user1 => {
-                        expect(user1).toEqual(user);
-                        expect(documentService.getDocuments).toHaveBeenCalled();
-                    });
+                return userService.getUserByEmailAddress(user.emailAddress).then(user1 => {
+                    expect(user1).toEqual(user);
+                    expect(documentService.getDocuments).toHaveBeenCalled();
+                });
             });
 
             it('should fail when more than one existing user is found', async () => {
-                documentService.getDocuments
-                    .mockImplementation(() => Promise.resolve([user, user]));
+                documentService.getDocuments.mockImplementation(() =>
+                    Promise.resolve([user, user]),
+                );
 
-                await expect(userService.getUserByEmailAddress(user.emailAddress))
-                    .rejects.toThrow();
+                await expect(
+                    userService.getUserByEmailAddress(user.emailAddress),
+                ).rejects.toThrow();
 
                 expect(documentService.getDocuments).toHaveBeenCalled();
             });
@@ -293,18 +308,16 @@ describe('UserService', () => {
             it('should fail when no users are found', () => {
                 documentService.getDocuments.mockImplementation(() => Promise.resolve([]));
 
-                return userService.getUserByEmailAddress(user.emailAddress)
-                    .then(user1 => {
-                        expect(user1).toBeUndefined();
-                        expect(documentService.getDocuments).toHaveBeenCalled();
-                    });
+                return userService.getUserByEmailAddress(user.emailAddress).then(user1 => {
+                    expect(user1).toBeUndefined();
+                    expect(documentService.getDocuments).toHaveBeenCalled();
+                });
             });
 
             it('should fail when email address is empty', async () => {
                 documentService.getDocuments.mockImplementation(() => Promise.resolve());
 
-                await expect(userService.getUserByEmailAddress())
-                    .rejects.toThrow();
+                await expect(userService.getUserByEmailAddress()).rejects.toThrow();
 
                 expect(documentService.getDocuments).not.toHaveBeenCalled();
             });
@@ -312,8 +325,9 @@ describe('UserService', () => {
             it('should fail when no documents are found', async () => {
                 documentService.getDocuments.mockImplementation(() => Promise.resolve());
 
-                await expect(userService.getUserByEmailAddress(user.emailAddress))
-                    .rejects.toThrow();
+                await expect(
+                    userService.getUserByEmailAddress(user.emailAddress),
+                ).rejects.toThrow();
 
                 expect(documentService.getDocuments).toHaveBeenCalled();
             });
@@ -325,19 +339,20 @@ describe('UserService', () => {
             it('should return an existing user', () => {
                 documentService.getDocuments.mockImplementation(() => Promise.resolve([user]));
 
-                return userService.getUserByEmailAddressToken('some_token')
-                    .then(user1 => {
-                        expect(user1).toEqual(user);
-                        expect(documentService.getDocuments).toHaveBeenCalled();
-                    });
+                return userService.getUserByEmailAddressToken('some_token').then(user1 => {
+                    expect(user1).toEqual(user);
+                    expect(documentService.getDocuments).toHaveBeenCalled();
+                });
             });
 
             it('should fail when more than one existing user is found', async () => {
-                documentService.getDocuments
-                    .mockImplementation(() => Promise.resolve([user, user]));
+                documentService.getDocuments.mockImplementation(() =>
+                    Promise.resolve([user, user]),
+                );
 
-                await expect(userService.getUserByEmailAddressToken('some_token'))
-                    .rejects.toThrow();
+                await expect(
+                    userService.getUserByEmailAddressToken('some_token'),
+                ).rejects.toThrow();
 
                 expect(documentService.getDocuments).toHaveBeenCalled();
             });
@@ -345,18 +360,16 @@ describe('UserService', () => {
             it('should fail when no users are found', () => {
                 documentService.getDocuments.mockImplementation(() => Promise.resolve([]));
 
-                return userService.getUserByEmailAddressToken('some_token')
-                    .then(user1 => {
-                        expect(user1).toBeUndefined();
-                        expect(documentService.getDocuments).toHaveBeenCalled();
-                    });
+                return userService.getUserByEmailAddressToken('some_token').then(user1 => {
+                    expect(user1).toBeUndefined();
+                    expect(documentService.getDocuments).toHaveBeenCalled();
+                });
             });
 
             it('should fail when email address token is empty', async () => {
                 documentService.getDocuments.mockImplementation(() => Promise.resolve());
 
-                await expect(userService.getUserByEmailAddressToken())
-                    .rejects.toThrow();
+                await expect(userService.getUserByEmailAddressToken()).rejects.toThrow();
 
                 expect(documentService.getDocuments).not.toHaveBeenCalled();
             });
@@ -364,8 +377,9 @@ describe('UserService', () => {
             it('should fail when no documents are found', async () => {
                 documentService.getDocuments.mockImplementation(() => Promise.resolve());
 
-                await expect(userService.getUserByEmailAddressToken('some_token'))
-                    .rejects.toThrow();
+                await expect(
+                    userService.getUserByEmailAddressToken('some_token'),
+                ).rejects.toThrow();
 
                 expect(documentService.getDocuments).toHaveBeenCalled();
             });
@@ -377,19 +391,20 @@ describe('UserService', () => {
             it('should return an existing user', () => {
                 documentService.getDocuments.mockImplementation(() => Promise.resolve([user]));
 
-                return userService.getUserByMembershipId(user.membershipId)
-                    .then(user1 => {
-                        expect(user1).toEqual(user);
-                        expect(documentService.getDocuments).toHaveBeenCalled();
-                    });
+                return userService.getUserByMembershipId(user.membershipId).then(user1 => {
+                    expect(user1).toEqual(user);
+                    expect(documentService.getDocuments).toHaveBeenCalled();
+                });
             });
 
             it('should fail when more than one existing user is found', async () => {
-                documentService.getDocuments
-                    .mockImplementation(() => Promise.resolve([user, user]));
+                documentService.getDocuments.mockImplementation(() =>
+                    Promise.resolve([user, user]),
+                );
 
-                await expect(userService.getUserByMembershipId(user.membershipId))
-                    .rejects.toThrow();
+                await expect(
+                    userService.getUserByMembershipId(user.membershipId),
+                ).rejects.toThrow();
 
                 expect(documentService.getDocuments).toHaveBeenCalled();
             });
@@ -397,18 +412,16 @@ describe('UserService', () => {
             it('should fail when no users are found', () => {
                 documentService.getDocuments.mockImplementation(() => Promise.resolve([]));
 
-                return userService.getUserByMembershipId(user.membershipId)
-                    .then(user1 => {
-                        expect(user1).toBeUndefined();
-                        expect(documentService.getDocuments).toHaveBeenCalled();
-                    });
+                return userService.getUserByMembershipId(user.membershipId).then(user1 => {
+                    expect(user1).toBeUndefined();
+                    expect(documentService.getDocuments).toHaveBeenCalled();
+                });
             });
 
             it('should fail when email address is empty', async () => {
                 documentService.getDocuments.mockImplementation(() => Promise.resolve());
 
-                await expect(userService.getUserByMembershipId())
-                    .rejects.toThrow();
+                await expect(userService.getUserByMembershipId()).rejects.toThrow();
 
                 expect(documentService.getDocuments).not.toHaveBeenCalled();
             });
@@ -429,12 +442,11 @@ describe('UserService', () => {
             it('should return cached user', () => {
                 cacheService.getUser.mockImplementationOnce(() => Promise.resolve(user));
 
-                return userService.getUserByPhoneNumber(user.phoneNumber)
-                    .then(user1 => {
-                        expect(cacheService.getUser).toHaveBeenCalled();
-                        expect(user1.displayName).toEqual(user.displayName);
-                        expect(documentService.getDocuments).not.toHaveBeenCalled();
-                    });
+                return userService.getUserByPhoneNumber(user.phoneNumber).then(user1 => {
+                    expect(cacheService.getUser).toHaveBeenCalled();
+                    expect(user1.displayName).toEqual(user.displayName);
+                    expect(documentService.getDocuments).not.toHaveBeenCalled();
+                });
             });
         });
 
@@ -442,19 +454,18 @@ describe('UserService', () => {
             it('should return an existing user', () => {
                 documentService.getDocuments.mockImplementation(() => Promise.resolve([user]));
 
-                return userService.getUserByPhoneNumber(user.phoneNumber)
-                    .then(user1 => {
-                        expect(user1).toEqual(user);
-                        expect(documentService.getDocuments).toHaveBeenCalled();
-                    });
+                return userService.getUserByPhoneNumber(user.phoneNumber).then(user1 => {
+                    expect(user1).toEqual(user);
+                    expect(documentService.getDocuments).toHaveBeenCalled();
+                });
             });
 
             it('should fail when more than one existing user is found', async () => {
-                documentService.getDocuments
-                    .mockImplementation(() => Promise.resolve([user, user]));
+                documentService.getDocuments.mockImplementation(() =>
+                    Promise.resolve([user, user]),
+                );
 
-                await expect(userService.getUserByPhoneNumber(user.phoneNumber))
-                    .rejects.toThrow();
+                await expect(userService.getUserByPhoneNumber(user.phoneNumber)).rejects.toThrow();
 
                 expect(documentService.getDocuments).toHaveBeenCalled();
             });
@@ -462,18 +473,16 @@ describe('UserService', () => {
             it('should fail when no users are found', () => {
                 documentService.getDocuments.mockImplementation(() => Promise.resolve([]));
 
-                return userService.getUserByPhoneNumber(user.phoneNumber)
-                    .then(user1 => {
-                        expect(user1).toBeUndefined();
-                        expect(documentService.getDocuments).toHaveBeenCalled();
-                    });
+                return userService.getUserByPhoneNumber(user.phoneNumber).then(user1 => {
+                    expect(user1).toBeUndefined();
+                    expect(documentService.getDocuments).toHaveBeenCalled();
+                });
             });
 
             it('should fail when phone number is empty', async () => {
                 documentService.getDocuments.mockImplementation(() => Promise.resolve());
 
-                await expect(userService.getUserByPhoneNumber())
-                    .rejects.toThrow();
+                await expect(userService.getUserByPhoneNumber()).rejects.toThrow();
 
                 expect(documentService.getDocuments).not.toHaveBeenCalled();
             });
@@ -481,8 +490,7 @@ describe('UserService', () => {
             it('should fail when no documents are found', async () => {
                 documentService.getDocuments.mockImplementation(() => Promise.resolve());
 
-                await expect(userService.getUserByPhoneNumber(user.phoneNumber))
-                    .rejects.toThrow();
+                await expect(userService.getUserByPhoneNumber(user.phoneNumber)).rejects.toThrow();
 
                 expect(documentService.getDocuments).toHaveBeenCalled();
             });
@@ -494,19 +502,18 @@ describe('UserService', () => {
             it('should return an existing user', () => {
                 documentService.getDocuments.mockImplementation(() => Promise.resolve([user]));
 
-                return userService.getUserById(user.id)
-                    .then(user1 => {
-                        expect(user1).toEqual(user);
-                        expect(documentService.getDocuments).toHaveBeenCalled();
-                    });
+                return userService.getUserById(user.id).then(user1 => {
+                    expect(user1).toEqual(user);
+                    expect(documentService.getDocuments).toHaveBeenCalled();
+                });
             });
 
             it('should fail when more than one existing user is found', async () => {
-                documentService.getDocuments
-                    .mockImplementation(() => Promise.resolve([user, user]));
+                documentService.getDocuments.mockImplementation(() =>
+                    Promise.resolve([user, user]),
+                );
 
-                await expect(userService.getUserById(user.id))
-                    .rejects.toThrow();
+                await expect(userService.getUserById(user.id)).rejects.toThrow();
 
                 expect(documentService.getDocuments).toHaveBeenCalled();
             });
@@ -514,18 +521,16 @@ describe('UserService', () => {
             it('should fail when no users are found', () => {
                 documentService.getDocuments.mockImplementation(() => Promise.resolve([]));
 
-                return userService.getUserById(user.id)
-                    .then(user1 => {
-                        expect(user1).toBeUndefined();
-                        expect(documentService.getDocuments).toHaveBeenCalled();
-                    });
+                return userService.getUserById(user.id).then(user1 => {
+                    expect(user1).toBeUndefined();
+                    expect(documentService.getDocuments).toHaveBeenCalled();
+                });
             });
 
             it('should fail when user id is empty', async () => {
                 documentService.getDocuments.mockImplementation(() => Promise.resolve());
 
-                await expect(userService.getUserById())
-                    .rejects.toThrow();
+                await expect(userService.getUserById()).rejects.toThrow();
 
                 expect(documentService.getDocuments).not.toHaveBeenCalled();
             });
@@ -552,12 +557,14 @@ describe('UserService', () => {
 
                     userService.getUserByDisplayName = vi.fn().mockResolvedValue(user);
 
-                    return userService.updateUser(user1)
-                        .then(user2 => {
-                            expect(user2).toBeUndefined();
-                            expect(documentService.updateDocument)
-                                .toHaveBeenCalledWith(expect.anything(), user1, user1.membershipType);
-                        });
+                    return userService.updateUser(user1).then(user2 => {
+                        expect(user2).toBeUndefined();
+                        expect(documentService.updateDocument).toHaveBeenCalledWith(
+                            expect.anything(),
+                            user1,
+                            user1.membershipType,
+                        );
+                    });
                 });
             });
 
@@ -570,8 +577,7 @@ describe('UserService', () => {
                     documentService.updateDocument.mockImplementation(() => Promise.resolve());
                     userService.getUserByDisplayName = vi.fn().mockResolvedValue();
 
-                    await expect(userService.updateUser(user1))
-                        .rejects.toThrow();
+                    await expect(userService.updateUser(user1)).rejects.toThrow();
 
                     expect(documentService.updateDocument).not.toHaveBeenCalled();
                 });
@@ -582,29 +588,28 @@ describe('UserService', () => {
     describe('updateUserBungie', () => {
         describe('when user id exists', () => {
             it('should return undefined', () => {
-                documentService.updateDocument
-                    .mockImplementation(() => Promise.resolve());
+                documentService.updateDocument.mockImplementation(() => Promise.resolve());
 
                 userService.getUserById = vi.fn().mockResolvedValue(user);
 
-                return userService.updateUserBungie(user.id, {})
-                    .then(user1 => {
-                        expect(user1).toBeUndefined();
-                        expect(documentService.updateDocument)
-                            .toHaveBeenCalledWith(expect.anything(), user, user.membershipType);
-                    });
+                return userService.updateUserBungie(user.id, {}).then(user1 => {
+                    expect(user1).toBeUndefined();
+                    expect(documentService.updateDocument).toHaveBeenCalledWith(
+                        expect.anything(),
+                        user,
+                        user.membershipType,
+                    );
+                });
             });
         });
 
         describe('when user id does not exist', () => {
             it('should not modify user document', async () => {
-                documentService.updateDocument
-                    .mockImplementation(() => Promise.resolve());
+                documentService.updateDocument.mockImplementation(() => Promise.resolve());
 
                 userService.getUserById = vi.fn().mockResolvedValue();
 
-                await expect(userService.updateUserBungie(user.id))
-                    .rejects.toThrow();
+                await expect(userService.updateUserBungie(user.id)).rejects.toThrow();
 
                 expect(documentService.updateDocument).not.toHaveBeenCalled();
             });

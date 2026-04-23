@@ -32,10 +32,11 @@ function parseRetryAfter(value) {
  * @param {number} [retryOptions.maxDelay=15000]
  * @returns {Promise<{ data: *, headers: object }>}
  */
-async function request({ url, method, headers = {}, data: body, ...rest } = {}, { maxRetries = 3, baseDelay = 1000, maxDelay = 15000 } = {}) {
-    const retries = Number.isFinite(maxRetries)
-        ? Math.max(0, Math.trunc(maxRetries))
-        : 0;
+async function request(
+    { url, method, headers = {}, data: body, ...rest } = {},
+    { maxRetries = 3, baseDelay = 1000, maxDelay = 15000 } = {},
+) {
+    const retries = Number.isFinite(maxRetries) ? Math.max(0, Math.trunc(maxRetries)) : 0;
     const init = { method, headers: { ...headers }, ...rest };
 
     if (body !== undefined) {
@@ -55,7 +56,10 @@ async function request({ url, method, headers = {}, data: body, ...rest } = {}, 
             if (attempt < retries && isTransientError(networkErr)) {
                 const delay = getBackoffDelay(attempt, baseDelay, maxDelay);
 
-                log.warn({ attempt: attempt + 1, delay, err: networkErr, url }, 'Retrying HTTP request after network error');
+                log.warn(
+                    { attempt: attempt + 1, delay, err: networkErr, url },
+                    'Retrying HTTP request after network error',
+                );
 
                 await new Promise(resolve => setTimeout(resolve, delay));
                 continue;
@@ -93,14 +97,14 @@ async function request({ url, method, headers = {}, data: body, ...rest } = {}, 
 
             if (responseError.isTransient && attempt < retries) {
                 const retryAfterHeader = response.headers.get('retry-after');
-                const parsed = retryAfterHeader != null
-                    ? parseRetryAfter(retryAfterHeader)
-                    : null;
-                const delay = parsed != null
-                    ? parsed
-                    : getBackoffDelay(attempt, baseDelay, maxDelay);
+                const parsed = retryAfterHeader != null ? parseRetryAfter(retryAfterHeader) : null;
+                const delay =
+                    parsed != null ? parsed : getBackoffDelay(attempt, baseDelay, maxDelay);
 
-                log.warn({ attempt: attempt + 1, delay, status: response.status, url }, 'Retrying HTTP request');
+                log.warn(
+                    { attempt: attempt + 1, delay, status: response.status, url },
+                    'Retrying HTTP request',
+                );
 
                 await new Promise(resolve => setTimeout(resolve, delay));
                 continue;
@@ -122,7 +126,10 @@ async function get(options, includeHeaders = false, retryOptions) {
 }
 
 async function post(options, retryOptions) {
-    const { data } = await request({ method: 'post', ...options }, { maxRetries: 0, ...retryOptions });
+    const { data } = await request(
+        { method: 'post', ...options },
+        { maxRetries: 0, ...retryOptions },
+    );
 
     return data;
 }
