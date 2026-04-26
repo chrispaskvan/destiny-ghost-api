@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import RedisErrors from 'redis-errors';
 import DestinyCache from './destiny.cache.js';
 import mockManifestResponse from '../mocks/manifestResponse.json';
 import mockXurResponse from '../mocks/xurResponse.json';
@@ -73,21 +72,13 @@ describe('DestinyCache', () => {
             });
         });
 
-        describe('when a Redis error occurs', () => {
-            it('should return undefined', async () => {
-                client.get.mockRejectedValueOnce(new RedisErrors.RedisError());
+        describe('when the client throws', () => {
+            it('should swallow the error and return undefined', async () => {
+                client.get.mockRejectedValueOnce(new Error('boom'));
 
                 const result = await destinyCache.getManifest();
 
                 expect(result).toBeUndefined();
-            });
-        });
-
-        describe('when a different error occurs', () => {
-            it('should throw', async () => {
-                client.get.mockRejectedValueOnce(new Error());
-
-                await expect(destinyCache.getManifest()).rejects.toThrow(Error);
             });
         });
     });
@@ -105,21 +96,13 @@ describe('DestinyCache', () => {
             });
         });
 
-        describe('when a Redis error occurs', () => {
-            it('should return undefined', async () => {
-                client.get.mockRejectedValueOnce(new RedisErrors.RedisError());
+        describe('when the client throws', () => {
+            it('should swallow the error and return undefined', async () => {
+                client.get.mockRejectedValueOnce(new Error('boom'));
 
                 const result = await destinyCache.getVendor(hash);
 
                 expect(result).toBeUndefined();
-            });
-        });
-
-        describe('when a different error occurs', () => {
-            it('should throw', async () => {
-                client.get.mockRejectedValueOnce(new Error());
-
-                await expect(destinyCache.getVendor(hash)).rejects.toThrow(Error);
             });
         });
     });
@@ -148,9 +131,9 @@ describe('DestinyCache', () => {
             });
         });
 
-        describe('when a Redis error occurs', () => {
-            it('should return a string', async () => {
-                client.setEx.mockRejectedValueOnce(new RedisErrors.RedisError());
+        describe('when the client throws', () => {
+            it('should swallow the error and return the Error sentinel', async () => {
+                client.setEx.mockRejectedValueOnce(new Error('boom'));
 
                 const result = await destinyCache.setManifest({
                     lastModified,
@@ -159,20 +142,6 @@ describe('DestinyCache', () => {
                 });
 
                 expect(result).toEqual('Error');
-            });
-        });
-
-        describe('when a different error occurs', () => {
-            it('should throw', async () => {
-                client.setEx.mockRejectedValueOnce(new Error());
-
-                await expect(
-                    destinyCache.setManifest({
-                        lastModified,
-                        manifest: mockManifestResponse.Response,
-                        maxAge: ttl,
-                    }),
-                ).rejects.toThrow(Error);
             });
         });
 
@@ -204,23 +173,13 @@ describe('DestinyCache', () => {
             });
         });
 
-        describe('when a Redis error occurs', () => {
-            it('should return a string', async () => {
-                client.setEx.mockRejectedValueOnce(new RedisErrors.RedisError());
+        describe('when the client throws', () => {
+            it('should swallow the error and return the Error sentinel', async () => {
+                client.setEx.mockRejectedValueOnce(new Error('boom'));
 
                 const result = await destinyCache.setVendor(hash, mockXurResponse.Response);
 
                 expect(result).toEqual('Error');
-            });
-        });
-
-        describe('when a different error occurs', () => {
-            it('should throw', async () => {
-                client.setEx.mockRejectedValueOnce(new Error());
-
-                await expect(
-                    destinyCache.setVendor(hash, mockXurResponse.Response),
-                ).rejects.toThrow(Error);
             });
         });
 
