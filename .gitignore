@@ -11,5 +11,6 @@ coverage/*
 !coverage/clover.xml
 databases/
 node_modules/
+.pnpm-store/
 security/
 settings/
