@@ -1,6 +1,8 @@
 .artillery
 .claude
+.claudeignore
 .clinic
+.cursorignore
 .dockerignore
 .DS_Store
 .env
