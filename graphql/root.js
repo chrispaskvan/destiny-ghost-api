@@ -9,7 +9,7 @@ const root = {
 
         const limit = pLimit(11);
 
-        await Promise.all(
+        return Promise.all(
             players.map(player =>
                 limit(async () => {
                     const {
@@ -33,12 +33,10 @@ const root = {
                               )
                             : null;
 
-                    Object.assign(player, { statistics, user });
+                    return Object.assign(player, { statistics, user });
                 }),
             ),
         );
-
-        return players;
     },
 };
 

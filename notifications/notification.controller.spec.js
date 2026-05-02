@@ -7,7 +7,6 @@ import NotificationError from './notification.error.js';
 import notificationTypes from './notification.types.js';
 import ClaimCheck from '../helpers/claim-check.js';
 import log from '../helpers/log.js';
-import pThrottle from 'p-throttle';
 
 vi.mock('../helpers/publisher.js');
 vi.mock('../helpers/subscriber.js');
@@ -153,7 +152,6 @@ describe('NotificationController', () => {
                 await new Promise(resolve => setImmediate(resolve));
 
                 expect(userService.getSubscribedUsers).toHaveBeenCalledWith(subscription);
-                expect(pThrottle).toHaveBeenCalledWith({ limit: 2, interval: 500 });
                 expect(publisher.sendNotification).toHaveBeenCalledTimes(numberOfSubscribedUsers);
                 expect(result).toBe(claimCheckNumber);
             });

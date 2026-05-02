@@ -6,6 +6,8 @@ import ClaimCheck from '../helpers/claim-check.js';
 import log from '../helpers/log.js';
 import pThrottle from 'p-throttle';
 
+const throttle = pThrottle({ limit: 2, interval: 500 });
+
 /**
  * Controller class for Notification routes.
  */
@@ -107,7 +109,6 @@ class NotificationController {
         }
 
         const users = await this.users.getSubscribedUsers(subscription);
-        const throttle = pThrottle({ limit: 2, interval: 500 });
         const sendNotification = throttle(async user => {
             await this.publisher.sendNotification(user, {
                 notificationType: subscription,
