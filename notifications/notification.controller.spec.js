@@ -7,7 +7,7 @@ import NotificationError from './notification.error.js';
 import notificationTypes from './notification.types.js';
 import ClaimCheck from '../helpers/claim-check.js';
 import log from '../helpers/log.js';
-import throttle from '../helpers/throttle.js';
+import pThrottle from 'p-throttle';
 
 vi.mock('../helpers/publisher.js');
 vi.mock('../helpers/subscriber.js');
@@ -19,7 +19,9 @@ vi.mock('../helpers/log.js', () => ({
         error: vi.fn(),
     },
 }));
-vi.mock('../helpers/throttle.js');
+vi.mock('p-throttle', () => ({
+    default: vi.fn(() => fn => fn),
+}));
 
 const chance = new Chance();
 const phoneNumber = chance.phone();
@@ -81,9 +83,6 @@ beforeEach(() => {
 
     // Setup subscriber mock
     subscriber.listen = vi.fn();
-
-    // Setup throttle mock
-    throttle.mockImplementation(promises => Promise.all(promises));
 
     notificationController = new NotificationController({
         authenticationService,
@@ -151,8 +150,11 @@ describe('NotificationController', () => {
 
                 const result = await notificationController.create(subscription);
 
+                await new Promise(resolve => setImmediate(resolve));
+
                 expect(userService.getSubscribedUsers).toHaveBeenCalledWith(subscription);
-                expect(throttle).toHaveBeenCalledWith(expect.any(Array), 2, 500);
+                expect(pThrottle).toHaveBeenCalledWith({ limit: 2, interval: 500 });
+                expect(publisher.sendNotification).toHaveBeenCalledTimes(numberOfSubscribedUsers);
                 expect(result).toBe(claimCheckNumber);
             });
         });

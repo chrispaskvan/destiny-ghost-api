@@ -4,7 +4,7 @@ import NotificationError from './notification.error.js';
 import notificationTypes from './notification.types.js';
 import ClaimCheck from '../helpers/claim-check.js';
 import log from '../helpers/log.js';
-import throttle from '../helpers/throttle.js';
+import pThrottle from 'p-throttle';
 
 /**
  * Controller class for Notification routes.
@@ -107,18 +107,16 @@ class NotificationController {
         }
 
         const users = await this.users.getSubscribedUsers(subscription);
+        const throttle = pThrottle({ limit: 2, interval: 500 });
+        const sendNotification = throttle(async user => {
+            await this.publisher.sendNotification(user, {
+                notificationType: subscription,
+                claimCheckNumber,
+            });
+            await claimCheck.addPhoneNumber(user.phoneNumber);
+        });
 
-        throttle(
-            users.map(async user => {
-                await this.publisher.sendNotification(user, {
-                    notificationType: subscription,
-                    claimCheckNumber,
-                });
-                await claimCheck.addPhoneNumber(user.phoneNumber);
-            }),
-            2,
-            500,
-        );
+        Promise.all(users.map(user => sendNotification(user))).catch(err => log.error(err));
 
         return claimCheckNumber;
     }

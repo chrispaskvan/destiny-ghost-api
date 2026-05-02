@@ -57,6 +57,8 @@
         "ioredis": "^5.10.1",
         "lru-cache": "^11.3.5",
         "nodemailer": "^8.0.7",
+        "p-limit": "^7.3.0",
+        "p-throttle": "^8.1.0",
         "pino": "^10.3.1",
         "pino-http": "^11.0.0",
         "qs": "^6.15.1",
