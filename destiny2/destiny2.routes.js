@@ -27,7 +27,7 @@ async function writeChunk(res, chunk) {
         const timeout = setTimeout(() => {
             cleanup();
             if (typeof res.destroy === 'function' && !res.destroyed) {
-                res.destroy(new Error('Inventory stream backpressure timeout'));
+                res.destroy();
             }
             resolve(false);
         }, inventoryStreamBackpressureTimeoutMs);

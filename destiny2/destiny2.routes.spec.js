@@ -273,8 +273,11 @@ describe('Destiny2Router', () => {
                     { hash: 2, displayProperties: { name: 'Two' } },
                 ];
                 res.destroy = vi.fn(err => {
+                    if (err) {
+                        res.emit('error', err);
+                    }
                     res.destroyed = true;
-                    res.emit('close', err);
+                    res.emit('close');
                 });
                 res.write = vi.fn(chunk => {
                     originalWrite(chunk);
@@ -292,6 +295,7 @@ describe('Destiny2Router', () => {
                 await responseComplete;
 
                 expect(res.destroy).toHaveBeenCalledOnce();
+                expect(res.destroy).toHaveBeenCalledWith();
                 expect(res.write).toHaveBeenCalledTimes(1);
                 expect(res._getData()).toEqual(`[${JSON.stringify(world.items[0])}`);
             } finally {
