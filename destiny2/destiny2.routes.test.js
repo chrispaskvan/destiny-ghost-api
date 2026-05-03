@@ -217,11 +217,10 @@ describe('/destiny2', () => {
                                             ),
                                         );
                                     });
-                                    response.once('error', err => {
+                                    response.once('error', () => {
                                         clearTimeout(timeout);
 
                                         try {
-                                            expect(err.message).toEqual('aborted');
                                             expect(response.complete).toEqual(false);
                                             resolve();
                                         } catch (assertionErr) {

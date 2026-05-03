@@ -86,6 +86,19 @@ async function writeChunk(res, chunk) {
     return drained;
 }
 
+function handleWriteResult(req, res, writeResult, context) {
+    if (writeResult === inventoryStreamWriteResult.ok) return false;
+
+    if (writeResult === inventoryStreamWriteResult.timedOut) {
+        log.warn(`${req.method} ${req.url} inventory stream timed out ${context}`);
+    } else {
+        log.info(`${req.method} ${req.url} request closed ${context}`);
+        if (!res.writableEnded && !res.destroyed) res.end();
+    }
+
+    return true;
+}
+
 /**
  * @openapi
  *  components:
@@ -203,19 +216,15 @@ const routes = ({ authenticationController, destiny2Controller }) => {
                     first ? `[${JSON.stringify(item)}` : `,${JSON.stringify(item)}`,
                 );
 
-                if (writeResult !== inventoryStreamWriteResult.ok) {
-                    if (writeResult === inventoryStreamWriteResult.timedOut) {
-                        log.warn(
-                            `${req.method} ${req.url} inventory stream timed out while waiting for drain at item ${index} of ${items.length}`,
-                        );
-                        return;
-                    }
-
-                    log.info(
-                        `${req.method} ${req.url} request closed while streaming item ${index} of ${items.length}`,
-                    );
-                    return res.end();
-                }
+                if (
+                    handleWriteResult(
+                        req,
+                        res,
+                        writeResult,
+                        `while streaming item ${index} of ${items.length}`,
+                    )
+                )
+                    return;
                 first = false;
 
                 // Introduce a delay to allow the event loop to process the 'close' event
@@ -224,17 +233,7 @@ const routes = ({ authenticationController, destiny2Controller }) => {
 
             const writeResult = await writeChunk(res, ']');
 
-            if (writeResult !== inventoryStreamWriteResult.ok) {
-                if (writeResult === inventoryStreamWriteResult.timedOut) {
-                    log.warn(
-                        `${req.method} ${req.url} inventory stream timed out before completion`,
-                    );
-                    return;
-                }
-
-                log.info(`${req.method} ${req.url} request closed before inventory completed`);
-                return res.end();
-            }
+            if (handleWriteResult(req, res, writeResult, 'before inventory completed')) return;
 
             res.end();
         } else {
