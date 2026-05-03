@@ -4,14 +4,10 @@ import { StatusCodes } from 'http-status-codes';
 import Chance from 'chance';
 import { createResponse, createRequest } from 'node-mocks-http';
 
-vi.mock('../authorization/authorization.middleware.js', () => ({
-    default: vi.fn((_req, _res, next) => next()),
-}));
-
 import Destiny2Router from './destiny2.routes.js';
 import Destiny2Controller from './destiny2.controller.js';
 import manifest2Response from '../mocks/manifest2Response.json';
-import authorizeUser from '../authorization/authorization.middleware.js';
+import configuration from '../helpers/config.js';
 
 const { Response: manifest } = manifest2Response;
 const chance = new Chance();
@@ -69,7 +65,6 @@ describe('Destiny2Router', () => {
         res = createResponse({
             eventEmitter: EventEmitter,
         });
-        authorizeUser.mockImplementation((_req, _res, next) => next());
     });
 
     describe('getCharacters', () => {
@@ -145,12 +140,33 @@ describe('Destiny2Router', () => {
     });
 
     describe('getInventory', () => {
+        it('should respond with unauthorized when notification headers are missing', () =>
+            new Promise((done, reject) => {
+                const req = createRequest({
+                    method: 'GET',
+                    url: '/inventory',
+                    query: {},
+                });
+
+                res.on('end', () => {
+                    try {
+                        expect(res.statusCode).toEqual(StatusCodes.UNAUTHORIZED);
+                        done();
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
+
+                destiny2Router(req, res, next);
+            }));
+
         it('should wait for drain when the response stream applies backpressure', () =>
             new Promise((done, reject) => {
                 const req = createRequest({
                     method: 'GET',
                     url: '/inventory',
                     query: {},
+                    headers: configuration.notificationHeaders,
                 });
                 const originalWrite = res.write.bind(res);
                 let writeCalls = 0;
@@ -200,6 +216,7 @@ describe('Destiny2Router', () => {
                     method: 'GET',
                     url: '/inventory',
                     query: {},
+                    headers: configuration.notificationHeaders,
                 });
                 const originalWrite = res.write.bind(res);
                 let writeCalls = 0;
@@ -238,5 +255,48 @@ describe('Destiny2Router', () => {
                     }
                 });
             }));
+
+        it('should stop streaming when backpressure does not drain in time', async () => {
+            vi.useFakeTimers();
+
+            try {
+                const req = createRequest({
+                    method: 'GET',
+                    url: '/inventory',
+                    query: {},
+                    headers: configuration.notificationHeaders,
+                });
+                const originalWrite = res.write.bind(res);
+
+                world.items = [
+                    { hash: 1, displayProperties: { name: 'One' } },
+                    { hash: 2, displayProperties: { name: 'Two' } },
+                ];
+                res.destroy = vi.fn(err => {
+                    res.destroyed = true;
+                    res.emit('close', err);
+                });
+                res.write = vi.fn(chunk => {
+                    originalWrite(chunk);
+
+                    return false;
+                });
+
+                const responseComplete = new Promise((resolve, reject) => {
+                    res.on('end', resolve);
+                    res.on('error', reject);
+                });
+
+                destiny2Router(req, res, next);
+                await vi.advanceTimersByTimeAsync(30 * 1000);
+                await responseComplete;
+
+                expect(res.destroy).toHaveBeenCalledOnce();
+                expect(res.write).toHaveBeenCalledTimes(1);
+                expect(res._getData()).toEqual(`[${JSON.stringify(world.items[0])}`);
+            } finally {
+                vi.useRealTimers();
+            }
+        });
     });
 });

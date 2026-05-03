@@ -12,6 +12,8 @@ import toTemporalInstant from '../helpers/to-temporal-instant.js';
 
 import configuration from '../helpers/config.js';
 
+const inventoryStreamBackpressureTimeoutMs = 30 * 1000;
+
 async function writeChunk(res, chunk) {
     if (res.writableEnded || res.destroyed) {
         return false;
@@ -22,6 +24,13 @@ async function writeChunk(res, chunk) {
     }
 
     const drained = await new Promise(resolve => {
+        const timeout = setTimeout(() => {
+            cleanup();
+            if (typeof res.destroy === 'function' && !res.destroyed) {
+                res.destroy(new Error('Inventory stream backpressure timeout'));
+            }
+            resolve(false);
+        }, inventoryStreamBackpressureTimeoutMs);
         const handleDrain = () => {
             cleanup();
             resolve(true);
@@ -31,10 +40,12 @@ async function writeChunk(res, chunk) {
             resolve(false);
         };
         const cleanup = () => {
+            clearTimeout(timeout);
             res.off('drain', handleDrain);
             res.off('close', handleClose);
         };
 
+        timeout.unref?.();
         res.on('drain', handleDrain);
         res.on('close', handleClose);
     });
