@@ -207,7 +207,7 @@ describe('/destiny2', () => {
                                                 'Expected the stalled inventory stream to close before timing out',
                                             ),
                                         );
-                                    }, 5000);
+                                    }, 2000);
 
                                     response.once('end', () => {
                                         clearTimeout(timeout);

@@ -249,6 +249,7 @@ describe('Destiny2Router', () => {
                 setImmediate(() => {
                     try {
                         expect(res.write).toHaveBeenCalledTimes(1);
+                        res.destroyed = true;
                         res.emit('close');
                     } catch (err) {
                         reject(err);

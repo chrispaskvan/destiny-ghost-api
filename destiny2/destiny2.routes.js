@@ -45,10 +45,15 @@ async function writeChunk(res, chunk) {
                     : inventoryStreamWriteResult.ok,
             );
         };
+        let timedOut = false;
         const handleClose = () => {
-            resolveWith(inventoryStreamWriteResult.closed);
+            resolveWith(
+                timedOut ? inventoryStreamWriteResult.timedOut : inventoryStreamWriteResult.closed,
+            );
         };
         const handleTimeout = () => {
+            timedOut = true;
+
             if (typeof res.destroy === 'function' && !res.destroyed) {
                 res.destroy();
             }
