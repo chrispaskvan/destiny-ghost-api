@@ -8,6 +8,14 @@ import Destiny2Router from './destiny2.routes.js';
 import Destiny2Controller from './destiny2.controller.js';
 import manifest2Response from '../mocks/manifest2Response.json';
 import configuration from '../helpers/config.js';
+import log from '../helpers/log.js';
+
+vi.mock('../helpers/log.js', () => ({
+    default: {
+        info: vi.fn(),
+        warn: vi.fn(),
+    },
+}));
 
 const { Response: manifest } = manifest2Response;
 const chance = new Chance();
@@ -210,6 +218,76 @@ describe('Destiny2Router', () => {
                 });
             }));
 
+        it('should restore the previous socket timeout when drain resumes streaming', () =>
+            new Promise((done, reject) => {
+                const req = createRequest({
+                    method: 'GET',
+                    url: '/inventory',
+                    query: {},
+                    headers: configuration.notificationHeaders,
+                });
+                const drainEmitter = new EventEmitter();
+                const originalOn = res.on.bind(res);
+                const originalWrite = res.write.bind(res);
+                let writeCalls = 0;
+                const socket = new EventEmitter();
+
+                world.items = [
+                    { hash: 1, displayProperties: { name: 'One' } },
+                    { hash: 2, displayProperties: { name: 'Two' } },
+                ];
+                socket.timeout = 5000;
+                socket.setTimeout = vi.fn(ms => {
+                    socket.timeout = ms;
+                });
+                res.socket = socket;
+                res.on = vi.fn((event, listener) => {
+                    if (event === 'drain') {
+                        drainEmitter.on(event, listener);
+
+                        return drainEmitter;
+                    }
+
+                    originalOn(event, listener);
+
+                    return res;
+                });
+                res.write = vi.fn(chunk => {
+                    writeCalls += 1;
+                    originalWrite(chunk);
+
+                    return writeCalls > 1;
+                });
+
+                res.on('end', () => {
+                    try {
+                        expect(res.statusCode).toEqual(StatusCodes.OK);
+                        expect(res.write).toHaveBeenCalledTimes(3);
+                        expect(socket.setTimeout).toHaveBeenCalledTimes(2);
+                        expect(socket.setTimeout).toHaveBeenNthCalledWith(1, 30 * 1000);
+                        expect(socket.setTimeout).toHaveBeenLastCalledWith(5000);
+                        expect(drainEmitter.listenerCount('drain')).toEqual(0);
+                        expect(JSON.parse(res._getData())).toEqual(world.items);
+                        done();
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
+
+                destiny2Router(req, res, next);
+
+                setImmediate(() => {
+                    try {
+                        expect(res.write).toHaveBeenCalledTimes(1);
+                        expect(drainEmitter.listenerCount('drain')).toEqual(1);
+                        expect(socket.setTimeout).toHaveBeenNthCalledWith(1, 30 * 1000);
+                        drainEmitter.emit('drain');
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
+            }));
+
         it('should stop streaming when the response closes while waiting for drain', () =>
             new Promise((done, reject) => {
                 const req = createRequest({
@@ -226,22 +304,12 @@ describe('Destiny2Router', () => {
                     { hash: 2, displayProperties: { name: 'Two' } },
                 ];
 
+                res.end = vi.fn(res.end.bind(res));
                 res.write = vi.fn(chunk => {
                     writeCalls += 1;
                     originalWrite(chunk);
 
                     return writeCalls > 1;
-                });
-
-                res.on('end', () => {
-                    try {
-                        expect(res.statusCode).toEqual(StatusCodes.OK);
-                        expect(res.write).toHaveBeenCalledTimes(1);
-                        expect(res._getData()).toEqual(`[${JSON.stringify(world.items[0])}`);
-                        done();
-                    } catch (err) {
-                        reject(err);
-                    }
                 });
 
                 destiny2Router(req, res, next);
@@ -253,7 +321,21 @@ describe('Destiny2Router', () => {
                         res.emit('close');
                     } catch (err) {
                         reject(err);
+                        return;
                     }
+
+                    // Allow the async route handler to process the close and return
+                    setImmediate(() => {
+                        try {
+                            expect(res.statusCode).toEqual(StatusCodes.OK);
+                            expect(res.write).toHaveBeenCalledTimes(1);
+                            expect(res.end).not.toHaveBeenCalled();
+                            expect(res._getData()).toEqual(`[${JSON.stringify(world.items[0])}`);
+                            done();
+                        } catch (err) {
+                            reject(err);
+                        }
+                    });
                 });
             }));
 
@@ -274,6 +356,8 @@ describe('Destiny2Router', () => {
                     { hash: 1, displayProperties: { name: 'One' } },
                     { hash: 2, displayProperties: { name: 'Two' } },
                 ];
+                log.warn.mockClear();
+                log.info.mockClear();
                 socket.timeout = 5000;
                 socket.setTimeout = vi.fn(ms => {
                     socket.timeout = ms;
@@ -286,6 +370,7 @@ describe('Destiny2Router', () => {
                     }
                 });
                 res.socket = socket;
+                res.end = vi.fn(res.end.bind(res));
                 res.destroy = vi.fn(err => {
                     if (err) {
                         res.emit('error', err);
@@ -312,6 +397,13 @@ describe('Destiny2Router', () => {
                 expect(res.destroy).toHaveBeenCalledWith();
                 expect(socket.setTimeout).toHaveBeenNthCalledWith(1, 30 * 1000);
                 expect(socket.setTimeout).toHaveBeenLastCalledWith(5000);
+                expect(log.warn).toHaveBeenCalledWith(
+                    expect.stringContaining(
+                        'inventory stream timed out while streaming item 0 of 2',
+                    ),
+                );
+                expect(log.info).not.toHaveBeenCalled();
+                expect(res.end).not.toHaveBeenCalled();
                 expect(res.write).toHaveBeenCalledTimes(1);
                 expect(res._getData()).toEqual(`[${JSON.stringify(world.items[0])}`);
             } finally {

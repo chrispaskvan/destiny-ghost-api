@@ -4,6 +4,7 @@ import nock from 'nock';
 import { StatusCodes } from 'http-status-codes';
 import { Readable } from 'node:stream';
 import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from 'vitest';
+import Destiny2Controller from './destiny2.controller.js';
 import { startServer, stopServer } from '../server.js';
 import configuration from '../helpers/config.js';
 
@@ -177,8 +178,9 @@ describe('/destiny2', () => {
 
                 test('should close a stalled inventory stream after the backpressure idle timeout', async () => {
                     const originalTimeout = process.env.INVENTORY_STREAM_BACKPRESSURE_TIMEOUT_MS;
+                    const closeGuardMs = 6000;
 
-                    process.env.INVENTORY_STREAM_BACKPRESSURE_TIMEOUT_MS = '1000';
+                    process.env.INVENTORY_STREAM_BACKPRESSURE_TIMEOUT_MS = '100';
 
                     try {
                         const readinessResponse = await get('/destiny2/inventory?page=1&size=1', {
@@ -186,6 +188,7 @@ describe('/destiny2', () => {
                         });
 
                         expect(readinessResponse.status).toEqual(StatusCodes.OK);
+                        await readinessResponse.arrayBuffer();
 
                         await new Promise((resolve, reject) => {
                             const request = http.get(
@@ -207,7 +210,7 @@ describe('/destiny2', () => {
                                                 'Expected the stalled inventory stream to close before timing out',
                                             ),
                                         );
-                                    }, 2000);
+                                    }, closeGuardMs);
 
                                     response.once('end', () => {
                                         clearTimeout(timeout);
@@ -249,7 +252,101 @@ describe('/destiny2', () => {
                             process.env.INVENTORY_STREAM_BACKPRESSURE_TIMEOUT_MS = originalTimeout;
                         }
                     }
-                });
+                }, 9000);
+
+                test('should not leak drain listeners while streaming a gzip-compressed inventory response', async () => {
+                    const originalGetInventory = Destiny2Controller.prototype.getInventory;
+                    const warnings = [];
+                    const handleWarning = warning => {
+                        warnings.push(warning);
+                    };
+
+                    Destiny2Controller.prototype.getInventory = async function () {
+                        const items = await originalGetInventory.call(this);
+
+                        if (!items?.length) {
+                            return items;
+                        }
+
+                        return items.map((item, index) => ({
+                            ...item,
+                            // Inflate the streamed payload so gzip backpressure cycles happen within the test window.
+                            flavorText: [
+                                item.flavorText ?? '',
+                                ...(index < 500
+                                    ? Array.from(
+                                          { length: 256 },
+                                          (_, paddingIndex) =>
+                                              `${item.hash}-${index}-${paddingIndex.toString(36)}`,
+                                      )
+                                    : []),
+                            ].join('|'),
+                        }));
+                    };
+                    process.on('warning', handleWarning);
+
+                    try {
+                        const readinessResponse = await get('/destiny2/inventory?page=1&size=1', {
+                            headers: configuration.notificationHeaders,
+                        });
+
+                        expect(readinessResponse.status).toEqual(StatusCodes.OK);
+                        await readinessResponse.arrayBuffer();
+
+                        await new Promise((resolve, reject) => {
+                            const request = http.get(
+                                `${baseUrl}/destiny2/inventory`,
+                                {
+                                    headers: {
+                                        ...configuration.notificationHeaders,
+                                        'Accept-Encoding': 'gzip',
+                                    },
+                                },
+                                async response => {
+                                    try {
+                                        expect(response.statusCode).toEqual(StatusCodes.OK);
+                                        expect(response.headers['content-encoding']).toEqual(
+                                            'gzip',
+                                        );
+                                        response.pause();
+                                        response.socket?.pause();
+                                    } catch (err) {
+                                        reject(err);
+                                        return;
+                                    }
+
+                                    const timeout = setTimeout(() => {
+                                        response.destroy();
+                                    }, 1500);
+
+                                    response.once('error', () => {
+                                        clearTimeout(timeout);
+                                        resolve();
+                                    });
+                                    response.once('close', () => {
+                                        clearTimeout(timeout);
+                                        resolve();
+                                    });
+                                    response.once('end', () => {
+                                        clearTimeout(timeout);
+                                        resolve();
+                                    });
+                                },
+                            );
+
+                            request.on('error', reject);
+                        });
+
+                        expect(
+                            warnings.filter(
+                                warning => warning.name === 'MaxListenersExceededWarning',
+                            ),
+                        ).toEqual([]);
+                    } finally {
+                        Destiny2Controller.prototype.getInventory = originalGetInventory;
+                        process.off('warning', handleWarning);
+                    }
+                }, 9000);
             });
         });
     });
