@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config';
+import { defaultExclude, defineConfig } from 'vitest/config';
 
 export default defineConfig({
     test: {
@@ -12,6 +12,7 @@ export default defineConfig({
                 lines: 82.54,
             },
         },
+        exclude: [...defaultExclude, '**/.claude/**'],
         pool: 'threads',
         sequence: {
             hooks: 'parallel',
