@@ -181,6 +181,12 @@ describe('/destiny2', () => {
                     process.env.INVENTORY_STREAM_BACKPRESSURE_TIMEOUT_MS = '1000';
 
                     try {
+                        const readinessResponse = await get('/destiny2/inventory?page=1&size=1', {
+                            headers: configuration.notificationHeaders,
+                        });
+
+                        expect(readinessResponse.status).toEqual(StatusCodes.OK);
+
                         await new Promise((resolve, reject) => {
                             const request = http.get(
                                 `${baseUrl}/destiny2/inventory`,

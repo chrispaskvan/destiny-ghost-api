@@ -36,6 +36,7 @@ async function writeChunk(res, chunk) {
 
     const drained = await new Promise(resolve => {
         const socket = res.socket;
+        const previousSocketTimeout = socket?.timeout;
         let timeout;
         const handleDrain = () => {
             resolveWith(
@@ -60,7 +61,7 @@ async function writeChunk(res, chunk) {
 
             if (socket?.setTimeout) {
                 socket.off('timeout', handleTimeout);
-                socket.setTimeout(0);
+                socket.setTimeout(previousSocketTimeout ?? 0);
             } else if (timeout) {
                 clearTimeout(timeout);
             }

@@ -273,7 +273,9 @@ describe('Destiny2Router', () => {
                     { hash: 1, displayProperties: { name: 'One' } },
                     { hash: 2, displayProperties: { name: 'Two' } },
                 ];
+                socket.timeout = 5000;
                 socket.setTimeout = vi.fn(ms => {
+                    socket.timeout = ms;
                     clearTimeout(socket.timeoutId);
 
                     if (ms > 0) {
@@ -308,7 +310,7 @@ describe('Destiny2Router', () => {
                 expect(res.destroy).toHaveBeenCalledOnce();
                 expect(res.destroy).toHaveBeenCalledWith();
                 expect(socket.setTimeout).toHaveBeenNthCalledWith(1, 30 * 1000);
-                expect(socket.setTimeout).toHaveBeenLastCalledWith(0);
+                expect(socket.setTimeout).toHaveBeenLastCalledWith(5000);
                 expect(res.write).toHaveBeenCalledTimes(1);
                 expect(res._getData()).toEqual(`[${JSON.stringify(world.items[0])}`);
             } finally {
