@@ -165,10 +165,6 @@ describe('Destiny2Router', () => {
                     originalWrite(chunk);
 
                     if (writeCalls === 1) {
-                        setImmediate(() => {
-                            res.emit('drain');
-                        });
-
                         return false;
                     }
 
@@ -187,6 +183,15 @@ describe('Destiny2Router', () => {
                 });
 
                 destiny2Router(req, res, next);
+
+                setImmediate(() => {
+                    try {
+                        expect(res.write).toHaveBeenCalledTimes(1);
+                        res.emit('drain');
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
             }));
     });
 });

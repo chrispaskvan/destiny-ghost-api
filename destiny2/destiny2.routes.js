@@ -2,7 +2,6 @@
  * Created by chris on 9/25/15.
  */
 import { StatusCodes } from 'http-status-codes';
-import { once } from 'node:events';
 import cors from 'cors';
 import { Router } from 'express';
 import AuthenticationMiddleware from '../authentication/authentication.middleware.js';
@@ -22,7 +21,23 @@ async function writeChunk(res, chunk) {
         return true;
     }
 
-    await Promise.race([once(res, 'drain'), once(res, 'close')]);
+    await new Promise(resolve => {
+        const handleDrain = () => {
+            cleanup();
+            resolve();
+        };
+        const handleClose = () => {
+            cleanup();
+            resolve();
+        };
+        const cleanup = () => {
+            res.off('drain', handleDrain);
+            res.off('close', handleClose);
+        };
+
+        res.on('drain', handleDrain);
+        res.on('close', handleClose);
+    });
 
     return !res.writableEnded && !res.destroyed;
 }
