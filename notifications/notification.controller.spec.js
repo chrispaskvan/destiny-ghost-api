@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import Chance from 'chance';
 import publisher from '../helpers/publisher.js';
 import subscriber from '../helpers/subscriber.js';
@@ -7,7 +7,7 @@ import NotificationError from './notification.error.js';
 import notificationTypes from './notification.types.js';
 import ClaimCheck from '../helpers/claim-check.js';
 import log from '../helpers/log.js';
-import throttle from '../helpers/throttle.js';
+import pThrottle from 'p-throttle';
 
 vi.mock('../helpers/publisher.js');
 vi.mock('../helpers/subscriber.js');
@@ -19,7 +19,9 @@ vi.mock('../helpers/log.js', () => ({
         error: vi.fn(),
     },
 }));
-vi.mock('../helpers/throttle.js');
+vi.mock('p-throttle', () => ({
+    default: vi.fn(() => fn => fn),
+}));
 
 const chance = new Chance();
 const phoneNumber = chance.phone();
@@ -67,6 +69,14 @@ const worldRepository = {
 };
 
 let notificationController;
+let pThrottleInitialCalls;
+
+// pThrottle runs at notification.controller.js module scope, before any
+// beforeEach/clearAllMocks. Capture its call record here so tests can
+// assert the rate-limit configuration without fighting clearAllMocks.
+beforeAll(() => {
+    pThrottleInitialCalls = [...pThrottle.mock.calls];
+});
 
 beforeEach(() => {
     vi.clearAllMocks();
@@ -82,9 +92,6 @@ beforeEach(() => {
     // Setup subscriber mock
     subscriber.listen = vi.fn();
 
-    // Setup throttle mock
-    throttle.mockImplementation(promises => Promise.all(promises));
-
     notificationController = new NotificationController({
         authenticationService,
         destinyService,
@@ -95,6 +102,10 @@ beforeEach(() => {
 });
 
 describe('NotificationController', () => {
+    it('should configure the global rate limiter with limit: 2 and interval: 500', () => {
+        expect(pThrottleInitialCalls).toContainEqual([{ limit: 2, interval: 500 }]);
+    });
+
     describe('create', () => {
         describe('when phone number is provided', () => {
             it('should send notification to specific user and return claim check number', async () => {
@@ -151,8 +162,10 @@ describe('NotificationController', () => {
 
                 const result = await notificationController.create(subscription);
 
+                await new Promise(resolve => setImmediate(resolve));
+
                 expect(userService.getSubscribedUsers).toHaveBeenCalledWith(subscription);
-                expect(throttle).toHaveBeenCalledWith(expect.any(Array), 2, 500);
+                expect(publisher.sendNotification).toHaveBeenCalledTimes(numberOfSubscribedUsers);
                 expect(result).toBe(claimCheckNumber);
             });
         });
