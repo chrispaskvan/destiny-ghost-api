@@ -21,14 +21,14 @@ async function writeChunk(res, chunk) {
         return true;
     }
 
-    await new Promise(resolve => {
+    const drained = await new Promise(resolve => {
         const handleDrain = () => {
             cleanup();
-            resolve();
+            resolve(true);
         };
         const handleClose = () => {
             cleanup();
-            resolve();
+            resolve(false);
         };
         const cleanup = () => {
             res.off('drain', handleDrain);
@@ -39,7 +39,7 @@ async function writeChunk(res, chunk) {
         res.on('close', handleClose);
     });
 
-    return !res.writableEnded && !res.destroyed;
+    return drained && !res.writableEnded && !res.destroyed;
 }
 
 /**

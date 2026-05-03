@@ -193,5 +193,50 @@ describe('Destiny2Router', () => {
                     }
                 });
             }));
+
+        it('should stop streaming when the response closes while waiting for drain', () =>
+            new Promise((done, reject) => {
+                const req = createRequest({
+                    method: 'GET',
+                    url: '/inventory',
+                    query: {},
+                });
+                const originalWrite = res.write.bind(res);
+                let writeCalls = 0;
+
+                world.items = [
+                    { hash: 1, displayProperties: { name: 'One' } },
+                    { hash: 2, displayProperties: { name: 'Two' } },
+                ];
+
+                res.write = vi.fn(chunk => {
+                    writeCalls += 1;
+                    originalWrite(chunk);
+
+                    return writeCalls > 1;
+                });
+
+                res.on('end', () => {
+                    try {
+                        expect(res.statusCode).toEqual(StatusCodes.OK);
+                        expect(res.write).toHaveBeenCalledTimes(1);
+                        expect(res._getData()).toEqual(`[${JSON.stringify(world.items[0])}`);
+                        done();
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
+
+                destiny2Router(req, res, next);
+
+                setImmediate(() => {
+                    try {
+                        expect(res.write).toHaveBeenCalledTimes(1);
+                        res.emit('close');
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
+            }));
     });
 });
