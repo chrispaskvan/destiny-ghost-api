@@ -12,45 +12,77 @@ import toTemporalInstant from '../helpers/to-temporal-instant.js';
 
 import configuration from '../helpers/config.js';
 
-const inventoryStreamBackpressureTimeoutMs = 30 * 1000;
+const inventoryStreamBackpressureIdleTimeoutMs = 30 * 1000;
+const inventoryStreamWriteResult = Object.freeze({
+    closed: 'closed',
+    ok: 'ok',
+    timedOut: 'timed_out',
+});
+
+function getInventoryStreamBackpressureIdleTimeoutMs() {
+    const value = Number.parseInt(process.env.INVENTORY_STREAM_BACKPRESSURE_TIMEOUT_MS, 10);
+
+    return Number.isFinite(value) && value > 0 ? value : inventoryStreamBackpressureIdleTimeoutMs;
+}
 
 async function writeChunk(res, chunk) {
     if (res.writableEnded || res.destroyed) {
-        return false;
+        return inventoryStreamWriteResult.closed;
     }
 
     if (res.write(chunk)) {
-        return true;
+        return inventoryStreamWriteResult.ok;
     }
 
     const drained = await new Promise(resolve => {
-        const timeout = setTimeout(() => {
-            cleanup();
+        const socket = res.socket;
+        let timeout;
+        const handleDrain = () => {
+            resolveWith(
+                res.writableEnded || res.destroyed
+                    ? inventoryStreamWriteResult.closed
+                    : inventoryStreamWriteResult.ok,
+            );
+        };
+        const handleClose = () => {
+            resolveWith(inventoryStreamWriteResult.closed);
+        };
+        const handleTimeout = () => {
             if (typeof res.destroy === 'function' && !res.destroyed) {
                 res.destroy();
             }
-            resolve(false);
-        }, inventoryStreamBackpressureTimeoutMs);
-        const handleDrain = () => {
-            cleanup();
-            resolve(true);
-        };
-        const handleClose = () => {
-            cleanup();
-            resolve(false);
+
+            resolveWith(inventoryStreamWriteResult.timedOut);
         };
         const cleanup = () => {
-            clearTimeout(timeout);
             res.off('drain', handleDrain);
             res.off('close', handleClose);
+
+            if (socket?.setTimeout) {
+                socket.off('timeout', handleTimeout);
+                socket.setTimeout(0);
+            } else if (timeout) {
+                clearTimeout(timeout);
+            }
+        };
+        const resolveWith = result => {
+            cleanup();
+            resolve(result);
         };
 
-        timeout.unref?.();
         res.on('drain', handleDrain);
         res.on('close', handleClose);
+
+        if (socket?.setTimeout) {
+            socket.setTimeout(getInventoryStreamBackpressureIdleTimeoutMs());
+            socket.on('timeout', handleTimeout);
+        } else {
+            timeout = setTimeout(handleTimeout, getInventoryStreamBackpressureIdleTimeoutMs());
+            timeout.unref?.();
+        }
     });
 
-    return drained && !res.writableEnded && !res.destroyed;
+    return drained;
 }
 
 /**
@@ -165,12 +197,19 @@ const routes = ({ authenticationController, destiny2Controller }) => {
                     return res.end();
                 }
 
-                const canContinue = await writeChunk(
+                const writeResult = await writeChunk(
                     res,
                     first ? `[${JSON.stringify(item)}` : `,${JSON.stringify(item)}`,
                 );
 
-                if (!canContinue) {
+                if (writeResult !== inventoryStreamWriteResult.ok) {
+                    if (writeResult === inventoryStreamWriteResult.timedOut) {
+                        log.warn(
+                            `${req.method} ${req.url} inventory stream timed out while waiting for drain at item ${index} of ${items.length}`,
+                        );
+                        return;
+                    }
+
                     log.info(
                         `${req.method} ${req.url} request closed while streaming item ${index} of ${items.length}`,
                     );
@@ -182,7 +221,16 @@ const routes = ({ authenticationController, destiny2Controller }) => {
                 await new Promise(resolve => setImmediate(resolve));
             }
 
-            if (!(await writeChunk(res, ']'))) {
+            const writeResult = await writeChunk(res, ']');
+
+            if (writeResult !== inventoryStreamWriteResult.ok) {
+                if (writeResult === inventoryStreamWriteResult.timedOut) {
+                    log.warn(
+                        `${req.method} ${req.url} inventory stream timed out before completion`,
+                    );
+                    return;
+                }
+
                 log.info(`${req.method} ${req.url} request closed before inventory completed`);
                 return res.end();
             }

@@ -267,11 +267,22 @@ describe('Destiny2Router', () => {
                     headers: configuration.notificationHeaders,
                 });
                 const originalWrite = res.write.bind(res);
+                const socket = new EventEmitter();
 
                 world.items = [
                     { hash: 1, displayProperties: { name: 'One' } },
                     { hash: 2, displayProperties: { name: 'Two' } },
                 ];
+                socket.setTimeout = vi.fn(ms => {
+                    clearTimeout(socket.timeoutId);
+
+                    if (ms > 0) {
+                        socket.timeoutId = setTimeout(() => {
+                            socket.emit('timeout');
+                        }, ms);
+                    }
+                });
+                res.socket = socket;
                 res.destroy = vi.fn(err => {
                     if (err) {
                         res.emit('error', err);
@@ -286,7 +297,7 @@ describe('Destiny2Router', () => {
                 });
 
                 const responseComplete = new Promise((resolve, reject) => {
-                    res.on('end', resolve);
+                    res.on('close', resolve);
                     res.on('error', reject);
                 });
 
@@ -296,6 +307,8 @@ describe('Destiny2Router', () => {
 
                 expect(res.destroy).toHaveBeenCalledOnce();
                 expect(res.destroy).toHaveBeenCalledWith();
+                expect(socket.setTimeout).toHaveBeenNthCalledWith(1, 30 * 1000);
+                expect(socket.setTimeout).toHaveBeenLastCalledWith(0);
                 expect(res.write).toHaveBeenCalledTimes(1);
                 expect(res._getData()).toEqual(`[${JSON.stringify(world.items[0])}`);
             } finally {

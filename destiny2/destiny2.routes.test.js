@@ -1,4 +1,5 @@
 import streamArray from 'stream-json/streamers/stream-array.js';
+import http from 'node:http';
 import nock from 'nock';
 import { StatusCodes } from 'http-status-codes';
 import { Readable } from 'node:stream';
@@ -172,6 +173,77 @@ describe('/destiny2', () => {
                     controller.abort();
 
                     await expect(readPromise).rejects.toMatchObject({ name: 'AbortError' });
+                });
+
+                test('should close a stalled inventory stream after the backpressure idle timeout', async () => {
+                    const originalTimeout = process.env.INVENTORY_STREAM_BACKPRESSURE_TIMEOUT_MS;
+
+                    process.env.INVENTORY_STREAM_BACKPRESSURE_TIMEOUT_MS = '1000';
+
+                    try {
+                        await new Promise((resolve, reject) => {
+                            const request = http.get(
+                                `${baseUrl}/destiny2/inventory`,
+                                { headers: configuration.notificationHeaders },
+                                async response => {
+                                    try {
+                                        expect(response.statusCode).toEqual(StatusCodes.OK);
+                                        response.pause();
+                                        response.socket?.pause();
+                                    } catch (err) {
+                                        reject(err);
+                                        return;
+                                    }
+
+                                    const timeout = setTimeout(() => {
+                                        reject(
+                                            new Error(
+                                                'Expected the stalled inventory stream to close before timing out',
+                                            ),
+                                        );
+                                    }, 5000);
+
+                                    response.once('end', () => {
+                                        clearTimeout(timeout);
+                                        reject(
+                                            new Error(
+                                                'Expected the stalled inventory stream to close before ending',
+                                            ),
+                                        );
+                                    });
+                                    response.once('error', err => {
+                                        clearTimeout(timeout);
+
+                                        try {
+                                            expect(err.message).toEqual('aborted');
+                                            expect(response.complete).toEqual(false);
+                                            resolve();
+                                        } catch (assertionErr) {
+                                            reject(assertionErr);
+                                        }
+                                    });
+                                    response.once('close', () => {
+                                        clearTimeout(timeout);
+
+                                        try {
+                                            expect(response.complete).toEqual(false);
+                                            resolve();
+                                        } catch (err) {
+                                            reject(err);
+                                        }
+                                    });
+                                },
+                            );
+
+                            request.on('error', reject);
+                        });
+                    } finally {
+                        if (originalTimeout === undefined) {
+                            delete process.env.INVENTORY_STREAM_BACKPRESSURE_TIMEOUT_MS;
+                        } else {
+                            process.env.INVENTORY_STREAM_BACKPRESSURE_TIMEOUT_MS = originalTimeout;
+                        }
+                    }
                 });
             });
         });
