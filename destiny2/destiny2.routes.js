@@ -2,6 +2,7 @@
  * Created by chris on 9/25/15.
  */
 import { StatusCodes } from 'http-status-codes';
+import { once } from 'node:events';
 import cors from 'cors';
 import { Router } from 'express';
 import AuthenticationMiddleware from '../authentication/authentication.middleware.js';
@@ -11,6 +12,20 @@ import log from '../helpers/log.js';
 import toTemporalInstant from '../helpers/to-temporal-instant.js';
 
 import configuration from '../helpers/config.js';
+
+async function writeChunk(res, chunk) {
+    if (res.writableEnded || res.destroyed) {
+        return false;
+    }
+
+    if (res.write(chunk)) {
+        return true;
+    }
+
+    await Promise.race([once(res, 'drain'), once(res, 'close')]);
+
+    return !res.writableEnded && !res.destroyed;
+}
 
 /**
  * @openapi
@@ -124,13 +139,28 @@ const routes = ({ authenticationController, destiny2Controller }) => {
                     return res.end();
                 }
 
-                res.write(first ? `[${JSON.stringify(item)}` : `,${JSON.stringify(item)}`);
+                const canContinue = await writeChunk(
+                    res,
+                    first ? `[${JSON.stringify(item)}` : `,${JSON.stringify(item)}`,
+                );
+
+                if (!canContinue) {
+                    log.info(
+                        `${req.method} ${req.url} request closed while streaming item ${index} of ${items.length}`,
+                    );
+                    return res.end();
+                }
                 first = false;
 
                 // Introduce a delay to allow the event loop to process the 'close' event
                 await new Promise(resolve => setImmediate(resolve));
             }
-            res.write(']');
+
+            if (!(await writeChunk(res, ']'))) {
+                log.info(`${req.method} ${req.url} request closed before inventory completed`);
+                return res.end();
+            }
+
             res.end();
         } else {
             if (Number.isNaN(page)) page = 1;

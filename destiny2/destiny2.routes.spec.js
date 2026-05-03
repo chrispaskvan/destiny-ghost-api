@@ -4,9 +4,14 @@ import { StatusCodes } from 'http-status-codes';
 import Chance from 'chance';
 import { createResponse, createRequest } from 'node-mocks-http';
 
+vi.mock('../authorization/authorization.middleware.js', () => ({
+    default: vi.fn((_req, _res, next) => next()),
+}));
+
 import Destiny2Router from './destiny2.routes.js';
 import Destiny2Controller from './destiny2.controller.js';
 import manifest2Response from '../mocks/manifest2Response.json';
+import authorizeUser from '../authorization/authorization.middleware.js';
 
 const { Response: manifest } = manifest2Response;
 const chance = new Chance();
@@ -64,6 +69,7 @@ describe('Destiny2Router', () => {
         res = createResponse({
             eventEmitter: EventEmitter,
         });
+        authorizeUser.mockImplementation((_req, _res, next) => next());
     });
 
     describe('getCharacters', () => {
@@ -136,5 +142,51 @@ describe('Destiny2Router', () => {
                     destiny2Router(req, res, next);
                 }));
         });
+    });
+
+    describe('getInventory', () => {
+        it('should wait for drain when the response stream applies backpressure', () =>
+            new Promise((done, reject) => {
+                const req = createRequest({
+                    method: 'GET',
+                    url: '/inventory',
+                    query: {},
+                });
+                const originalWrite = res.write.bind(res);
+                let writeCalls = 0;
+
+                world.items = [
+                    { hash: 1, displayProperties: { name: 'One' } },
+                    { hash: 2, displayProperties: { name: 'Two' } },
+                ];
+
+                res.write = vi.fn(chunk => {
+                    writeCalls += 1;
+                    originalWrite(chunk);
+
+                    if (writeCalls === 1) {
+                        setImmediate(() => {
+                            res.emit('drain');
+                        });
+
+                        return false;
+                    }
+
+                    return true;
+                });
+
+                res.on('end', () => {
+                    try {
+                        expect(res.statusCode).toEqual(StatusCodes.OK);
+                        expect(res.write).toHaveBeenCalledTimes(3);
+                        expect(JSON.parse(res._getData())).toEqual(world.items);
+                        done();
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
+
+                destiny2Router(req, res, next);
+            }));
     });
 });
