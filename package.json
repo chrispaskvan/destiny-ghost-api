@@ -9,12 +9,12 @@
         "format": "remark . --quiet --frail --output",
         "lint": "biome check --write .",
         "lint:ci": "biome check .",
-        "start:production": "NODE_ENV=production node --harmony-temporal --permission --allow-fs-read=./ --allow-fs-read=/agents/ --allow-fs-write=./databases --allow-fs-write=/var/ --allow-worker --allow-addons --disable-warning=SecurityWarning --disable-warning=ExperimentalWarning --import=./helpers/permission-model-patch.js -r dotenv/config --max-old-space-size=8192 --unhandled-rejections=strict start.js",
+        "start:production": "NODE_ENV=production node --permission --allow-fs-read=./ --allow-fs-read=/agents/ --allow-fs-write=./databases --allow-fs-write=/var/ --allow-worker --allow-addons --disable-warning=SecurityWarning --import=./helpers/permission-model-patch.js -r dotenv/config --max-old-space-size=8192 --unhandled-rejections=strict start.js",
         "start:dev": "NODE_ENV=development pnpm start",
-        "start": "node --harmony-temporal --disable-warning=ExperimentalWarning -r dotenv/config --max-old-space-size=8192 --unhandled-rejections=strict start.js",
+        "start": "node -r dotenv/config --max-old-space-size=8192 --unhandled-rejections=strict start.js",
         "swagger": "rm -f openapi.json && swagger-jsdoc -d openapi.cjs ./**/*.routes.js -o openapi.json",
         "test": "pnpm test:watch --run",
-        "test:watch": "NODE_ENV=test node --harmony-temporal -r dotenv/config node_modules/vitest/vitest.mjs",
+        "test:watch": "NODE_ENV=test node -r dotenv/config node_modules/vitest/vitest.mjs",
         "prepare": "husky || true",
         "typecheck": "tsc --noEmit -p jsconfig.json"
     },
@@ -25,7 +25,7 @@
         "url": "git+https://github.com/chrispaskvan/destiny-ghost-api"
     },
     "engines": {
-        "node": ">=24.16.0 <25",
+        "node": ">=26.0.0",
         "pnpm": ">=10.0.0"
     },
     "packageManager": "pnpm@10.33.0",

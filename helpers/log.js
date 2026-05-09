@@ -23,11 +23,8 @@ if (process.env.NODE_ENV !== 'production') {
         transport: {
             target: 'pino-pretty',
             worker: {
-                // Worker threads do not support V8 flags like --max-old-space-size or any --harmony* flags.
-                // This intentionally strips flags such as --harmony-temporal that may be used by the main process.
-                execArgv: process.execArgv.filter(
-                    arg => !arg.startsWith('--max-old-space-size') && !arg.startsWith('--harmony'),
-                ),
+                // Worker threads do not support --max-old-space-size.
+                execArgv: process.execArgv.filter(arg => !arg.startsWith('--max-old-space-size')),
             },
         },
         ...productionOnlyOptions,
