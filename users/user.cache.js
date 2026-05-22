@@ -93,7 +93,11 @@ class UserCache {
         if (user) {
             const { displayName, membershipId, membershipType } = user;
 
-            if (!membershipId && typeof displayName === 'string' && typeof membershipType === 'number') {
+            if (
+                !membershipId &&
+                typeof displayName === 'string' &&
+                typeof membershipType === 'number'
+            ) {
                 return await this.getUser(displayName, membershipType);
             }
 

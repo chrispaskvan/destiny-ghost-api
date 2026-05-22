@@ -276,7 +276,7 @@ class UserService {
      * Delete a message.
      * @param {string} messageId
      * @param {string} phoneNumber
-     * @returns {Promise<void>}
+     * @returns {Promise<import('@azure/cosmos').ItemResponse<Record<string, unknown>>>}
      */
     async #deleteMessage(messageId, phoneNumber) {
         return await this.documents.deleteDocumentById(messageCollectionId, messageId, phoneNumber);
@@ -286,7 +286,7 @@ class UserService {
      * Delete a user.
      * @param {string} documentId
      * @param {number} membershipType
-     * @returns {Promise<void>}
+     * @returns {Promise<import('@azure/cosmos').ItemResponse<Record<string, unknown>>>}
      */
     // biome-ignore lint/correctness/noUnusedPrivateClassMembers: future use
     async #deleteUser(documentId, membershipType) {
@@ -310,16 +310,16 @@ class UserService {
         const delivered = new Set();
 
         for (const message of messages) {
-            const wasDelivered =
-                delivered.has(message.SmsSid) ||
-                (
-                    await this.documents.getDocuments(
-                        messageCollectionId,
-                        `SELECT * FROM c WHERE c.SmsSid = '${message.SmsSid}' AND c.SmsStatus = 'delivered'`,
-                    )
-                ).length > 0;
+            if (delivered.has(message.SmsSid)) {
+                continue;
+            }
 
-            if (wasDelivered) {
+            const dbResults = await this.documents.getDocuments(
+                messageCollectionId,
+                `SELECT * FROM c WHERE c.SmsSid = '${message.SmsSid}' AND c.SmsStatus = 'delivered'`,
+            );
+
+            if (dbResults.length > 0) {
                 delivered.add(message.SmsSid);
                 this.#deleteMessage(message.id, message.To);
                 log.warn(message, 'Deleted message.');
@@ -404,9 +404,10 @@ class UserService {
             return Promise.reject(err);
         }
 
-        let user = /** @type {import('../helpers/documents.js').CosmosDocument<User> | undefined} */ (
-            await this.cacheService.getUser(displayName, membershipType)
-        );
+        let user =
+            /** @type {import('../helpers/documents.js').CosmosDocument<User> | undefined} */ (
+                await this.cacheService.getUser(displayName, membershipType)
+            );
 
         if (!skipCache && user) {
             return user;
@@ -416,7 +417,10 @@ class UserService {
         const documents = /** @type {import('../helpers/documents.js').CosmosDocument<User>[]} */ (
             await this.documents.getDocuments(
                 userCollectionId,
-                qb.where('displayName', displayName).where('membershipType', membershipType).getQuery(),
+                qb
+                    .where('displayName', displayName)
+                    .where('membershipType', membershipType)
+                    .getQuery(),
             )
         );
 
@@ -445,9 +449,10 @@ class UserService {
             return Promise.reject(new Error('emailAddress string is required'));
         }
 
-        let user = /** @type {import('../helpers/documents.js').CosmosDocument<User> | undefined} */ (
-            await this.cacheService.getUser(emailAddress)
-        );
+        let user =
+            /** @type {import('../helpers/documents.js').CosmosDocument<User> | undefined} */ (
+                await this.cacheService.getUser(emailAddress)
+            );
 
         if (user) {
             return user;
@@ -516,10 +521,7 @@ class UserService {
 
         const qb = new QueryBuilder();
         const documents = /** @type {import('../helpers/documents.js').CosmosDocument<User>[]} */ (
-            await this.documents.getDocuments(
-                userCollectionId,
-                qb.where('id', userId).getQuery(),
-            )
+            await this.documents.getDocuments(userCollectionId, qb.where('id', userId).getQuery())
         );
         if (documents) {
             if (documents.length > 1) {
@@ -572,9 +574,10 @@ class UserService {
             return Promise.reject(Error('phoneNumber string is required'));
         }
 
-        let user = /** @type {import('../helpers/documents.js').CosmosDocument<User> | undefined} */ (
-            await this.cacheService.getUser(phoneNumber)
-        );
+        let user =
+            /** @type {import('../helpers/documents.js').CosmosDocument<User> | undefined} */ (
+                await this.cacheService.getUser(phoneNumber)
+            );
 
         if (user) {
             return user;

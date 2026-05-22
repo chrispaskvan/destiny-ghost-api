@@ -65,11 +65,11 @@ class Documents {
      * @param {string} collectionId
      * @param {string} documentId
      * @param {string | number} partitionKey
-     * @returns {Promise<void>}
+     * @returns {Promise<import('@azure/cosmos').ItemResponse<Record<string, unknown>>>}
      */
     async deleteDocumentById(collectionId, documentId, partitionKey) {
         const container = await this.#getCollection(collectionId);
-        await container.item(documentId, partitionKey).delete();
+        return await container.item(documentId, partitionKey).delete();
     }
 
     /**

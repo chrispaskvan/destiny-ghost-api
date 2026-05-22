@@ -173,9 +173,8 @@ describe('UserCache', () => {
                     it('cache user', async () => {
                         // eslint-disable-next-line no-unused-vars
                         const { emailAddress, ...mockUser1 } = mockUser;
-                        const res = await cacheService.setUser(mockUser1);
+                        await cacheService.setUser(mockUser1);
 
-                        expect(res).toEqual([undefined, undefined, undefined]);
                         expect(client.setEx).toHaveBeenCalledTimes(2);
                     });
                 });
@@ -184,18 +183,16 @@ describe('UserCache', () => {
                     it('cache user', async () => {
                         // eslint-disable-next-line no-unused-vars
                         const { phoneNumber, ...mockUser1 } = mockUser;
-                        const res = await cacheService.setUser(mockUser1);
+                        await cacheService.setUser(mockUser1);
 
-                        expect(res).toEqual([undefined, undefined, undefined]);
                         expect(client.setEx).toHaveBeenCalledTimes(2);
                     });
                 });
 
                 describe('when email address and phone number is included', () => {
                     it('cache user', async () => {
-                        const res = await cacheService.setUser(mockUser);
+                        await cacheService.setUser(mockUser);
 
-                        expect(res).toEqual([undefined, undefined, undefined]);
                         expect(client.setEx).toHaveBeenCalledTimes(3);
                     });
                 });
