@@ -23,6 +23,15 @@ const bungieTokenSchema = z.object({
 });
 
 /**
+ * Schema for a persisted Bungie token on a user document. Less strict than
+ * bungieTokenSchema because legacy documents may only carry access_token.
+ * @private
+ */
+const storedBungieTokenSchema = bungieTokenSchema.partial().required({
+    access_token: true,
+});
+
+/**
  * Schema for anonymous users.
  * @private
  */
@@ -79,7 +88,7 @@ const userSchema = z.object({
     phoneNumber: z.string(),
     roles: z.array(z.string()).default(['User']),
     type: z.string().optional(),
-    bungie: bungieTokenSchema.optional(),
+    bungie: storedBungieTokenSchema.optional(),
 });
 
 /**
