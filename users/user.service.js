@@ -303,28 +303,31 @@ class UserService {
      * @returns {Promise<void>}
      */
     async deleteUserMessages(phoneNumber) {
-        const messages = await this.documents.getDocuments(
-            messageCollectionId,
-            `SELECT * FROM c WHERE c.SmsStatus != 'delivered' AND c.To = '${phoneNumber}'`,
-        );
+        const messages = await this.documents.getDocuments(messageCollectionId, {
+            query: "SELECT * FROM c WHERE c.SmsStatus != 'delivered' AND c.To = @phoneNumber",
+            parameters: [{ name: '@phoneNumber', value: phoneNumber }],
+        });
         const delivered = new Set();
+        const deletes = [];
 
         for (const message of messages) {
             if (delivered.has(message.SmsSid)) {
                 continue;
             }
 
-            const dbResults = await this.documents.getDocuments(
-                messageCollectionId,
-                `SELECT * FROM c WHERE c.SmsSid = '${message.SmsSid}' AND c.SmsStatus = 'delivered'`,
-            );
+            const dbResults = await this.documents.getDocuments(messageCollectionId, {
+                query: "SELECT * FROM c WHERE c.SmsSid = @smsSid AND c.SmsStatus = 'delivered'",
+                parameters: [{ name: '@smsSid', value: message.SmsSid }],
+            });
 
             if (dbResults.length > 0) {
                 delivered.add(message.SmsSid);
-                this.#deleteMessage(message.id, message.To);
+                deletes.push(this.#deleteMessage(message.id, message.To));
                 log.warn(message, 'Deleted message.');
             }
         }
+
+        await Promise.all(deletes);
     }
 
     /**
@@ -404,13 +407,18 @@ class UserService {
             return Promise.reject(err);
         }
 
-        let user =
-            /** @type {import('../helpers/documents.js').CosmosDocument<User> | undefined} */ (
-                await this.cacheService.getUser(displayName, membershipType)
-            );
+        /** @type {import('../helpers/documents.js').CosmosDocument<User> | undefined} */
+        let user;
 
-        if (!skipCache && user) {
-            return user;
+        if (!skipCache) {
+            user =
+                /** @type {import('../helpers/documents.js').CosmosDocument<User> | undefined} */ (
+                    await this.cacheService.getUser(displayName, membershipType)
+                );
+
+            if (user) {
+                return user;
+            }
         }
 
         const qb = new QueryBuilder();
@@ -494,17 +502,13 @@ class UserService {
                 qb.where('membership.tokens.blob', emailAddressToken).getQuery(),
             )
         );
-        if (documents) {
-            if (documents.length > 1) {
-                throw new Error(
-                    `more than 1 document found for emailAddressToken ${emailAddressToken}`,
-                );
-            }
-
-            return documents[0];
+        if (documents.length > 1) {
+            throw new Error(
+                `more than 1 document found for emailAddressToken ${emailAddressToken}`,
+            );
         }
 
-        throw new Error('documents undefined');
+        return documents[0];
     }
 
     /**
@@ -625,7 +629,7 @@ class UserService {
         if (user) {
             const mergedUser = { ...user, ...anonymousUser };
             return await this.documents
-                .updateDocument(userCollectionId, mergedUser)
+                .updateDocument(userCollectionId, mergedUser, mergedUser.membershipType)
                 .then(() => this.cacheService.setUser(mergedUser));
         }
 
