@@ -47,12 +47,13 @@ class UserCache {
 
     /**
      * Delete all cache entries associated with a user.
-     * @param {{ displayName?: string, membershipType?: number, phoneNumber?: string }} user
-     * @returns {Promise<[number | void, number | void]>}
+     * @param {{ displayName?: string, emailAddress?: string, membershipType?: number, phoneNumber?: string }} user
+     * @returns {Promise<[number | void, number | void, number | void]>}
      */
-    deleteUser({ displayName, membershipType, phoneNumber }) {
+    deleteUser({ displayName, emailAddress, membershipType, phoneNumber }) {
         let promise1;
         let promise2;
+        let promise3;
 
         if (phoneNumber) {
             promise1 = this.#deleteCache(UserCache.#getCacheKey(phoneNumber));
@@ -66,7 +67,13 @@ class UserCache {
             promise2 = Promise.resolve();
         }
 
-        return Promise.all([promise1, promise2]);
+        if (emailAddress) {
+            promise3 = this.#deleteCache(UserCache.#getCacheKey(emailAddress));
+        } else {
+            promise3 = Promise.resolve();
+        }
+
+        return Promise.all([promise1, promise2, promise3]);
     }
 
     /**

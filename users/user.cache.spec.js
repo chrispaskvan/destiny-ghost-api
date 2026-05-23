@@ -21,8 +21,8 @@ describe('UserCache', () => {
             it('delete user', async () => {
                 const res = await cacheService.deleteUser(mockUser);
 
-                expect(res).toEqual([1, 1]);
-                expect(client.del).toHaveBeenCalledTimes(2);
+                expect(res).toEqual([1, 1, 1]);
+                expect(client.del).toHaveBeenCalledTimes(3);
             });
         });
 
@@ -30,7 +30,7 @@ describe('UserCache', () => {
             it('delete user', async () => {
                 const res = await cacheService.deleteUser({});
 
-                expect(res).toEqual([undefined, undefined]);
+                expect(res).toEqual([undefined, undefined, undefined]);
                 expect(client.del).not.toHaveBeenCalled();
             });
         });

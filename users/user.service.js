@@ -469,7 +469,7 @@ class UserService {
             if (documents.length > 1) {
                 throw new Error(`more than 1 document found for emailAddress ${emailAddress}`);
             }
-            this.cacheService.setUser(documents[0]);
+            await this.cacheService.setUser(documents[0]);
 
             [user] = documents;
         }
@@ -594,7 +594,7 @@ class UserService {
             if (documents.length > 1) {
                 throw new Error(`more than 1 document found for phoneNumber ${phoneNumber}`);
             }
-            this.cacheService.setUser(documents[0]);
+            await this.cacheService.setUser(documents[0]);
 
             [user] = documents;
         }
