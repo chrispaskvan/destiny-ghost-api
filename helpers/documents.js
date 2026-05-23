@@ -97,12 +97,9 @@ class Documents {
      */
     async updateDocument(collectionId, document, partitionKey) {
         const container = await this.#getCollection(collectionId);
-        const options = {
-            accessCondition: {
-                type: 'IfMatch',
-                condition: document._etag,
-            },
-        };
+        const options = document._etag
+            ? { accessCondition: { type: 'IfMatch', condition: document._etag } }
+            : {};
         const { resource: updatedDocument } = await container
             .item(document.id, partitionKey)
             .replace(document, options);

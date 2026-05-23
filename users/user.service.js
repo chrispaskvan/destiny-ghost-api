@@ -229,6 +229,8 @@ class UserService {
         } catch (err) {
             if (err instanceof z.ZodError) {
                 issues = [...issues, ...err.issues];
+            } else {
+                return Promise.reject(err);
             }
         }
 
@@ -238,6 +240,8 @@ class UserService {
             } catch (err) {
                 if (err instanceof z.ZodError) {
                     issues = [...issues, ...err.issues];
+                } else {
+                    throw err;
                 }
             }
         });
@@ -312,10 +316,14 @@ class UserService {
      * @returns {Promise<void>}
      */
     async deleteUserMessages(phoneNumber) {
-        const messages = await this.documents.getDocuments(messageCollectionId, {
-            query: "SELECT * FROM c WHERE c.SmsStatus != 'delivered' AND c.To = @phoneNumber",
-            parameters: [{ name: '@phoneNumber', value: phoneNumber }],
-        });
+        const messages = await this.documents.getDocuments(
+            messageCollectionId,
+            {
+                query: "SELECT * FROM c WHERE c.SmsStatus != 'delivered' AND c.To = @phoneNumber",
+                parameters: [{ name: '@phoneNumber', value: phoneNumber }],
+            },
+            { partitionKey: phoneNumber },
+        );
         const delivered = new Set();
         const deletes = [];
 
@@ -324,10 +332,14 @@ class UserService {
                 continue;
             }
 
-            const dbResults = await this.documents.getDocuments(messageCollectionId, {
-                query: "SELECT * FROM c WHERE c.SmsSid = @smsSid AND c.SmsStatus = 'delivered'",
-                parameters: [{ name: '@smsSid', value: message.SmsSid }],
-            });
+            const dbResults = await this.documents.getDocuments(
+                messageCollectionId,
+                {
+                    query: "SELECT * FROM c WHERE c.SmsSid = @smsSid AND c.SmsStatus = 'delivered'",
+                    parameters: [{ name: '@smsSid', value: message.SmsSid }],
+                },
+                { partitionKey: message.To },
+            );
 
             if (dbResults.length > 0) {
                 delivered.add(message.SmsSid);
