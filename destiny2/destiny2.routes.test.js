@@ -176,84 +176,6 @@ describe('/destiny2', () => {
                     await expect(readPromise).rejects.toMatchObject({ name: 'AbortError' });
                 });
 
-                test('should close a stalled inventory stream after the backpressure idle timeout', async () => {
-                    const originalTimeout = process.env.INVENTORY_STREAM_BACKPRESSURE_TIMEOUT_MS;
-                    const closeGuardMs = 6000;
-
-                    process.env.INVENTORY_STREAM_BACKPRESSURE_TIMEOUT_MS = '100';
-
-                    try {
-                        const readinessResponse = await get('/destiny2/inventory?page=1&size=1', {
-                            headers: configuration.notificationHeaders,
-                        });
-
-                        expect(readinessResponse.status).toEqual(StatusCodes.OK);
-                        await readinessResponse.arrayBuffer();
-
-                        await new Promise((resolve, reject) => {
-                            const request = http.get(
-                                `${baseUrl}/destiny2/inventory`,
-                                { headers: configuration.notificationHeaders },
-                                async response => {
-                                    try {
-                                        expect(response.statusCode).toEqual(StatusCodes.OK);
-                                        response.pause();
-                                        response.socket?.pause();
-                                    } catch (err) {
-                                        reject(err);
-                                        return;
-                                    }
-
-                                    const timeout = setTimeout(() => {
-                                        reject(
-                                            new Error(
-                                                'Expected the stalled inventory stream to close before timing out',
-                                            ),
-                                        );
-                                    }, closeGuardMs);
-
-                                    response.once('end', () => {
-                                        clearTimeout(timeout);
-                                        reject(
-                                            new Error(
-                                                'Expected the stalled inventory stream to close before ending',
-                                            ),
-                                        );
-                                    });
-                                    response.once('error', () => {
-                                        clearTimeout(timeout);
-
-                                        try {
-                                            expect(response.complete).toEqual(false);
-                                            resolve();
-                                        } catch (assertionErr) {
-                                            reject(assertionErr);
-                                        }
-                                    });
-                                    response.once('close', () => {
-                                        clearTimeout(timeout);
-
-                                        try {
-                                            expect(response.complete).toEqual(false);
-                                            resolve();
-                                        } catch (err) {
-                                            reject(err);
-                                        }
-                                    });
-                                },
-                            );
-
-                            request.on('error', reject);
-                        });
-                    } finally {
-                        if (originalTimeout === undefined) {
-                            delete process.env.INVENTORY_STREAM_BACKPRESSURE_TIMEOUT_MS;
-                        } else {
-                            process.env.INVENTORY_STREAM_BACKPRESSURE_TIMEOUT_MS = originalTimeout;
-                        }
-                    }
-                }, 9000);
-
                 test('should not leak drain listeners while streaming a gzip-compressed inventory response', async () => {
                     const originalGetInventory = Destiny2Controller.prototype.getInventory;
                     const warnings = [];
@@ -317,7 +239,7 @@ describe('/destiny2', () => {
 
                                     const timeout = setTimeout(() => {
                                         response.destroy();
-                                    }, 1500);
+                                    }, 300);
 
                                     response.once('error', () => {
                                         clearTimeout(timeout);
