@@ -1,4 +1,3 @@
-import RedisErrors from 'redis-errors';
 import log from '../helpers/log.js';
 
 /**
@@ -54,8 +53,6 @@ class DestinyCache {
                 };
             }
         } catch (err) {
-            if (!(err instanceof RedisErrors.RedisError)) throw err;
-
             log.error(err);
         }
 
@@ -73,8 +70,6 @@ class DestinyCache {
 
             return res ? JSON.parse(res) : undefined;
         } catch (err) {
-            if (!(err instanceof RedisErrors.RedisError)) throw err;
-
             log.error(err);
         }
 
@@ -95,8 +90,6 @@ class DestinyCache {
                     JSON.stringify({ lastModified, manifest }),
                 );
             } catch (err) {
-                if (!(err instanceof RedisErrors.RedisError)) throw err;
-
                 log.error(err);
 
                 return 'Error';
@@ -124,8 +117,6 @@ class DestinyCache {
                 JSON.stringify(vendor),
             );
         } catch (err) {
-            if (!(err instanceof RedisErrors.RedisError)) throw err;
-
             log.error(err);
 
             return 'Error';

@@ -1,13 +1,35 @@
+// @ts-check
+
+/**
+ * A minimal pointer stored under phone-number and email-address cache keys.
+ * The full user object is stored under the displayName+membershipType key.
+ * @typedef {Object} CachedUserRef
+ * @property {string} displayName
+ * @property {number} membershipType
+ */
+
+/**
+ * The Redis client methods used by UserCache.
+ * Structural interface so the implementation detail (node-redis vs ioredis) stays decoupled.
+ * @typedef {Object} RedisClient
+ * @property {(key: string) => Promise<number>} del
+ * @property {(key: string) => Promise<string | null>} get
+ * @property {(key: string, seconds: number, value: string) => Promise<string>} setEx
+ */
+
 /**
  *  User Cache Class
  */
 class UserCache {
-    constructor(options = {}) {
+    /**
+     * @param {{ client: RedisClient }} options
+     */
+    constructor(options) {
         this.client = options.client;
     }
 
     /**
-     * @param teeth
+     * @param {...(string | number)} teeth
      * @returns {string}
      */
     static #getCacheKey(...teeth) {
@@ -16,22 +38,22 @@ class UserCache {
 
     /**
      * Delete cache by key.
-     * @param key
-     * @returns {Promise}
-     * @private
+     * @param {string} key
+     * @returns {Promise<number>}
      */
     async #deleteCache(key) {
         return await this.client.del(key);
     }
 
     /**
-     * Delete cached user.
-     * @param teeth
-     * @returns {Promise}
+     * Delete all cache entries associated with a user.
+     * @param {{ displayName?: string, emailAddress?: string, membershipType?: number, phoneNumber?: string }} user
+     * @returns {Promise<[number | void, number | void, number | void]>}
      */
-    deleteUser({ displayName, membershipType, phoneNumber }) {
+    deleteUser({ displayName, emailAddress, membershipType, phoneNumber }) {
         let promise1;
         let promise2;
+        let promise3;
 
         if (phoneNumber) {
             promise1 = this.#deleteCache(UserCache.#getCacheKey(phoneNumber));
@@ -45,14 +67,19 @@ class UserCache {
             promise2 = Promise.resolve();
         }
 
-        return Promise.all([promise1, promise2]);
+        if (emailAddress) {
+            promise3 = this.#deleteCache(UserCache.#getCacheKey(emailAddress));
+        } else {
+            promise3 = Promise.resolve();
+        }
+
+        return Promise.all([promise1, promise2, promise3]);
     }
 
     /**
      * Get cached item by key.
-     * @param key
-     * @returns {Promise}
-     * @private
+     * @param {string} key
+     * @returns {Promise<Record<string, unknown> | undefined>}
      */
     async getCache(key) {
         const res = await this.client.get(key);
@@ -61,9 +88,10 @@ class UserCache {
     }
 
     /**
-     * Get cached user.
-     * @param teeth
-     * @returns {Promise}
+     * Get cached user by one or more cache-key segments (displayName+membershipType,
+     * phoneNumber, or emailAddress). Follows pointer keys back to the full user record.
+     * @param {...(string | number)} teeth
+     * @returns {Promise<Record<string, unknown> | undefined>}
      */
     async getUser(...teeth) {
         const key = UserCache.#getCacheKey(...teeth);
@@ -72,7 +100,11 @@ class UserCache {
         if (user) {
             const { displayName, membershipId, membershipType } = user;
 
-            if (!membershipId && displayName && membershipType) {
+            if (
+                !membershipId &&
+                typeof displayName === 'string' &&
+                typeof membershipType === 'number'
+            ) {
                 return await this.getUser(displayName, membershipType);
             }
 
@@ -83,9 +115,10 @@ class UserCache {
     }
 
     /**
-     * Set cached user.
-     * @param user
-     * @returns {*}
+     * Cache a user under all applicable keys (displayName+membershipType,
+     * phoneNumber, and emailAddress). TTL is 1 hour.
+     * @param {{ displayName?: string, emailAddress?: string, membershipType?: number, phoneNumber?: string }} user
+     * @returns {Promise<void>}
      */
     async setUser(user = {}) {
         const { displayName, emailAddress, membershipType, phoneNumber } = user;
@@ -98,12 +131,12 @@ class UserCache {
         }
 
         const key = UserCache.#getCacheKey(displayName, membershipType);
-        const promise1 = await this.client.setEx(key, 60 * 60, JSON.stringify(user));
+        const promise1 = this.client.setEx(key, 60 * 60, JSON.stringify(user));
 
         let promise2;
 
         if (phoneNumber) {
-            promise2 = await this.client.setEx(
+            promise2 = this.client.setEx(
                 phoneNumber,
                 60 * 60,
                 JSON.stringify({ displayName, membershipType }),
@@ -115,7 +148,7 @@ class UserCache {
         let promise3;
 
         if (emailAddress) {
-            promise3 = await this.client.setEx(
+            promise3 = this.client.setEx(
                 emailAddress,
                 60 * 60,
                 JSON.stringify({ displayName, membershipType }),
@@ -124,7 +157,7 @@ class UserCache {
             promise3 = Promise.resolve();
         }
 
-        return Promise.all([promise1, promise2, promise3]);
+        await Promise.all([promise1, promise2, promise3]);
     }
 }
 

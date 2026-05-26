@@ -1,4 +1,4 @@
-import throttle from '../helpers/throttle.js';
+import pLimit from 'p-limit';
 
 const root = {
     async findPlayers({ displayName, pageNumber = 0 }, context) {
@@ -7,36 +7,36 @@ const root = {
             pageNumber,
         );
 
-        await throttle(
-            players.map(async player => {
-                const {
-                    displayName: activeDisplayName,
-                    membershipId,
-                    membershipType,
-                } = player.destinyMemberships.find(
-                    membership =>
-                        membership.crossSaveOverride === membership.membershipType ||
-                        membership.crossSaveOverride === 0,
-                ) || {};
-                const statistics = await context.destiny2Service.getPlayerStatistics(
-                    membershipId,
-                    membershipType,
-                );
-                const user =
-                    context.isAdministrator && activeDisplayName
-                        ? await context.userService.getUserByDisplayName(
-                              activeDisplayName,
-                              membershipType,
-                          )
-                        : null;
+        const limit = pLimit(11);
 
-                return Object.assign(player, { statistics, user });
-            }),
-            11,
-            2,
+        return Promise.all(
+            players.map(player =>
+                limit(async () => {
+                    const {
+                        displayName: activeDisplayName,
+                        membershipId,
+                        membershipType,
+                    } = player.destinyMemberships.find(
+                        membership =>
+                            membership.crossSaveOverride === membership.membershipType ||
+                            membership.crossSaveOverride === 0,
+                    ) || {};
+                    const statistics = await context.destiny2Service.getPlayerStatistics(
+                        membershipId,
+                        membershipType,
+                    );
+                    const user =
+                        context.isAdministrator && activeDisplayName
+                            ? await context.userService.getUserByDisplayName(
+                                  activeDisplayName,
+                                  membershipType,
+                              )
+                            : null;
+
+                    return Object.assign(player, { statistics, user });
+                }),
+            ),
         );
-
-        return players;
     },
 };
 

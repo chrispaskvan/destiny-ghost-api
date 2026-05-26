@@ -1,5 +1,5 @@
 # Define Node.js version as a build argument
-ARG NODE_VERSION=24.15.0
+ARG NODE_VERSION=24.16.0
 
 # Build stage - includes dev dependencies for OpenAPI generation
 FROM node:${NODE_VERSION}-trixie-slim AS builder
@@ -13,17 +13,20 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
       python3 \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
+# Enable corepack so the pnpm version pinned in package.json#packageManager is used
+RUN corepack enable
+
 WORKDIR /app
 
 # Copy package files and install ALL dependencies (including dev)
-COPY package.json package-lock.json* ./
-RUN --mount=type=cache,target=/root/.npm npm ci
+COPY package.json pnpm-lock.yaml .npmrc ./
+RUN pnpm install --frozen-lockfile
 
 # Copy source code
 COPY . .
 
 # Generate OpenAPI documentation for production
-RUN NODE_ENV=production npm run swagger
+RUN NODE_ENV=production pnpm run swagger
 
 # Production stage - lean runtime image
 FROM node:${NODE_VERSION}-trixie-slim AS production
@@ -56,6 +59,9 @@ ENV WEBSITE=$WEBSITE
 
 EXPOSE $PORT
 
+# Enable corepack as root before switching to the unprivileged user
+RUN corepack enable
+
 # Create application directory and set permissions
 RUN mkdir /destiny-ghost-api && chown -R node:node /destiny-ghost-api
 
@@ -64,8 +70,8 @@ WORKDIR /destiny-ghost-api
 USER node
 
 # Copy package files and install ONLY production dependencies
-COPY --chown=node:node package.json package-lock.json* ./
-RUN --mount=type=cache,target=/home/node/.npm,uid=1000,gid=1000 npm ci --omit=dev
+COPY --chown=node:node package.json pnpm-lock.yaml .npmrc ./
+RUN pnpm install --frozen-lockfile --prod
 
 # Copy generated OpenAPI file from build stage
 COPY --from=builder --chown=node:node /app/openapi.json ./
@@ -76,4 +82,4 @@ COPY --chown=node:node . .
 # Create writable databases directories
 RUN mkdir -p "$DESTINY_DATABASE_DIR" "$DESTINY2_DATABASE_DIR"
 
-CMD ["npm", "run", "start:production"]
+CMD ["pnpm", "run", "start:production"]

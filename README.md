@@ -4,14 +4,18 @@
 [![Codacy Badge](https://api.codacy.com/project/badge/Grade/eb80d748233e4f0c836a329ddb390be4)](https://app.codacy.com/manual/chrispaskvan/destiny-ghost-api?utm_source=github.com\&utm_medium=referral\&utm_content=chrispaskvan/destiny-ghost-api\&utm_campaign=Badge_Grade_Dashboard)
 [![Codacy Badge](https://api.codacy.com/project/badge/Coverage/f3739ef16c3a4c9d9ad08423744fa5d3)](https://www.codacy.com/manual/chrispaskvan/destiny-ghost-api?utm_source=github.com\&utm_medium=referral\&utm_content=chrispaskvan/destiny-ghost-api\&utm_campaign=Badge_Coverage)
 [![Maintainability](https://qlty.sh/gh/chrispaskvan/projects/destiny-ghost-api/maintainability.svg)](https://qlty.sh/gh/chrispaskvan/projects/destiny-ghost-api)
-[![Known Vulnerabilities](https://snyk.io/test/github/chrispaskvan/destiny-ghost-api/badge.svg)](https://snyk.io/test/github/chrispaskvan/destiny-ghost-api)
 [![Dependency Status](https://img.shields.io/librariesio/github/chrispaskvan/destiny-ghost-api)](https://libraries.io/github/chrispaskvan/destiny-ghost-api)
+![MCP Protocol](https://img.shields.io/badge/MCP-Supported-orange?logo=anthropic)
 
 Node application for SMS/MMS interface for receiving notifications of Vendor (Xur) inventory changes and on-demand weapon searches.
 
 ## Description
 
 This project provides a quick and convenient way to search the Destiny database through text messages. Guardians can message the name of that mysterious weapon that just killed them in PvP (Player versus Player) for more insight. For example, "Thorn" returns "Thorn Exotic Primary Hand Cannon". The service can also notify guardians of sale items when vendors refresh their stock. So when Xur finally sells that Gjallarhorn you've been dying for, you don't miss it.
+
+## Development Setup
+
+This repository targets Node.js 24 and the Docker image is pinned to Node.js 24.16.0. For local development, run `nvm use` from the repository root to activate the version declared in `.nvmrc` before installing dependencies or running scripts.
 
 ## Disclaimer
 

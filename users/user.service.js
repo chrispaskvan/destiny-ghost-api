@@ -1,3 +1,4 @@
+// @ts-check
 import { z } from 'zod';
 import QueryBuilder from '../helpers/queryBuilder.js';
 import log from '../helpers/log.js';
@@ -9,6 +10,26 @@ import notificationTypes from '../notifications/notification.types.js';
  */
 const messageCollectionId = 'Messages';
 const userCollectionId = 'Users';
+
+/**
+ * Schema for Bungie OAuth tokens.
+ * @private
+ */
+const bungieTokenSchema = z.object({
+    access_token: z.string(),
+    expires_in: z.number(),
+    membership_id: z.string(),
+    refresh_token: z.string(),
+});
+
+/**
+ * Schema for a persisted Bungie token on a user document. Less strict than
+ * bungieTokenSchema because legacy documents may only carry access_token.
+ * @private
+ */
+const storedBungieTokenSchema = bungieTokenSchema.partial().required({
+    access_token: true,
+});
 
 /**
  * Schema for anonymous users.
@@ -67,14 +88,74 @@ const userSchema = z.object({
     phoneNumber: z.string(),
     roles: z.array(z.string()).default(['User']),
     type: z.string().optional(),
+    bungie: storedBungieTokenSchema.optional(),
 });
+
+/**
+ * An anonymous user as validated by `anonymousUserSchema`.
+ * @typedef {ReturnType<typeof anonymousUserSchema.parse>} AnonymousUser
+ */
+
+/**
+ * A user notification as validated by `notificationSchema`.
+ * @typedef {ReturnType<typeof notificationSchema.parse>} UserNotification
+ */
+
+/**
+ * A registered user as validated by `userSchema`.
+ * @typedef {ReturnType<typeof userSchema.parse>} User
+ */
+
+/**
+ * Bungie OAuth token stored on a user record.
+ * @typedef {ReturnType<typeof bungieTokenSchema.parse>} BungieToken
+ */
+
+/**
+ * A stored message document from Cosmos DB.
+ * @typedef {Object} UserMessage
+ * @property {string} id - Cosmos DB document ID
+ * @property {string} SmsSid - Twilio message SID
+ * @property {string} SmsStatus - Delivery status ('queued' | 'sent' | 'delivered' | 'failed')
+ * @property {string} To - Recipient phone number in E.164 format
+ */
+
+/**
+ * Carrier lookup result from Twilio.
+ * @typedef {Object} CarrierInfo
+ * @property {string} name - Carrier name (e.g., 'T-Mobile')
+ * @property {string} type - Number type ('mobile' | 'landline' | 'voip')
+ */
+
+/**
+ * Minimal user projection returned by `getSubscribedUsers`.
+ * @typedef {Object} SubscribedUser
+ * @property {string} displayName
+ * @property {string} membershipId
+ * @property {number} membershipType
+ * @property {string} phoneNumber
+ */
+
+/**
+ * Minimal Twilio client interface for carrier lookup.
+ * @typedef {Object} TwilioClient
+ * @property {(phoneNumber: string) => { get: (options: { countryCode: string, type: string }, callback: (err: unknown, number: { carrier: CarrierInfo }) => void) => void }} phoneNumbers
+ */
+
+/**
+ * Constructor options for UserService.
+ * @typedef {Object} UserServiceOptions
+ * @property {import('./user.cache.js').default} cacheService - Redis-backed cache service
+ * @property {TwilioClient} client - Twilio client instance
+ * @property {import('../helpers/documents.js').default} documentService - Cosmos DB document service
+ */
 
 /**
  * User Service Class
  */
 class UserService {
     /**
-     * @constructor
+     * @param {UserServiceOptions} options
      */
     constructor(options) {
         const schema = z.object({
@@ -91,11 +172,9 @@ class UserService {
     }
 
     /**
-     * Add message to the user's notification history.
-     * @param displayName
-     * @param membershipType
-     * @param message
-     * @returns {Promise}
+     * Add a message to the user's notification history.
+     * @param {Omit<UserMessage, 'id'>} message
+     * @returns {Promise<import('../helpers/documents.js').CosmosDocument<Omit<UserMessage, 'id'>> | undefined>}
      */
     async addUserMessage(message) {
         return await this.documents.createDocument(messageCollectionId, {
@@ -106,14 +185,17 @@ class UserService {
 
     /**
      * Create an anonymous user.
-     * @param user
-     * @returns {*}
+     * @param {AnonymousUser} user
+     * @returns {Promise<import('../helpers/documents.js').CosmosDocument<AnonymousUser> | undefined>}
      */
     async createAnonymousUser(user) {
         try {
             anonymousUserSchema.parse(user);
         } catch (err) {
-            return Promise.reject(Error(JSON.stringify(err.issues)));
+            if (err instanceof z.ZodError) {
+                return Promise.reject(Error(JSON.stringify(err.issues)));
+            }
+            return Promise.reject(err);
         }
 
         const existingUser = await this.getUserByDisplayName(
@@ -134,24 +216,33 @@ class UserService {
     }
 
     /**
-     * Create a user.
-     * @param user {Object}
-     * @returns {*}
+     * Create a registered user, merging with an existing anonymous record if present.
+     * @param {User} user
+     * @returns {Promise<import('../helpers/documents.js').CosmosDocument<User> | undefined>}
      */
     async createUser(user) {
+        /** @type {import('zod').ZodIssue[]} */
         let issues = [];
 
         try {
             userSchema.parse(user);
         } catch (err) {
-            issues = [...issues, ...err.issues];
+            if (err instanceof z.ZodError) {
+                issues = [...issues, ...err.issues];
+            } else {
+                return Promise.reject(err);
+            }
         }
 
         user.notifications?.forEach(notification => {
             try {
                 notificationSchema.parse(notification);
             } catch (err) {
-                issues = [...issues, ...err.issues];
+                if (err instanceof z.ZodError) {
+                    issues = [...issues, ...err.issues];
+                } else {
+                    throw err;
+                }
             }
         });
 
@@ -198,7 +289,7 @@ class UserService {
      * Delete a message.
      * @param {string} messageId
      * @param {string} phoneNumber
-     * @returns {Promise.<T>}
+     * @returns {Promise<import('@azure/cosmos').ItemResponse<Record<string, unknown>>>}
      */
     async #deleteMessage(messageId, phoneNumber) {
         return await this.documents.deleteDocumentById(messageCollectionId, messageId, phoneNumber);
@@ -208,7 +299,7 @@ class UserService {
      * Delete a user.
      * @param {string} documentId
      * @param {number} membershipType
-     * @returns {Promise.<T>}
+     * @returns {Promise<import('@azure/cosmos').ItemResponse<Record<string, unknown>>>}
      */
     // biome-ignore lint/correctness/noUnusedPrivateClassMembers: future use
     async #deleteUser(documentId, membershipType) {
@@ -222,34 +313,48 @@ class UserService {
     /**
      * Delete messages with the status 'queued' or 'sent' given the message was 'delivered'.
      * @param {string} phoneNumber
+     * @returns {Promise<void>}
      */
     async deleteUserMessages(phoneNumber) {
         const messages = await this.documents.getDocuments(
             messageCollectionId,
-            `SELECT * FROM c WHERE c.SmsStatus != 'delivered' AND c.To = '${phoneNumber}'`,
+            {
+                query: "SELECT * FROM c WHERE c.SmsStatus != 'delivered' AND c.To = @phoneNumber",
+                parameters: [{ name: '@phoneNumber', value: phoneNumber }],
+            },
+            { partitionKey: phoneNumber },
         );
         const delivered = new Set();
+        const deletes = [];
 
         for (const message of messages) {
-            const received =
-                delivered.has(message.SmsSid) ||
-                (await this.documents.getDocuments(
-                    messageCollectionId,
-                    `SELECT * FROM c WHERE c.SmsSid = '${message.SmsSid}' AND c.SmsStatus = 'delivered'`,
-                ));
+            if (delivered.has(message.SmsSid)) {
+                continue;
+            }
 
-            if (received.length) {
+            const dbResults = await this.documents.getDocuments(
+                messageCollectionId,
+                {
+                    query: "SELECT * FROM c WHERE c.SmsSid = @smsSid AND c.SmsStatus = 'delivered'",
+                    parameters: [{ name: '@smsSid', value: message.SmsSid }],
+                },
+                { partitionKey: message.To },
+            );
+
+            if (dbResults.length > 0) {
                 delivered.add(message.SmsSid);
-                this.#deleteMessage(message.id, message.To);
+                deletes.push(this.#deleteMessage(message.id, message.To));
                 log.warn(message, 'Deleted message.');
             }
         }
+
+        await Promise.all(deletes);
     }
 
     /**
      * Get carrier data for a phone number.
-     * @param phoneNumber
-     * @returns {Promise}
+     * @param {string} phoneNumber - Phone number in E.164 format
+     * @returns {Promise<CarrierInfo>}
      */
     getPhoneNumberType(phoneNumber) {
         return new Promise((resolve, reject) => {
@@ -270,9 +375,9 @@ class UserService {
     }
 
     /**
-     * Get subscribed users.
-     * @param notificationType
-     * @returns {*|Array.User}
+     * Get subscribed users for a given notification type.
+     * @param {string} notificationType
+     * @returns {Promise<SubscribedUser[]>}
      */
     async getSubscribedUsers(notificationType) {
         const notification = Object.values(notificationTypes).find(
@@ -294,16 +399,17 @@ class UserService {
             .where('type', notification)
             .where('enabled', true);
 
-        return await this.documents.getDocuments(userCollectionId, qb.getQuery(), {
-            enableCrossPartitionQuery: true,
-        });
+        return /** @type {Promise<SubscribedUser[]>} */ (
+            this.documents.getDocuments(userCollectionId, qb.getQuery())
+        );
     }
 
     /**
      * Get user from display name (gamer tag) and membership type (console).
-     * @param displayName
-     * @param membershipType
-     * @returns {Promise}
+     * @param {string} displayName
+     * @param {number} membershipType
+     * @param {boolean} [skipCache=false]
+     * @returns {Promise<import('../helpers/documents.js').CosmosDocument<User> | undefined>}
      */
     async getUserByDisplayName(displayName, membershipType, skipCache = false) {
         const schema = z.object({
@@ -315,21 +421,36 @@ class UserService {
         try {
             schema.parse({ displayName, membershipType, skipCache });
         } catch (err) {
-            const messages = err.issues.map(issue => issue.message);
-
-            return Promise.reject(new Error(messages.join(',')));
+            if (err instanceof z.ZodError) {
+                const messages = err.issues.map(issue => issue.message);
+                return Promise.reject(new Error(messages.join(',')));
+            }
+            return Promise.reject(err);
         }
 
-        let user = await this.cacheService.getUser(displayName, membershipType);
+        /** @type {import('../helpers/documents.js').CosmosDocument<User> | undefined} */
+        let user;
 
-        if (!skipCache && user) {
-            return user;
+        if (!skipCache) {
+            user =
+                /** @type {import('../helpers/documents.js').CosmosDocument<User> | undefined} */ (
+                    await this.cacheService.getUser(displayName, membershipType)
+                );
+
+            if (user) {
+                return user;
+            }
         }
 
         const qb = new QueryBuilder();
-        const documents = await this.documents.getDocuments(
-            userCollectionId,
-            qb.where('displayName', displayName).where('membershipType', membershipType).getQuery(),
+        const documents = /** @type {import('../helpers/documents.js').CosmosDocument<User>[]} */ (
+            await this.documents.getDocuments(
+                userCollectionId,
+                qb
+                    .where('displayName', displayName)
+                    .where('membershipType', membershipType)
+                    .getQuery(),
+            )
         );
 
         if (documents.length) {
@@ -349,33 +470,35 @@ class UserService {
 
     /**
      * Get user from email address.
-     * @param emailAddress
-     * @returns {Promise}
+     * @param {string} emailAddress
+     * @returns {Promise<import('../helpers/documents.js').CosmosDocument<User> | undefined>}
      */
     async getUserByEmailAddress(emailAddress) {
         if (typeof emailAddress !== 'string' || !emailAddress) {
             return Promise.reject(new Error('emailAddress string is required'));
         }
 
-        let user = await this.cacheService.getUser(emailAddress);
+        let user =
+            /** @type {import('../helpers/documents.js').CosmosDocument<User> | undefined} */ (
+                await this.cacheService.getUser(emailAddress)
+            );
 
         if (user) {
             return user;
         }
 
         const qb = new QueryBuilder();
-        const documents = await this.documents.getDocuments(
-            userCollectionId,
-            qb.where('emailAddress', emailAddress).getQuery(),
-            {
-                enableCrossPartitionQuery: true,
-            },
+        const documents = /** @type {import('../helpers/documents.js').CosmosDocument<User>[]} */ (
+            await this.documents.getDocuments(
+                userCollectionId,
+                qb.where('emailAddress', emailAddress).getQuery(),
+            )
         );
         if (documents.length) {
             if (documents.length > 1) {
                 throw new Error(`more than 1 document found for emailAddress ${emailAddress}`);
             }
-            this.cacheService.setUser(documents[0]);
+            await this.cacheService.setUser(documents[0]);
 
             [user] = documents;
         }
@@ -385,8 +508,8 @@ class UserService {
 
     /**
      * Get user from their email address token.
-     * @param emailAddressToken
-     * @returns {Promise}
+     * @param {string} emailAddressToken
+     * @returns {Promise<import('../helpers/documents.js').CosmosDocument<User> | undefined>}
      */
     async getUserByEmailAddressToken(emailAddressToken) {
         if (typeof emailAddressToken !== 'string' || !emailAddressToken) {
@@ -394,30 +517,25 @@ class UserService {
         }
 
         const qb = new QueryBuilder();
-        const documents = await this.documents.getDocuments(
-            userCollectionId,
-            qb.where('membership.tokens.blob', emailAddressToken).getQuery(),
-            {
-                enableCrossPartitionQuery: true,
-            },
+        const documents = /** @type {import('../helpers/documents.js').CosmosDocument<User>[]} */ (
+            await this.documents.getDocuments(
+                userCollectionId,
+                qb.where('membership.tokens.blob', emailAddressToken).getQuery(),
+            )
         );
-        if (documents) {
-            if (documents.length > 1) {
-                throw new Error(
-                    `more than 1 document found for emailAddressToken ${emailAddressToken}`,
-                );
-            }
-
-            return documents[0];
+        if (documents.length > 1) {
+            throw new Error(
+                `more than 1 document found for emailAddressToken ${emailAddressToken}`,
+            );
         }
 
-        throw new Error('documents undefined');
+        return documents[0];
     }
 
     /**
      * Get user from id.
-     * @param userId
-     * @returns {Promise}
+     * @param {string} userId
+     * @returns {Promise<import('../helpers/documents.js').CosmosDocument<User> | undefined>}
      */
     async getUserById(userId) {
         let user;
@@ -427,12 +545,8 @@ class UserService {
         }
 
         const qb = new QueryBuilder();
-        const documents = await this.documents.getDocuments(
-            userCollectionId,
-            qb.where('id', userId).getQuery(),
-            {
-                enableCrossPartitionQuery: true,
-            },
+        const documents = /** @type {import('../helpers/documents.js').CosmosDocument<User>[]} */ (
+            await this.documents.getDocuments(userCollectionId, qb.where('id', userId).getQuery())
         );
         if (documents) {
             if (documents.length > 1) {
@@ -447,8 +561,8 @@ class UserService {
 
     /**
      * Get user from membership Id.
-     * @param membershipId
-     * @returns {Promise}
+     * @param {string} membershipId
+     * @returns {Promise<import('../helpers/documents.js').CosmosDocument<User> | undefined>}
      */
     async getUserByMembershipId(membershipId) {
         let user;
@@ -458,12 +572,11 @@ class UserService {
         }
 
         const qb = new QueryBuilder();
-        const documents = await this.documents.getDocuments(
-            userCollectionId,
-            qb.where('membershipId', membershipId).getQuery(),
-            {
-                enableCrossPartitionQuery: true,
-            },
+        const documents = /** @type {import('../helpers/documents.js').CosmosDocument<User>[]} */ (
+            await this.documents.getDocuments(
+                userCollectionId,
+                qb.where('membershipId', membershipId).getQuery(),
+            )
         );
         if (documents) {
             if (documents.length > 1) {
@@ -478,33 +591,35 @@ class UserService {
 
     /**
      * Get user from phone number.
-     * @param phoneNumber
-     * @returns {Promise}
+     * @param {string} phoneNumber
+     * @returns {Promise<import('../helpers/documents.js').CosmosDocument<User> | undefined>}
      */
     async getUserByPhoneNumber(phoneNumber) {
         if (typeof phoneNumber !== 'string' || !phoneNumber) {
             return Promise.reject(Error('phoneNumber string is required'));
         }
 
-        let user = await this.cacheService.getUser(phoneNumber);
+        let user =
+            /** @type {import('../helpers/documents.js').CosmosDocument<User> | undefined} */ (
+                await this.cacheService.getUser(phoneNumber)
+            );
 
         if (user) {
             return user;
         }
 
         const qb = new QueryBuilder();
-        const documents = await this.documents.getDocuments(
-            userCollectionId,
-            qb.where('phoneNumber', phoneNumber).getQuery(),
-            {
-                enableCrossPartitionQuery: true,
-            },
+        const documents = /** @type {import('../helpers/documents.js').CosmosDocument<User>[]} */ (
+            await this.documents.getDocuments(
+                userCollectionId,
+                qb.where('phoneNumber', phoneNumber).getQuery(),
+            )
         );
         if (documents.length) {
             if (documents.length > 1) {
                 throw new Error(`more than 1 document found for phoneNumber ${phoneNumber}`);
             }
-            this.cacheService.setUser(documents[0]);
+            await this.cacheService.setUser(documents[0]);
 
             [user] = documents;
         }
@@ -514,14 +629,17 @@ class UserService {
 
     /**
      * Update anonymous user.
-     * @param anonymousUser {Object}
-     * @returns {Promise}
+     * @param {AnonymousUser} anonymousUser
+     * @returns {Promise<void>}
      */
     async updateAnonymousUser(anonymousUser) {
         try {
             anonymousUserSchema.parse(anonymousUser);
         } catch (err) {
-            return Promise.reject(Error(JSON.stringify(err.issues)));
+            if (err instanceof z.ZodError) {
+                return Promise.reject(Error(JSON.stringify(err.issues)));
+            }
+            return Promise.reject(err);
         }
 
         const user = await this.getUserByDisplayName(
@@ -530,9 +648,10 @@ class UserService {
         );
 
         if (user) {
+            const mergedUser = { ...user, ...anonymousUser };
             return await this.documents
-                .updateDocument(userCollectionId, anonymousUser)
-                .then(() => this.cacheService.setUser(anonymousUser));
+                .updateDocument(userCollectionId, mergedUser, mergedUser.membershipType)
+                .then(() => this.cacheService.setUser(mergedUser));
         }
 
         throw new Error(
@@ -542,14 +661,17 @@ class UserService {
 
     /**
      * Update user.
-     * @param user {Object}
-     * @returns {Promise}
+     * @param {User} user
+     * @returns {Promise<void>}
      */
     async updateUser(user) {
         try {
             userSchema.parse(user);
         } catch (err) {
-            return Promise.reject(Error(JSON.stringify(err.issues)));
+            if (err instanceof z.ZodError) {
+                return Promise.reject(Error(JSON.stringify(err.issues)));
+            }
+            return Promise.reject(err);
         }
 
         const userDocument = await this.getUserByDisplayName(user.displayName, user.membershipType);
@@ -568,9 +690,9 @@ class UserService {
 
     /**
      * Replace the Bungie authentication information.
-     * @param userId
-     * @param bungie
-     * @returns {Promise}
+     * @param {string} userId
+     * @param {BungieToken} bungie - Bungie OAuth token response
+     * @returns {Promise<void>}
      */
     async updateUserBungie(userId, bungie) {
         const userDocument = await this.getUserById(userId);
