@@ -226,8 +226,6 @@ describe('Destiny2Router', () => {
                     query: {},
                     headers: configuration.notificationHeaders,
                 });
-                const drainEmitter = new EventEmitter();
-                const originalOn = res.on.bind(res);
                 const originalWrite = res.write.bind(res);
                 let writeCalls = 0;
                 const socket = new EventEmitter();
@@ -241,17 +239,6 @@ describe('Destiny2Router', () => {
                     socket.timeout = ms;
                 });
                 res.socket = socket;
-                res.on = vi.fn((event, listener) => {
-                    if (event === 'drain') {
-                        drainEmitter.on(event, listener);
-
-                        return drainEmitter;
-                    }
-
-                    originalOn(event, listener);
-
-                    return res;
-                });
                 res.write = vi.fn(chunk => {
                     writeCalls += 1;
                     originalWrite(chunk);
@@ -266,7 +253,7 @@ describe('Destiny2Router', () => {
                         expect(socket.setTimeout).toHaveBeenCalledTimes(2);
                         expect(socket.setTimeout).toHaveBeenNthCalledWith(1, 30 * 1000);
                         expect(socket.setTimeout).toHaveBeenLastCalledWith(5000);
-                        expect(drainEmitter.listenerCount('drain')).toEqual(0);
+                        expect(res.listenerCount('drain')).toEqual(0);
                         expect(JSON.parse(res._getData())).toEqual(world.items);
                         done();
                     } catch (err) {
@@ -279,9 +266,9 @@ describe('Destiny2Router', () => {
                 setImmediate(() => {
                     try {
                         expect(res.write).toHaveBeenCalledTimes(1);
-                        expect(drainEmitter.listenerCount('drain')).toEqual(1);
+                        expect(res.listenerCount('drain')).toEqual(1);
                         expect(socket.setTimeout).toHaveBeenNthCalledWith(1, 30 * 1000);
-                        drainEmitter.emit('drain');
+                        res.emit('drain');
                     } catch (err) {
                         reject(err);
                     }
@@ -397,6 +384,60 @@ describe('Destiny2Router', () => {
                 expect(res.destroy).toHaveBeenCalledWith();
                 expect(socket.setTimeout).toHaveBeenNthCalledWith(1, 30 * 1000);
                 expect(socket.setTimeout).toHaveBeenLastCalledWith(5000);
+                expect(log.warn).toHaveBeenCalledWith(
+                    expect.stringContaining(
+                        'inventory stream timed out while streaming item 0 of 2',
+                    ),
+                );
+                expect(log.info).not.toHaveBeenCalled();
+                expect(res.end).not.toHaveBeenCalled();
+                expect(res.write).toHaveBeenCalledTimes(1);
+                expect(res._getData()).toEqual(`[${JSON.stringify(world.items[0])}`);
+            } finally {
+                vi.useRealTimers();
+            }
+        });
+
+        it('should stop streaming when backpressure idle timeout fires and no socket is available', async () => {
+            vi.useFakeTimers();
+
+            try {
+                const req = createRequest({
+                    method: 'GET',
+                    url: '/inventory',
+                    query: {},
+                    headers: configuration.notificationHeaders,
+                });
+                const originalWrite = res.write.bind(res);
+
+                world.items = [
+                    { hash: 1, displayProperties: { name: 'One' } },
+                    { hash: 2, displayProperties: { name: 'Two' } },
+                ];
+                log.warn.mockClear();
+                log.info.mockClear();
+                res.socket = null;
+                res.end = vi.fn(res.end.bind(res));
+                res.destroy = vi.fn(() => {
+                    res.destroyed = true;
+                    res.emit('close');
+                });
+                res.write = vi.fn(chunk => {
+                    originalWrite(chunk);
+
+                    return false;
+                });
+
+                const responseComplete = new Promise((resolve, reject) => {
+                    res.on('close', resolve);
+                    res.on('error', reject);
+                });
+
+                destiny2Router(req, res, next);
+                await vi.advanceTimersByTimeAsync(30 * 1000);
+                await responseComplete;
+
+                expect(res.destroy).toHaveBeenCalledOnce();
                 expect(log.warn).toHaveBeenCalledWith(
                     expect.stringContaining(
                         'inventory stream timed out while streaming item 0 of 2',

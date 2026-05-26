@@ -37,6 +37,7 @@ async function writeChunk(res, chunk) {
     const drained = await new Promise(resolve => {
         const socket = res.socket;
         const previousSocketTimeout = socket?.timeout;
+        let cleaned = false;
         let drainEmitter;
         let timeout;
         const handleDrain = () => {
@@ -62,6 +63,8 @@ async function writeChunk(res, chunk) {
             resolveWith(inventoryStreamWriteResult.timedOut);
         };
         const cleanup = () => {
+            if (cleaned) return;
+            cleaned = true;
             drainEmitter.off('drain', handleDrain);
             res.off('close', handleClose);
 
