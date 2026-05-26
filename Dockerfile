@@ -1,5 +1,5 @@
 # Define Node.js version as a build argument
-ARG NODE_VERSION=24.15.0
+ARG NODE_VERSION=24.16.0
 
 # Build stage - includes dev dependencies for OpenAPI generation
 FROM node:${NODE_VERSION}-trixie-slim AS builder

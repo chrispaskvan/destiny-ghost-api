@@ -13,6 +13,10 @@ Node application for SMS/MMS interface for receiving notifications of Vendor (Xu
 
 This project provides a quick and convenient way to search the Destiny database through text messages. Guardians can message the name of that mysterious weapon that just killed them in PvP (Player versus Player) for more insight. For example, "Thorn" returns "Thorn Exotic Primary Hand Cannon". The service can also notify guardians of sale items when vendors refresh their stock. So when Xur finally sells that Gjallarhorn you've been dying for, you don't miss it.
 
+## Development Setup
+
+This repository targets Node.js 24 and the Docker image is pinned to Node.js 24.16.0. For local development, run `nvm use` from the repository root to activate the version declared in `.nvmrc` before installing dependencies or running scripts.
+
 ## Disclaimer
 
 This project is not affiliated with, maintained, authorized, endorsed, or sponsored by Bungie.
