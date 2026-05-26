@@ -81,12 +81,15 @@ class Publisher {
 
             try {
                 const job = await this.#queue.getJob(jobId);
-                if (job && job.attemptsMade >= (job.opts?.attempts ?? 1)) {
-                    log.error({
-                        jobId,
-                        failedReason,
-                        attemptsMade: job.attemptsMade,
-                    }, 'Job exhausted all retries');
+                if (job?.opts?.attempts && job.attemptsMade >= job.opts.attempts) {
+                    log.error(
+                        {
+                            jobId,
+                            failedReason,
+                            attemptsMade: job.attemptsMade,
+                        },
+                        'Job exhausted all retries',
+                    );
 
                     applicationInsights.trackMetric({
                         name: 'notification-job-exhausted',

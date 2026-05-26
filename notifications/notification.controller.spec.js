@@ -19,8 +19,6 @@ vi.mock('bullmq', () => ({
     Queue: class {
         add = vi.fn().mockResolvedValue('some-job');
         getJob = vi.fn();
-
-        constructor() {}
     },
     QueueEvents: class {
         on = vi.fn();
@@ -45,6 +43,7 @@ vi.mock('../helpers/retry.js', async importOriginal => {
     };
 });
 import { isTransientError } from '../helpers/retry.js';
+import DestinyError from '../destiny/destiny.error.js';
 vi.mock('p-throttle', () => ({
     default: vi.fn(() => fn => fn),
 }));
@@ -298,28 +297,47 @@ describe('NotificationController', () => {
             });
 
             it('should not send any message when no characters found', async () => {
-                authenticationService.authenticate.mockResolvedValue({ bungie: { access_token: accessToken } });
-                destinyService.getProfile.mockResolvedValue([]); // No characters
+                authenticationService.authenticate.mockResolvedValue({
+                    bungie: { access_token: accessToken },
+                });
+                destinyService.getProfile.mockResolvedValue([]);
 
                 await sendMethod(mockUser, {
                     claimCheckNumber,
                     notificationType: notificationTypes.Xur,
                 });
 
-                expect(notificationService.sendMessage).toHaveBeenCalledWith(
-                    "Xur has closed shop. He'll return Friday.",
-                    phoneNumber,
-                    null,
-                    { claimCheckNumber, notificationType: notificationTypes.Xur },
-                );
-                expect(log.info).toHaveBeenCalledWith(JSON.stringify('sent'));
+                expect(notificationService.sendMessage).not.toHaveBeenCalled();
+                expect(ClaimCheck.updatePhoneNumber).not.toHaveBeenCalled();
             });
 
-            it('should send fallback message when getProfile fails', async () => {
+            it('should not send any message when characters is null', async () => {
                 authenticationService.authenticate.mockResolvedValue({
                     bungie: { access_token: accessToken },
                 });
-                destinyService.getProfile.mockRejectedValue(new Error('Profile failed'));
+                destinyService.getProfile.mockResolvedValue(null);
+
+                await sendMethod(mockUser, {
+                    claimCheckNumber,
+                    notificationType: notificationTypes.Xur,
+                });
+
+                expect(notificationService.sendMessage).not.toHaveBeenCalled();
+                expect(ClaimCheck.updatePhoneNumber).not.toHaveBeenCalled();
+            });
+
+            it('should send fallback SMS when Xur vendor is unavailable', async () => {
+                const xurNotFoundErr = new DestinyError(
+                    1627,
+                    'Vendor not found',
+                    'DestinyVendorNotFound',
+                );
+
+                authenticationService.authenticate.mockResolvedValue({
+                    bungie: { access_token: accessToken },
+                });
+                destinyService.getProfile.mockResolvedValue([mockCharacter]);
+                destinyService.getXur.mockRejectedValue(xurNotFoundErr);
                 notificationService.sendMessage.mockResolvedValue({ status: 'sent' });
                 ClaimCheck.updatePhoneNumber.mockResolvedValue();
 
@@ -338,40 +356,8 @@ describe('NotificationController', () => {
                 expect(ClaimCheck.updatePhoneNumber).toHaveBeenCalledWith(
                     claimCheckNumber,
                     phoneNumber,
-                    'sent'
+                    'sent',
                 );
-            });
-
-            it('should not send any message when no characters found', async () => {
-                authenticationService.authenticate.mockResolvedValue({
-                    bungie: { access_token: accessToken },
-                });
-                destinyService.getProfile.mockResolvedValue([]); // No characters
-
-                const rejection = await sendMethod(mockUser, {
-                    claimCheckNumber,
-                    notificationType: notificationTypes.Xur,
-                }).catch(err => err);
-
-                expect(rejection.name).toBe('UnrecoverableError');
-                expect(rejection.message).toBe('Unexpected failure');
-                expect(notificationService.sendMessage).not.toHaveBeenCalled();
-            });
-
-            it('should not send any message when characters is null', async () => {
-                authenticationService.authenticate.mockResolvedValue({
-                    bungie: { access_token: accessToken },
-                });
-                destinyService.getProfile.mockResolvedValue(null); // Null characters
-
-                const rejection = await sendMethod(mockUser, {
-                    claimCheckNumber,
-                    notificationType: notificationTypes.Xur,
-                }).catch(err => err);
-
-                expect(rejection.name).toBe('UnrecoverableError');
-                expect(rejection.cause).toBe(destinyErr);
-                expect(notificationService.sendMessage).not.toHaveBeenCalled();
             });
         });
 
@@ -386,10 +372,12 @@ describe('NotificationController', () => {
                 destinyService.getProfile.mockResolvedValue([mockCharacter]);
                 destinyService.getXur.mockRejectedValue(transientError);
 
-                await expect(sendMethod(mockUser, {
-                    claimCheckNumber,
-                    notificationType: notificationTypes.Xur,
-                })).rejects.toThrow('Service Unavailable');
+                await expect(
+                    sendMethod(mockUser, {
+                        claimCheckNumber,
+                        notificationType: notificationTypes.Xur,
+                    }),
+                ).rejects.toThrow('Service Unavailable');
 
                 expect(notificationService.sendMessage).not.toHaveBeenCalled();
             });
@@ -401,10 +389,12 @@ describe('NotificationController', () => {
 
                 authenticationService.authenticate.mockRejectedValue(transientError);
 
-                await expect(sendMethod(mockUser, {
-                    claimCheckNumber,
-                    notificationType: notificationTypes.Xur,
-                })).rejects.toThrow('Gateway Timeout');
+                await expect(
+                    sendMethod(mockUser, {
+                        claimCheckNumber,
+                        notificationType: notificationTypes.Xur,
+                    }),
+                ).rejects.toThrow('Gateway Timeout');
 
                 expect(notificationService.sendMessage).not.toHaveBeenCalled();
             });
@@ -414,13 +404,17 @@ describe('NotificationController', () => {
                 transientError.status = 500;
                 isTransientError.mockReturnValue(true);
 
-                authenticationService.authenticate.mockResolvedValue({ bungie: { access_token: accessToken } });
+                authenticationService.authenticate.mockResolvedValue({
+                    bungie: { access_token: accessToken },
+                });
                 destinyService.getProfile.mockRejectedValue(transientError);
 
-                await expect(sendMethod(mockUser, {
-                    claimCheckNumber,
-                    notificationType: notificationTypes.Xur,
-                })).rejects.toThrow('Internal Server Error');
+                await expect(
+                    sendMethod(mockUser, {
+                        claimCheckNumber,
+                        notificationType: notificationTypes.Xur,
+                    }),
+                ).rejects.toThrow('Internal Server Error');
 
                 expect(notificationService.sendMessage).not.toHaveBeenCalled();
             });
@@ -448,7 +442,9 @@ describe('NotificationController', () => {
                 const permanentError = new Error('Account not found');
                 isTransientError.mockReturnValue(false);
 
-                authenticationService.authenticate.mockResolvedValue({ bungie: { access_token: accessToken } });
+                authenticationService.authenticate.mockResolvedValue({
+                    bungie: { access_token: accessToken },
+                });
                 destinyService.getProfile.mockRejectedValue(permanentError);
 
                 const rejection = await sendMethod(mockUser, {

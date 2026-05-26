@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Chance from 'chance';
 
 const { mocks } = vi.hoisted(() => ({
@@ -12,15 +12,21 @@ const { mocks } = vi.hoisted(() => ({
 
 vi.mock('bullmq', () => ({
     Queue: class {
-        add(...args) { return mocks.add(...args); }
-        getJob(...args) { return mocks.getJob(...args); }
+        add(...args) {
+            return mocks.add(...args);
+        }
+        getJob(...args) {
+            return mocks.getJob(...args);
+        }
 
         constructor(...args) {
             mocks.constructorArgs = args;
         }
     },
     QueueEvents: class {
-        on(...args) { return mocks.queueEventsOn(...args); }
+        on(...args) {
+            return mocks.queueEventsOn(...args);
+        }
     },
 }));
 
@@ -121,25 +127,24 @@ describe('Publisher', () => {
         it('should not throw when getJob rejects', async () => {
             mocks.getJob.mockRejectedValue(new Error('Redis connection lost'));
 
-            await expect(failedHandler({ jobId: 'job-1', failedReason: 'Some error' }))
-                .resolves.toBeUndefined();
+            await expect(
+                failedHandler({ jobId: 'job-1', failedReason: 'Some error' }),
+            ).resolves.toBeUndefined();
 
             expect(applicationInsights.trackMetric).not.toHaveBeenCalled();
         });
 
-        it('should emit metric when opts is missing (falls back to default attempts of 1)', async () => {
+        it('should not emit metric when opts is missing', async () => {
             mocks.getJob.mockResolvedValue({
                 attemptsMade: 3,
                 opts: undefined,
             });
 
-            await expect(failedHandler({ jobId: 'job-1', failedReason: 'Some error' }))
-                .resolves.toBeUndefined();
+            await expect(
+                failedHandler({ jobId: 'job-1', failedReason: 'Some error' }),
+            ).resolves.toBeUndefined();
 
-            expect(applicationInsights.trackMetric).toHaveBeenCalledWith({
-                name: 'notification-job-exhausted',
-                value: 1,
-            });
+            expect(applicationInsights.trackMetric).not.toHaveBeenCalled();
         });
     });
 });

@@ -43,7 +43,7 @@ class NotificationController {
                 } = await this.authentication.authenticate(user);
                 const characters = await this.destiny.getProfile(membershipId, membershipType);
 
-                if (characters && characters.length) {
+                if (characters?.length) {
                     let itemHashes;
                     try {
                         itemHashes = await this.destiny.getXur(
@@ -54,8 +54,13 @@ class NotificationController {
                         );
                     } catch (xurErr) {
                         if (isTransientError(xurErr)) throw xurErr;
-                        if (xurErr instanceof DestinyError && xurErr.status === 'DestinyVendorNotFound') {
-                            throw new XurUnavailableError(xurErr.message, { cause: xurErr });
+                        if (
+                            xurErr instanceof DestinyError &&
+                            xurErr.status === 'DestinyVendorNotFound'
+                        ) {
+                            throw new XurUnavailableError(xurErr.code, xurErr.message, {
+                                cause: xurErr,
+                            });
                         }
                         throw xurErr;
                     }
@@ -83,10 +88,15 @@ class NotificationController {
                 }
             } catch (err) {
                 if (err instanceof XurUnavailableError) {
-                    const { status } = await this.notifications.sendMessage('Xur has closed shop. He\'ll return Friday.', phoneNumber, null, {
-                        claimCheckNumber,
-                        notificationType,
-                    });
+                    const { status } = await this.notifications.sendMessage(
+                        "Xur has closed shop. He'll return Friday.",
+                        phoneNumber,
+                        null,
+                        {
+                            claimCheckNumber,
+                            notificationType,
+                        },
+                    );
                     log.info(JSON.stringify(status));
                     await ClaimCheck.updatePhoneNumber(claimCheckNumber, phoneNumber, status);
                     return;
