@@ -110,7 +110,7 @@ class NotificationController {
                     throw err;
                 }
 
-                throw new UnrecoverableError(err.message, { cause: err });
+                throw new UnrecoverableError(err instanceof Error ? err.message : String(err), { cause: err });
             }
         }
     }

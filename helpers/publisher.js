@@ -97,7 +97,7 @@ class Publisher {
                     });
                 }
             } catch (handlerErr) {
-                log.error({ jobId, error: handlerErr.message }, 'Error in failed event handler');
+                log.error({ jobId, error: handlerErr }, 'Error in failed event handler');
             }
         });
     }
