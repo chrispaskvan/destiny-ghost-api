@@ -1,7 +1,11 @@
+import { UnrecoverableError } from 'bullmq';
 import publisher from '../helpers/publisher.js';
+import { isTransientError } from '../helpers/retry.js';
 import subscriber from '../helpers/subscriber.js';
 import NotificationError from './notification.error.js';
 import notificationTypes from './notification.types.js';
+import DestinyError from '../destiny/destiny.error.js';
+import XurUnavailableError from './xur-unavailable.error.js';
 import ClaimCheck from '../helpers/claim-check.js';
 import log from '../helpers/log.js';
 import pThrottle from 'p-throttle';
@@ -40,12 +44,28 @@ class NotificationController {
                 const characters = await this.destiny.getProfile(membershipId, membershipType);
 
                 if (characters?.length) {
-                    const itemHashes = await this.destiny.getXur(
-                        membershipId,
-                        membershipType,
-                        characters[0].characterId,
-                        accessToken,
-                    );
+                    let itemHashes;
+
+                    try {
+                        itemHashes = await this.destiny.getXur(
+                            membershipId,
+                            membershipType,
+                            characters[0].characterId,
+                            accessToken,
+                        );
+                    } catch (xurErr) {
+                        if (isTransientError(xurErr)) throw xurErr;
+                        if (
+                            xurErr instanceof DestinyError &&
+                            xurErr.status === 'DestinyVendorNotFound'
+                        ) {
+                            throw new XurUnavailableError(xurErr.code, xurErr.message, {
+                                cause: xurErr,
+                            });
+                        }
+                        throw xurErr;
+                    }
+
                     const weaponCategory = await this.world.getWeaponCategory();
                     const items = await Promise.all(
                         itemHashes.map(itemHash => this.world.getItemByHash(itemHash)),
@@ -65,19 +85,38 @@ class NotificationController {
                             notificationType,
                         },
                     );
+
                     await ClaimCheck.updatePhoneNumber(claimCheckNumber, phoneNumber, status);
                 }
-            } catch {
-                const { status } = await this.notifications.sendMessage(
-                    "Xur has closed shop. He'll return Friday.",
-                    phoneNumber,
-                    null,
-                    {
-                        claimCheckNumber,
-                        notificationType,
-                    },
-                );
-                log.info(JSON.stringify(status));
+            } catch (err) {
+                if (err instanceof XurUnavailableError) {
+                    const { status } = await this.notifications.sendMessage(
+                        "Xur has closed shop. He'll return Friday.",
+                        phoneNumber,
+                        null,
+                        {
+                            claimCheckNumber,
+                            notificationType,
+                        },
+                    );
+
+                    log.info(JSON.stringify(status));
+                    await ClaimCheck.updatePhoneNumber(claimCheckNumber, phoneNumber, status);
+
+                    return;
+                }
+
+                if (isTransientError(err)) {
+                    throw err;
+                }
+
+                if (err instanceof UnrecoverableError) {
+                    throw err;
+                }
+
+                throw new UnrecoverableError(err instanceof Error ? err.message : String(err), {
+                    cause: err,
+                });
             }
         }
     }
