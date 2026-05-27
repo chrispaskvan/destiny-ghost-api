@@ -45,6 +45,7 @@ class NotificationController {
 
                 if (characters?.length) {
                     let itemHashes;
+
                     try {
                         itemHashes = await this.destiny.getXur(
                             membershipId,
@@ -84,6 +85,7 @@ class NotificationController {
                             notificationType,
                         },
                     );
+
                     await ClaimCheck.updatePhoneNumber(claimCheckNumber, phoneNumber, status);
                 }
             } catch (err) {
@@ -97,8 +99,10 @@ class NotificationController {
                             notificationType,
                         },
                     );
+
                     log.info(JSON.stringify(status));
                     await ClaimCheck.updatePhoneNumber(claimCheckNumber, phoneNumber, status);
+
                     return;
                 }
 
@@ -110,7 +114,9 @@ class NotificationController {
                     throw err;
                 }
 
-                throw new UnrecoverableError(err instanceof Error ? err.message : String(err), { cause: err });
+                throw new UnrecoverableError(err instanceof Error ? err.message : String(err), {
+                    cause: err,
+                });
             }
         }
     }

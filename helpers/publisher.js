@@ -81,6 +81,7 @@ class Publisher {
 
             try {
                 const job = await this.#queue.getJob(jobId);
+
                 if (job?.opts?.attempts && job.attemptsMade >= job.opts.attempts) {
                     log.error(
                         {
