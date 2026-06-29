@@ -44,7 +44,7 @@ I'm a huge fan of learning new [architecture patterns](https://github.com/nodesh
 * Express.js 5.x:
   * More than a decade ago I started with Express.js 4.x. Given the scale of this project, I didn't want an opinionated framework and the community support was mature. I recently upgraded to the new major release of Express.js 5.x.
 * Vitest.js for testing:
-  * I migrated away from Jest. I wanted to use ESM (ECMAScript Modules) and Jest doesn't support them. See this [Architecture Decision Recored (ADR)](adr-files/esm.md) for more information.
+  * I migrated away from Jest. I wanted to use ESM (ECMAScript Modules) and Jest doesn't support them. See this [Architecture Decision Record (ADR)](adr-files/esm.md) for more information.
 * ESLint:
   * Linters are great when it comes to recommending [code quality and style patterns](https://github.com/goldbergyoni/nodebestpractices?tab=readme-ov-file#3-code-patterns-and-style-practices).
 * BullMQ for pub/sub messaging:
@@ -59,7 +59,7 @@ I'm a huge fan of learning new [architecture patterns](https://github.com/nodesh
 * Secure HTTP headers with Helmet:
   * I want my application to be production ready, which includes making it secure.
 * Rate limits:
-  * To prevent abuse of the API, I implelemented rate limiting to manage incoming requests.
+  * To prevent abuse of the API, I implemented rate limiting to manage incoming requests.
 * Data validation and schema definitions:
   * I used Joi for data validation and schema definitions.
 * Body parser limits:
@@ -70,9 +70,9 @@ I'm a huge fan of learning new [architecture patterns](https://github.com/nodesh
 * Graceful shutdown:
   * I've seen Kubernetes kill applications when readiness and/or liveness probes fail. I wanted to make sure I was handling shutdowns gracefully. I use GoDaddy's Terminus and some Docker best practices to shutdown application resources gracefully.
 * Cache-Aside caching strategy:
-  * The Desiny API has rate limits too. I'm efficiently caching data to prevent hitting those limits.
+  * The Destiny API has rate limits too. I'm efficiently caching data to prevent hitting those limits.
 * JSON Patch:
-  * I'm not a fan of PUT requests. I am a fan of PATCH requests, partticularly [JSON Patch](https://jsonpatch.me). I appreciate how the standard is explicit about what is being updated.
+  * I'm not a fan of PUT requests. I am a fan of PATCH requests, particularly [JSON Patch](https://jsonpatch.me). I appreciate how the standard is explicit about what is being updated.
 * Health checks and metrics:
   * In today's cloud environment, health checks and metrics are critical when it comes to observability.
 * ESM support:
@@ -80,7 +80,7 @@ I'm a huge fan of learning new [architecture patterns](https://github.com/nodesh
 * API documentation with Swagger:
   * OpenAPI is a great way to document APIs.
 * Test suites - unit, integration, and end-to-end:
-  * There a lot of ways to test software. I like to use a smart combination of each.
+  * There are a lot of ways to test software. I like to use a smart combination of each.
 * Observability headers:
   * I support using the X-Request-Id and X-Trace-Id headers for observability. I plan to use OpenTelemetry for distributed tracing.
 * Performance hooks for capturing latency of external services:

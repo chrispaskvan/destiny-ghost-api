@@ -50,7 +50,7 @@
         "dotenv": "^17.4.2",
         "express": "^5.2.1",
         "express-session": "^1.19.0",
-        "graphql": "^17.0.1",
+        "graphql": "^16.14.0",
         "graphql-http": "^1.22.4",
         "helmet": "^8.2.0",
         "html-to-text": "^10.0.0",
@@ -93,10 +93,8 @@
     "snyk": true,
     "pnpm": {
         "onlyBuiltDependencies": [
-            "@google/genai",
             "@snyk/protect",
-            "better-sqlite3",
-            "protobufjs"
+            "better-sqlite3"
         ]
     }
 }
