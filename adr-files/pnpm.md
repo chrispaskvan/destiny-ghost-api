@@ -28,21 +28,21 @@ Replace `package-lock.json` with `pnpm-lock.yaml`, install via the global conten
 
 The costs are also concrete and have to be planned for, not waved past:
 
-- The npm-style `overrides` block in `package.json` was deleted as part of removing `nodemailer-smtp-transport` (see commit history); a future pnpm migration starts with no overrides to translate. New `pnpm.overrides` would only be needed if Snyk re-flags a transitive in the meantime.
-- pnpm v9+ blocks postinstall scripts unless the package is allow-listed in `pnpm.onlyBuiltDependencies`. `better-sqlite3` and `@snyk/protect` will need entries; native deps that silently `node-gyp`-built under npm will otherwise fail to compile.
-- Both Dockerfile stages need to switch from `npm ci` to `pnpm install --frozen-lockfile`, and the cache mount target changes from `/root/.npm` to the pnpm store path. The root monorepo `Dockerfile` also runs `npm ci --omit=dev` against the API directory; that line needs to flip in the same change set even though the frontend stays on npm.
-- Husky hooks (`.husky/pre-commit`, `.husky/pre-push`) and the `start:dev` script invoke `npm` directly and need to be retargeted to `pnpm`.
-- Snyk's `@snyk/protect` and the implicit `"snyk": true` flag in `package.json` work with pnpm but should be re-verified against the produced `pnpm-lock.yaml` before turning the migration loose.
+* The npm-style `overrides` block in `package.json` was deleted as part of removing `nodemailer-smtp-transport` (see commit history); a future pnpm migration starts with no overrides to translate. New `pnpm.overrides` would only be needed if Snyk re-flags a transitive in the meantime.
+* pnpm v9+ blocks postinstall scripts unless the package is allow-listed in `pnpm.onlyBuiltDependencies`. `better-sqlite3` and `@snyk/protect` will need entries; native deps that silently `node-gyp`-built under npm will otherwise fail to compile.
+* Both Dockerfile stages need to switch from `npm ci` to `pnpm install --frozen-lockfile`, and the cache mount target changes from `/root/.npm` to the pnpm store path. The root monorepo `Dockerfile` also runs `npm ci --omit=dev` against the API directory; that line needs to flip in the same change set even though the frontend stays on npm.
+* Husky hooks (`.husky/pre-commit`, `.husky/pre-push`) and the `start:dev` script invoke `npm` directly and need to be retargeted to `pnpm`.
+* Snyk's `@snyk/protect` and the implicit `"snyk": true` flag in `package.json` work with pnpm but should be re-verified against the produced `pnpm-lock.yaml` before turning the migration loose.
 
 #### Spike: Node `--permission` interaction with pnpm symlinks (resolved)
 
 The original concern was that `--permission --allow-fs-read=./` would reject reads through pnpm's `node_modules/<pkg>` symlinks because the realpath escapes the project directory into the global store. A standalone reproduction (Node 22.22, pnpm 10.33, deps drawn from the API: `nodemailer`, `pino`, `lru-cache`) confirms this does not happen in the default configuration:
 
-- `node_modules/<pkg>` resolves via realpath to `node_modules/.pnpm/<pkg>@<ver>/node_modules/<pkg>`, which is still under cwd.
-- Files inside `.pnpm/` are content-addressable hardlinks that share inodes with the global store (verified with `stat -c %i` on both sides). At the filesystem level Node sees them as ordinary files inside the project — it never has to follow a path back to `~/.local/share/pnpm/store/`.
-- Running `node --permission --allow-fs-read=./ --allow-worker --allow-addons start.js` against the pnpm-installed deps printed `OK` and resolved all three modules.
-- A negative control (`--allow-fs-read=/tmp` only) failed at the very first `package_json_reader.read` call with `Access to this API has been restricted`, confirming the positive run was not a no-op.
-- An in-tree store variant (`store-dir=./.pnpm-store`, `package-import-method=hardlink` in `.npmrc`) produced the same successful result and is what we should use in the Dockerfile to keep store and project on the same filesystem (so hardlinks never silently fall back to copy or symlink across an overlay boundary).
+* `node_modules/<pkg>` resolves via realpath to `node_modules/.pnpm/<pkg>@<ver>/node_modules/<pkg>`, which is still under cwd.
+* Files inside `.pnpm/` are content-addressable hardlinks that share inodes with the global store (verified with `stat -c %i` on both sides). At the filesystem level Node sees them as ordinary files inside the project — it never has to follow a path back to `~/.local/share/pnpm/store/`.
+* Running `node --permission --allow-fs-read=./ --allow-worker --allow-addons start.js` against the pnpm-installed deps printed `OK` and resolved all three modules.
+* A negative control (`--allow-fs-read=/tmp` only) failed at the very first `package_json_reader.read` call with `Access to this API has been restricted`, confirming the positive run was not a no-op.
+* An in-tree store variant (`store-dir=./.pnpm-store`, `package-import-method=hardlink` in `.npmrc`) produced the same successful result and is what we should use in the Dockerfile to keep store and project on the same filesystem (so hardlinks never silently fall back to copy or symlink across an overlay boundary).
 
 The remaining risk is narrow: if a Docker `RUN --mount=type=cache,target=…` cache mount lands on a different filesystem than the workdir, pnpm's hardlink fallback chain (hardlink → copy → symlink, depending on version and config) could in principle land on symlinks and break the permission envelope. Pinning the store inside the workdir avoids this entirely.
 
@@ -66,7 +66,7 @@ Anything that today imports a transitive without declaring it will fail to insta
 
 ## Action Items
 
-1. ~~Spike Node `--permission` against pnpm symlinks.~~ Done (see above) — works with default hardlink mode; recommend pinning the store in-tree for the Docker build.
+1. \~~Spike Node `--permission` against pnpm symlinks.~~ Done (see above) — works with default hardlink mode; recommend pinning the store in-tree for the Docker build.
 2. Open an issue mirroring #604 (ESLint → Biome) covering: `package.json` (engines, packageManager, onlyBuiltDependencies), both Dockerfiles, both husky hooks, the `start:dev` script, README install instructions, lockfile regeneration, and a project-level `.npmrc` with `store-dir=./.pnpm-store` and `package-import-method=hardlink`.
 3. Re-run Snyk against `pnpm-lock.yaml` and confirm Codacy continues to ingest coverage unchanged.
 4. File a follow-up issue to evaluate a repo-root pnpm workspace covering both API and frontend, with the root `Dockerfile` consolidating onto a single install.

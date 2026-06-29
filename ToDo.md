@@ -19,16 +19,18 @@ Segregate the user interface from the API to allow for independent scaling.
 More performance tests should be added to the application to identify bottlenecks.
 
 ### Resources
-- [Node Clinic](https://github.com/nearform/node-clinic)
-- [Artillery](https://www.artillery.io)
+
+* [Node Clinic](https://github.com/nearform/node-clinic)
+* [Artillery](https://www.artillery.io)
 
 ## Notifications
 
 The application could maintain a list of subscribers to notify for each vendor rather than querying for subscribed users in the user collection.
-- Save an array of subscribed phone numbers to the vendor in the Notifications collection.
-- Emit an event to notify the Notification class to add a subscriber.
-- Fetch subscribers from the Notification collection when it is time to send a message.
-- Add a utility for synchronizing the list of phone numbers subscibed to the vendor with the source of truth User collection as a fallback in case of failures.
+
+* Save an array of subscribed phone numbers to the vendor in the Notifications collection.
+* Emit an event to notify the Notification class to add a subscriber.
+* Fetch subscribers from the Notification collection when it is time to send a message.
+* Add a utility for synchronizing the list of phone numbers subscibed to the vendor with the source of truth User collection as a fallback in case of failures.
 
 ## Telemetry
 
@@ -36,8 +38,8 @@ The application has been instrumented with Application Insights, but custom tele
 
 ### Bonuses
 
-- Evaluate how to capture application metrics like Node performace.
-- Consider OpenTelemetry for distributed tracing.
+* Evaluate how to capture application metrics like Node performace.
+* Consider OpenTelemetry for distributed tracing.
 
 ## Circuit Breaker
 
