@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import Database from 'better-sqlite3';
+import { DatabaseSync } from 'node:sqlite';
 import worker from './worker.js';
 
-vi.mock('better-sqlite3', () => ({
-    default: vi.fn(),
+vi.mock('node:sqlite', () => ({
+    DatabaseSync: vi.fn(),
 }));
 
 describe('worker', () => {
@@ -22,7 +22,7 @@ describe('worker', () => {
             close: vi.fn(),
         };
         // biome-ignore lint/complexity/useArrowFunction: function expression required — `new` ignores return value of arrow functions
-        Database.mockImplementation(function () {
+        DatabaseSync.mockImplementation(function () {
             return mockDatabase;
         });
     });
@@ -34,10 +34,7 @@ describe('worker', () => {
     it('should execute queries and return results', async () => {
         const results = await worker({ databasePath, queries });
 
-        expect(Database).toHaveBeenCalledWith(databasePath, {
-            readonly: true,
-            fileMustExist: true,
-        });
+        expect(DatabaseSync).toHaveBeenCalledWith(databasePath, { readOnly: true });
         expect(mockPrepare).toHaveBeenCalledWith(queries[0]);
         expect(mockAll).toHaveBeenCalled();
         expect(mockDatabase.close).toHaveBeenCalled();
@@ -46,7 +43,7 @@ describe('worker', () => {
 
     it('should throw an error if database loading fails', async () => {
         // biome-ignore lint/complexity/useArrowFunction: function expression required — `new` ignores return value of arrow functions
-        Database.mockImplementation(function () {
+        DatabaseSync.mockImplementation(function () {
             throw new Error('Database error');
         });
 

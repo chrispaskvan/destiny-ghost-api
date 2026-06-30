@@ -41,7 +41,6 @@
         "applicationinsights": "^3.15.1",
         "awesome-phonenumber": "^7.8.0",
         "base64url": "^3.0.1",
-        "better-sqlite3": "^12.11.1",
         "bullmq": "^5.79.2",
         "compression": "^1.8.1",
         "connect-redis": "^9.0.0",
@@ -93,8 +92,15 @@
     "snyk": true,
     "pnpm": {
         "onlyBuiltDependencies": [
-            "@snyk/protect",
-            "better-sqlite3"
+            "@google/genai",
+            "@scarf/scarf",
+            "msgpackr-extract",
+            "protobufjs",
+            "@snyk/protect"
         ]
+    },
+    "allowScripts": {
+        "@google/genai@2.10.0": true,
+        "protobufjs@7.6.4": true
     }
 }

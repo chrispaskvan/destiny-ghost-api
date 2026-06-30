@@ -1,13 +1,11 @@
-import Database from 'better-sqlite3';
+import { DatabaseSync } from 'node:sqlite';
 
 export default async function ({ databasePath, queries }) {
     let database;
 
     try {
-        database = new Database(databasePath, {
-            readonly: true,
-            fileMustExist: true,
-        });
+        database = new DatabaseSync(databasePath, { readOnly: true });
+
         const results = queries.map(query => database.prepare(query).all());
 
         return results;
