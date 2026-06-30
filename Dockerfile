@@ -1,20 +1,11 @@
 # Define Node.js version as a build argument
-ARG NODE_VERSION=24.16.0
+ARG NODE_VERSION=26.4.0
 
 # Build stage - includes dev dependencies for OpenAPI generation
 FROM node:${NODE_VERSION}-trixie-slim AS builder
 
-# Install build dependencies
-RUN apt-get update && apt-get install --no-install-recommends -y \
-      gcc \
-      g++ \
-      libc6-dev \
-      make \
-      python3 \
-    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
-
 # Enable corepack so the pnpm version pinned in package.json#packageManager is used
-RUN corepack enable
+RUN npm install -g corepack && corepack enable
 
 WORKDIR /app
 
@@ -60,7 +51,7 @@ ENV WEBSITE=$WEBSITE
 EXPOSE $PORT
 
 # Enable corepack as root before switching to the unprivileged user
-RUN corepack enable
+RUN npm install -g corepack && corepack enable
 
 # Create application directory and set permissions
 RUN mkdir /destiny-ghost-api && chown -R node:node /destiny-ghost-api
