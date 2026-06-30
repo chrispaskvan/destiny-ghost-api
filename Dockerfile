@@ -4,15 +4,6 @@ ARG NODE_VERSION=26.4.0
 # Build stage - includes dev dependencies for OpenAPI generation
 FROM node:${NODE_VERSION}-trixie-slim AS builder
 
-# Install build dependencies
-RUN apt-get update && apt-get install --no-install-recommends -y \
-      gcc \
-      g++ \
-      libc6-dev \
-      make \
-      python3 \
-    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
-
 # Enable corepack so the pnpm version pinned in package.json#packageManager is used
 RUN corepack enable
 
