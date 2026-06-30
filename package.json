@@ -1,6 +1,6 @@
 {
     "name": "destiny-ghost-api",
-    "version": "2.13.0",
+    "version": "2.14.0",
     "description": "Node.js API for querying the Destiny database via SMS messages.",
     "main": "start.js",
     "type": "module",
@@ -9,7 +9,7 @@
         "format": "remark . --quiet --frail --output",
         "lint": "biome check --write .",
         "lint:ci": "biome check .",
-        "start:production": "NODE_ENV=production node --permission --allow-fs-read=./ --allow-fs-read=/agents/ --allow-fs-write=./databases --allow-fs-write=/var/ --allow-worker --allow-addons --disable-warning=SecurityWarning --import=./helpers/permission-model-patch.js -r dotenv/config --max-old-space-size=8192 --unhandled-rejections=strict start.js",
+        "start:production": "NODE_ENV=production node --permission --allow-fs-read=./ --allow-fs-read=/agents/ --allow-fs-write=./databases --allow-fs-write=/var/ --allow-worker --allow-addons --allow-net --disable-warning=SecurityWarning --import=./helpers/permission-model-patch.js -r dotenv/config --max-old-space-size=8192 --unhandled-rejections=strict start.js",
         "start:dev": "NODE_ENV=development pnpm start",
         "start": "node -r dotenv/config --max-old-space-size=8192 --unhandled-rejections=strict start.js",
         "swagger": "rm -f openapi.json && swagger-jsdoc -d openapi.cjs ./**/*.routes.js -o openapi.json",
