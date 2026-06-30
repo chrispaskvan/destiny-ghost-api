@@ -93,7 +93,6 @@
     "pnpm": {
         "onlyBuiltDependencies": [
             "@google/genai",
-            "@scarf/scarf",
             "msgpackr-extract",
             "protobufjs"
         ]
