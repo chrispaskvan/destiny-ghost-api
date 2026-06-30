@@ -5,7 +5,7 @@ ARG NODE_VERSION=26.4.0
 FROM node:${NODE_VERSION}-trixie-slim AS builder
 
 # Enable corepack so the pnpm version pinned in package.json#packageManager is used
-RUN corepack enable
+RUN npm install -g corepack && corepack enable
 
 WORKDIR /app
 
@@ -51,7 +51,7 @@ ENV WEBSITE=$WEBSITE
 EXPOSE $PORT
 
 # Enable corepack as root before switching to the unprivileged user
-RUN corepack enable
+RUN npm install -g corepack && corepack enable
 
 # Create application directory and set permissions
 RUN mkdir /destiny-ghost-api && chown -R node:node /destiny-ghost-api
