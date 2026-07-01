@@ -20,7 +20,6 @@ Dockerfile
 eslint.config.mjs
 LICENSE
 mocks
-nginx
 node_modules
 README.md
 references.txt
