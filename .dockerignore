@@ -15,7 +15,6 @@
 adr-files
 coverage
 databases
-docker-compose.yml
 Dockerfile
 eslint.config.mjs
 LICENSE
