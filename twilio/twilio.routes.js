@@ -50,27 +50,30 @@ const routes = ({
         NumMedia: z.coerce.number().int().min(0),
     });
 
-    twilioRouter.route('/destiny/r').post(
-        async (req, res, next) => await middleware.authenticateUser(req, res, next),
-        async (req, res) => {
-            const header = req.headers['x-twilio-signature'];
-            const { body, cookies: requestCookies = {} } = req;
+    twilioRouter.route('/destiny/r').post(async (req, res) => {
+        const header = req.headers['x-twilio-signature'];
+        const { body, cookies: requestCookies = {} } = req;
 
-            try {
-                bodySchema.parse(body);
-            } catch (err) {
-                return res.status(StatusCodes.BAD_REQUEST).json({ error: err.issues[0].message });
-            }
+        // Reconstruct the URL using known, trusted components
+        const reconstructedUrl = `${process.env.PROTOCOL}://${process.env.DOMAIN}/twilio/destiny/r`;
 
-            // Reconstruct the URL using known, trusted components
-            const reconstructedUrl = `${process.env.PROTOCOL}://${process.env.DOMAIN}/twilio/destiny/r`;
+        // Verify the request is genuinely from Twilio before doing anything
+        // else with it (schema validation, user lookups, etc).
+        if (!validateRequest(authToken, header, reconstructedUrl, body)) {
+            res.writeHead(StatusCodes.FORBIDDEN);
 
-            if (!validateRequest(authToken, header, reconstructedUrl, body)) {
-                res.writeHead(StatusCodes.FORBIDDEN);
+            return res.end();
+        }
 
-                return res.end();
-            }
+        try {
+            bodySchema.parse(body);
+        } catch (err) {
+            return res.status(StatusCodes.BAD_REQUEST).json({ error: err.issues[0].message });
+        }
 
+        // Only look up/authenticate the user once the request has been
+        // verified as an authentic, well-formed Twilio callback.
+        return middleware.authenticateUser(req, res, async () => {
             const {
                 cookies = {},
                 media,
@@ -106,8 +109,8 @@ const routes = ({
             });
 
             return res.end(twiml.toString());
-        },
-    );
+        });
+    });
 
     twilioRouter.route('/destiny/s').post(async (req, res) => {
         const header = req.headers['x-twilio-signature'];
