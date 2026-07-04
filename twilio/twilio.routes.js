@@ -51,7 +51,7 @@ const routes = ({
     });
 
     twilioRouter.route('/destiny/r').post(
-        async (req, res, next) => {
+        (req, res, next) => {
             const header = req.headers['x-twilio-signature'];
             const reconstructedUrl = `${process.env.PROTOCOL}://${process.env.DOMAIN}/twilio/destiny/r`;
 
@@ -61,12 +61,13 @@ const routes = ({
                 return res.end();
             }
 
-            next();
+            return next();
         },
-        async (req, res, next) => {
+        (req, res, next) => {
             try {
                 bodySchema.parse(req.body);
-                next();
+
+                return next();
             } catch (err) {
                 return res.status(StatusCodes.BAD_REQUEST).json({ error: err.issues[0].message });
             }
