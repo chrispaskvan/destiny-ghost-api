@@ -1,0 +1,20 @@
+version: 2
+updates:
+  # Application dependencies (pnpm).
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      # Batch routine minor/patch bumps into a single PR to cut noise.
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  # Keep the GitHub Actions in .github/workflows pinned and current.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
