@@ -51,26 +51,30 @@ const routes = ({
     });
 
     twilioRouter.route('/destiny/r').post(
-        async (req, res, next) => await middleware.authenticateUser(req, res, next),
-        async (req, res) => {
+        (req, res, next) => {
             const header = req.headers['x-twilio-signature'];
-            const { body, cookies: requestCookies = {} } = req;
-
-            try {
-                bodySchema.parse(body);
-            } catch (err) {
-                return res.status(StatusCodes.BAD_REQUEST).json({ error: err.issues[0].message });
-            }
-
-            // Reconstruct the URL using known, trusted components
             const reconstructedUrl = `${process.env.PROTOCOL}://${process.env.DOMAIN}/twilio/destiny/r`;
 
-            if (!validateRequest(authToken, header, reconstructedUrl, body)) {
+            if (!validateRequest(authToken, header, reconstructedUrl, req.body)) {
                 res.writeHead(StatusCodes.FORBIDDEN);
 
                 return res.end();
             }
 
+            return next();
+        },
+        (req, res, next) => {
+            try {
+                bodySchema.parse(req.body);
+
+                return next();
+            } catch (err) {
+                return res.status(StatusCodes.BAD_REQUEST).json({ error: err.issues[0].message });
+            }
+        },
+        (req, res, next) => middleware.authenticateUser(req, res, next),
+        async (req, res) => {
+            const { body, cookies: requestCookies = {} } = req;
             const {
                 cookies = {},
                 media,
