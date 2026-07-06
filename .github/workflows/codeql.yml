@@ -17,6 +17,9 @@ jobs:
     name: analyze
     runs-on: ubuntu-latest
     permissions:
+      # Job-level permissions replace (not merge with) the workflow-level
+      # block, so contents:read must be restated for actions/checkout.
+      contents: read
       security-events: write
     steps:
       - uses: actions/checkout@v4
