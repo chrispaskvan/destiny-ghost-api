@@ -18,7 +18,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       # Job-level permissions replace (not merge with) the workflow-level
-      # block, so contents:read must be restated for actions/checkout.
+      # block, so read scopes must be restated here.
+      actions: read # required by the CodeQL action for private repositories
       contents: read
       security-events: write
     steps:
