@@ -18,3 +18,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    groups:
+      # Batch all action bumps into a single PR to avoid the rebase cascade
+      # that separate PRs cause under strict, up-to-date-required checks.
+      actions:
+        patterns:
+          - "*"
