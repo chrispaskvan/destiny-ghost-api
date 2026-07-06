@@ -39,8 +39,15 @@ jobs:
 
       # Regenerate the spec from JSDoc and fail if it differs from the
       # committed openapi.json — keeps the API docs from silently rotting.
+      # NODE_ENV is pinned because openapi.cjs selects the server URL from it,
+      # so the output must match the environment the committed spec was built in.
       - name: Check OpenAPI spec is up to date
+        env:
+          NODE_ENV: development
         run: |
           pnpm swagger
-          git diff --exit-code -- openapi.json \
-            || (echo "::error::openapi.json is out of date. Run 'pnpm swagger' and commit the result." && exit 1)
+          if ! git diff --quiet -- openapi.json; then
+            echo "::error::openapi.json is out of date. Run 'pnpm swagger' and commit the result."
+            git diff -- openapi.json
+            exit 1
+          fi
