@@ -84,7 +84,8 @@ const startServer = () => {
         getAll: createGetAllHandler(world),
     });
 
-    server.bindAsync(`127.0.0.1:${port}`, grpc.ServerCredentials.createInsecure(), () => {
+    server.bindAsync(`127.0.0.1:${port}`, grpc.ServerCredentials.createInsecure(), err => {
+        if (err) throw err;
         log.info({ port }, 'GRPC server is listening');
     });
 };

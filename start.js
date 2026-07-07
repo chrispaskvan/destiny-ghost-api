@@ -1,9 +1,8 @@
-import log from './helpers/log.js';
 import { startServer } from './server.js';
 import { startServer as grpcStart } from './grpc.js';
 
 function exitOnError(err) {
-    log.error({ err }, 'Fatal error');
+    console.error('Fatal error', err);
     process.exit(1);
 }
 
