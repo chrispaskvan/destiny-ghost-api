@@ -2,6 +2,7 @@ import grpc from '@grpc/grpc-js';
 import protoLoader from '@grpc/proto-loader';
 
 import configuration from './helpers/config.js';
+import log from './helpers/log.js';
 import World2 from './helpers/world2.js';
 import pool from './helpers/pool.js';
 
@@ -84,7 +85,7 @@ const startServer = () => {
     });
 
     server.bindAsync(`127.0.0.1:${port}`, grpc.ServerCredentials.createInsecure(), () => {
-        console.log(`GRPC server listening on port ${port}.`);
+        log.info({ port }, 'GRPC server is listening');
     });
 };
 
