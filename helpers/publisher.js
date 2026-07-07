@@ -60,9 +60,7 @@ class Publisher {
             connection: client,
         });
         this.#queueEvents.on('deduplicated', ({ jobId, deduplicationId }, id) => {
-            console.log(
-                `Job ${id} was deduplicated due to existing job ${jobId} with deduplication Id ${deduplicationId}`,
-            );
+            log.info({ id, jobId, deduplicationId }, 'Job deduplicated');
         });
         this.#queueEvents.on('added', ({ jobId }) => {
             log.info({ jobId }, 'Job added to queue');

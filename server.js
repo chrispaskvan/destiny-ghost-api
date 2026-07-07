@@ -12,6 +12,7 @@ import { createTerminus } from '@godaddy/terminus';
 import applicationInsights from './helpers/application-insights.js';
 import cache from './helpers/cache.js';
 import jobs from './helpers/jobs.js';
+import log from './helpers/log.js';
 import loaders from './loaders/index.js';
 import subscriber from './helpers/subscriber.js';
 import processExternalPromisesWithTimeout from './helpers/process-external-promises-with-timeout.js';
@@ -50,7 +51,7 @@ const startServer = async () => {
         );
 
         secureConnection = server.listen(443, () =>
-            console.log('HTTPS server listening on port 443.'),
+            log.info({ port: 443 }, 'HTTPS server is listening.'),
         );
     }
 
@@ -88,7 +89,7 @@ const startServer = async () => {
 
             insecureServer.close();
         },
-        logger: console.error,
+        logger: (msg, err) => log.error({ err }, msg),
     });
 
     insecureConnection = insecureServer.listen(port, () => {
@@ -97,7 +98,7 @@ const startServer = async () => {
 
         applicationInsights.trackMetric({ name: 'startup-time', value: duration });
 
-        console.log(`HTTP server listening on port ${port} with ${cpuCount} cpus.`);
+        log.info({ port, cpuCount, duration }, 'HTTP server is listening');
     });
 
     insecureServer.headersTimeout = serverOptions.headersTimeout;

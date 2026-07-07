@@ -2,7 +2,7 @@ import { startServer } from './server.js';
 import { startServer as grpcStart } from './grpc.js';
 
 function exitOnError(err) {
-    console.log(err);
+    console.error('Fatal error', err);
     process.exit(1);
 }
 
