@@ -83,7 +83,7 @@ const loaders = {
 
             log.error(err);
 
-            if (res.status) {
+            if (!res.headersSent) {
                 if (err instanceof DestinyError) {
                     res.status(StatusCodes.NOT_FOUND).json({
                         errors: [
