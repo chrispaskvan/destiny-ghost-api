@@ -45,8 +45,8 @@ I'm a huge fan of learning new [architecture patterns](https://github.com/nodesh
   * More than a decade ago I started with Express.js 4.x. Given the scale of this project, I didn't want an opinionated framework and the community support was mature. I recently upgraded to the new major release of Express.js 5.x.
 * Vitest.js for testing:
   * I migrated away from Jest. I wanted to use ESM (ECMAScript Modules) and Jest doesn't support them. See this [Architecture Decision Record (ADR)](adr-files/esm.md) for more information.
-* ESLint:
-  * Linters are great when it comes to recommending [code quality and style patterns](https://github.com/goldbergyoni/nodebestpractices?tab=readme-ov-file#3-code-patterns-and-style-practices).
+* Biome for linting and formatting:
+  * Linters are great when it comes to recommending [code quality and style patterns](https://github.com/goldbergyoni/nodebestpractices?tab=readme-ov-file#3-code-patterns-and-style-practices). I migrated from ESLint to Biome for its speed and unified lint + format toolchain.
 * BullMQ for pub/sub messaging:
   * I also wanted to learn more about cloud computing when I started. I originally used Azure Service Bus for messaging. But I've since migrated to BullMQ for pub/sub messaging as a cost saving measure, since I'm already using Redis for caching.
 * Pino for logging:
@@ -61,7 +61,7 @@ I'm a huge fan of learning new [architecture patterns](https://github.com/nodesh
 * Rate limits:
   * To prevent abuse of the API, I implemented rate limiting to manage incoming requests.
 * Data validation and schema definitions:
-  * I used Joi for data validation and schema definitions.
+  * I used Zod for data validation and schema definitions.
 * Body parser limits:
   * I set limits on incoming payloads to prevent abuse.
 
