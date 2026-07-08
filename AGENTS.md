@@ -53,7 +53,7 @@ Biome enforces formatting and linting (`biome.json` is authoritative): 4-space i
 Conventions you'll see everywhere and should follow:
 
 * **ESM only** (`"type": "module"`), targeting Node 26. Modern platform features are used freely — the `Temporal` API (global), `fetch`, and Node's permission model in production.
-* **JSDoc** on modules, classes, and public methods. Types are checked with `tsc --noEmit` against `jsconfig.json` (`pnpm typecheck`) — no TypeScript source files.
+* **JSDoc** on modules, classes, and public methods. `pnpm typecheck` runs `tsc --noEmit` against `jsconfig.json`, but `checkJs` is off — only files with a `// @ts-check` pragma are type-checked (e.g., `users/user.service.js`). No TypeScript source files.
 * **`StatusCodes` from `http-status-codes`** instead of numeric literals.
 * **`log` from `helpers/log.js`** (Pino) — never `console.*`.
 * **Zod** for input validation and schemas.
@@ -63,7 +63,9 @@ Commit messages follow Conventional Commits (`fix(logging): …`, `chore(deps): 
 
 ## Testing
 
-Vitest, with `chance` for randomized test data, `node-mocks-http` for req/res mocks, and `nock` for intercepting external HTTP in integration tests. Coverage thresholds in `vitest.config.js` auto-update — a change that drops coverage will fail CI.
+Vitest, with `chance` for randomized test data, `node-mocks-http` for req/res mocks, and `nock` for intercepting external HTTP in integration tests. Coverage thresholds in `vitest.config.js` auto-update when `pnpm coverage` runs, ratcheting them to the current coverage — treat them as a floor and don't let a change lower them.
+
+Enforcement is split between CI and git hooks: GitHub Actions runs lint, typecheck, and the OpenAPI check, while the Husky pre-push hook runs the full test suite locally.
 
 ### Test file naming convention
 
