@@ -10,7 +10,7 @@ A Node.js API that lets Destiny players search the game's weapon database over S
 
 ### Feature folders, layered within
 
-Code is organized by domain feature, not by technical role. Each feature folder (`destiny/`, `destiny2/`, `users/`, `notifications/`, `authentication/`, `twilio/`, `health/`) contains its own layers:
+Code is organized by domain feature, not by technical role. Each feature folder (`destiny/`, `destiny2/`, `users/`, `notifications/`, `authentication/`, `twilio/`, `health/`) follows this layered shape, keeping only the layers it needs (e.g., `health/` is just routes + controller, and `authentication/` has no routes file):
 
 ```
 feature/
@@ -39,8 +39,8 @@ The API is exposed several ways, all sharing the same service layer:
 ### Data stores
 
 * **Azure Cosmos DB** — user documents (`helpers/documents.js`)
-* **SQLite** — the Bungie manifest databases, downloaded and refreshed at startup (`helpers/world.js`, `world2.js`), queried through a worker pool (`helpers/pool.js`)
-* **Redis (ioredis)** — cache-aside caching, sessions, and BullMQ queues
+* **SQLite** — the Bungie manifest databases, downloaded and refreshed at startup (`helpers/world.js`, `helpers/world2.js`), queried through a worker pool (`helpers/pool.js`)
+* **Redis** — cache-aside caching and sessions use the `redis` client (`helpers/cache.js`, `helpers/store.js`); BullMQ queues use `ioredis` (`helpers/jobs.js`)
 
 ## Decisions Are Documented
 
@@ -71,7 +71,7 @@ Enforcement is split between CI and git hooks: GitHub Actions runs lint, typeche
 
 Two suffixes distinguish test types:
 
-* `*.spec.js` — Unit tests. Dependencies are mocked; no server is started. Fast and isolated. Every module has one.
+* `*.spec.js` — Unit tests. Dependencies are mocked; no server is started. Fast and isolated. Most modules have one, and new modules should too.
 * `*.test.js` — Integration tests. A real server is started via `startServer()` and requests are made over HTTP; `nock` intercepts external API calls. These exist only where end-to-end HTTP behavior needs verification (e.g., `destiny2/destiny2.routes.test.js`).
 
 When adding tests:
