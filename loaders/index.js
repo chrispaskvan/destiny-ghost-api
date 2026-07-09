@@ -79,7 +79,7 @@ const loaders = {
         });
 
         app.use((err, _req, res, next) => {
-            const { code, message, status, statusText } = err;
+            const { code, message, status, statusCode, statusText } = err;
 
             log.error(err);
 
@@ -104,7 +104,7 @@ const loaders = {
                         ],
                     });
                 } else {
-                    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+                    res.status(statusCode ?? StatusCodes.INTERNAL_SERVER_ERROR).json({
                         errors: [
                             {
                                 message,

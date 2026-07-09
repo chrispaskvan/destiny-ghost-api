@@ -3,6 +3,7 @@ import cookieParser from 'cookie-parser';
 import express from 'express';
 import session from 'express-session';
 import helmet from 'helmet';
+import { StatusCodes } from 'http-status-codes';
 
 import configuration from '../helpers/config.js';
 import httpLog from '../helpers/httpLog.js';
@@ -79,25 +80,29 @@ export default app => {
     app.use(ghostSession);
 
     /**
+     * Request/Response and Error Loggers
+     *
+     * Runs before the session guard so requests still get correlation
+     * headers and structured logs during a session store outage.
+     */
+    app.use(httpLog);
+
+    /**
      * If the Redis store is disconnected, express-session calls next() without
      * setting req.session. Fail fast with an explicit error rather than letting
      * the request proceed sessionless.
      */
     app.use((req, _res, next) => {
         if (!req.session) {
-            return next(new Error('Session store unavailable.'));
+            const error = new Error('Session store unavailable.');
+
+            error.statusCode = StatusCodes.SERVICE_UNAVAILABLE;
+
+            return next(error);
         }
 
         return next();
     });
-
-    /**
-     * Request/Response and Error Loggers
-     *
-     * Must stay behind the session guard: httpLog destructures req.session
-     * and would throw if it ran while the session store is unavailable.
-     */
-    app.use(httpLog);
 
     /**
      * Rate Limiter
