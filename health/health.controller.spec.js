@@ -6,6 +6,12 @@ import manifestResponse from '../mocks/manifestResponse.json';
 import manifest2Response from '../mocks/manifest2Response.json';
 
 vi.mock('../helpers/request.js');
+vi.mock('../helpers/bungie.request.js', () => ({
+    getCircuitBreakerStatus: vi.fn(() => ({
+        state: 'closed',
+        stats: { failures: 0, rejects: 0, successes: 0, timeouts: 0 },
+    })),
+}));
 vi.mock('../helpers/application-insights.js', () => ({
     default: {
         trackMetric: vi.fn(),
@@ -97,6 +103,10 @@ describe('HealthController', () => {
 
                 expect(failures).toEqual(0);
                 expect(health).toEqual({
+                    bungie: {
+                        state: 'closed',
+                        stats: { failures: 0, rejects: 0, successes: 0, timeouts: 0 },
+                    },
                     documents: 2,
                     twilio: 'All Systems Go',
                     destiny: {
@@ -156,6 +166,10 @@ describe('HealthController', () => {
 
                 expect(failures).toEqual(6);
                 expect(health).toEqual({
+                    bungie: {
+                        state: 'closed',
+                        stats: { failures: 0, rejects: 0, successes: 0, timeouts: 0 },
+                    },
                     documents: -1,
                     twilio: 'N/A',
                     destiny: {
