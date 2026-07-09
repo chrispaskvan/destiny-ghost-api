@@ -90,10 +90,13 @@ export default app => {
     /**
      * If the Redis store is disconnected, express-session calls next() without
      * setting req.session. Fail fast with an explicit error rather than letting
-     * the request proceed sessionless.
+     * the request proceed sessionless. Liveness and health endpoints are exempt
+     * so they can still report diagnostics during a session store outage.
      */
     app.use((req, _res, next) => {
-        if (!req.session) {
+        const isSessionless = req.path === '/ping' || req.path.startsWith('/health');
+
+        if (!isSessionless && !req.session) {
             const error = new Error('Session store unavailable.');
 
             error.statusCode = StatusCodes.SERVICE_UNAVAILABLE;
