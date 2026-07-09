@@ -63,33 +63,24 @@ export default app => {
         },
         name: configuration.session.cookie.name,
         resave: false,
-        saveUninitialized: true,
+        saveUninitialized: false,
         secret: configuration.session.secret,
         store,
     });
 
-    app.use((req, res, next) => {
-        let numberOfRetries = 3;
+    app.use(ghostSession);
 
-        function lookupSession(err) {
-            if (err) {
-                return next(err);
-            }
-
-            numberOfRetries -= 1;
-
-            if (req.session !== undefined) {
-                return next();
-            }
-
-            if (numberOfRetries < 0) {
-                return next(new Error('Failed to look up session.'));
-            }
-
-            return ghostSession(req, res, lookupSession);
+    /**
+     * If the Redis store is disconnected, express-session calls next() without
+     * setting req.session. Fail fast with an explicit error rather than letting
+     * the request proceed sessionless.
+     */
+    app.use((req, _res, next) => {
+        if (!req.session) {
+            return next(new Error('Session store unavailable.'));
         }
 
-        lookupSession();
+        return next();
     });
 
     /**
