@@ -3,6 +3,7 @@ import cookieParser from 'cookie-parser';
 import express from 'express';
 import session from 'express-session';
 import helmet from 'helmet';
+import { StatusCodes } from 'http-status-codes';
 
 import configuration from '../helpers/config.js';
 import httpLog from '../helpers/httpLog.js';
@@ -47,6 +48,14 @@ export default app => {
     });
 
     /**
+     * Attach Context
+     *
+     * Runs before the session middleware so that errors raised there, e.g.
+     * when the session store is unavailable, are logged with a traceId.
+     */
+    app.use(contextMiddleware);
+
+    /**
      * Attach Session
      */
     if (process.env.NODE_ENV === 'production') {
@@ -63,44 +72,40 @@ export default app => {
         },
         name: configuration.session.cookie.name,
         resave: false,
-        saveUninitialized: true,
+        saveUninitialized: false,
         secret: configuration.session.secret,
         store,
     });
 
-    app.use((req, res, next) => {
-        let numberOfRetries = 3;
-
-        function lookupSession(err) {
-            if (err) {
-                return next(err);
-            }
-
-            numberOfRetries -= 1;
-
-            if (req.session !== undefined) {
-                return next();
-            }
-
-            if (numberOfRetries < 0) {
-                return next(new Error('Failed to look up session.'));
-            }
-
-            return ghostSession(req, res, lookupSession);
-        }
-
-        lookupSession();
-    });
-
-    /**
-     * Attach Context
-     */
-    app.use(contextMiddleware);
+    app.use(ghostSession);
 
     /**
      * Request/Response and Error Loggers
+     *
+     * Runs before the session guard so requests still get correlation
+     * headers and structured logs during a session store outage.
      */
     app.use(httpLog);
+
+    /**
+     * If the Redis store is disconnected, express-session calls next() without
+     * setting req.session. Fail fast with an explicit error rather than letting
+     * the request proceed sessionless. Liveness and health endpoints are exempt
+     * so they can still report diagnostics during a session store outage.
+     */
+    app.use((req, _res, next) => {
+        const isSessionless = /^\/(?:ping|health)(?:\/|$)/.test(req.path);
+
+        if (!isSessionless && !req.session) {
+            const error = new Error('Session store unavailable.');
+
+            error.statusCode = StatusCodes.SERVICE_UNAVAILABLE;
+
+            return next(error);
+        }
+
+        return next();
+    });
 
     /**
      * Rate Limiter
