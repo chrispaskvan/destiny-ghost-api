@@ -47,6 +47,14 @@ export default app => {
     });
 
     /**
+     * Attach Context
+     *
+     * Runs before the session middleware so that errors raised there, e.g.
+     * when the session store is unavailable, are logged with a traceId.
+     */
+    app.use(contextMiddleware);
+
+    /**
      * Attach Session
      */
     if (process.env.NODE_ENV === 'production') {
@@ -84,12 +92,10 @@ export default app => {
     });
 
     /**
-     * Attach Context
-     */
-    app.use(contextMiddleware);
-
-    /**
      * Request/Response and Error Loggers
+     *
+     * Must stay behind the session guard: httpLog destructures req.session
+     * and would throw if it ran while the session store is unavailable.
      */
     app.use(httpLog);
 
