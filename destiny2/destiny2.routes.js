@@ -2,15 +2,12 @@
  * Created by chris on 9/25/15.
  */
 import { StatusCodes } from 'http-status-codes';
-import cors from 'cors';
 import { Router } from 'express';
 import AuthenticationMiddleware from '../authentication/authentication.middleware.js';
 import authorizeUser from '../authorization/authorization.middleware.js';
 import getMaxAgeFromCacheControl from '../helpers/get-max-age-from-cache-control.js';
 import log from '../helpers/log.js';
 import toTemporalInstant from '../helpers/to-temporal-instant.js';
-
-import configuration from '../helpers/config.js';
 
 const inventoryStreamBackpressureIdleTimeoutMs = 30 * 1000;
 const inventoryStreamWriteResult = Object.freeze({
@@ -375,7 +372,6 @@ const routes = ({ authenticationController, destiny2Controller }) => {
      *          description: Xur could not be found.
      */
     destiny2Router.route('/xur').get(
-        cors(configuration.cors),
         async (req, res, next) => await middleware.authenticateUser(req, res, next),
         async (req, res) => {
             const {
