@@ -94,7 +94,7 @@ export default app => {
      * so they can still report diagnostics during a session store outage.
      */
     app.use((req, _res, next) => {
-        const isSessionless = req.path === '/ping' || req.path.startsWith('/health');
+        const isSessionless = /^\/(?:ping|health)(?:\/|$)/.test(req.path);
 
         if (!isSessionless && !req.session) {
             const error = new Error('Session store unavailable.');
