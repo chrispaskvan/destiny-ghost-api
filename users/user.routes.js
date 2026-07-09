@@ -1,9 +1,7 @@
 import { StatusCodes } from 'http-status-codes';
-import cors from 'cors';
 import { Router } from 'express';
 import AuthenticationMiddleWare from '../authentication/authentication.middleware.js';
 import UserController from './user.controller.js';
-import configuration from '../helpers/config.js';
 import log from '../helpers/log.js';
 
 /**
@@ -92,8 +90,6 @@ const routes = ({
         worldRepository,
     });
     const userRouter = Router();
-
-    userRouter.use(cors(configuration.cors));
 
     /**
      * @openapi

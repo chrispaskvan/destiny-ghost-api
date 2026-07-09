@@ -1,5 +1,6 @@
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
+import cors from 'cors';
 import express from 'express';
 import session from 'express-session';
 import helmet from 'helmet';
@@ -38,14 +39,9 @@ export default app => {
     app.disable('etag').disable('x-powered-by');
 
     /**
-     * Set Access Headers
+     * Cross-Origin Resource Sharing
      */
-    app.use((_req, res, next) => {
-        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, PATCH, DELETE');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-        res.setHeader('Access-Control-Allow-Credentials', true);
-        next();
-    });
+    app.use(cors(configuration.cors));
 
     /**
      * Attach Context

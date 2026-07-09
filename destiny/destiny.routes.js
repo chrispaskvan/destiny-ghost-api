@@ -2,13 +2,11 @@
  * Created by chris on 9/25/15.
  */
 import { StatusCodes } from 'http-status-codes';
-import cors from 'cors';
 import { Router } from 'express';
 import DestinyController from './destiny.controller.js';
 import authorizeUser from '../authorization/authorization.middleware.js';
 import getMaxAgeFromCacheControl from '../helpers/get-max-age-from-cache-control.js';
 import toTemporalInstant from '../helpers/to-temporal-instant.js';
-import configuration from '../helpers/config.js';
 
 /**
  * Destiny Routes
@@ -32,7 +30,7 @@ const routes = ({ destinyService, userService, worldRepository }) => {
         worldRepository,
     });
 
-    destinyRouter.route('/signIn/').get(cors(configuration.cors), async (req, res) => {
+    destinyRouter.route('/signIn/').get(async (req, res) => {
         const { state, url } = await destinyController.getAuthorizationUrl();
 
         req.session.state = state;
@@ -86,27 +84,25 @@ const routes = ({ destinyService, userService, worldRepository }) => {
      *        422:
      *          description: Unrecognized whole number.
      */
-    destinyRouter
-        .route('/grimoireCards/:numberOfCards')
-        .get(cors(configuration.cors), async (req, res) => {
-            const {
-                params: { numberOfCards },
-            } = req;
-            const count = parseInt(numberOfCards, 10);
+    destinyRouter.route('/grimoireCards/:numberOfCards').get(async (req, res) => {
+        const {
+            params: { numberOfCards },
+        } = req;
+        const count = parseInt(numberOfCards, 10);
 
-            if (Number.isNaN(count)) {
-                return res.status(StatusCodes.UNPROCESSABLE_ENTITY).end();
-            }
+        if (Number.isNaN(count)) {
+            return res.status(StatusCodes.UNPROCESSABLE_ENTITY).end();
+        }
 
-            if (count < 1 || count > 10) {
-                return res
-                    .status(StatusCodes.BAD_REQUEST)
-                    .send('Must be a whole number less than or equal to 10.');
-            }
+        if (count < 1 || count > 10) {
+            return res
+                .status(StatusCodes.BAD_REQUEST)
+                .send('Must be a whole number less than or equal to 10.');
+        }
 
-            const grimoireCards = await destinyController.getGrimoireCards(count);
-            res.status(StatusCodes.OK).json(grimoireCards);
-        });
+        const grimoireCards = await destinyController.getGrimoireCards(count);
+        res.status(StatusCodes.OK).json(grimoireCards);
+    });
 
     /**
      * @openapi

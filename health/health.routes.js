@@ -1,8 +1,6 @@
 import { Router } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import HealthController from './health.controller.js';
-import cors from 'cors';
-import configuration from '../helpers/config.js';
 
 /**
  * Destiny Routes
@@ -21,8 +19,6 @@ const routes = ({
     world2Repository,
 }) => {
     const healthRouter = Router();
-
-    healthRouter.use(cors(configuration.cors));
 
     /**
      * Set up routes and initialize the controller.
