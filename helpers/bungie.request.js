@@ -37,6 +37,10 @@ const options = {
 // The breaker owns outage handling, so one quick retry replaces the
 // request helper's default ladder of three with long backoff.
 const retryDefaults = { baseDelay: 500, maxDelay: 1000, maxRetries: 1 };
+// The socket abort trails the breaker timeout so opossum deterministically
+// rejects first with ETIMEDOUT (and counts it in stats.timeouts); the abort
+// then tears down the socket shortly after.
+const socketTimeout = options.timeout + 1000;
 
 const breaker = new CircuitBreaker((fn, ...args) => fn(...args), options);
 
@@ -66,11 +70,13 @@ async function fire(fn, ...args) {
 }
 
 /**
- * Cap every attempt with a timeout signal that actually aborts the socket;
- * opossum's timeout only rejects. Retry backoff sleeps are not cancelled,
- * but once the timeout fires any subsequent attempt rejects immediately.
- * A caller-provided signal is combined, not replaced, so the timeout
- * always applies.
+ * Cap every attempt with a signal that actually aborts the socket;
+ * opossum's timeout only rejects. The abort fires after the breaker
+ * timeout, so callers consistently see ETIMEDOUT rather than racing it
+ * with an AbortError. Retry backoff sleeps are not cancelled, but once
+ * the signal fires any subsequent attempt rejects immediately. A
+ * caller-provided signal is combined, not replaced, so the cap always
+ * applies.
  *
  * @param {object} requestOptions
  * @returns {object}
@@ -78,8 +84,8 @@ async function fire(fn, ...args) {
 const withSignal = ({ signal, ...requestOptions } = {}) => ({
     ...requestOptions,
     signal: signal
-        ? AbortSignal.any([signal, AbortSignal.timeout(options.timeout)])
-        : AbortSignal.timeout(options.timeout),
+        ? AbortSignal.any([signal, AbortSignal.timeout(socketTimeout)])
+        : AbortSignal.timeout(socketTimeout),
 });
 
 /**
