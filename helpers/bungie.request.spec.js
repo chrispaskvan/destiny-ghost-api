@@ -93,6 +93,23 @@ describe('bungie.request', () => {
             );
         });
 
+        it('should combine a caller-provided signal with the timeout signal', async () => {
+            const controller = new AbortController();
+
+            httpGet.mockResolvedValue({});
+
+            await bungie.get({ signal: controller.signal, url: 'https://example.com/api' });
+
+            const [{ signal }] = httpGet.mock.calls[0];
+
+            expect(signal).not.toBe(controller.signal);
+            expect(signal.aborted).toBe(false);
+
+            controller.abort();
+
+            expect(signal.aborted).toBe(true);
+        });
+
         it('should forward includeHeaders and caller retry overrides', async () => {
             const body = { data: { name: 'test' }, headers: {} };
 

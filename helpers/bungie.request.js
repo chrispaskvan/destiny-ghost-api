@@ -66,15 +66,20 @@ async function fire(fn, ...args) {
 }
 
 /**
- * Bound the whole logical call (attempt + backoff + retry) with a signal
- * that actually cancels the socket; opossum's timeout only rejects.
+ * Cap every attempt with a timeout signal that actually aborts the socket;
+ * opossum's timeout only rejects. Retry backoff sleeps are not cancelled,
+ * but once the timeout fires any subsequent attempt rejects immediately.
+ * A caller-provided signal is combined, not replaced, so the timeout
+ * always applies.
  *
  * @param {object} requestOptions
  * @returns {object}
  */
-const withSignal = requestOptions => ({
-    signal: AbortSignal.timeout(options.timeout),
+const withSignal = ({ signal, ...requestOptions } = {}) => ({
     ...requestOptions,
+    signal: signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(options.timeout)])
+        : AbortSignal.timeout(options.timeout),
 });
 
 /**
