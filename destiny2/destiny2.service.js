@@ -14,7 +14,7 @@ import DestinyService from '../destiny/destiny.service.js';
 import configuration from '../helpers/config.js';
 import log from '../helpers/log.js';
 import { strangeGearOffersHash } from './destiny2.constants.js';
-import { get, post } from '../helpers/request.js';
+import { get, post } from '../helpers/bungie.request.js';
 
 const {
     bungie: { apiKey, host },
@@ -54,7 +54,7 @@ class Destiny2Service extends DestinyService {
             },
             url: `${servicePlatform}/User/Search/GlobalName/${pageNumber}/`,
         };
-        const responseBody = await post(options, { maxRetries: 3 });
+        const responseBody = await post(options);
 
         if (responseBody.ErrorCode === 1) {
             const {

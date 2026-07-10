@@ -8,6 +8,7 @@ import { getHeapStatistics } from 'v8';
 import { convert } from 'html-to-text';
 
 import { get } from '../helpers/request.js';
+import { getCircuitBreakerStatus } from '../helpers/bungie.request.js';
 import applicationInsights from '../helpers/application-insights.js';
 import log from '../helpers/log.js';
 
@@ -161,6 +162,10 @@ class HealthController {
         return {
             failures,
             health: {
+                // Reported for observability only: an open breaker means
+                // Bungie is down, not this service, so it never counts as
+                // a failure.
+                bungie: getCircuitBreakerStatus(),
                 documents,
                 twilio,
                 destiny: {

@@ -10,7 +10,7 @@
  * the Bungie web API platform help page {@link https://www.bungie.net/platform/destiny/help/}.
  */
 import { stringify } from 'qs';
-import { get, post } from '../helpers/request.js';
+import { get, post } from '../helpers/bungie.request.js';
 import DestinyError from './destiny.error.js';
 import configuration from '../helpers/config.js';
 
@@ -108,7 +108,7 @@ class DestinyService {
             url: `${servicePlatform}/app/oauth/token/`,
         };
 
-        return await post(options, { maxRetries: 3 });
+        return await post(options);
     }
 
     /**

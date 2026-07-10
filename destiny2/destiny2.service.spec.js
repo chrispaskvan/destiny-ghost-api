@@ -8,9 +8,9 @@ import mockManifestResponse from '../mocks/manifestResponse.json';
 import mockProfileCharactersResponse from '../mocks/profileCharactersResponse.json';
 import mockPlayerStatisticsResponse from '../mocks/playerStatisticsResponse.json';
 import mockXurResponse from '../mocks/xurResponse.json';
-import { get, post } from '../helpers/request.js';
+import { get, post } from '../helpers/bungie.request.js';
 
-vi.mock('../helpers/request.js');
+vi.mock('../helpers/bungie.request.js');
 
 const mockUser = {
     membershipId: '11',
