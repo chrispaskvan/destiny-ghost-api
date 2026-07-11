@@ -15,7 +15,7 @@ This project provides a quick and convenient way to search the Destiny database 
 
 ## Development Setup
 
-This repository targets Node.js 26 and the Docker image is pinned to Node.js 26.4.0. For local development, run `nvm use` from the repository root to activate the version declared in `.nvmrc` before installing dependencies or running scripts.
+This repository targets Node.js 26 and the Docker image is pinned to Node.js 26.5.0. For local development, run `nvm use` from the repository root to activate the version declared in `.nvmrc` before installing dependencies or running scripts.
 
 ## Disclaimer
 
