@@ -42,8 +42,8 @@ importers:
         specifier: ^3.0.1
         version: 3.0.1
       bullmq:
-        specifier: ^5.80.0
-        version: 5.80.0(redis@6.1.0(@opentelemetry/api@1.9.1))
+        specifier: ^5.80.1
+        version: 5.80.1(redis@6.1.0(@opentelemetry/api@1.9.1))
       compression:
         specifier: ^1.8.1
         version: 1.8.1
@@ -1465,8 +1465,8 @@ packages:
   buffer-from@1.1.2:
     resolution: {integrity: sha512-E+XQCRwSbaaiChtv6k6Dwgc+bx+Bs6vuKJHHl5kox/BaKbhiXzqQOwK4cO22yElGp2OCmjwVhT3HmxgyPGnJfQ==}
 
-  bullmq@5.80.0:
-    resolution: {integrity: sha512-xrCjINZcW6P4irrGZrOXPizzBbvgaP01u2oXGmqY1O5fll56z7OOf9vdnTzK7X4P34vo6ayMPQjyhJN+KwAMWA==}
+  bullmq@5.80.1:
+    resolution: {integrity: sha512-nV8Bmr28HKqbNOU6GqPVca0vCfW/y6WB7IpnFVmRScx8s6IfXWGiqmDIVMEiNoXKKrfoBBvL/FTzR1SQet0iAg==}
     engines: {node: '>=12.22.0'}
     peerDependencies:
       redis: '>=5.0.0'
@@ -4998,7 +4998,7 @@ snapshots:
 
   buffer-from@1.1.2: {}
 
-  bullmq@5.80.0(redis@6.1.0(@opentelemetry/api@1.9.1)):
+  bullmq@5.80.1(redis@6.1.0(@opentelemetry/api@1.9.1)):
     dependencies:
       cron-parser: 4.9.0
       ioredis: 5.10.1
