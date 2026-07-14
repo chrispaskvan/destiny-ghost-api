@@ -63,7 +63,7 @@ sequenceDiagram
     rect rgb(245, 245, 245)
         note right of User: Submit contact info
         User->>WebApp: Enter first/last name, phone, email
-        WebApp->>API: POST /users/signUp {firstName, lastName, phoneNumber, emailAddress}
+        WebApp->>API: POST /users/signUp (firstName, lastName, phoneNumber, emailAddress)
         API->>API: Normalize phone to E.164 (rejects CN/KP/RU region codes)
         API->>API: Generate one token pair: SMS code + email blob, shared 5-min TTL
         par Send SMS
@@ -73,7 +73,7 @@ sequenceDiagram
             API->>Email: Send link WEBSITE/register?token=[blob]
             Email-->>User: Deliver email
         end
-        API-->>WebApp: 204 (always — a conflicting already-registered<br/>email/phone is not reported to the client)
+        API-->>WebApp: 204 (conflicting registrations are not disclosed)
     end
 
     rect rgb(240, 255, 240)
@@ -81,7 +81,7 @@ sequenceDiagram
         User->>WebApp: Click emailed link → opens /register?token=[blob]
         WebApp-->>User: Prompt for the SMS code
         User->>WebApp: Enter SMS code
-        WebApp->>API: POST /users/join {tokens: {emailAddress: [blob], phoneNumber: [code]}}
+        WebApp->>API: POST /users/join (tokens: emailAddress=[blob], phoneNumber=[code])
         API->>API: Validate both against the 5-min TTL token pair
         API->>API: Set dateRegistered and seed notifications (Orders, Banshee-44, Lord Saladin, Xur, all disabled)
         API-->>WebApp: 200 success, or 400 if expired/mismatched (resubmit signUp to retry)
@@ -106,7 +106,7 @@ sequenceDiagram
         API-->>WebApp: 200 profile + ETag header
         User->>WebApp: Edit name and/or toggle a subscription
         WebApp->>API: PATCH /users (If-Match: ETag)
-        note left of API: Body is a JSON Patch array, e.g. replace ops<br/>on /firstName, /lastName, or /notifications/{i}/enabled
+        note left of API: Body is a JSON Patch array, e.g. replace ops<br/>on /firstName, /lastName, or /notifications/[i]/enabled
         API-->>WebApp: 204, or 412 (stale ETag) / 428 (missing If-Match)
     end
 
