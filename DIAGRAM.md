@@ -83,7 +83,7 @@ sequenceDiagram
         User->>WebApp: Enter SMS code
         WebApp->>API: POST /users/join {tokens: {emailAddress: [blob], phoneNumber: [code]}}
         API->>API: Validate both against the 5-min TTL token pair
-        API->>API: Set dateRegistered and seed notifications (Foundry, Gunsmith, IronBanner, Xur, all disabled)
+        API->>API: Set dateRegistered and seed notifications (Orders, Banshee-44, Lord Saladin, Xur, all disabled)
         API-->>WebApp: 200 success, or 400 if expired/mismatched (resubmit signUp to retry)
     end
 
