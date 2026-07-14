@@ -637,6 +637,44 @@ describe('UserController', () => {
                 });
             });
 
+            it('should strip a notification enabled patch with a non-boolean value', async () => {
+                const patches = [
+                    {
+                        op: 'replace',
+                        path: '/notifications/0/enabled',
+                        value: 'true',
+                    },
+                ];
+                const user = {
+                    displayName,
+                    membershipType,
+                    notifications: [{ enabled: false, type: 'Xur', messages: [] }],
+                };
+                const mock = userService.updateUser;
+
+                userService.getUserByDisplayName.mockImplementation(() => Promise.resolve(user));
+
+                const patchedUser = await userController.update({
+                    displayName,
+                    membershipType,
+                    patches,
+                });
+
+                expect(patchedUser).not.toBeUndefined();
+                expect(mock).toHaveBeenCalledWith({
+                    displayName,
+                    membershipType,
+                    notifications: [{ enabled: false, type: 'Xur', messages: [] }],
+                    version: 2,
+                    patches: [
+                        {
+                            patch: [],
+                            version: 1,
+                        },
+                    ],
+                });
+            });
+
             it('should strip patches to non-mutable fields', async () => {
                 const patches = [
                     { op: 'replace', path: '/emailAddress', value: 'new@example.com' },

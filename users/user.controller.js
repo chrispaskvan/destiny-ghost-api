@@ -115,15 +115,25 @@ class UserController {
      * @private
      */
     static #scrubOperations(patches) {
-        const mutablePaths = new Set(['/firstName', '/lastName']);
-        const mutablePatterns = [/^\/notifications\/\d+\/enabled$/];
+        const mutableValidators = new Map([
+            ['/firstName', value => typeof value === 'string'],
+            ['/lastName', value => typeof value === 'string'],
+        ]);
+        const notificationEnabledPattern = /^\/notifications\/\d+\/enabled$/;
 
-        return patches.filter(
-            patch =>
-                patch.op === 'replace' &&
-                (mutablePaths.has(patch.path) ||
-                    mutablePatterns.some(pattern => pattern.test(patch.path))),
-        );
+        return patches.filter(patch => {
+            if (patch.op !== 'replace') {
+                return false;
+            }
+            if (mutableValidators.has(patch.path)) {
+                return mutableValidators.get(patch.path)(patch.value);
+            }
+            if (notificationEnabledPattern.test(patch.path)) {
+                return typeof patch.value === 'boolean';
+            }
+
+            return false;
+        });
     }
 
     /**

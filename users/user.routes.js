@@ -482,7 +482,7 @@ const routes = ({
      *              $ref: '#/components/schemas/Patch'
      *      responses:
      *        204:
-     *          description: Returns the updated user profile.
+     *          description: No Content.
      */
     userRouter.route('/').patch(
         (req, res, next) => middleware.authenticateUser(req, res, next),

@@ -765,7 +765,7 @@
         },
         "responses": {
           "204": {
-            "description": "Returns the updated user profile."
+            "description": "No Content."
           }
         }
       }
