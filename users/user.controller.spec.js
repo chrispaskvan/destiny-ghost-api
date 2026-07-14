@@ -330,6 +330,62 @@ describe('UserController', () => {
                     expect(user).toBeDefined();
                     expect(userService.updateUser).toHaveBeenCalled();
                 });
+
+                it('should seed all known notification types', async () => {
+                    userService.getUserByEmailAddressToken.mockImplementation(() =>
+                        Promise.resolve({
+                            membership: {
+                                tokens: {
+                                    timeStamp: getEpoch(),
+                                    code,
+                                },
+                            },
+                            ...mockUser,
+                        }),
+                    );
+
+                    await userController.join({
+                        tokens: {
+                            phoneNumber: code,
+                        },
+                    });
+
+                    const [savedUser] = userService.updateUser.mock.calls.at(-1);
+
+                    expect(savedUser.notifications).toEqual([
+                        { enabled: false, type: 'Orders', messages: [] },
+                        { enabled: false, type: 'Banshee-44', messages: [] },
+                        { enabled: false, type: 'Lord Saladin', messages: [] },
+                        { enabled: false, type: 'Xur', messages: [] },
+                    ]);
+                });
+
+                it('should not overwrite existing notifications', async () => {
+                    const existingNotifications = [{ enabled: true, type: 'Xur', messages: [] }];
+
+                    userService.getUserByEmailAddressToken.mockImplementation(() =>
+                        Promise.resolve({
+                            membership: {
+                                tokens: {
+                                    timeStamp: getEpoch(),
+                                    code,
+                                },
+                            },
+                            notifications: existingNotifications,
+                            ...mockUser,
+                        }),
+                    );
+
+                    await userController.join({
+                        tokens: {
+                            phoneNumber: code,
+                        },
+                    });
+
+                    const [savedUser] = userService.updateUser.mock.calls.at(-1);
+
+                    expect(savedUser.notifications).toEqual(existingNotifications);
+                });
             });
         });
     });
@@ -531,6 +587,87 @@ describe('UserController', () => {
                                     value: '08',
                                 },
                             ],
+                            version: 1,
+                        },
+                    ],
+                });
+            });
+
+            it("should patch a notification's enabled flag", async () => {
+                const patches = [
+                    {
+                        op: 'replace',
+                        path: '/notifications/0/enabled',
+                        value: true,
+                    },
+                ];
+                const user = {
+                    displayName,
+                    membershipType,
+                    notifications: [{ enabled: false, type: 'Xur', messages: [] }],
+                };
+                const mock = userService.updateUser;
+
+                userService.getUserByDisplayName.mockImplementation(() => Promise.resolve(user));
+
+                const patchedUser = await userController.update({
+                    displayName,
+                    membershipType,
+                    patches,
+                });
+
+                expect(patchedUser).not.toBeUndefined();
+                expect(mock).toHaveBeenCalledWith({
+                    displayName,
+                    membershipType,
+                    notifications: [{ enabled: true, type: 'Xur', messages: [] }],
+                    version: 2,
+                    patches: [
+                        {
+                            patch: [
+                                {
+                                    op: 'replace',
+                                    path: '/notifications/0/enabled',
+                                    value: false,
+                                },
+                            ],
+                            version: 1,
+                        },
+                    ],
+                });
+            });
+
+            it('should strip patches to non-mutable fields', async () => {
+                const patches = [
+                    { op: 'replace', path: '/emailAddress', value: 'new@example.com' },
+                    { op: 'replace', path: '/notifications/0/type', value: 'Xur' },
+                ];
+                const user = {
+                    displayName,
+                    emailAddress: 'old@example.com',
+                    membershipType,
+                    notifications: [{ enabled: false, type: 'Foundry', messages: [] }],
+                };
+                const mock = userService.updateUser;
+
+                userService.getUserByDisplayName.mockImplementation(() => Promise.resolve(user));
+
+                const patchedUser = await userController.update({
+                    displayName,
+                    membershipType,
+                    patches,
+                });
+
+                expect(patchedUser).not.toBeUndefined();
+                expect(mock).toHaveBeenCalledWith({
+                    displayName,
+                    emailAddress: 'old@example.com',
+                    membershipType,
+                    notifications: [{ enabled: false, type: 'Foundry', messages: [] }],
+                    version: 2,
+                    patches: [
+                        {
+                            patch: [],
                             version: 1,
                         },
                     ],

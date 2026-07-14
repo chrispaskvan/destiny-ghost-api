@@ -10,6 +10,7 @@ import Postmaster from '../helpers/postmaster.js';
 import getEpoch from '../helpers/get-epoch.js';
 import { getBlob, getCode } from '../helpers/tokens.js';
 import { postmasterHash } from '../destiny/destiny.constants.js';
+import notificationTypes from '../notifications/notification.types.js';
 
 /**
  * Time To Live for Tokens
@@ -114,15 +115,15 @@ class UserController {
      * @private
      */
     static #scrubOperations(patches) {
-        const mutable = new Set(['firstName', 'lastName']);
-        const replacements = patches.filter(patch => patch.op === 'replace');
+        const mutablePaths = new Set(['/firstName', '/lastName']);
+        const mutablePatterns = [/^\/notifications\/\d+\/enabled$/];
 
-        return replacements.filter(replacement => {
-            const properties = new Set(replacement.path.split('/'));
-            const intersection = new Set([...properties].filter(x => mutable.has(x)));
-
-            return intersection.size;
-        });
+        return patches.filter(
+            patch =>
+                patch.op === 'replace' &&
+                (mutablePaths.has(patch.path) ||
+                    mutablePatterns.some(pattern => pattern.test(patch.path))),
+        );
     }
 
     /**
@@ -276,6 +277,14 @@ class UserController {
         registeredUser.dateRegistered = Temporal.Now.instant().toString({
             smallestUnit: 'millisecond',
         });
+
+        if (!registeredUser.notifications?.length) {
+            registeredUser.notifications = Object.values(notificationTypes).map(type => ({
+                enabled: false,
+                type,
+                messages: [],
+            }));
+        }
 
         await this.users.updateUser(registeredUser);
 

@@ -25,6 +25,10 @@ This project is not affiliated with, maintained, authorized, endorsed, or sponso
 
 See my grandious plans for the future [here](ToDo.md).
 
+## API Flows
+
+Sequence diagrams for the auth, registration, and authenticated app-usage flows a frontend should build around live in [DIAGRAM.md](DIAGRAM.md).
+
 ## Background
 
 In the fall of 2007, I was introduced to Halo 3. I immediately fell in love with the game. Perhaps my greatest achievement as a gamer was completing the campaign on Legendary difficulty. Bungie moved on from Halo and released Destiny in the fall of 2014.

@@ -458,11 +458,11 @@ const routes = ({
     /**
      * @openapi
      * paths:
-     *  /users/{userId}:
+     *  /users:
      *    patch:
-     *      summary: Update a user's profile.
+     *      summary: Update the current user's profile.
      *      operationId: updateUser
-     *      description: See [JSONPatch](https://jsonpatch.com) for more information.
+     *      description: The user is identified by the authenticated session cookie, not a path parameter. See [JSONPatch](https://jsonpatch.com) for more information.
      *      tags:
      *        - Users
      *      security:
@@ -474,14 +474,8 @@ const routes = ({
      *          schema:
      *            type: string
      *          required: true
-     *        - name: userId
-     *          in: path
-     *          description: The user's id.
-     *          required: true
-     *          schema:
-     *            type: string
      *      requestBody:
-     *        description: Update an existent user in the store
+     *        description: Update the current user in the store
      *        content:
      *          application/json:
      *            schema:
