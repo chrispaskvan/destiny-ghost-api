@@ -421,6 +421,51 @@ describe('UserRouter', () => {
 
                         userRouter(req, res, next);
                     }));
+
+                it('should return unprocessable entity when a patch operation cannot be applied', () =>
+                    new Promise((done, reject) => {
+                        const req = createRequest({
+                            headers: {
+                                'if-match': ETag,
+                            },
+                            method: 'PATCH',
+                            url: '/',
+                            body: [
+                                {
+                                    op: 'replace',
+                                    path: '/notifications/5/enabled',
+                                    value: true,
+                                },
+                            ],
+                            session: {
+                                displayName,
+                                membershipType,
+                            },
+                        });
+                        const user = {
+                            _etag: ETag,
+                            displayName,
+                            membershipType,
+                            notifications: [{ enabled: false, type: 'Xur', messages: [] }],
+                        };
+
+                        userService.getUserByDisplayName.mockImplementation(() =>
+                            Promise.resolve(user),
+                        );
+                        userService.updateUser.mockClear();
+
+                        res.on('end', () => {
+                            try {
+                                expect(res.statusCode).toEqual(StatusCodes.UNPROCESSABLE_ENTITY);
+                                expect(userService.updateUser).not.toHaveBeenCalled();
+                                done();
+                            } catch (err) {
+                                reject(err);
+                            }
+                        });
+
+                        userRouter(req, res, next);
+                    }));
             });
             describe('when ETag does not match', () => {
                 it('should return precondition failed', () =>

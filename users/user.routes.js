@@ -43,7 +43,9 @@ function signIn(req, res, user, next) {
  *            path:
  *              type: string
  *            value:
- *              type: string
+ *              oneOf:
+ *                - type: string
+ *                - type: boolean
  *      User:
  *        type: object
  *        required:
@@ -483,6 +485,8 @@ const routes = ({
      *      responses:
      *        204:
      *          description: No Content.
+     *        422:
+     *          description: Unprocessable Entity. One or more patch operations could not be applied (e.g. a notification index that does not exist).
      */
     userRouter.route('/').patch(
         (req, res, next) => middleware.authenticateUser(req, res, next),
@@ -511,6 +515,9 @@ const routes = ({
             } catch (err) {
                 if (err.message === 'precondition failed') {
                     return res.status(StatusCodes.PRECONDITION_FAILED).end();
+                }
+                if (err.message === 'invalid patch') {
+                    return res.status(StatusCodes.UNPROCESSABLE_ENTITY).end();
                 }
 
                 throw err;

@@ -84,7 +84,14 @@
               "type": "string"
             },
             "value": {
-              "type": "string"
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
             }
           }
         }
@@ -766,6 +773,9 @@
         "responses": {
           "204": {
             "description": "No Content."
+          },
+          "422": {
+            "description": "Unprocessable Entity. One or more patch operations could not be applied (e.g. a notification index that does not exist)."
           }
         }
       }

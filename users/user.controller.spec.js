@@ -715,6 +715,34 @@ describe('UserController', () => {
                     ],
                 });
             });
+
+            it('should reject a patch that targets a notification index that does not exist', async () => {
+                const patches = [
+                    {
+                        op: 'replace',
+                        path: '/notifications/5/enabled',
+                        value: true,
+                    },
+                ];
+                const user = {
+                    displayName,
+                    membershipType,
+                    notifications: [{ enabled: false, type: 'Xur', messages: [] }],
+                };
+
+                userService.getUserByDisplayName.mockImplementation(() => Promise.resolve(user));
+                userService.updateUser.mockClear();
+
+                await expect(
+                    userController.update({
+                        displayName,
+                        membershipType,
+                        patches,
+                    }),
+                ).rejects.toThrow('invalid patch');
+
+                expect(userService.updateUser).not.toHaveBeenCalled();
+            });
         });
     });
 });

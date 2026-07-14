@@ -458,7 +458,11 @@ class UserController {
 
         const userCopy = structuredClone(user);
 
-        applyPatch(user, UserController.#scrubOperations(patches));
+        const results = applyPatch(user, UserController.#scrubOperations(patches));
+
+        if (results.some(result => result !== null)) {
+            throw new Error('invalid patch');
+        }
 
         const patch = createPatch(user, userCopy);
         const version = user.version || 1;
