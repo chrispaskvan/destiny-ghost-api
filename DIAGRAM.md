@@ -18,7 +18,7 @@ sequenceDiagram
     participant API as Destiny-Ghost API
     participant Bungie as Bungie.net
 
-    rect rgb(240, 248, 255)
+    rect rgba(100, 150, 240, 0.15)
         note right of User: Start login
         WebApp->>API: GET /destiny/signIn/
         API->>API: Generate and store OAuth state in session
@@ -28,7 +28,7 @@ sequenceDiagram
         User->>Bungie: Enter credentials and approve access
     end
 
-    rect rgb(245, 245, 245)
+    rect rgba(128, 128, 128, 0.15)
         note right of User: Callback (hosted by this API, not the frontend)
         Bungie->>API: GET /users/signIn/Bungie (code, state)
         API->>API: Validate state matches session
@@ -53,14 +53,14 @@ sequenceDiagram
     participant SMS as Twilio (SMS)
     participant Email as Email (SMTP)
 
-    rect rgb(240, 248, 255)
+    rect rgba(100, 150, 240, 0.15)
         note right of User: Detect incomplete registration
         WebApp->>API: GET /users/current
         API-->>WebApp: 200 (anonymous profile — no dateRegistered/email/phone)
         WebApp-->>User: Show registration form
     end
 
-    rect rgb(245, 245, 245)
+    rect rgba(128, 128, 128, 0.15)
         note right of User: Submit contact info
         User->>WebApp: Enter first/last name, phone, email
         WebApp->>API: POST /users/signUp (firstName, lastName, phoneNumber, emailAddress)
@@ -76,7 +76,7 @@ sequenceDiagram
         API-->>WebApp: 204 (conflicting registrations are not disclosed)
     end
 
-    rect rgb(240, 255, 240)
+    rect rgba(80, 200, 120, 0.15)
         note right of User: Confirm both channels together
         User->>WebApp: Click emailed link → opens /register?token=[blob]
         WebApp-->>User: Prompt for the SMS code
@@ -100,7 +100,7 @@ sequenceDiagram
     participant API as Destiny-Ghost API
     participant Bungie as Bungie.net
 
-    rect rgb(240, 248, 255)
+    rect rgba(100, 150, 240, 0.15)
         note right of User: Profile and subscriptions
         WebApp->>API: GET /users/current
         API-->>WebApp: 200 profile + ETag header
@@ -110,7 +110,7 @@ sequenceDiagram
         API-->>WebApp: 204, or 412 (stale ETag) / 428 (missing If-Match)
     end
 
-    rect rgb(245, 245, 245)
+    rect rgba(128, 128, 128, 0.15)
         note right of User: Main app data
         WebApp->>API: GET /destiny2/characters
         API->>Bungie: Fetch characters (refreshes access token if expired)
@@ -119,7 +119,7 @@ sequenceDiagram
         API-->>WebApp: Xur's inventory, or 404 if unavailable
     end
 
-    rect rgb(255, 245, 245)
+    rect rgba(240, 100, 100, 0.15)
         note right of User: Sign out
         User->>WebApp: Click sign out
         WebApp->>API: POST /users/signOut
