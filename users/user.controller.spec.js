@@ -646,7 +646,7 @@ describe('UserController', () => {
                     displayName,
                     emailAddress: 'old@example.com',
                     membershipType,
-                    notifications: [{ enabled: false, type: 'Foundry', messages: [] }],
+                    notifications: [{ enabled: false, type: 'Orders', messages: [] }],
                 };
                 const mock = userService.updateUser;
 
@@ -663,7 +663,7 @@ describe('UserController', () => {
                     displayName,
                     emailAddress: 'old@example.com',
                     membershipType,
-                    notifications: [{ enabled: false, type: 'Foundry', messages: [] }],
+                    notifications: [{ enabled: false, type: 'Orders', messages: [] }],
                     version: 2,
                     patches: [
                         {
