@@ -346,6 +346,7 @@ describe('UserController', () => {
 
                     await userController.join({
                         tokens: {
+                            emailAddress: 'some-token',
                             phoneNumber: code,
                         },
                     });
@@ -378,6 +379,7 @@ describe('UserController', () => {
 
                     await userController.join({
                         tokens: {
+                            emailAddress: 'some-token',
                             phoneNumber: code,
                         },
                     });
