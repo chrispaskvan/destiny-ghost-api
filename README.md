@@ -27,7 +27,7 @@ See my grandious plans for the future [here](ToDo.md).
 
 ## API Flows
 
-Sequence diagrams for the auth, registration, and authenticated app-usage flows a frontend should build around live in [DIAGRAM.md](DIAGRAM.md).
+See [DIAGRAM.md](DIAGRAM.md) for sequence diagrams of the auth, registration, and authenticated app-usage flows a frontend should build around.
 
 ## Background
 

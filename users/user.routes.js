@@ -475,7 +475,7 @@ const routes = ({
      *            type: string
      *          required: true
      *      requestBody:
-     *        description: Update the current user in the store
+     *        description: A JSON Patch array of replace operations to apply to the current user.
      *        content:
      *          application/json:
      *            schema:
