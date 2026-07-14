@@ -26,7 +26,7 @@ module.exports = {
             bungieOAuth: {
                 type: 'oauth2',
                 description:
-                    'This API uses OAuth 2.0 with Bungie.net as the Authorization Server. Clients should obtain a Bearer token from Bungie.net and include it in the Authorization header.',
+                    'This API authenticates via Bungie.net OAuth 2.0, but clients never handle a bearer token directly. GET /destiny/signIn/ returns the Bungie authorization URL; after the user approves access, Bungie redirects to GET /users/signIn/Bungie, which exchanges the code server-side and establishes an httpOnly session cookie. All bungieOAuth-secured endpoints are authenticated via that session cookie, not an Authorization header.',
                 flows: {
                     authorizationCode: {
                         authorizationUrl: 'https://www.bungie.net/en/OAuth/Authorize',

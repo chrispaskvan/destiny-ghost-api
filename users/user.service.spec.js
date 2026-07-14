@@ -150,6 +150,17 @@ describe('UserService', () => {
                     undefined,
                 );
             });
+
+            it('should reject a notification with an unrecognized type', async () => {
+                const userWithInvalidNotification = {
+                    ...user,
+                    notifications: [{ enabled: true, type: 'NotARealType' }],
+                };
+
+                await expect(userService.createUser(userWithInvalidNotification)).rejects.toThrow(
+                    undefined,
+                );
+            });
         });
     });
 

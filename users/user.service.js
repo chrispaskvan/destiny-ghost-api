@@ -49,7 +49,7 @@ const anonymousUserSchema = z.object({
 const notificationSchema = z
     .object({
         enabled: z.boolean(),
-        type: z.string(),
+        type: z.enum(Object.values(notificationTypes)),
         messages: z.array(z.string()).default([]),
     })
     .strict();

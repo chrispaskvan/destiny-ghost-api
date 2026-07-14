@@ -43,7 +43,9 @@ function signIn(req, res, user, next) {
  *            path:
  *              type: string
  *            value:
- *              type: string
+ *              oneOf:
+ *                - type: string
+ *                - type: boolean
  *      User:
  *        type: object
  *        required:
@@ -458,11 +460,11 @@ const routes = ({
     /**
      * @openapi
      * paths:
-     *  /users/{userId}:
+     *  /users:
      *    patch:
-     *      summary: Update a user's profile.
+     *      summary: Update the current user's profile.
      *      operationId: updateUser
-     *      description: See [JSONPatch](https://jsonpatch.com) for more information.
+     *      description: The user is identified by the authenticated session cookie, not a path parameter. See [JSONPatch](https://jsonpatch.com) for more information.
      *      tags:
      *        - Users
      *      security:
@@ -474,21 +476,17 @@ const routes = ({
      *          schema:
      *            type: string
      *          required: true
-     *        - name: userId
-     *          in: path
-     *          description: The user's id.
-     *          required: true
-     *          schema:
-     *            type: string
      *      requestBody:
-     *        description: Update an existent user in the store
+     *        description: A JSON Patch array of replace operations to apply to the current user.
      *        content:
      *          application/json:
      *            schema:
      *              $ref: '#/components/schemas/Patch'
      *      responses:
      *        204:
-     *          description: Returns the updated user profile.
+     *          description: No Content.
+     *        422:
+     *          description: Unprocessable Entity. One or more patch operations could not be applied (e.g. a notification index that does not exist).
      */
     userRouter.route('/').patch(
         (req, res, next) => middleware.authenticateUser(req, res, next),
@@ -517,6 +515,9 @@ const routes = ({
             } catch (err) {
                 if (err.message === 'precondition failed') {
                     return res.status(StatusCodes.PRECONDITION_FAILED).end();
+                }
+                if (err.message === 'invalid patch') {
+                    return res.status(StatusCodes.UNPROCESSABLE_ENTITY).end();
                 }
 
                 throw err;

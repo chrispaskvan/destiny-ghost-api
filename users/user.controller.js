@@ -10,6 +10,7 @@ import Postmaster from '../helpers/postmaster.js';
 import getEpoch from '../helpers/get-epoch.js';
 import { getBlob, getCode } from '../helpers/tokens.js';
 import { postmasterHash } from '../destiny/destiny.constants.js';
+import notificationTypes from '../notifications/notification.types.js';
 
 /**
  * Time To Live for Tokens
@@ -114,14 +115,24 @@ class UserController {
      * @private
      */
     static #scrubOperations(patches) {
-        const mutable = new Set(['firstName', 'lastName']);
-        const replacements = patches.filter(patch => patch.op === 'replace');
+        const mutableValidators = new Map([
+            ['/firstName', value => typeof value === 'string'],
+            ['/lastName', value => typeof value === 'string'],
+        ]);
+        const notificationEnabledPattern = /^\/notifications\/\d+\/enabled$/;
 
-        return replacements.filter(replacement => {
-            const properties = new Set(replacement.path.split('/'));
-            const intersection = new Set([...properties].filter(x => mutable.has(x)));
+        return patches.filter(patch => {
+            if (patch.op !== 'replace') {
+                return false;
+            }
+            if (mutableValidators.has(patch.path)) {
+                return mutableValidators.get(patch.path)(patch.value);
+            }
+            if (notificationEnabledPattern.test(patch.path)) {
+                return typeof patch.value === 'boolean';
+            }
 
-            return intersection.size;
+            return false;
         });
     }
 
@@ -277,9 +288,17 @@ class UserController {
             smallestUnit: 'millisecond',
         });
 
+        if (!registeredUser.notifications?.length) {
+            registeredUser.notifications = Object.values(notificationTypes).map(type => ({
+                enabled: false,
+                type,
+                messages: [],
+            }));
+        }
+
         await this.users.updateUser(registeredUser);
 
-        return user;
+        return registeredUser;
     }
 
     /**
@@ -439,7 +458,11 @@ class UserController {
 
         const userCopy = structuredClone(user);
 
-        applyPatch(user, UserController.#scrubOperations(patches));
+        const results = applyPatch(user, UserController.#scrubOperations(patches));
+
+        if (results.some(result => result !== null)) {
+            throw new Error('invalid patch');
+        }
 
         const patch = createPatch(user, userCopy);
         const version = user.version || 1;
