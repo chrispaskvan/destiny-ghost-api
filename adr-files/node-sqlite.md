@@ -58,7 +58,7 @@ Replace `better-sqlite3` with `node:sqlite` (`DatabaseSync`).
 The API surface used by `helpers/worker.js` maps directly: constructor options, prepared
 statements, and `stmt.all()` are identical in behaviour. The one naming difference is
 the read-only constructor flag — `better-sqlite3` used `readonly` (lowercase), while
-`node:sqlite` uses `readOnly` (camelCase). Both enforce read-only at the SQLite SQLITE_OPEN_READONLY
+`node:sqlite` uses `readOnly` (camelCase). Both enforce read-only at the SQLite SQLITE\_OPEN\_READONLY
 level; a non-existent file produces the same `unable to open database file` error under
 either driver.
 
@@ -84,21 +84,21 @@ The `better-sqlite3` entry was also dropped from `pnpm.onlyBuiltDependencies`.
 
 ## Consequences
 
-- `helpers/worker.js` imports `{ DatabaseSync }` from `node:sqlite` instead of the
+* `helpers/worker.js` imports `{ DatabaseSync }` from `node:sqlite` instead of the
   default export from `better-sqlite3`. The implementation is otherwise unchanged.
-- The vitest mock in `helpers/worker.spec.js` targets `node:sqlite` rather than
+* The vitest mock in `helpers/worker.spec.js` targets `node:sqlite` rather than
   `better-sqlite3`. Because `node:sqlite` exports a named class rather than a default
   export, the mock factory uses `{ DatabaseSync: vi.fn() }`.
-- The Docker builder stage no longer installs a C++ toolchain. The remaining packages
+* The Docker builder stage no longer installs a C++ toolchain. The remaining packages
   in `pnpm.onlyBuiltDependencies` (`@google/genai`, `msgpackr-extract`, `protobufjs`)
   either ship platform prebuilt binaries or run pure-JS postinstall scripts.
-- `node:sqlite` is a runtime dependency on Node.js ≥ 22. The `engines.node` field is
+* `node:sqlite` is a runtime dependency on Node.js ≥ 22. The `engines.node` field is
   already pinned to `>=26.0.0 <27`, so no additional constraint is required.
-- Raw SQLite throughput is lower by 1.6–3.4× for simple queries. Acceptable given the
+* Raw SQLite throughput is lower by 1.6–3.4× for simple queries. Acceptable given the
   read-only, low-frequency, bootstrap-only access pattern.
 
 ## References
 
-- [Node.js 26 — node:sqlite stable](https://nodejs.org/docs/latest-v26.x/api/sqlite.html)
-- [WiseLibs/better-sqlite3#1476 — segfault on Node 26 worker thread exit](https://github.com/WiseLibs/better-sqlite3/issues/1476)
-- [takymt/node-builtin-sqlite-bench — performance comparison](https://github.com/takymt/node-builtin-sqlite-bench)
+* [Node.js 26 — node:sqlite stable](https://nodejs.org/docs/latest-v26.x/api/sqlite.html)
+* [WiseLibs/better-sqlite3#1476 — segfault on Node 26 worker thread exit](https://github.com/WiseLibs/better-sqlite3/issues/1476)
+* [takymt/node-builtin-sqlite-bench — performance comparison](https://github.com/takymt/node-builtin-sqlite-bench)

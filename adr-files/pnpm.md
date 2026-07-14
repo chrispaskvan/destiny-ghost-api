@@ -66,7 +66,7 @@ Anything that today imports a transitive without declaring it will fail to insta
 
 ## Action Items
 
-1. ~~Spike Node `--permission` against pnpm symlinks.~~ Done (see above) — works with default hardlink mode; recommend pinning the store in-tree for the Docker build.
+1. \~~Spike Node `--permission` against pnpm symlinks.~~ Done (see above) — works with default hardlink mode; recommend pinning the store in-tree for the Docker build.
 2. Open an issue mirroring #604 (ESLint → Biome) covering: `package.json` (engines, packageManager, onlyBuiltDependencies), both Dockerfiles, both husky hooks, the `start:dev` script, README install instructions, lockfile regeneration, and a project-level `.npmrc` with `store-dir=./.pnpm-store` and `package-import-method=hardlink`.
 3. Re-run Snyk against `pnpm-lock.yaml` and confirm Codacy continues to ingest coverage unchanged.
 4. File a follow-up issue to evaluate a repo-root pnpm workspace covering both API and frontend, with the root `Dockerfile` consolidating onto a single install.
