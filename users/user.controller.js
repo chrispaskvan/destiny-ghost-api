@@ -298,7 +298,7 @@ class UserController {
 
         await this.users.updateUser(registeredUser);
 
-        return user;
+        return registeredUser;
     }
 
     /**

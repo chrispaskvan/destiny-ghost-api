@@ -307,7 +307,7 @@ describe('UserController', () => {
             });
 
             describe('when the code and token are valid', () => {
-                it('should return the user', async () => {
+                it('should return the registered user, not the request body', async () => {
                     userService.getUserByEmailAddressToken.mockImplementation(() =>
                         Promise.resolve({
                             membership: {
@@ -322,12 +322,14 @@ describe('UserController', () => {
 
                     const user = await userController.join({
                         tokens: {
+                            emailAddress: 'some-token',
                             phoneNumber: code,
                         },
                     });
 
                     expect(userService.getUserByEmailAddressToken).toHaveBeenCalled();
-                    expect(user).toBeDefined();
+                    expect(user).toMatchObject(mockUser);
+                    expect(user.dateRegistered).toBeDefined();
                     expect(userService.updateUser).toHaveBeenCalled();
                 });
 
