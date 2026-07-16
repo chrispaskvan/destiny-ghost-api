@@ -40,8 +40,17 @@ export default app => {
 
     /**
      * Cross-Origin Resource Sharing
+     *
+     * Always expose ETag so cross-origin clients can use If-Match on PATCH /users.
      */
-    app.use(cors(configuration.cors));
+    const { exposedHeaders, ...corsOptions } = configuration.cors ?? {};
+
+    app.use(
+        cors({
+            ...corsOptions,
+            exposedHeaders: [...new Set([].concat(exposedHeaders ?? [], 'ETag'))],
+        }),
+    );
 
     /**
      * Attach Context
