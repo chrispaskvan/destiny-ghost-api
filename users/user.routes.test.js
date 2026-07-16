@@ -1,6 +1,6 @@
 import nock from 'nock';
 import { StatusCodes } from 'http-status-codes';
-import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from 'vitest';
 import { startServer, stopServer } from '../server.js';
 
 vi.mock('../helpers/subscriber.js');
@@ -21,25 +21,6 @@ beforeAll(async () => {
     nock.enableNetConnect(ipAddress);
 });
 
-const request = async (url, options = {}) => {
-    const delay = 1000; // milliseconds
-    let res;
-    let retries = options.retries ?? 5;
-
-    while (retries > 0) {
-        res = await fetch(`${baseUrl}${url}`, options);
-
-        if (res.status !== StatusCodes.SERVICE_UNAVAILABLE) {
-            break;
-        }
-
-        retries -= 1;
-        await new Promise(resolve => setTimeout(resolve, delay));
-    }
-
-    return res;
-};
-
 /**
  * The If-Match flow on PATCH /users only works cross-origin when the browser
  * is allowed to read the ETag response header, so every response must carry
@@ -51,12 +32,15 @@ describe('/users', () => {
     describe('GET /users/current', () => {
         describe('when an anonymous cross-origin client requests the current user', () => {
             test('should expose the ETag header required for If-Match updates', async () => {
-                const res = await request('/users/current', {
-                    headers: { Origin: origin },
+                const response = await fetch(`${baseUrl}/users/current`, {
+                    method: 'GET',
+                    headers: {
+                        Origin: origin,
+                    },
                 });
 
-                expect(res.status).toEqual(StatusCodes.UNAUTHORIZED);
-                expect(res.headers.get('Access-Control-Expose-Headers')).toContain('ETag');
+                expect(response.status).toEqual(StatusCodes.UNAUTHORIZED);
+                expect(response.headers.get('Access-Control-Expose-Headers')).toContain('ETag');
             });
         });
     });
@@ -64,7 +48,7 @@ describe('/users', () => {
     describe('PATCH /users', () => {
         describe('when an anonymous cross-origin client updates the current user', () => {
             test('should expose the ETag header required for If-Match updates', async () => {
-                const res = await request('/users', {
+                const response = await fetch(`${baseUrl}/users`, {
                     method: 'PATCH',
                     headers: {
                         'Content-Type': 'application/json',
@@ -76,11 +60,15 @@ describe('/users', () => {
                     ]),
                 });
 
-                expect(res.status).toEqual(StatusCodes.UNAUTHORIZED);
-                expect(res.headers.get('Access-Control-Expose-Headers')).toContain('ETag');
+                expect(response.status).toEqual(StatusCodes.UNAUTHORIZED);
+                expect(response.headers.get('Access-Control-Expose-Headers')).toContain('ETag');
             });
         });
     });
+});
+
+afterEach(() => {
+    nock.cleanAll();
 });
 
 /**
