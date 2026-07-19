@@ -64,6 +64,21 @@ describe('/users', () => {
                 expect(response.headers.get('Access-Control-Expose-Headers')).toContain('ETag');
             });
         });
+
+        describe('when a client sends a prototype-poisoning JSON body', () => {
+            test('should reject the request as a bad request', async () => {
+                const response = await fetch(`${baseUrl}/users`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Origin: origin,
+                    },
+                    body: '{"__proto__":{"polluted":true}}',
+                });
+
+                expect(response.status).toEqual(StatusCodes.BAD_REQUEST);
+            });
+        });
     });
 });
 
