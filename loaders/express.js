@@ -1,5 +1,4 @@
 import compression from 'compression';
-import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express from 'express';
 import session from 'express-session';
@@ -26,7 +25,6 @@ export default app => {
         }),
     );
     app.use(compression());
-    app.use(cookieParser());
     app.use(
         helmet.crossOriginResourcePolicy({
             policy: 'cross-origin',
