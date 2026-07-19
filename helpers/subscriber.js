@@ -8,6 +8,7 @@
 import { Worker } from 'bullmq';
 import client from './jobs.js';
 import log from './log.js';
+import safeReviver from './safe-reviver.js';
 
 class Subscriber {
     /**
@@ -30,7 +31,7 @@ class Subscriber {
                         body,
                         applicationProperties: { claimCheckNumber, notificationType, traceId },
                     } = data;
-                    const user = JSON.parse(body);
+                    const user = JSON.parse(body, safeReviver);
 
                     log.info(
                         {

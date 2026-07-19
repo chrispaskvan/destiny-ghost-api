@@ -9,12 +9,14 @@ import configuration from '../helpers/config.js';
 import httpLog from '../helpers/httpLog.js';
 import { contextMiddleware } from '../helpers/log.js';
 import rateLimiterMiddleware from '../helpers/rate-limiter.middleware.js';
+import safeReviver from '../helpers/safe-reviver.js';
 import store from '../helpers/store.js';
 
 export default app => {
     app.use(
         express.json({
             limit: '1mb',
+            reviver: safeReviver,
         }),
     );
     app.use(
