@@ -140,6 +140,17 @@
           }
         }
       }
+    },
+    "parameters": {
+      "CsrfToken": {
+        "name": "x-csrf-token",
+        "in": "header",
+        "description": "CSRF token obtained from `GET /users/current/csrfToken`. Required on state-changing requests to `/users`.",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
     }
   },
   "tags": [
@@ -514,6 +525,11 @@
             "bungieOAuth": []
           }
         ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -552,6 +568,9 @@
           "401": {
             "description": "Unauthorized. Bungie OAuth token missing or invalid."
           },
+          "403": {
+            "description": "Forbidden. Missing or invalid CSRF token."
+          },
           "429": {
             "description": "Too Many Requests. The user has requested codes too frequently."
           }
@@ -569,6 +588,11 @@
         "security": [
           {
             "bungieOAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
           }
         ],
         "requestBody": {
@@ -611,6 +635,9 @@
           },
           "401": {
             "description": "Unauthorized. Bungie OAuth token missing or invalid."
+          },
+          "403": {
+            "description": "Forbidden. Missing or invalid CSRF token."
           },
           "404": {
             "description": "Not Found. No pending verification found for this user and channel, or the code has already been used/invalidated."
@@ -668,6 +695,11 @@
             "bungieOAuth": []
           }
         ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -699,6 +731,9 @@
           },
           "400": {
             "description": "Bad request."
+          },
+          "403": {
+            "description": "Forbidden. Missing or invalid CSRF token."
           }
         }
       }
@@ -715,9 +750,17 @@
             "bungieOAuth": []
           }
         ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
         "responses": {
           "204": {
             "description": "No Content"
+          },
+          "403": {
+            "description": "Forbidden. Missing or invalid CSRF token."
           },
           "500": {
             "description": "Internal Server Error"
@@ -735,6 +778,11 @@
         "security": [
           {
             "bungieOAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
           }
         ],
         "requestBody": {
@@ -767,6 +815,9 @@
         "responses": {
           "204": {
             "description": "No Content"
+          },
+          "403": {
+            "description": "Forbidden. Missing or invalid CSRF token."
           }
         }
       }
@@ -793,6 +844,9 @@
               "type": "string"
             },
             "required": true
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
           }
         ],
         "requestBody": {
@@ -808,6 +862,9 @@
         "responses": {
           "204": {
             "description": "No Content."
+          },
+          "403": {
+            "description": "Forbidden. Missing or invalid CSRF token."
           },
           "422": {
             "description": "Unprocessable Entity. One or more patch operations could not be applied (e.g. a notification index that does not exist)."

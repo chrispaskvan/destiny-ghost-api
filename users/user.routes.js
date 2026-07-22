@@ -32,6 +32,14 @@ function signIn(req, res, user, next) {
 /**
  * @openapi
  *  components:
+ *    parameters:
+ *      CsrfToken:
+ *        name: x-csrf-token
+ *        in: header
+ *        description: CSRF token obtained from `GET /users/current/csrfToken`. Required on state-changing requests to `/users`.
+ *        required: true
+ *        schema:
+ *          type: string
  *    schemas:
  *      Patch:
  *        type: array
@@ -154,6 +162,8 @@ const routes = ({
      *       - Users
      *     security:
      *       - bungieOAuth: []
+     *     parameters:
+     *       - $ref: '#/components/parameters/CsrfToken'
      *     requestBody:
      *       required: true
      *       content:
@@ -178,6 +188,8 @@ const routes = ({
      *         description: Bad Request. E.g., channel not specified, or user does not have the specified contact method registered and verified.
      *       401:
      *         description: Unauthorized. Bungie OAuth token missing or invalid.
+     *       403:
+     *         description: Forbidden. Missing or invalid CSRF token.
      *       429:
      *         description: Too Many Requests. The user has requested codes too frequently.
      */
@@ -225,6 +237,8 @@ const routes = ({
      *       - Users
      *     security:
      *       - bungieOAuth: []
+     *     parameters:
+     *       - $ref: '#/components/parameters/CsrfToken'
      *     requestBody:
      *       required: true
      *       content:
@@ -252,6 +266,8 @@ const routes = ({
      *         description: Bad Request. E.g., channel not specified, or user does not have the specified contact method registered and verified.
      *       401:
      *         description: Unauthorized. Bungie OAuth token missing or invalid.
+     *       403:
+     *         description: Forbidden. Missing or invalid CSRF token.
      *       404:
      *         description: Not Found. No pending verification found for this user and channel, or the code has already been used/invalidated.
      *       429:
@@ -330,6 +346,8 @@ const routes = ({
      *        - Users
      *      security:
      *        - bungieOAuth: []
+     *      parameters:
+     *        - $ref: '#/components/parameters/CsrfToken'
      *      requestBody:
      *        required: true
      *        content:
@@ -351,6 +369,8 @@ const routes = ({
      *          description: User joined successfully.
      *        400:
      *          description: Bad request.
+     *        403:
+     *          description: Forbidden. Missing or invalid CSRF token.
      */
     userRouter.route('/join').post(
         (req, res, next) => middleware.authenticateUser(req, res, next),
@@ -420,9 +440,13 @@ const routes = ({
      *        - Users
      *      security:
      *        - bungieOAuth: []
+     *      parameters:
+     *        - $ref: '#/components/parameters/CsrfToken'
      *      responses:
      *        204:
      *          description: No Content
+     *        403:
+     *          description: Forbidden. Missing or invalid CSRF token.
      *        500:
      *          description: Internal Server Error
      */
@@ -452,6 +476,8 @@ const routes = ({
      *        - Users
      *      security:
      *        - bungieOAuth: []
+     *      parameters:
+     *        - $ref: '#/components/parameters/CsrfToken'
      *      requestBody:
      *        required: true
      *        content:
@@ -473,6 +499,8 @@ const routes = ({
      *      responses:
      *        204:
      *          description: No Content
+     *        403:
+     *          description: Forbidden. Missing or invalid CSRF token.
      */
     userRouter.route('/signUp').post(
         (req, res, next) => middleware.authenticateUser(req, res, next),
@@ -514,6 +542,7 @@ const routes = ({
      *          schema:
      *            type: string
      *          required: true
+     *        - $ref: '#/components/parameters/CsrfToken'
      *      requestBody:
      *        description: A JSON Patch array of replace operations to apply to the current user.
      *        content:
@@ -523,6 +552,8 @@ const routes = ({
      *      responses:
      *        204:
      *          description: No Content.
+     *        403:
+     *          description: Forbidden. Missing or invalid CSRF token.
      *        422:
      *          description: Unprocessable Entity. One or more patch operations could not be applied (e.g. a notification index that does not exist).
      */
