@@ -31,15 +31,6 @@ const routes = ({
 }) => {
     const middleware = new AuthenticationMiddleWare({ authenticationController });
     const twilioRouter = Router();
-
-    /**
-     * Twilio echoes cookies back on subsequent SMS/MMS webhook requests from the
-     * same phone number, used below to carry conversation state (last item hash,
-     * registration gate) between messages. Scoped to this router rather than the
-     * global app since it's the only consumer of `req.cookies`.
-     */
-    twilioRouter.use(cookieParser());
-
     const twilioController = new TwilioController({
         authenticationService,
         destinyService,
@@ -73,6 +64,14 @@ const routes = ({
 
             return next();
         },
+        /**
+         * Twilio echoes this cookie back on subsequent SMS/MMS webhook requests
+         * from the same phone number, used below to carry conversation state
+         * (last item hash, registration gate) between messages. Scoped to this
+         * route (and placed after the signature check) since it's the only
+         * Twilio endpoint that consumes `req.cookies`.
+         */
+        cookieParser(),
         (req, res, next) => {
             try {
                 bodySchema.parse(req.body);
