@@ -525,52 +525,42 @@ describe('UserRouter', () => {
             });
 
             describe('when the CSRF token is missing or invalid', () => {
-                it('should forward an invalid csrf token error instead of patching the user', () =>
-                    new Promise((done, reject) => {
-                        const req = createRequest({
-                            headers: {
-                                'if-match': ETag,
-                                'x-csrf-token': 'wrong-token',
+                it('should forward an invalid csrf token error instead of patching the user', async () => {
+                    const req = createRequest({
+                        headers: {
+                            'if-match': ETag,
+                            'x-csrf-token': 'wrong-token',
+                        },
+                        method: 'PATCH',
+                        url: '/',
+                        body: [
+                            {
+                                op: 'replace',
+                                path: '/firstName',
+                                value: firstName,
                             },
-                            method: 'PATCH',
-                            url: '/',
-                            body: [
-                                {
-                                    op: 'replace',
-                                    path: '/firstName',
-                                    value: firstName,
-                                },
-                            ],
-                            session: {
-                                csrfToken,
-                                displayName,
-                                membershipType,
-                            },
-                        });
+                        ],
+                        session: {
+                            csrfToken,
+                            displayName,
+                            membershipType,
+                        },
+                    });
 
-                        next.mockClear();
-                        userService.updateUser.mockClear();
+                    next.mockClear();
+                    userService.updateUser.mockClear();
 
-                        res.on('end', () => {
-                            reject(
-                                new Error('Expected the request to be rejected before patching'),
-                            );
-                        });
+                    userRouter(req, res, next);
 
-                        setTimeout(() => {
-                            try {
-                                expect(next).toHaveBeenCalledWith(
-                                    expect.objectContaining({ statusCode: StatusCodes.FORBIDDEN }),
-                                );
-                                expect(userService.updateUser).not.toHaveBeenCalled();
-                                done();
-                            } catch (err) {
-                                reject(err);
-                            }
-                        }, 50);
+                    await vi.waitFor(() => {
+                        expect(next).toHaveBeenCalledWith(
+                            expect.objectContaining({ statusCode: StatusCodes.FORBIDDEN }),
+                        );
+                    });
 
-                        userRouter(req, res, next);
-                    }));
+                    expect(userService.updateUser).not.toHaveBeenCalled();
+                    expect(res._isEndCalled()).toEqual(false);
+                });
             });
 
             describe('when a generic error occurs', () => {
