@@ -21,6 +21,7 @@ vi.mock('../helpers/get-epoch.js', () => ({
 const chance = new Chance();
 const displayName = chance.name();
 const membershipType = chance.integer({ min: 1, max: 2 });
+const csrfToken = chance.guid();
 const authenticationController = {
     authenticate: vi.fn(() => ({
         displayName,
@@ -170,6 +171,7 @@ describe('UserRouter', () => {
                             method: 'GET',
                             url: '/current',
                             session: {
+                                csrfToken,
                                 displayName,
                                 membershipType,
                             },
@@ -231,6 +233,7 @@ describe('UserRouter', () => {
                             method: 'GET',
                             url: '/current',
                             session: {
+                                csrfToken,
                                 displayName,
                                 membershipType,
                             },
@@ -269,6 +272,7 @@ describe('UserRouter', () => {
                             method: 'GET',
                             url: '/current',
                             session: {
+                                csrfToken,
                                 displayName,
                                 membershipType,
                             },
@@ -312,7 +316,8 @@ describe('UserRouter', () => {
                     const req = createRequest({
                         method: 'PATCH',
                         url: '/',
-                        session: {},
+                        headers: { 'x-csrf-token': csrfToken },
+                        session: { csrfToken },
                     });
 
                     res.on('end', () => {
@@ -333,10 +338,11 @@ describe('UserRouter', () => {
                     const req = createRequest({
                         headers: {
                             'if-match': '02',
+                            'x-csrf-token': csrfToken,
                         },
                         method: 'PATCH',
                         url: '/',
-                        session: {},
+                        session: { csrfToken },
                     });
 
                     userService.getUserByDisplayName.mockImplementation(() => Promise.resolve());
@@ -364,6 +370,7 @@ describe('UserRouter', () => {
                         const req = createRequest({
                             headers: {
                                 'if-match': ETag,
+                                'x-csrf-token': csrfToken,
                             },
                             method: 'PATCH',
                             url: '/',
@@ -375,6 +382,7 @@ describe('UserRouter', () => {
                                 },
                             ],
                             session: {
+                                csrfToken,
                                 displayName,
                                 membershipType,
                             },
@@ -427,6 +435,7 @@ describe('UserRouter', () => {
                         const req = createRequest({
                             headers: {
                                 'if-match': ETag,
+                                'x-csrf-token': csrfToken,
                             },
                             method: 'PATCH',
                             url: '/',
@@ -438,6 +447,7 @@ describe('UserRouter', () => {
                                 },
                             ],
                             session: {
+                                csrfToken,
                                 displayName,
                                 membershipType,
                             },
@@ -473,6 +483,7 @@ describe('UserRouter', () => {
                         const req = createRequest({
                             headers: {
                                 'if-match': ETag,
+                                'x-csrf-token': csrfToken,
                             },
                             method: 'PATCH',
                             url: '/',
@@ -484,6 +495,7 @@ describe('UserRouter', () => {
                                 },
                             ],
                             session: {
+                                csrfToken,
                                 displayName,
                                 membershipType,
                             },
@@ -512,12 +524,13 @@ describe('UserRouter', () => {
                     }));
             });
 
-            describe('when a generic error occurs', () => {
-                it('should re-throw the error', () =>
+            describe('when the CSRF token is missing or invalid', () => {
+                it('should forward an invalid csrf token error instead of patching the user', () =>
                     new Promise((done, reject) => {
                         const req = createRequest({
                             headers: {
                                 'if-match': ETag,
+                                'x-csrf-token': 'wrong-token',
                             },
                             method: 'PATCH',
                             url: '/',
@@ -529,6 +542,56 @@ describe('UserRouter', () => {
                                 },
                             ],
                             session: {
+                                csrfToken,
+                                displayName,
+                                membershipType,
+                            },
+                        });
+
+                        next.mockClear();
+                        userService.updateUser.mockClear();
+
+                        res.on('end', () => {
+                            reject(
+                                new Error('Expected the request to be rejected before patching'),
+                            );
+                        });
+
+                        setTimeout(() => {
+                            try {
+                                expect(next).toHaveBeenCalledWith(
+                                    expect.objectContaining({ statusCode: StatusCodes.FORBIDDEN }),
+                                );
+                                expect(userService.updateUser).not.toHaveBeenCalled();
+                                done();
+                            } catch (err) {
+                                reject(err);
+                            }
+                        }, 50);
+
+                        userRouter(req, res, next);
+                    }));
+            });
+
+            describe('when a generic error occurs', () => {
+                it('should re-throw the error', () =>
+                    new Promise((done, reject) => {
+                        const req = createRequest({
+                            headers: {
+                                'if-match': ETag,
+                                'x-csrf-token': csrfToken,
+                            },
+                            method: 'PATCH',
+                            url: '/',
+                            body: [
+                                {
+                                    op: 'replace',
+                                    path: '/firstName',
+                                    value: firstName,
+                                },
+                            ],
+                            session: {
+                                csrfToken,
                                 displayName,
                                 membershipType,
                             },
@@ -574,8 +637,10 @@ describe('UserRouter', () => {
                     const req = createRequest({
                         method: 'POST',
                         url: '/current/ciphers',
+                        headers: { 'x-csrf-token': csrfToken },
                         body: { channel: 'email' },
                         session: {
+                            csrfToken,
                             displayName,
                             membershipType,
                         },
@@ -617,8 +682,10 @@ describe('UserRouter', () => {
                     const req = createRequest({
                         method: 'POST',
                         url: '/current/ciphers',
+                        headers: { 'x-csrf-token': csrfToken },
                         body: { channel: 'phone' },
                         session: {
+                            csrfToken,
                             displayName,
                             membershipType,
                         },
@@ -664,8 +731,10 @@ describe('UserRouter', () => {
                     const req = createRequest({
                         method: 'POST',
                         url: '/current/ciphers',
+                        headers: { 'x-csrf-token': csrfToken },
                         body: { channel: 'invalid' },
                         session: {
+                            csrfToken,
                             displayName,
                             membershipType,
                         },
@@ -691,8 +760,10 @@ describe('UserRouter', () => {
                     const req = createRequest({
                         method: 'POST',
                         url: '/current/ciphers',
+                        headers: { 'x-csrf-token': csrfToken },
                         body: {},
                         session: {
+                            csrfToken,
                             displayName,
                             membershipType,
                         },
@@ -718,8 +789,10 @@ describe('UserRouter', () => {
                     const req = createRequest({
                         method: 'POST',
                         url: '/current/ciphers',
+                        headers: { 'x-csrf-token': csrfToken },
                         body: { channel: 'email' },
                         session: {
+                            csrfToken,
                             displayName,
                             membershipType,
                         },
@@ -749,8 +822,10 @@ describe('UserRouter', () => {
                     const req = createRequest({
                         method: 'POST',
                         url: '/current/ciphers',
+                        headers: { 'x-csrf-token': csrfToken },
                         body: { channel: 'email' },
                         session: {
+                            csrfToken,
                             displayName,
                             membershipType,
                         },
@@ -795,8 +870,10 @@ describe('UserRouter', () => {
                     const req = createRequest({
                         method: 'POST',
                         url: '/current/cryptarch',
+                        headers: { 'x-csrf-token': csrfToken },
                         body: { channel: 'phone', code },
                         session: {
+                            csrfToken,
                             displayName,
                             membershipType,
                         },
@@ -841,8 +918,10 @@ describe('UserRouter', () => {
                     const req = createRequest({
                         method: 'POST',
                         url: '/current/cryptarch',
+                        headers: { 'x-csrf-token': csrfToken },
                         body: { channel: 'email', code: blob },
                         session: {
+                            csrfToken,
                             displayName,
                             membershipType,
                         },
@@ -887,8 +966,10 @@ describe('UserRouter', () => {
                     const req = createRequest({
                         method: 'POST',
                         url: '/current/cryptarch',
+                        headers: { 'x-csrf-token': csrfToken },
                         body: { channel: 'invalid', code },
                         session: {
+                            csrfToken,
                             displayName,
                             membershipType,
                         },
@@ -914,8 +995,10 @@ describe('UserRouter', () => {
                     const req = createRequest({
                         method: 'POST',
                         url: '/current/cryptarch',
+                        headers: { 'x-csrf-token': csrfToken },
                         body: { channel: 'phone', code: 'wrong-code' },
                         session: {
+                            csrfToken,
                             displayName,
                             membershipType,
                         },
@@ -957,8 +1040,10 @@ describe('UserRouter', () => {
                     const req = createRequest({
                         method: 'POST',
                         url: '/current/cryptarch',
+                        headers: { 'x-csrf-token': csrfToken },
                         body: { channel: 'phone', code },
                         session: {
+                            csrfToken,
                             displayName,
                             membershipType,
                         },
@@ -1000,8 +1085,10 @@ describe('UserRouter', () => {
                     const req = createRequest({
                         method: 'POST',
                         url: '/current/cryptarch',
+                        headers: { 'x-csrf-token': csrfToken },
                         body: { channel: 'phone', code },
                         session: {
+                            csrfToken,
                             displayName,
                             membershipType,
                         },
@@ -1015,6 +1102,37 @@ describe('UserRouter', () => {
                         try {
                             expect(res.statusCode).toEqual(StatusCodes.NOT_FOUND);
                             expect(res._getData()).toContain('Invalid cipher');
+                            done();
+                        } catch (err) {
+                            reject(err);
+                        }
+                    });
+
+                    userRouter(req, res, next);
+                }));
+        });
+    });
+
+    describe('GET /users/current/csrfToken', () => {
+        describe('when the session is authenticated', () => {
+            it('should mint and return a CSRF token', () =>
+                new Promise((done, reject) => {
+                    const req = createRequest({
+                        method: 'GET',
+                        url: '/current/csrfToken',
+                        session: {
+                            displayName,
+                            membershipType,
+                        },
+                    });
+
+                    res.on('end', () => {
+                        try {
+                            expect(res.statusCode).toEqual(StatusCodes.OK);
+                            expect(JSON.parse(res._getData())).toEqual({
+                                csrfToken: req.session.csrfToken,
+                            });
+                            expect(typeof req.session.csrfToken).toEqual('string');
                             done();
                         } catch (err) {
                             reject(err);

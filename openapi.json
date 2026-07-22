@@ -621,6 +621,41 @@
         }
       }
     },
+    "/users/current/csrfToken": {
+      "get": {
+        "summary": "Get a CSRF token for the current session.",
+        "operationId": "getCsrfToken",
+        "description": "Mints (or returns the existing) CSRF token for the authenticated session. The frontend must send this token back via the `x-csrf-token` header on subsequent state-changing requests (`POST`/`PATCH`) to `/users`.",
+        "tags": [
+          "Users"
+        ],
+        "security": [
+          {
+            "bungieOAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns a CSRF token scoped to the current session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "csrfToken": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized. Bungie OAuth token missing or invalid."
+          }
+        }
+      }
+    },
     "/users/join": {
       "post": {
         "summary": "Confirm the user.",

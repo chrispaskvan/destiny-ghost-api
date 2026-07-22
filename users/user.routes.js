@@ -2,6 +2,7 @@ import { StatusCodes } from 'http-status-codes';
 import { Router } from 'express';
 import AuthenticationMiddleWare from '../authentication/authentication.middleware.js';
 import UserController from './user.controller.js';
+import csrfProtection from '../helpers/csrf.middleware.js';
 import log from '../helpers/log.js';
 
 /**
@@ -182,6 +183,7 @@ const routes = ({
      */
     userRouter.route('/current/ciphers').post(
         (req, res, next) => middleware.authenticateUser(req, res, next),
+        csrfProtection,
         async (req, res) => {
             try {
                 const {
@@ -257,6 +259,7 @@ const routes = ({
      */
     userRouter.route('/current/cryptarch').post(
         (req, res, next) => middleware.authenticateUser(req, res, next),
+        csrfProtection,
         async (req, res) => {
             try {
                 const {
@@ -281,6 +284,38 @@ const routes = ({
             } catch {
                 return res.status(StatusCodes.NOT_FOUND).send('Invalid cipher.');
             }
+        },
+    );
+
+    /**
+     * @openapi
+     * /users/current/csrfToken:
+     *   get:
+     *     summary: Get a CSRF token for the current session.
+     *     operationId: getCsrfToken
+     *     description: Mints (or returns the existing) CSRF token for the authenticated session. The frontend must send this token back via the `x-csrf-token` header on subsequent state-changing requests (`POST`/`PATCH`) to `/users`.
+     *     tags:
+     *       - Users
+     *     security:
+     *       - bungieOAuth: []
+     *     responses:
+     *       200:
+     *         description: Returns a CSRF token scoped to the current session.
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               properties:
+     *                 csrfToken:
+     *                   type: string
+     *       401:
+     *         description: Unauthorized. Bungie OAuth token missing or invalid.
+     */
+    userRouter.route('/current/csrfToken').get(
+        (req, res, next) => middleware.authenticateUser(req, res, next),
+        csrfProtection,
+        (req, res) => {
+            res.status(StatusCodes.OK).json({ csrfToken: req.csrfToken() });
         },
     );
 
@@ -319,6 +354,7 @@ const routes = ({
      */
     userRouter.route('/join').post(
         (req, res, next) => middleware.authenticateUser(req, res, next),
+        csrfProtection,
         async (req, res) => {
             const { body: user } = req;
             const newUser = await userController.join(user);
@@ -392,6 +428,7 @@ const routes = ({
      */
     userRouter.route('/signOut').post(
         (req, res, next) => middleware.authenticateUser(req, res, next),
+        csrfProtection,
         (req, res) => {
             req.session.destroy(err => {
                 if (err) {
@@ -439,6 +476,7 @@ const routes = ({
      */
     userRouter.route('/signUp').post(
         (req, res, next) => middleware.authenticateUser(req, res, next),
+        csrfProtection,
         async (req, res) => {
             const {
                 body: user,
@@ -490,6 +528,7 @@ const routes = ({
      */
     userRouter.route('/').patch(
         (req, res, next) => middleware.authenticateUser(req, res, next),
+        csrfProtection,
         async (req, res) => {
             try {
                 const {

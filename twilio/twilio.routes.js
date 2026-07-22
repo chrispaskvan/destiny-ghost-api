@@ -4,6 +4,7 @@
  * for instructions on how to debug these routes locally. Remember
  * to update the DOMAIN environment variable.
  */
+import cookieParser from 'cookie-parser';
 import { Router } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import twilio from 'twilio';
@@ -30,6 +31,15 @@ const routes = ({
 }) => {
     const middleware = new AuthenticationMiddleWare({ authenticationController });
     const twilioRouter = Router();
+
+    /**
+     * Twilio echoes cookies back on subsequent SMS/MMS webhook requests from the
+     * same phone number, used below to carry conversation state (last item hash,
+     * registration gate) between messages. Scoped to this router rather than the
+     * global app since it's the only consumer of `req.cookies`.
+     */
+    twilioRouter.use(cookieParser());
+
     const twilioController = new TwilioController({
         authenticationService,
         destinyService,
