@@ -4,6 +4,7 @@
  * for instructions on how to debug these routes locally. Remember
  * to update the DOMAIN environment variable.
  */
+import cookieParser from 'cookie-parser';
 import { Router } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import twilio from 'twilio';
@@ -63,6 +64,14 @@ const routes = ({
 
             return next();
         },
+        /**
+         * Twilio echoes this cookie back on subsequent SMS/MMS webhook requests
+         * from the same phone number, used below to carry conversation state
+         * (last item hash, registration gate) between messages. Scoped to this
+         * route (and placed after the signature check) since it's the only
+         * Twilio endpoint that consumes `req.cookies`.
+         */
+        cookieParser(),
         (req, res, next) => {
             try {
                 bodySchema.parse(req.body);
