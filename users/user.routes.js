@@ -317,6 +317,11 @@ const routes = ({
      *     responses:
      *       200:
      *         description: Returns a CSRF token scoped to the current session.
+     *         headers:
+     *           'Cache-Control':
+     *             description: Always `no-store`, since this response carries a security token.
+     *             schema:
+     *               type: string
      *         content:
      *           application/json:
      *             schema:
@@ -330,7 +335,9 @@ const routes = ({
     userRouter.route('/current/csrfToken').get(
         (req, res, next) => middleware.authenticateUser(req, res, next),
         (req, res) => {
-            res.status(StatusCodes.OK).json({ csrfToken: generateToken(req) });
+            res.set('Cache-Control', 'no-store')
+                .status(StatusCodes.OK)
+                .json({ csrfToken: generateToken(req) });
         },
     );
 

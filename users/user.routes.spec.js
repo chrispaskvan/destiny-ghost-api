@@ -1123,6 +1123,7 @@ describe('UserRouter', () => {
                                 csrfToken: req.session.csrfToken,
                             });
                             expect(typeof req.session.csrfToken).toEqual('string');
+                            expect(res.getHeader('Cache-Control')).toEqual('no-store');
                             done();
                         } catch (err) {
                             reject(err);
