@@ -2,7 +2,7 @@ import { StatusCodes } from 'http-status-codes';
 import { Router } from 'express';
 import AuthenticationMiddleWare from '../authentication/authentication.middleware.js';
 import UserController from './user.controller.js';
-import csrfProtection from '../helpers/csrf.middleware.js';
+import csrfProtection, { generateToken } from '../helpers/csrf.middleware.js';
 import log from '../helpers/log.js';
 
 /**
@@ -329,9 +329,8 @@ const routes = ({
      */
     userRouter.route('/current/csrfToken').get(
         (req, res, next) => middleware.authenticateUser(req, res, next),
-        csrfProtection,
         (req, res) => {
-            res.status(StatusCodes.OK).json({ csrfToken: req.csrfToken() });
+            res.status(StatusCodes.OK).json({ csrfToken: generateToken(req) });
         },
     );
 
