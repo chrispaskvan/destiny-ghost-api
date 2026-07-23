@@ -12,7 +12,17 @@ vi.mock('../helpers/bitly.js', () => ({
 
 const { getExpectedTwilioSignature } = twilio;
 const { authToken } = configuration.twilio;
-const url = `${process.env.PROTOCOL}://${process.env.DOMAIN}/twilio/destiny/r`;
+
+/**
+ * Read PROTOCOL/DOMAIN at call time, not into a module-scope constant: the
+ * route handler under test (twilio.routes.js) reconstructs this same URL
+ * per-request rather than caching it, and other spec files (e.g.
+ * helpers/director.client.spec.js) temporarily mutate process.env.PROTOCOL,
+ * so caching it here risks signing against a stale value.
+ */
+function getUrl() {
+    return `${process.env.PROTOCOL}://${process.env.DOMAIN}/twilio/destiny/r`;
+}
 
 /**
  * `bodySchema` in twilio.routes.js requires SID-shaped strings of exactly 34
@@ -36,7 +46,7 @@ function signedBody(overrides = {}) {
 }
 
 function signedRequest({ body, cookie }) {
-    const signature = getExpectedTwilioSignature(authToken, url, body);
+    const signature = getExpectedTwilioSignature(authToken, getUrl(), body);
     const req = createRequest({
         method: 'POST',
         url: '/destiny/r',
