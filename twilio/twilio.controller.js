@@ -80,13 +80,11 @@ class TwilioController {
 
     static async getMore(itemHash, cookies = {}) {
         if (itemHash) {
-            const shortURL = await getShortUrl(
-                `https://destinytracker.com/destiny-2/db/items/${itemHash}`,
-            );
+            const shortURL = await getShortUrl(`https://www.light.gg/db/items/${itemHash}`);
 
             return {
                 cookies,
-                message: `Destiny Tracker\n${shortURL}`,
+                message: `light.gg\n${shortURL}`,
             };
         }
 
