@@ -45,6 +45,21 @@ describe('/users', () => {
         });
     });
 
+    describe('GET /users/current/csrfToken', () => {
+        describe('when an anonymous client requests a CSRF token', () => {
+            test('should require authentication', async () => {
+                const response = await fetch(`${baseUrl}/users/current/csrfToken`, {
+                    method: 'GET',
+                    headers: {
+                        Origin: origin,
+                    },
+                });
+
+                expect(response.status).toEqual(StatusCodes.UNAUTHORIZED);
+            });
+        });
+    });
+
     describe('PATCH /users', () => {
         describe('when an anonymous cross-origin client updates the current user', () => {
             test('should expose the ETag header required for If-Match updates', async () => {

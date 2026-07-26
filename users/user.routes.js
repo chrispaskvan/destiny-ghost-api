@@ -2,6 +2,7 @@ import { StatusCodes } from 'http-status-codes';
 import { Router } from 'express';
 import AuthenticationMiddleWare from '../authentication/authentication.middleware.js';
 import UserController from './user.controller.js';
+import csrfProtection, { generateToken } from '../helpers/csrf.middleware.js';
 import log from '../helpers/log.js';
 
 /**
@@ -31,6 +32,14 @@ function signIn(req, res, user, next) {
 /**
  * @openapi
  *  components:
+ *    parameters:
+ *      CsrfToken:
+ *        name: x-csrf-token
+ *        in: header
+ *        description: CSRF token obtained from `GET /users/current/csrfToken`. Required on state-changing requests to `/users`.
+ *        required: true
+ *        schema:
+ *          type: string
  *    schemas:
  *      Patch:
  *        type: array
@@ -153,6 +162,8 @@ const routes = ({
      *       - Users
      *     security:
      *       - bungieOAuth: []
+     *     parameters:
+     *       - $ref: '#/components/parameters/CsrfToken'
      *     requestBody:
      *       required: true
      *       content:
@@ -177,11 +188,14 @@ const routes = ({
      *         description: Bad Request. E.g., channel not specified, or user does not have the specified contact method registered and verified.
      *       401:
      *         description: Unauthorized. Bungie OAuth token missing or invalid.
+     *       403:
+     *         description: Forbidden. Missing or invalid CSRF token.
      *       429:
      *         description: Too Many Requests. The user has requested codes too frequently.
      */
     userRouter.route('/current/ciphers').post(
         (req, res, next) => middleware.authenticateUser(req, res, next),
+        csrfProtection,
         async (req, res) => {
             try {
                 const {
@@ -223,6 +237,8 @@ const routes = ({
      *       - Users
      *     security:
      *       - bungieOAuth: []
+     *     parameters:
+     *       - $ref: '#/components/parameters/CsrfToken'
      *     requestBody:
      *       required: true
      *       content:
@@ -250,6 +266,8 @@ const routes = ({
      *         description: Bad Request. E.g., channel not specified, or user does not have the specified contact method registered and verified.
      *       401:
      *         description: Unauthorized. Bungie OAuth token missing or invalid.
+     *       403:
+     *         description: Forbidden. Missing or invalid CSRF token.
      *       404:
      *         description: Not Found. No pending verification found for this user and channel, or the code has already been used/invalidated.
      *       429:
@@ -257,6 +275,7 @@ const routes = ({
      */
     userRouter.route('/current/cryptarch').post(
         (req, res, next) => middleware.authenticateUser(req, res, next),
+        csrfProtection,
         async (req, res) => {
             try {
                 const {
@@ -286,6 +305,44 @@ const routes = ({
 
     /**
      * @openapi
+     * /users/current/csrfToken:
+     *   get:
+     *     summary: Get a CSRF token for the current session.
+     *     operationId: getCsrfToken
+     *     description: Mints (or returns the existing) CSRF token for the authenticated session. The frontend must send this token back via the `x-csrf-token` header on subsequent state-changing requests (`POST`/`PATCH`) to `/users`.
+     *     tags:
+     *       - Users
+     *     security:
+     *       - bungieOAuth: []
+     *     responses:
+     *       200:
+     *         description: Returns a CSRF token scoped to the current session.
+     *         headers:
+     *           'Cache-Control':
+     *             description: Always `no-store`, since this response carries a security token.
+     *             schema:
+     *               type: string
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               properties:
+     *                 csrfToken:
+     *                   type: string
+     *       401:
+     *         description: Unauthorized. Bungie OAuth token missing or invalid.
+     */
+    userRouter.route('/current/csrfToken').get(
+        (req, res, next) => middleware.authenticateUser(req, res, next),
+        (req, res) => {
+            res.set('Cache-Control', 'no-store')
+                .status(StatusCodes.OK)
+                .json({ csrfToken: generateToken(req) });
+        },
+    );
+
+    /**
+     * @openapi
      * paths:
      *  /users/join:
      *    post:
@@ -295,6 +352,8 @@ const routes = ({
      *        - Users
      *      security:
      *        - bungieOAuth: []
+     *      parameters:
+     *        - $ref: '#/components/parameters/CsrfToken'
      *      requestBody:
      *        required: true
      *        content:
@@ -316,9 +375,12 @@ const routes = ({
      *          description: User joined successfully.
      *        400:
      *          description: Bad request.
+     *        403:
+     *          description: Forbidden. Missing or invalid CSRF token.
      */
     userRouter.route('/join').post(
         (req, res, next) => middleware.authenticateUser(req, res, next),
+        csrfProtection,
         async (req, res) => {
             const { body: user } = req;
             const newUser = await userController.join(user);
@@ -384,14 +446,19 @@ const routes = ({
      *        - Users
      *      security:
      *        - bungieOAuth: []
+     *      parameters:
+     *        - $ref: '#/components/parameters/CsrfToken'
      *      responses:
      *        204:
      *          description: No Content
+     *        403:
+     *          description: Forbidden. Missing or invalid CSRF token.
      *        500:
      *          description: Internal Server Error
      */
     userRouter.route('/signOut').post(
         (req, res, next) => middleware.authenticateUser(req, res, next),
+        csrfProtection,
         (req, res) => {
             req.session.destroy(err => {
                 if (err) {
@@ -415,6 +482,8 @@ const routes = ({
      *        - Users
      *      security:
      *        - bungieOAuth: []
+     *      parameters:
+     *        - $ref: '#/components/parameters/CsrfToken'
      *      requestBody:
      *        required: true
      *        content:
@@ -436,9 +505,12 @@ const routes = ({
      *      responses:
      *        204:
      *          description: No Content
+     *        403:
+     *          description: Forbidden. Missing or invalid CSRF token.
      */
     userRouter.route('/signUp').post(
         (req, res, next) => middleware.authenticateUser(req, res, next),
+        csrfProtection,
         async (req, res) => {
             const {
                 body: user,
@@ -476,6 +548,7 @@ const routes = ({
      *          schema:
      *            type: string
      *          required: true
+     *        - $ref: '#/components/parameters/CsrfToken'
      *      requestBody:
      *        description: A JSON Patch array of replace operations to apply to the current user.
      *        content:
@@ -485,11 +558,14 @@ const routes = ({
      *      responses:
      *        204:
      *          description: No Content.
+     *        403:
+     *          description: Forbidden. Missing or invalid CSRF token.
      *        422:
      *          description: Unprocessable Entity. One or more patch operations could not be applied (e.g. a notification index that does not exist).
      */
     userRouter.route('/').patch(
         (req, res, next) => middleware.authenticateUser(req, res, next),
+        csrfProtection,
         async (req, res) => {
             try {
                 const {
