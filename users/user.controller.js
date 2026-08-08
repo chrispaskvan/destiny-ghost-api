@@ -31,6 +31,20 @@ class UserController {
     }
 
     /**
+     * Build the SMS text sent to verify a phone number. Carries the A2P 10DLC
+     * disclosures required on a subscriber's first message: frequency, rates,
+     * and opt-out instructions. The brand prefix is added centrally when the
+     * message is sent (see notification.service.js).
+     *
+     * @param {string} code
+     * @returns {string}
+     * @private
+     */
+    static #buildVerificationMessage(code) {
+        return `Enter ${code} to verify your phone number. Up to 10 msgs/week. Msg&data rates may apply. Reply HELP for help, STOP to cancel.`;
+    }
+
+    /**
      * Get the phone number format into the Twilio standard: e164.
      * Deny phone numbers from China, North Korea, and Russia.
      *
@@ -326,7 +340,7 @@ class UserController {
             });
 
             user.membership.message = await this.notifications.sendMessage(
-                `Enter ${user.membership.tokens.code} to verify your phone number.`,
+                UserController.#buildVerificationMessage(user.membership.tokens.code),
                 user.phoneNumber,
                 user.type === 'mobile' ? iconUrl : '',
             );
@@ -421,7 +435,7 @@ class UserController {
 
         promises.push(
             this.notifications.sendMessage(
-                `Enter ${user.membership.tokens.code} to verify your phone number.`,
+                UserController.#buildVerificationMessage(user.membership.tokens.code),
                 user.phoneNumber,
                 user.type === 'mobile' ? iconUrl : '',
             ),

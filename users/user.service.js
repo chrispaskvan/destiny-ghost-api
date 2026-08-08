@@ -128,9 +128,11 @@ const userSchema = z.object({
  */
 
 /**
- * Minimal user projection returned by `getSubscribedUsers`.
+ * Minimal user projection returned by `getSubscribedUsers`. Already filtered
+ * to exclude users who have opted out via SMS (isSubscribed === false).
  * @typedef {Object} SubscribedUser
  * @property {string} displayName
+ * @property {boolean} [isSubscribed]
  * @property {string} membershipId
  * @property {number} membershipType
  * @property {string} phoneNumber
@@ -375,7 +377,10 @@ class UserService {
     }
 
     /**
-     * Get subscribed users for a given notification type.
+     * Get subscribed users for a given notification type. Excludes users who
+     * have opted out via SMS (isSubscribed === false); users missing the
+     * field are treated as subscribed, since it defaults to true and existing
+     * documents predate the field.
      * @param {string} notificationType
      * @returns {Promise<SubscribedUser[]>}
      */
@@ -391,6 +396,7 @@ class UserService {
         const qb = new QueryBuilder();
 
         qb.select('displayName')
+            .select('isSubscribed')
             .select('membershipId')
             .select('membershipType')
             .select('phoneNumber')
@@ -399,9 +405,11 @@ class UserService {
             .where('type', notification)
             .where('enabled', true);
 
-        return /** @type {Promise<SubscribedUser[]>} */ (
-            this.documents.getDocuments(userCollectionId, qb.getQuery())
+        const documents = /** @type {SubscribedUser[]} */ (
+            await this.documents.getDocuments(userCollectionId, qb.getQuery())
         );
+
+        return documents.filter(document => document.isSubscribed !== false);
     }
 
     /**

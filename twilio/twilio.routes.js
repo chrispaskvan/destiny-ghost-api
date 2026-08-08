@@ -13,6 +13,7 @@ import { z } from 'zod';
 import AuthenticationMiddleWare from '../authentication/authentication.middleware.js';
 import TwilioController from './twilio.controller.js';
 import configuration from '../helpers/config.js';
+import { BRAND_PREFIX, MAX_SMS_MESSAGE_LENGTH } from './twilio.constants.js';
 
 const {
     twiml: { MessagingResponse },
@@ -94,9 +95,17 @@ const routes = ({
             });
 
             if (!message) {
-                res.writeHead(StatusCodes.FORBIDDEN);
+                /**
+                 * A missing message means the reply is intentionally
+                 * suppressed (e.g. an opted-out user), not that the request
+                 * failed - reply 200 with empty TwiML so Twilio doesn't
+                 * treat this as an error and retry the webhook.
+                 */
+                res.writeHead(StatusCodes.OK, {
+                    'Content-Type': 'text/xml',
+                });
 
-                return res.end();
+                return res.end(new MessagingResponse().toString());
             }
 
             for (const [key, value] of Object.entries(cookies)) {
@@ -108,11 +117,12 @@ const routes = ({
             }
 
             const twiml = new MessagingResponse();
+            const brandedMessage = `${BRAND_PREFIX}${message}`.substring(0, MAX_SMS_MESSAGE_LENGTH);
 
             if (media) {
-                twiml.message(attributes, message).media(media);
+                twiml.message(attributes, brandedMessage).media(media);
             } else {
-                twiml.message(attributes, message);
+                twiml.message(attributes, brandedMessage);
             }
             res.writeHead(StatusCodes.OK, {
                 'Content-Type': 'text/xml',
@@ -165,7 +175,7 @@ const routes = ({
         const message = TwilioController.fallback();
         const twiml = new MessagingResponse();
 
-        twiml.message(attributes, message);
+        twiml.message(attributes, `${BRAND_PREFIX}${message}`.substring(0, MAX_SMS_MESSAGE_LENGTH));
         res.writeHead(StatusCodes.OK, {
             'Content-Type': 'text/xml',
         });

@@ -40,4 +40,12 @@ describe('Notifications', () => {
         expect(dateCreated).toEqual(mockTwilioCreateMessageResponse.dateCreated);
         expect(status).toEqual(mockTwilioCreateMessageResponse.status);
     });
+
+    it('prefixes the message body with the brand name for carrier compliance', async () => {
+        await notificationService.sendMessage('Aegis of the Reef', '+11111111111');
+
+        expect(client.messages.create).toHaveBeenCalledWith(
+            expect.objectContaining({ body: 'Destiny-Ghost: Aegis of the Reef' }),
+        );
+    });
 });

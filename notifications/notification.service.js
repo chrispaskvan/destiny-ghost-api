@@ -9,7 +9,7 @@
  */
 import configuration from '../helpers/config.js';
 import { withRetry, isTransientError } from '../helpers/retry.js';
-import { MAX_SMS_MESSAGE_LENGTH } from '../twilio/twilio.constants.js';
+import { BRAND_PREFIX, MAX_SMS_MESSAGE_LENGTH } from '../twilio/twilio.constants.js';
 
 /**
  * Notifications Class
@@ -33,7 +33,7 @@ class Notifications {
         const message = {
             to,
             from: configuration.twilio.phoneNumber,
-            body: body.substring(0, MAX_SMS_MESSAGE_LENGTH),
+            body: `${BRAND_PREFIX}${body}`.substring(0, MAX_SMS_MESSAGE_LENGTH),
             statusCallback: `${process.env.PROTOCOL}://${process.env.DOMAIN}/twilio/destiny/s${query}`,
         };
 
