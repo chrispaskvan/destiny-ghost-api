@@ -17,14 +17,19 @@ const productionOnlyOptions = {
     timestamp: pino.stdTimeFunctions.isoTime,
 };
 let options;
+const unsupportedWorkerExecArgvPrefixes = ['--max-old-space-size', '--disable-proto='];
+const getWorkerExecArgv = execArgv =>
+    execArgv.filter(
+        arg => !unsupportedWorkerExecArgvPrefixes.some(prefix => arg.startsWith(prefix)),
+    );
 
 if (process.env.NODE_ENV !== 'production') {
     options = {
         transport: {
             target: 'pino-pretty',
             worker: {
-                // Worker threads do not support --max-old-space-size.
-                execArgv: process.execArgv.filter(arg => !arg.startsWith('--max-old-space-size')),
+                // Worker threads do not support all process-level Node flags.
+                execArgv: getWorkerExecArgv(process.execArgv),
             },
         },
         ...productionOnlyOptions,
@@ -51,4 +56,4 @@ const contextMiddleware = (_req, _res, next) => {
 };
 
 export default log;
-export { contextMiddleware };
+export { contextMiddleware, getWorkerExecArgv };
