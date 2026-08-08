@@ -550,7 +550,7 @@ describe('UserController', () => {
                         emailAddress: 'some-email-address',
                         dateRegistered: Temporal.Now.instant().toString(),
                         membershipType,
-                        phoneNumber,
+                        phoneNumber: `+1${phoneNumber}`,
                     }),
                 );
 
@@ -558,7 +558,7 @@ describe('UserController', () => {
 
                 expect(notificationService.sendMessage).toHaveBeenCalledWith(
                     expect.stringContaining('Reply HELP for help, STOP to cancel.'),
-                    phoneNumber,
+                    `+1${phoneNumber}`,
                     '',
                 );
                 expect(userService.updateUser).toHaveBeenCalled();
