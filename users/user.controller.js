@@ -45,6 +45,16 @@ class UserController {
     }
 
     /**
+     * Build the SMS text sent after successful registration.
+     *
+     * @returns {string}
+     * @private
+     */
+    static #buildWelcomeMessage() {
+        return 'Welcome to Destiny-Ghost! Message frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to cancel.';
+    }
+
+    /**
      * Get the phone number format into the Twilio standard: e164.
      * Deny phone numbers from China, North Korea, and Russia.
      *
@@ -311,6 +321,14 @@ class UserController {
         }
 
         await this.users.updateUser(registeredUser);
+
+        if (registeredUser.phoneNumber) {
+            await this.notifications.sendMessage(
+                UserController.#buildWelcomeMessage(),
+                registeredUser.phoneNumber,
+                '',
+            );
+        }
 
         return registeredUser;
     }
