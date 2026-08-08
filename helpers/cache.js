@@ -9,11 +9,20 @@ import log from './log.js';
 const { redis = {} } = configuration;
 const { host, port, ...options } = redis;
 const url = `rediss://${host}:${port}`;
+// Auth failures (bad credentials/permissions) will never succeed on retry, so give up immediately
+// instead of looping forever.
+const fatalReconnectErrorPattern = /^(WRONGPASS|NOAUTH|NOPERM)\b/;
 const redisConfiguration = {
     socket: {
         connectTimeout: 60000,
         lazyConnect: false,
-        reconnectStrategy: retries => {
+        reconnectStrategy: (retries, cause) => {
+            if (fatalReconnectErrorPattern.test(cause?.message ?? '')) {
+                log.error({ err: cause }, 'Redis authentication failed; not retrying.');
+
+                return cause;
+            }
+
             // Continuously try to reconnect with exponential backoff
             // Cap the delay at 30 seconds to avoid extremely long waits
             const delay = Math.min(retries * 100, 30000);
@@ -27,6 +36,9 @@ const redisConfiguration = {
     },
     url,
     ...options,
+    // Pin RESP2: the production Redis deployment does not support RESP3, which node-redis defaults to as of v6.
+    // Placed after the spread so settings files can't silently override this.
+    RESP: 2,
 };
 const client = createClient(redisConfiguration);
 
