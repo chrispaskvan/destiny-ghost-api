@@ -135,6 +135,10 @@ class NotificationController {
             const user = await this.users.getUserByPhoneNumber(phoneNumber);
 
             if (user?.phoneNumber) {
+                if (user.isSubscribed === false) {
+                    throw new NotificationError('user has opted out of notifications');
+                }
+
                 await this.publisher.sendNotification(user, {
                     notificationType: subscription,
                     claimCheckNumber,

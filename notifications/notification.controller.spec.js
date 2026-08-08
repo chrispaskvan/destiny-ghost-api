@@ -175,6 +175,22 @@ describe('NotificationController', () => {
                     notificationController.create(subscription, phoneNumber),
                 ).rejects.toThrow(NotificationError);
             });
+
+            it('should throw NotificationError when user has opted out', async () => {
+                const subscription = notificationTypes.Xur;
+                const optedOutUser = { ...mockUser, isSubscribed: false };
+
+                userService.getUserByPhoneNumber.mockResolvedValue(optedOutUser);
+
+                await expect(
+                    notificationController.create(subscription, phoneNumber),
+                ).rejects.toThrow(NotificationError);
+
+                expect(NotificationError).toHaveBeenCalledWith(
+                    'user has opted out of notifications',
+                );
+                expect(publisher.sendNotification).not.toHaveBeenCalled();
+            });
         });
 
         describe('when phone number is not provided', () => {

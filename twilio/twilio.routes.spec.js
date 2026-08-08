@@ -4,7 +4,9 @@ import { StatusCodes } from 'http-status-codes';
 import { createResponse, createRequest } from 'node-mocks-http';
 import twilio from 'twilio';
 import TwilioRouter from './twilio.routes.js';
+import TwilioController from './twilio.controller.js';
 import configuration from '../helpers/config.js';
+import { MAX_SMS_MESSAGE_LENGTH } from './twilio.constants.js';
 
 vi.mock('../helpers/bitly.js', () => ({
     default: vi.fn().mockResolvedValue('https://bit.ly/short'),
@@ -71,11 +73,12 @@ function signedRequest({ body, cookie }) {
 const authenticationController = {
     authenticate: vi.fn(() => ({ displayName: 'test-user', membershipType: 2 })),
 };
-const authenticationService = {};
+const authenticationService = { authenticate: vi.fn() };
 const destinyService = {};
 const userService = {
     addUserMessage: vi.fn(),
     getUserByPhoneNumber: vi.fn(),
+    updateUser: vi.fn(),
 };
 const worldRepository = {};
 
@@ -140,9 +143,234 @@ describe('TwilioRouter', () => {
                             expect(res.statusCode).toEqual(StatusCodes.OK);
                             expect(req.cookies).toEqual({});
                             expect(res._getData()).toContain('More what?');
+                            expect(res._getData()).toContain('Destiny-Ghost: ');
                             done();
                         } catch (err) {
                             reject(err);
+                        }
+                    });
+
+                    twilioRouter(req, res, next);
+                }));
+        });
+
+        describe('when the message body is STOP', () => {
+            it('should unsubscribe the user and reply with the opt-out confirmation', () =>
+                new Promise((done, reject) => {
+                    const body = signedBody({ Body: 'STOP' });
+                    const req = signedRequest({ body });
+
+                    res.on('end', () => {
+                        try {
+                            expect(res.statusCode).toEqual(StatusCodes.OK);
+                            expect(res._getData()).toContain("You're unsubscribed");
+                            expect(res._getData()).toContain('Destiny-Ghost: ');
+                            expect(userService.updateUser).toHaveBeenCalledWith(
+                                expect.objectContaining({ isSubscribed: false }),
+                            );
+                            done();
+                        } catch (err) {
+                            reject(err);
+                        }
+                    });
+
+                    twilioRouter(req, res, next);
+                }));
+        });
+
+        describe('when the message body is HELP', () => {
+            it('should reply with support information without changing subscription state', () =>
+                new Promise((done, reject) => {
+                    const body = signedBody({ Body: 'HELP' });
+                    const req = signedRequest({ body });
+
+                    res.on('end', () => {
+                        try {
+                            expect(res.statusCode).toEqual(StatusCodes.OK);
+                            expect(res._getData()).toContain('banshee-44@destiny-ghost.com');
+                            expect(res._getData()).toContain('Destiny-Ghost: ');
+                            expect(userService.updateUser).not.toHaveBeenCalled();
+                            done();
+                        } catch (err) {
+                            reject(err);
+                        }
+                    });
+
+                    twilioRouter(req, res, next);
+                }));
+        });
+
+        describe('when the message body is START', () => {
+            it('should re-subscribe the user and reply with the opt-in confirmation', () =>
+                new Promise((done, reject) => {
+                    const body = signedBody({ Body: 'START' });
+                    const req = signedRequest({ body });
+
+                    res.on('end', () => {
+                        try {
+                            expect(res.statusCode).toEqual(StatusCodes.OK);
+                            expect(res._getData()).toContain("You're re-subscribed");
+                            expect(res._getData()).toContain('Destiny-Ghost: ');
+                            expect(userService.updateUser).toHaveBeenCalledWith(
+                                expect.objectContaining({ isSubscribed: true }),
+                            );
+                            done();
+                        } catch (err) {
+                            reject(err);
+                        }
+                    });
+
+                    twilioRouter(req, res, next);
+                }));
+        });
+
+        describe('when getXur encounters an unexpected error', () => {
+            it('should reply with a branded message instead of silently failing', () =>
+                new Promise((done, reject) => {
+                    authenticationService.authenticate.mockRejectedValue(new Error('boom'));
+
+                    const body = signedBody({ Body: 'xur' });
+                    const req = signedRequest({ body });
+
+                    res.on('end', () => {
+                        try {
+                            expect(res.statusCode).toEqual(StatusCodes.OK);
+                            expect(res._getData()).toContain('Destiny-Ghost: ');
+                            done();
+                        } catch (err) {
+                            reject(err);
+                        }
+                    });
+
+                    twilioRouter(req, res, next);
+                }));
+        });
+
+        describe('when the reply is already at the max SMS length before branding', () => {
+            it('should truncate the branded message so it does not exceed MAX_SMS_MESSAGE_LENGTH', () =>
+                new Promise((done, reject) => {
+                    const requestSpy = vi
+                        .spyOn(TwilioController.prototype, 'request')
+                        .mockResolvedValue({
+                            cookies: {},
+                            message: 'x'.repeat(MAX_SMS_MESSAGE_LENGTH),
+                        });
+
+                    const body = signedBody();
+                    const req = signedRequest({ body });
+
+                    res.on('end', () => {
+                        try {
+                            expect(res.statusCode).toEqual(StatusCodes.OK);
+
+                            const [, messageBody] =
+                                res._getData().match(/<Message[^>]*>([\s\S]*)<\/Message>/) ?? [];
+
+                            expect(messageBody.length).toEqual(MAX_SMS_MESSAGE_LENGTH);
+                            expect(messageBody.startsWith('Destiny-Ghost: ')).toBe(true);
+                            done();
+                        } catch (err) {
+                            reject(err);
+                        } finally {
+                            requestSpy.mockRestore();
+                        }
+                    });
+
+                    twilioRouter(req, res, next);
+                }));
+        });
+
+        describe('when the user has opted out', () => {
+            it('should suppress further replies with an empty 200 response, not a webhook error', () =>
+                new Promise((done, reject) => {
+                    userService.getUserByPhoneNumber.mockResolvedValue({
+                        dateRegistered: Temporal.Now.instant().toString(),
+                        type: 'mobile',
+                        isSubscribed: false,
+                    });
+
+                    const body = signedBody();
+                    const req = signedRequest({ body });
+
+                    res.on('end', () => {
+                        try {
+                            expect(res.statusCode).toEqual(StatusCodes.OK);
+                            expect(res._getData()).not.toContain('Destiny-Ghost: ');
+                            done();
+                        } catch (err) {
+                            reject(err);
+                        }
+                    });
+
+                    twilioRouter(req, res, next);
+                }));
+        });
+
+        describe('when an unregistered number texts STOP', () => {
+            it('should still confirm the opt-out without persisting a user record', () =>
+                new Promise((done, reject) => {
+                    userService.getUserByPhoneNumber.mockResolvedValue(null);
+
+                    const body = signedBody({ Body: 'STOP' });
+                    const req = signedRequest({ body });
+
+                    res.on('end', () => {
+                        try {
+                            expect(res.statusCode).toEqual(StatusCodes.OK);
+                            expect(res._getData()).toContain("You're unsubscribed");
+                            expect(res._getData()).toContain('Destiny-Ghost: ');
+                            expect(userService.updateUser).not.toHaveBeenCalled();
+                            done();
+                        } catch (err) {
+                            reject(err);
+                        }
+                    });
+
+                    twilioRouter(req, res, next);
+                }));
+        });
+    });
+
+    describe('POST /destiny/f', () => {
+        it('should reply with a branded fallback message', () =>
+            new Promise((done, reject) => {
+                const req = createRequest({ method: 'POST', url: '/destiny/f' });
+
+                res.on('end', () => {
+                    try {
+                        expect(res.statusCode).toEqual(StatusCodes.OK);
+                        expect(res._getData()).toContain('Destiny-Ghost: ');
+                        done();
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
+
+                twilioRouter(req, res, next);
+            }));
+
+        describe('when the fallback message is already at the max SMS length before branding', () => {
+            it('should truncate the branded message so it does not exceed MAX_SMS_MESSAGE_LENGTH', () =>
+                new Promise((done, reject) => {
+                    const errorSpy = vi
+                        .spyOn(TwilioController, 'getRandomResponseForAnError')
+                        .mockReturnValue('x'.repeat(MAX_SMS_MESSAGE_LENGTH));
+
+                    const req = createRequest({ method: 'POST', url: '/destiny/f' });
+
+                    res.on('end', () => {
+                        try {
+                            expect(res.statusCode).toEqual(StatusCodes.OK);
+
+                            const [, messageBody] =
+                                res._getData().match(/<Message[^>]*>([\s\S]*)<\/Message>/) ?? [];
+
+                            expect(messageBody.length).toEqual(MAX_SMS_MESSAGE_LENGTH);
+                            done();
+                        } catch (err) {
+                            reject(err);
+                        } finally {
+                            errorSpy.mockRestore();
                         }
                     });
 
