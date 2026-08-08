@@ -339,6 +339,36 @@ describe('UserController', () => {
                     );
                 });
 
+                it('should still join if sending the welcome message fails', async () => {
+                    notificationService.sendMessage.mockRejectedValueOnce(
+                        new Error('twilio error'),
+                    );
+                    userService.getUserByEmailAddressToken.mockImplementation(() =>
+                        Promise.resolve({
+                            membership: {
+                                tokens: {
+                                    timeStamp: getEpoch(),
+                                    code,
+                                },
+                            },
+                            phoneNumber: `+1${phoneNumber}`,
+                            ...mockUser,
+                        }),
+                    );
+
+                    const user = await userController.join({
+                        tokens: {
+                            emailAddress: 'some-token',
+                            phoneNumber: code,
+                        },
+                    });
+
+                    expect(userService.getUserByEmailAddressToken).toHaveBeenCalled();
+                    expect(user).toMatchObject(mockUser);
+                    expect(user.dateRegistered).toBeDefined();
+                    expect(userService.updateUser).toHaveBeenCalled();
+                });
+
                 it('should seed all known notification types', async () => {
                     userService.getUserByEmailAddressToken.mockImplementation(() =>
                         Promise.resolve({

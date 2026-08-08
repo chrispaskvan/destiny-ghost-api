@@ -8,6 +8,7 @@ import { applyPatch, createPatch } from 'rfc6902';
 import { parsePhoneNumber } from 'awesome-phonenumber';
 import Postmaster from '../helpers/postmaster.js';
 import getEpoch from '../helpers/get-epoch.js';
+import log from '../helpers/log.js';
 import { getBlob, getCode } from '../helpers/tokens.js';
 import { postmasterHash } from '../destiny/destiny.constants.js';
 import notificationTypes from '../notifications/notification.types.js';
@@ -323,11 +324,15 @@ class UserController {
         await this.users.updateUser(registeredUser);
 
         if (registeredUser.phoneNumber) {
-            await this.notifications.sendMessage(
-                UserController.#buildWelcomeMessage(),
-                registeredUser.phoneNumber,
-                '',
-            );
+            try {
+                await this.notifications.sendMessage(
+                    UserController.#buildWelcomeMessage(),
+                    registeredUser.phoneNumber,
+                    '',
+                );
+            } catch (err) {
+                log.error({ err }, 'Failed to send welcome message.');
+            }
         }
 
         return registeredUser;
