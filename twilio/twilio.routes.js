@@ -13,6 +13,7 @@ import { z } from 'zod';
 import AuthenticationMiddleWare from '../authentication/authentication.middleware.js';
 import TwilioController from './twilio.controller.js';
 import configuration from '../helpers/config.js';
+import { BRAND_PREFIX } from './twilio.constants.js';
 
 const {
     twiml: { MessagingResponse },
@@ -108,11 +109,12 @@ const routes = ({
             }
 
             const twiml = new MessagingResponse();
+            const brandedMessage = `${BRAND_PREFIX}${message}`;
 
             if (media) {
-                twiml.message(attributes, message).media(media);
+                twiml.message(attributes, brandedMessage).media(media);
             } else {
-                twiml.message(attributes, message);
+                twiml.message(attributes, brandedMessage);
             }
             res.writeHead(StatusCodes.OK, {
                 'Content-Type': 'text/xml',
@@ -165,7 +167,7 @@ const routes = ({
         const message = TwilioController.fallback();
         const twiml = new MessagingResponse();
 
-        twiml.message(attributes, message);
+        twiml.message(attributes, `${BRAND_PREFIX}${message}`);
         res.writeHead(StatusCodes.OK, {
             'Content-Type': 'text/xml',
         });

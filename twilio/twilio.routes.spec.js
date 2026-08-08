@@ -71,11 +71,12 @@ function signedRequest({ body, cookie }) {
 const authenticationController = {
     authenticate: vi.fn(() => ({ displayName: 'test-user', membershipType: 2 })),
 };
-const authenticationService = {};
+const authenticationService = { authenticate: vi.fn() };
 const destinyService = {};
 const userService = {
     addUserMessage: vi.fn(),
     getUserByPhoneNumber: vi.fn(),
+    updateUser: vi.fn(),
 };
 const worldRepository = {};
 
@@ -140,6 +141,7 @@ describe('TwilioRouter', () => {
                             expect(res.statusCode).toEqual(StatusCodes.OK);
                             expect(req.cookies).toEqual({});
                             expect(res._getData()).toContain('More what?');
+                            expect(res._getData()).toContain('Destiny-Ghost: ');
                             done();
                         } catch (err) {
                             reject(err);
@@ -149,5 +151,141 @@ describe('TwilioRouter', () => {
                     twilioRouter(req, res, next);
                 }));
         });
+
+        describe('when the message body is STOP', () => {
+            it('should unsubscribe the user and reply with the opt-out confirmation', () =>
+                new Promise((done, reject) => {
+                    const body = signedBody({ Body: 'STOP' });
+                    const req = signedRequest({ body });
+
+                    res.on('end', () => {
+                        try {
+                            expect(res.statusCode).toEqual(StatusCodes.OK);
+                            expect(res._getData()).toContain("You're unsubscribed");
+                            expect(res._getData()).toContain('Destiny-Ghost: ');
+                            expect(userService.updateUser).toHaveBeenCalledWith(
+                                expect.objectContaining({ isSubscribed: false }),
+                            );
+                            done();
+                        } catch (err) {
+                            reject(err);
+                        }
+                    });
+
+                    twilioRouter(req, res, next);
+                }));
+        });
+
+        describe('when the message body is HELP', () => {
+            it('should reply with support information without changing subscription state', () =>
+                new Promise((done, reject) => {
+                    const body = signedBody({ Body: 'HELP' });
+                    const req = signedRequest({ body });
+
+                    res.on('end', () => {
+                        try {
+                            expect(res.statusCode).toEqual(StatusCodes.OK);
+                            expect(res._getData()).toContain('banshee-44@destiny-ghost.com');
+                            expect(res._getData()).toContain('Destiny-Ghost: ');
+                            expect(userService.updateUser).not.toHaveBeenCalled();
+                            done();
+                        } catch (err) {
+                            reject(err);
+                        }
+                    });
+
+                    twilioRouter(req, res, next);
+                }));
+        });
+
+        describe('when the message body is START', () => {
+            it('should re-subscribe the user and reply with the opt-in confirmation', () =>
+                new Promise((done, reject) => {
+                    const body = signedBody({ Body: 'START' });
+                    const req = signedRequest({ body });
+
+                    res.on('end', () => {
+                        try {
+                            expect(res.statusCode).toEqual(StatusCodes.OK);
+                            expect(res._getData()).toContain("You're re-subscribed");
+                            expect(res._getData()).toContain('Destiny-Ghost: ');
+                            expect(userService.updateUser).toHaveBeenCalledWith(
+                                expect.objectContaining({ isSubscribed: true }),
+                            );
+                            done();
+                        } catch (err) {
+                            reject(err);
+                        }
+                    });
+
+                    twilioRouter(req, res, next);
+                }));
+        });
+
+        describe('when getXur encounters an unexpected error', () => {
+            it('should reply with a branded message instead of silently failing', () =>
+                new Promise((done, reject) => {
+                    authenticationService.authenticate.mockRejectedValue(new Error('boom'));
+
+                    const body = signedBody({ Body: 'xur' });
+                    const req = signedRequest({ body });
+
+                    res.on('end', () => {
+                        try {
+                            expect(res.statusCode).toEqual(StatusCodes.OK);
+                            expect(res._getData()).toContain('Destiny-Ghost: ');
+                            done();
+                        } catch (err) {
+                            reject(err);
+                        }
+                    });
+
+                    twilioRouter(req, res, next);
+                }));
+        });
+
+        describe('when the user has opted out', () => {
+            it('should suppress further replies', () =>
+                new Promise((done, reject) => {
+                    userService.getUserByPhoneNumber.mockResolvedValue({
+                        dateRegistered: Temporal.Now.instant().toString(),
+                        type: 'mobile',
+                        isSubscribed: false,
+                    });
+
+                    const body = signedBody();
+                    const req = signedRequest({ body });
+
+                    res.on('end', () => {
+                        try {
+                            expect(res.statusCode).toEqual(StatusCodes.FORBIDDEN);
+                            done();
+                        } catch (err) {
+                            reject(err);
+                        }
+                    });
+
+                    twilioRouter(req, res, next);
+                }));
+        });
+    });
+
+    describe('POST /destiny/f', () => {
+        it('should reply with a branded fallback message', () =>
+            new Promise((done, reject) => {
+                const req = createRequest({ method: 'POST', url: '/destiny/f' });
+
+                res.on('end', () => {
+                    try {
+                        expect(res.statusCode).toEqual(StatusCodes.OK);
+                        expect(res._getData()).toContain('Destiny-Ghost: ');
+                        done();
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
+
+                twilioRouter(req, res, next);
+            }));
     });
 });

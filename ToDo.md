@@ -4,8 +4,6 @@
 
 The application needs a user interface to allow users to register, login, and manage their subscriptions. Plan on using React. Add a UI testing framework like Cypress or Playwright.
 
-The web application also needs to have a public page that provides a clear and comprehensive overview of the campaign's objectives and interactions the end-user would experience after opting in. For more details about the Campaign Approval Best Practices, see [here](https://support.twilio.com/hc/en-us/articles/11847054539547-A2P-10DLC-Campaign-Approval-Best-Practices).
-
 ### Bonuses
 
 The user interface should be a Progressive Web Application (PWA) that can be installed on a user's device.

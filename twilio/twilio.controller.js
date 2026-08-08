@@ -7,7 +7,15 @@
 import ClaimCheck from '../helpers/claim-check.js';
 import getShortUrl from '../helpers/bitly.js';
 import log from '../helpers/log.js';
-import { MAX_SMS_MESSAGE_LENGTH } from './twilio.constants.js';
+import {
+    HELP_KEYWORDS,
+    HELP_REPLY,
+    MAX_SMS_MESSAGE_LENGTH,
+    START_KEYWORDS,
+    START_REPLY,
+    STOP_KEYWORDS,
+    STOP_REPLY,
+} from './twilio.constants.js';
 
 /**
  * Twilio Controller
@@ -185,7 +193,7 @@ class TwilioController {
 
             return {
                 cookies,
-                messsage: TwilioController.getRandomResponseForNoResults(),
+                message: TwilioController.getRandomResponseForNoResults(),
             };
         }
     }
@@ -236,6 +244,29 @@ class TwilioController {
     async request({ body, cookies }) {
         let responseCookies = {};
         const user = await this.users.getUserByPhoneNumber(body.From);
+        const message = body.Body.trim().toLowerCase();
+
+        if (user) {
+            if (STOP_KEYWORDS.has(message)) {
+                await this.users.updateUser({ ...user, isSubscribed: false });
+
+                return { message: STOP_REPLY };
+            }
+
+            if (HELP_KEYWORDS.has(message)) {
+                return { message: HELP_REPLY };
+            }
+
+            if (START_KEYWORDS.has(message)) {
+                await this.users.updateUser({ ...user, isSubscribed: true });
+
+                return { message: START_REPLY };
+            }
+
+            if (user.isSubscribed === false) {
+                return {};
+            }
+        }
 
         if (!user?.dateRegistered) {
             if (!cookies.isRegistered) {
@@ -250,13 +281,8 @@ class TwilioController {
         responseCookies = { isRegistered: true, ...responseCookies };
         await this.users.addUserMessage(body);
 
-        const { Body: rawMessage } = body;
         const { itemHash } = cookies;
-        const message = rawMessage.trim().toLowerCase();
 
-        /**
-         * @ToDo: Handle STOP and HELP
-         */
         if (this.itemKeywords.has(message)) {
             return await this.itemKeywords.get(message).bind(this)(itemHash, responseCookies);
         }

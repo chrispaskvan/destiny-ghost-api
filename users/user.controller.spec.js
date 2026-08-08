@@ -490,6 +490,11 @@ describe('UserController', () => {
 
                     expect(userService.updateUser).toHaveBeenCalled();
                     expect(user).not.toBeUndefined();
+                    expect(notificationService.sendMessage).toHaveBeenCalledWith(
+                        expect.stringContaining('Reply HELP for help, STOP to cancel.'),
+                        `+1${phoneNumber}`,
+                        '',
+                    );
                 });
             });
             describe('when phone number is invalid', () => {
@@ -532,6 +537,31 @@ describe('UserController', () => {
                 });
 
                 expect(user).toBeUndefined();
+            });
+        });
+    });
+
+    describe('sendCipher', () => {
+        describe('when channel is phone', () => {
+            it('should send a compliant verification message', async () => {
+                userService.getUserByDisplayName.mockImplementation(() =>
+                    Promise.resolve({
+                        displayName,
+                        emailAddress: 'some-email-address',
+                        dateRegistered: Temporal.Now.instant().toString(),
+                        membershipType,
+                        phoneNumber,
+                    }),
+                );
+
+                await userController.sendCipher({ displayName, membershipType, channel: 'phone' });
+
+                expect(notificationService.sendMessage).toHaveBeenCalledWith(
+                    expect.stringContaining('Reply HELP for help, STOP to cancel.'),
+                    phoneNumber,
+                    '',
+                );
+                expect(userService.updateUser).toHaveBeenCalled();
             });
         });
     });

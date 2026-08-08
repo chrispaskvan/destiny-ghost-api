@@ -508,6 +508,40 @@ describe('UserService', () => {
         });
     });
 
+    describe('getSubscribedUsers', () => {
+        describe('when notificationType is not valid', () => {
+            it('should reject', async () => {
+                await expect(userService.getSubscribedUsers('not-a-type')).rejects.toThrow();
+            });
+        });
+
+        describe('when notificationType is valid', () => {
+            it('should include a user missing the isSubscribed field', async () => {
+                documentService.getDocuments.mockImplementation(() =>
+                    Promise.resolve([{ ...user, isSubscribed: undefined }]),
+                );
+
+                const users = await userService.getSubscribedUsers('Xur');
+
+                expect(users).toHaveLength(1);
+            });
+
+            it('should exclude a user who has opted out', async () => {
+                documentService.getDocuments.mockImplementation(() =>
+                    Promise.resolve([
+                        { ...user, isSubscribed: false },
+                        { ...user, isSubscribed: true },
+                    ]),
+                );
+
+                const users = await userService.getSubscribedUsers('Xur');
+
+                expect(users).toHaveLength(1);
+                expect(users[0].isSubscribed).toBe(true);
+            });
+        });
+    });
+
     describe('getUserById', () => {
         describe('when user id defined', () => {
             it('should return an existing user', () => {
