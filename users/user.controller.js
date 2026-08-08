@@ -309,9 +309,13 @@ class UserController {
             return undefined;
         }
 
-        registeredUser.dateRegistered = Temporal.Now.instant().toString({
-            smallestUnit: 'millisecond',
-        });
+        const isNewRegistration = !registeredUser.dateRegistered;
+
+        if (isNewRegistration) {
+            registeredUser.dateRegistered = Temporal.Now.instant().toString({
+                smallestUnit: 'millisecond',
+            });
+        }
 
         if (!registeredUser.notifications?.length) {
             registeredUser.notifications = Object.values(notificationTypes).map(type => ({
@@ -323,7 +327,7 @@ class UserController {
 
         await this.users.updateUser(registeredUser);
 
-        if (registeredUser.phoneNumber) {
+        if (isNewRegistration && registeredUser.phoneNumber) {
             try {
                 await this.notifications.sendMessage(
                     UserController.#buildWelcomeMessage(),

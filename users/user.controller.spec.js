@@ -369,6 +369,35 @@ describe('UserController', () => {
                     expect(userService.updateUser).toHaveBeenCalled();
                 });
 
+                it('should not resend welcome message or update dateRegistered for already-registered users', async () => {
+                    const existingDateRegistered = Temporal.Now.instant().toString();
+
+                    notificationService.sendMessage.mockClear();
+                    userService.getUserByEmailAddressToken.mockImplementation(() =>
+                        Promise.resolve({
+                            dateRegistered: existingDateRegistered,
+                            membership: {
+                                tokens: {
+                                    timeStamp: getEpoch(),
+                                    code,
+                                },
+                            },
+                            phoneNumber: `+1${phoneNumber}`,
+                            ...mockUser,
+                        }),
+                    );
+
+                    const user = await userController.join({
+                        tokens: {
+                            emailAddress: 'some-token',
+                            phoneNumber: code,
+                        },
+                    });
+
+                    expect(user.dateRegistered).toBe(existingDateRegistered);
+                    expect(notificationService.sendMessage).not.toHaveBeenCalled();
+                });
+
                 it('should seed all known notification types', async () => {
                     userService.getUserByEmailAddressToken.mockImplementation(() =>
                         Promise.resolve({
