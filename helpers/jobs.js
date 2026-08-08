@@ -10,9 +10,10 @@ const { redis } = configuration;
  */
 const redisConfiguration = {
     maxRetriesPerRequest: 0,
-    // Pin RESP2: the production Redis deployment does not support RESP3, which ioredis defaults to as of v6.
-    protocol: 2,
     ...redis,
+    // Pin RESP2: the production Redis deployment does not support RESP3, which ioredis defaults to as of v6.
+    // Placed after the spread so settings files can't silently override this.
+    protocol: 2,
 };
 const client = new Redis(redisConfiguration);
 
