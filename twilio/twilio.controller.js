@@ -246,26 +246,33 @@ class TwilioController {
         const user = await this.users.getUserByPhoneNumber(body.From);
         const message = body.Body.trim().toLowerCase();
 
-        if (user) {
-            if (STOP_KEYWORDS.has(message)) {
+        /**
+         * Carrier compliance requires STOP/HELP/START to work for any inbound
+         * number, not just ones with an existing user record - persistence is
+         * the only part conditional on `user`.
+         */
+        if (STOP_KEYWORDS.has(message)) {
+            if (user) {
                 await this.users.updateUser({ ...user, isSubscribed: false });
-
-                return { message: STOP_REPLY };
             }
 
-            if (HELP_KEYWORDS.has(message)) {
-                return { message: HELP_REPLY };
-            }
+            return { message: STOP_REPLY };
+        }
 
-            if (START_KEYWORDS.has(message)) {
+        if (HELP_KEYWORDS.has(message)) {
+            return { message: HELP_REPLY };
+        }
+
+        if (START_KEYWORDS.has(message)) {
+            if (user) {
                 await this.users.updateUser({ ...user, isSubscribed: true });
-
-                return { message: START_REPLY };
             }
 
-            if (user.isSubscribed === false) {
-                return {};
-            }
+            return { message: START_REPLY };
+        }
+
+        if (user?.isSubscribed === false) {
+            return {};
         }
 
         if (!user?.dateRegistered) {

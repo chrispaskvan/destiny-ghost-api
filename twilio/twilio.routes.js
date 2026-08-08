@@ -95,9 +95,17 @@ const routes = ({
             });
 
             if (!message) {
-                res.writeHead(StatusCodes.FORBIDDEN);
+                /**
+                 * A missing message means the reply is intentionally
+                 * suppressed (e.g. an opted-out user), not that the request
+                 * failed - reply 200 with empty TwiML so Twilio doesn't
+                 * treat this as an error and retry the webhook.
+                 */
+                res.writeHead(StatusCodes.OK, {
+                    'Content-Type': 'text/xml',
+                });
 
-                return res.end();
+                return res.end(new MessagingResponse().toString());
             }
 
             for (const [key, value] of Object.entries(cookies)) {

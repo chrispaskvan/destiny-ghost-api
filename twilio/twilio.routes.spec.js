@@ -245,7 +245,7 @@ describe('TwilioRouter', () => {
         });
 
         describe('when the user has opted out', () => {
-            it('should suppress further replies', () =>
+            it('should suppress further replies with an empty 200 response, not a webhook error', () =>
                 new Promise((done, reject) => {
                     userService.getUserByPhoneNumber.mockResolvedValue({
                         dateRegistered: Temporal.Now.instant().toString(),
@@ -258,7 +258,32 @@ describe('TwilioRouter', () => {
 
                     res.on('end', () => {
                         try {
-                            expect(res.statusCode).toEqual(StatusCodes.FORBIDDEN);
+                            expect(res.statusCode).toEqual(StatusCodes.OK);
+                            expect(res._getData()).not.toContain('Destiny-Ghost: ');
+                            done();
+                        } catch (err) {
+                            reject(err);
+                        }
+                    });
+
+                    twilioRouter(req, res, next);
+                }));
+        });
+
+        describe('when an unregistered number texts STOP', () => {
+            it('should still confirm the opt-out without persisting a user record', () =>
+                new Promise((done, reject) => {
+                    userService.getUserByPhoneNumber.mockResolvedValue(null);
+
+                    const body = signedBody({ Body: 'STOP' });
+                    const req = signedRequest({ body });
+
+                    res.on('end', () => {
+                        try {
+                            expect(res.statusCode).toEqual(StatusCodes.OK);
+                            expect(res._getData()).toContain("You're unsubscribed");
+                            expect(res._getData()).toContain('Destiny-Ghost: ');
+                            expect(userService.updateUser).not.toHaveBeenCalled();
                             done();
                         } catch (err) {
                             reject(err);
