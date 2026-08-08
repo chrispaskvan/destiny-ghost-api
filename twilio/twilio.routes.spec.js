@@ -4,7 +4,9 @@ import { StatusCodes } from 'http-status-codes';
 import { createResponse, createRequest } from 'node-mocks-http';
 import twilio from 'twilio';
 import TwilioRouter from './twilio.routes.js';
+import TwilioController from './twilio.controller.js';
 import configuration from '../helpers/config.js';
+import { MAX_SMS_MESSAGE_LENGTH } from './twilio.constants.js';
 
 vi.mock('../helpers/bitly.js', () => ({
     default: vi.fn().mockResolvedValue('https://bit.ly/short'),
@@ -244,6 +246,40 @@ describe('TwilioRouter', () => {
                 }));
         });
 
+        describe('when the reply is already at the max SMS length before branding', () => {
+            it('should truncate the branded message so it does not exceed MAX_SMS_MESSAGE_LENGTH', () =>
+                new Promise((done, reject) => {
+                    const requestSpy = vi
+                        .spyOn(TwilioController.prototype, 'request')
+                        .mockResolvedValue({
+                            cookies: {},
+                            message: 'x'.repeat(MAX_SMS_MESSAGE_LENGTH),
+                        });
+
+                    const body = signedBody();
+                    const req = signedRequest({ body });
+
+                    res.on('end', () => {
+                        try {
+                            expect(res.statusCode).toEqual(StatusCodes.OK);
+
+                            const [, messageBody] =
+                                res._getData().match(/<Message[^>]*>([\s\S]*)<\/Message>/) ?? [];
+
+                            expect(messageBody.length).toEqual(MAX_SMS_MESSAGE_LENGTH);
+                            expect(messageBody.startsWith('Destiny-Ghost: ')).toBe(true);
+                            done();
+                        } catch (err) {
+                            reject(err);
+                        } finally {
+                            requestSpy.mockRestore();
+                        }
+                    });
+
+                    twilioRouter(req, res, next);
+                }));
+        });
+
         describe('when the user has opted out', () => {
             it('should suppress further replies with an empty 200 response, not a webhook error', () =>
                 new Promise((done, reject) => {
@@ -312,5 +348,34 @@ describe('TwilioRouter', () => {
 
                 twilioRouter(req, res, next);
             }));
+
+        describe('when the fallback message is already at the max SMS length before branding', () => {
+            it('should truncate the branded message so it does not exceed MAX_SMS_MESSAGE_LENGTH', () =>
+                new Promise((done, reject) => {
+                    const errorSpy = vi
+                        .spyOn(TwilioController, 'getRandomResponseForAnError')
+                        .mockReturnValue('x'.repeat(MAX_SMS_MESSAGE_LENGTH));
+
+                    const req = createRequest({ method: 'POST', url: '/destiny/f' });
+
+                    res.on('end', () => {
+                        try {
+                            expect(res.statusCode).toEqual(StatusCodes.OK);
+
+                            const [, messageBody] =
+                                res._getData().match(/<Message[^>]*>([\s\S]*)<\/Message>/) ?? [];
+
+                            expect(messageBody.length).toEqual(MAX_SMS_MESSAGE_LENGTH);
+                            done();
+                        } catch (err) {
+                            reject(err);
+                        } finally {
+                            errorSpy.mockRestore();
+                        }
+                    });
+
+                    twilioRouter(req, res, next);
+                }));
+        });
     });
 });

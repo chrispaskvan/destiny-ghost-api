@@ -13,7 +13,7 @@ import { z } from 'zod';
 import AuthenticationMiddleWare from '../authentication/authentication.middleware.js';
 import TwilioController from './twilio.controller.js';
 import configuration from '../helpers/config.js';
-import { BRAND_PREFIX } from './twilio.constants.js';
+import { BRAND_PREFIX, MAX_SMS_MESSAGE_LENGTH } from './twilio.constants.js';
 
 const {
     twiml: { MessagingResponse },
@@ -117,7 +117,7 @@ const routes = ({
             }
 
             const twiml = new MessagingResponse();
-            const brandedMessage = `${BRAND_PREFIX}${message}`;
+            const brandedMessage = `${BRAND_PREFIX}${message}`.substring(0, MAX_SMS_MESSAGE_LENGTH);
 
             if (media) {
                 twiml.message(attributes, brandedMessage).media(media);
@@ -175,7 +175,7 @@ const routes = ({
         const message = TwilioController.fallback();
         const twiml = new MessagingResponse();
 
-        twiml.message(attributes, `${BRAND_PREFIX}${message}`);
+        twiml.message(attributes, `${BRAND_PREFIX}${message}`.substring(0, MAX_SMS_MESSAGE_LENGTH));
         res.writeHead(StatusCodes.OK, {
             'Content-Type': 'text/xml',
         });
