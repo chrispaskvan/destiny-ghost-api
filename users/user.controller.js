@@ -52,7 +52,7 @@ class UserController {
      * @private
      */
     static #buildWelcomeMessage() {
-        return 'Welcome to Destiny-Ghost! Message frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to cancel.';
+        return 'Welcome! Message frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to cancel.';
     }
 
     /**

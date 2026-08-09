@@ -333,7 +333,7 @@ describe('UserController', () => {
                     expect(user.dateRegistered).toBeDefined();
                     expect(userService.updateUser).toHaveBeenCalled();
                     expect(notificationService.sendMessage).toHaveBeenCalledWith(
-                        'Welcome to Destiny-Ghost! Message frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to cancel.',
+                        'Welcome! Message frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to cancel.',
                         `+1${phoneNumber}`,
                         '',
                     );
