@@ -8,6 +8,7 @@ import { applyPatch, createPatch } from 'rfc6902';
 import { parsePhoneNumber } from 'awesome-phonenumber';
 import Postmaster from '../helpers/postmaster.js';
 import getEpoch from '../helpers/get-epoch.js';
+import log from '../helpers/log.js';
 import { getBlob, getCode } from '../helpers/tokens.js';
 import { postmasterHash } from '../destiny/destiny.constants.js';
 import notificationTypes from '../notifications/notification.types.js';
@@ -42,6 +43,16 @@ class UserController {
      */
     static #buildVerificationMessage(code) {
         return `Enter ${code} to verify your phone number. Up to 10 msgs/week. Msg&data rates may apply. Reply HELP for help, STOP to cancel.`;
+    }
+
+    /**
+     * Build the SMS text sent after successful registration.
+     *
+     * @returns {string}
+     * @private
+     */
+    static #buildWelcomeMessage() {
+        return 'Welcome! Message frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to cancel.';
     }
 
     /**
@@ -298,9 +309,13 @@ class UserController {
             return undefined;
         }
 
-        registeredUser.dateRegistered = Temporal.Now.instant().toString({
-            smallestUnit: 'millisecond',
-        });
+        const isNewRegistration = !registeredUser.dateRegistered;
+
+        if (isNewRegistration) {
+            registeredUser.dateRegistered = Temporal.Now.instant().toString({
+                smallestUnit: 'millisecond',
+            });
+        }
 
         if (!registeredUser.notifications?.length) {
             registeredUser.notifications = Object.values(notificationTypes).map(type => ({
@@ -311,6 +326,18 @@ class UserController {
         }
 
         await this.users.updateUser(registeredUser);
+
+        if (isNewRegistration && registeredUser.phoneNumber) {
+            try {
+                await this.notifications.sendMessage(
+                    UserController.#buildWelcomeMessage(),
+                    registeredUser.phoneNumber,
+                    '',
+                );
+            } catch (err) {
+                log.error({ err }, 'Failed to send welcome message.');
+            }
+        }
 
         return registeredUser;
     }

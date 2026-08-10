@@ -316,6 +316,42 @@ describe('UserController', () => {
                                     code,
                                 },
                             },
+                            phoneNumber: `+1${phoneNumber}`,
+                            ...mockUser,
+                        }),
+                    );
+
+                    const user = await userController.join({
+                        tokens: {
+                            emailAddress: 'some-token',
+                            phoneNumber: code,
+                        },
+                    });
+
+                    expect(userService.getUserByEmailAddressToken).toHaveBeenCalled();
+                    expect(user).toMatchObject(mockUser);
+                    expect(user.dateRegistered).toBeDefined();
+                    expect(userService.updateUser).toHaveBeenCalled();
+                    expect(notificationService.sendMessage).toHaveBeenCalledWith(
+                        'Welcome! Message frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to cancel.',
+                        `+1${phoneNumber}`,
+                        '',
+                    );
+                });
+
+                it('should still join if sending the welcome message fails', async () => {
+                    notificationService.sendMessage.mockRejectedValueOnce(
+                        new Error('twilio error'),
+                    );
+                    userService.getUserByEmailAddressToken.mockImplementation(() =>
+                        Promise.resolve({
+                            membership: {
+                                tokens: {
+                                    timeStamp: getEpoch(),
+                                    code,
+                                },
+                            },
+                            phoneNumber: `+1${phoneNumber}`,
                             ...mockUser,
                         }),
                     );
@@ -333,6 +369,35 @@ describe('UserController', () => {
                     expect(userService.updateUser).toHaveBeenCalled();
                 });
 
+                it('should not resend welcome message or update dateRegistered for already-registered users', async () => {
+                    const existingDateRegistered = Temporal.Now.instant().toString();
+
+                    notificationService.sendMessage.mockClear();
+                    userService.getUserByEmailAddressToken.mockImplementation(() =>
+                        Promise.resolve({
+                            dateRegistered: existingDateRegistered,
+                            membership: {
+                                tokens: {
+                                    timeStamp: getEpoch(),
+                                    code,
+                                },
+                            },
+                            phoneNumber: `+1${phoneNumber}`,
+                            ...mockUser,
+                        }),
+                    );
+
+                    const user = await userController.join({
+                        tokens: {
+                            emailAddress: 'some-token',
+                            phoneNumber: code,
+                        },
+                    });
+
+                    expect(user.dateRegistered).toBe(existingDateRegistered);
+                    expect(notificationService.sendMessage).not.toHaveBeenCalled();
+                });
+
                 it('should seed all known notification types', async () => {
                     userService.getUserByEmailAddressToken.mockImplementation(() =>
                         Promise.resolve({
@@ -342,6 +407,7 @@ describe('UserController', () => {
                                     code,
                                 },
                             },
+                            phoneNumber: `+1${phoneNumber}`,
                             ...mockUser,
                         }),
                     );
@@ -375,6 +441,7 @@ describe('UserController', () => {
                                 },
                             },
                             notifications: existingNotifications,
+                            phoneNumber: `+1${phoneNumber}`,
                             ...mockUser,
                         }),
                     );
