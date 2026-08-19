@@ -10,6 +10,7 @@
 import configuration from '../helpers/config.js';
 import { withRetry, isTransientError } from '../helpers/retry.js';
 import { BRAND_PREFIX, MAX_SMS_MESSAGE_LENGTH } from '../twilio/twilio.constants.js';
+import twilioRateLimiter from '../helpers/twilio-rate-limiter.js';
 
 /**
  * Notifications Class
@@ -17,6 +18,7 @@ import { BRAND_PREFIX, MAX_SMS_MESSAGE_LENGTH } from '../twilio/twilio.constants
 class Notifications {
     constructor(options = {}) {
         this.client = options.client;
+        this.limiter = options.limiter ?? twilioRateLimiter;
     }
 
     /**
@@ -41,10 +43,13 @@ class Notifications {
             message.mediaUrl = mediaUrl;
         }
 
-        return await withRetry(() => this.client.messages.create(message), {
-            shouldRetry: isTransientError,
-            maxRetries: 0,
-        });
+        return await withRetry(
+            () => this.limiter.schedule(() => this.client.messages.create(message)),
+            {
+                shouldRetry: isTransientError,
+                maxRetries: 0,
+            },
+        );
     }
 }
 

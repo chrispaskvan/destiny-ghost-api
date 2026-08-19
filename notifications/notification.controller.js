@@ -8,9 +8,6 @@ import DestinyError from '../destiny/destiny.error.js';
 import XurUnavailableError from './xur-unavailable.error.js';
 import ClaimCheck from '../helpers/claim-check.js';
 import log from '../helpers/log.js';
-import pThrottle from 'p-throttle';
-
-const throttle = pThrottle({ limit: 2, interval: 500 });
 
 /**
  * Controller class for Notification routes.
@@ -152,13 +149,13 @@ class NotificationController {
         }
 
         const users = await this.users.getSubscribedUsers(subscription);
-        const sendNotification = throttle(async user => {
+        const sendNotification = async user => {
             await this.publisher.sendNotification(user, {
                 notificationType: subscription,
                 claimCheckNumber,
             });
             await claimCheck.addPhoneNumber(user.phoneNumber);
-        });
+        };
 
         Promise.all(users.map(user => sendNotification(user))).catch(err => log.error(err));
 
