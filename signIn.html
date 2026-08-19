@@ -35,7 +35,7 @@
                         .then(({ csrfToken }) => jQuery.ajax({
                             contentType: 'application/json; charset=utf-8',
                             type: 'POST',
-                            url: '/users/signout',
+                            url: '/users/signOut',
                             headers: { 'x-csrf-token': csrfToken }
                         }))
                         .always(() => {
