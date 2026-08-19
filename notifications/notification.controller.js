@@ -1,4 +1,5 @@
 import { UnrecoverableError } from 'bullmq';
+import pLimit from 'p-limit';
 import publisher from '../helpers/publisher.js';
 import { isTransientError } from '../helpers/retry.js';
 import subscriber from '../helpers/subscriber.js';
@@ -149,6 +150,7 @@ class NotificationController {
         }
 
         const users = await this.users.getSubscribedUsers(subscription);
+        const limit = pLimit(20);
         const sendNotification = async user => {
             await this.publisher.sendNotification(user, {
                 notificationType: subscription,
@@ -157,7 +159,9 @@ class NotificationController {
             await claimCheck.addPhoneNumber(user.phoneNumber);
         };
 
-        Promise.all(users.map(user => sendNotification(user))).catch(err => log.error(err));
+        Promise.all(users.map(user => limit(() => sendNotification(user)))).catch(err =>
+            log.error(err),
+        );
 
         return claimCheckNumber;
     }

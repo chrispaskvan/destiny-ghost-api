@@ -195,6 +195,39 @@ describe('NotificationController', () => {
                 expect(publisher.sendNotification).toHaveBeenCalledTimes(numberOfSubscribedUsers);
                 expect(result).toBe(claimCheckNumber);
             });
+
+            it('should cap concurrent sends so an unbounded subscriber list does not fire every enqueue/claim-check write at once', async () => {
+                const subscription = notificationTypes.Xur;
+                const numberOfSubscribedUsers = 25;
+                const concurrencyLimit = 20;
+                const subscribedUsers = new Array(numberOfSubscribedUsers).fill(mockUser);
+                const pendingResolvers = [];
+
+                publisher.sendNotification.mockImplementation(
+                    () =>
+                        new Promise(resolve => {
+                            pendingResolvers.push(resolve);
+                        }),
+                );
+                mockClaimCheck.addPhoneNumber.mockResolvedValue();
+                userService.getSubscribedUsers.mockResolvedValue(subscribedUsers);
+
+                await notificationController.create(subscription);
+                await new Promise(resolve => setImmediate(resolve));
+
+                expect(publisher.sendNotification).toHaveBeenCalledTimes(concurrencyLimit);
+
+                pendingResolvers.splice(0).forEach(resolve => {
+                    resolve();
+                });
+                await new Promise(resolve => setImmediate(resolve));
+
+                expect(publisher.sendNotification).toHaveBeenCalledTimes(numberOfSubscribedUsers);
+
+                pendingResolvers.splice(0).forEach(resolve => {
+                    resolve();
+                });
+            });
         });
     });
 
