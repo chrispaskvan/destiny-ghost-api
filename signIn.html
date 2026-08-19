@@ -29,10 +29,15 @@
                 this.welcomeMessage = ko.pureComputed(() => `Welcome ${user.displayName}`);
                 this.signOut = () => {
                     jQuery.ajax({
-                        contentType: 'application/json; charset=utf-8',
-                        type: 'POST',
-                        url: '/users/signout'
+                        type: 'GET',
+                        url: '/users/current/csrfToken'
                     })
+                        .then(({ csrfToken }) => jQuery.ajax({
+                            contentType: 'application/json; charset=utf-8',
+                            type: 'POST',
+                            url: '/users/signOut',
+                            headers: { 'x-csrf-token': csrfToken }
+                        }))
                         .always(() => {
                             window.location = '/';
                         });
