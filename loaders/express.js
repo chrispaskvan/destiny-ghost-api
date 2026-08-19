@@ -73,6 +73,7 @@ export default app => {
             domain,
             httpOnly: true,
             maxAge: configuration.session.cookie.maxAge,
+            sameSite: 'strict',
             secure: true,
         },
         name: configuration.session.cookie.name,
