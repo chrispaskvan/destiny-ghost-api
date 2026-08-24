@@ -6,6 +6,7 @@
 .clinic/
 .cursorignore
 .env
+.graphify/
 .vscode/
 coverage/*
 !coverage/clover.xml
