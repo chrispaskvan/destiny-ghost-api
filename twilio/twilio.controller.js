@@ -254,11 +254,12 @@ class TwilioController {
         const emojiMatches = extractEmoji(rawMessage);
         /**
          * Emoji are stripped before keyword/search matching so a message like
-         * "gjallarhorn 🔥" resolves the same way it would without the emoji.
-         * Only applied when emoji are actually present, so messages without
-         * emoji are processed exactly as before (no incidental whitespace
-         * collapsing, no redundant regex pass). Emoji-only messages are
-         * handled separately below, before falling through to item search.
+         * "gjallarhorn 🔥" resolves the same way "gjallarhorn" would. Stripping
+         * also normalizes surrounding whitespace, so it's only applied when
+         * emoji are actually present - messages with no emoji at all are left
+         * completely untouched (no incidental whitespace collapsing, no
+         * redundant regex pass). Emoji-only messages are handled separately
+         * below, before falling through to item search.
          */
         const strippedMessage = emojiMatches.length ? stripEmoji(rawMessage) : rawMessage;
         const message = strippedMessage.toLowerCase();

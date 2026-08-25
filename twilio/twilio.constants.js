@@ -100,7 +100,7 @@ export const EMOJI_INTENT_REPLIES = new Map([
  * @description Reply sent when an emoji-only message doesn't match a known
  * intent in {@link EMOJI_INTENT_REPLIES}.
  */
-export const EMOJI_DEFAULT_REPLY = EMOJI_INTENT_REPLIES.get('👍');
+export const EMOJI_DEFAULT_REPLY = EMOJI_INTENT_REPLIES.get('👍') ?? 'Got it 👍';
 
 /**
  * @constant
