@@ -309,7 +309,7 @@ class TwilioController {
              * processing (which handles its own errors) finish in the
              * background.
              */
-            this.mms.process({ from: body.From, media });
+            void this.mms.process({ from: body.From, media });
 
             return { cookies: responseCookies, message: MEDIA_RECEIVED_REPLY };
         }

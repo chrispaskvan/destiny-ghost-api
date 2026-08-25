@@ -4,9 +4,12 @@
  * @module mmsService
  * @author Chris Paskvan
  */
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { createWriteStream } from 'node:fs';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { Readable, Transform } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 
 import configuration from '../helpers/config.js';
 import log from '../helpers/log.js';
@@ -56,29 +59,6 @@ class MmsService {
             throw new Error(`Unexpected media host ${hostname}`);
         }
 
-        const buffer = await withRetry(
-            async () => {
-                const response = await fetch(url, {
-                    headers: {
-                        Authorization: `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString('base64')}`,
-                    },
-                });
-
-                if (!response.ok) {
-                    throw Object.assign(new Error(`Media download failed for ${url}`), {
-                        status: response.status,
-                    });
-                }
-
-                return Buffer.from(await response.arrayBuffer());
-            },
-            { shouldRetry: isTransientError },
-        );
-
-        if (buffer.byteLength > MAX_MEDIA_BYTES) {
-            throw new Error(`Media of ${buffer.byteLength} bytes exceeds ${MAX_MEDIA_BYTES}`);
-        }
-
         /**
          * mkdtemp creates a private (0700) directory, keeping the image out of
          * the shared, world-writable temp directory (CodeQL
@@ -87,7 +67,51 @@ class MmsService {
         const directory = await mkdtemp(join(tmpdir(), 'mms-'));
         const filePath = join(directory, `image.${contentType.split('/')[1]}`);
 
-        await writeFile(filePath, buffer, { mode: 0o600 });
+        try {
+            await withRetry(
+                async () => {
+                    const response = await fetch(url, {
+                        headers: {
+                            Authorization: `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString('base64')}`,
+                        },
+                    });
+
+                    if (!response.ok) {
+                        throw Object.assign(new Error(`Media download failed for ${url}`), {
+                            status: response.status,
+                        });
+                    }
+
+                    /**
+                     * Stream to disk while counting bytes so an oversized (or
+                     * mislabeled) response is aborted at the cap instead of
+                     * being buffered wholly into memory first.
+                     */
+                    let bytes = 0;
+                    const guard = new Transform({
+                        transform(chunk, _encoding, callback) {
+                            bytes += chunk.length;
+                            callback(
+                                bytes > MAX_MEDIA_BYTES
+                                    ? new Error(`Media exceeds ${MAX_MEDIA_BYTES} bytes`)
+                                    : null,
+                                chunk,
+                            );
+                        },
+                    });
+
+                    await pipeline(
+                        Readable.fromWeb(response.body),
+                        guard,
+                        createWriteStream(filePath, { mode: 0o600 }),
+                    );
+                },
+                { shouldRetry: isTransientError },
+            );
+        } catch (err) {
+            await rm(directory, { force: true, recursive: true }).catch(() => {});
+            throw err;
+        }
 
         return filePath;
     }
