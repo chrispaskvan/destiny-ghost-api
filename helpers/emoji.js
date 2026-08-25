@@ -39,7 +39,8 @@ function normalizeEmoji(emoji = '') {
 /**
  * @function
  * @param {string} text - Inbound message text.
- * @returns {string} - The text with all emoji removed and whitespace trimmed.
+ * @returns {string} - The text with all emoji removed, internal whitespace
+ * collapsed to a single space, and leading/trailing whitespace trimmed.
  * @description Strips emoji from a message so the remaining text can be
  * processed as a normal keyword or item-search query.
  */
