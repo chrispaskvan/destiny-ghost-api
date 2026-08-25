@@ -7,7 +7,7 @@
 import { createWriteStream } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 
@@ -46,76 +46,66 @@ class MmsService {
     }
 
     /**
-     * Download a media attachment to a temporary file.
+     * Download a media attachment into the given directory.
      *
      * @param {{ contentType: string, url: string }} media
+     * @param {string} directory - Private directory to download into.
      * @returns {Promise<string>} Path to the downloaded file.
      * @private
      */
-    async #download({ contentType, url }) {
+    async #download({ contentType, url }, directory) {
         const { hostname, protocol } = new URL(url);
 
         if (protocol !== 'https:' || hostname !== TWILIO_MEDIA_HOST) {
             throw new Error(`Unexpected media URL origin ${protocol}//${hostname}`);
         }
 
-        /**
-         * mkdtemp creates a private (0700) directory, keeping the image out of
-         * the shared, world-writable temp directory (CodeQL
-         * js/insecure-temporary-file).
-         */
-        const directory = await mkdtemp(join(tmpdir(), 'mms-'));
         const filePath = join(directory, `image.${contentType.split('/')[1]}`);
 
-        try {
-            await withRetry(
-                async () => {
-                    const response = await fetch(url, {
-                        headers: {
-                            Authorization: `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString('base64')}`,
-                        },
+        await withRetry(
+            async () => {
+                const response = await fetch(url, {
+                    headers: {
+                        Authorization: `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString('base64')}`,
+                    },
+                });
+
+                if (!response.ok) {
+                    throw Object.assign(new Error(`Media download failed for ${url}`), {
+                        status: response.status,
                     });
+                }
 
-                    if (!response.ok) {
-                        throw Object.assign(new Error(`Media download failed for ${url}`), {
-                            status: response.status,
-                        });
-                    }
+                if (!response.body) {
+                    throw new Error(`Media download returned no body for ${url}`);
+                }
 
-                    if (!response.body) {
-                        throw new Error(`Media download returned no body for ${url}`);
-                    }
+                /**
+                 * Stream to disk while counting bytes so an oversized (or
+                 * mislabeled) response is aborted at the cap instead of
+                 * being buffered wholly into memory first.
+                 */
+                let bytes = 0;
+                const guard = new Transform({
+                    transform(chunk, _encoding, callback) {
+                        bytes += chunk.length;
+                        callback(
+                            bytes > MAX_MEDIA_BYTES
+                                ? new Error(`Media exceeds ${MAX_MEDIA_BYTES} bytes`)
+                                : null,
+                            chunk,
+                        );
+                    },
+                });
 
-                    /**
-                     * Stream to disk while counting bytes so an oversized (or
-                     * mislabeled) response is aborted at the cap instead of
-                     * being buffered wholly into memory first.
-                     */
-                    let bytes = 0;
-                    const guard = new Transform({
-                        transform(chunk, _encoding, callback) {
-                            bytes += chunk.length;
-                            callback(
-                                bytes > MAX_MEDIA_BYTES
-                                    ? new Error(`Media exceeds ${MAX_MEDIA_BYTES} bytes`)
-                                    : null,
-                                chunk,
-                            );
-                        },
-                    });
-
-                    await pipeline(
-                        Readable.fromWeb(response.body),
-                        guard,
-                        createWriteStream(filePath, { mode: 0o600 }),
-                    );
-                },
-                { shouldRetry: isTransientError },
-            );
-        } catch (err) {
-            await rm(directory, { force: true, recursive: true }).catch(() => {});
-            throw err;
-        }
+                await pipeline(
+                    Readable.fromWeb(response.body),
+                    guard,
+                    createWriteStream(filePath, { mode: 0o600 }),
+                );
+            },
+            { shouldRetry: isTransientError },
+        );
 
         return filePath;
     }
@@ -133,14 +123,25 @@ class MmsService {
     async process({ from, media }) {
         try {
             for (const item of media) {
-                const filePath = await this.#download(item);
+                /**
+                 * mkdtemp creates a private (0700) directory, keeping the image
+                 * out of the shared, world-writable temp directory (CodeQL
+                 * js/insecure-temporary-file). Owned here for its whole
+                 * lifecycle: created before the download, removed after
+                 * analysis or on any failure in between.
+                 */
+                const directory = await mkdtemp(join(tmpdir(), 'mms-'));
 
                 try {
+                    const filePath = await this.#download(item, directory);
+
                     await MmsService.analyzeImage(filePath);
                 } finally {
-                    await rm(dirname(filePath), { force: true, recursive: true }).catch(err =>
-                        log.warn({ err, filePath }, 'Failed to delete downloaded media'),
-                    );
+                    try {
+                        await rm(directory, { force: true, recursive: true });
+                    } catch (rmErr) {
+                        log.warn({ err: rmErr, directory }, 'Failed to delete downloaded media');
+                    }
                 }
             }
         } catch (err) {

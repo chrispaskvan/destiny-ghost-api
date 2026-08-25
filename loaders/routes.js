@@ -16,6 +16,7 @@ import Destiny2Controller from '../destiny2/destiny2.controller.js';
 import Destiny2Service from '../destiny2/destiny2.service.js';
 import DestinyCache from '../destiny/destiny.cache.js';
 import DestinyService from '../destiny/destiny.service.js';
+import MmsService from '../twilio/mms.service.js';
 import NotificationService from '../notifications/notification.service.js';
 import UserCache from '../users/user.cache.js';
 import UserService from '../users/user.service.js';
@@ -95,6 +96,7 @@ export default () => {
     const notificationService = new NotificationService({
         client: messageClient,
     });
+    const mmsService = new MmsService({ notificationService });
 
     /**
      * Routes
@@ -140,7 +142,7 @@ export default () => {
         authenticationController,
         authenticationService,
         destinyService: destiny2Service,
-        notificationService,
+        mmsService,
         userService,
         worldRepository: world2,
     });

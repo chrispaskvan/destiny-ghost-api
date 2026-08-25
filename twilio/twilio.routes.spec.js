@@ -80,7 +80,7 @@ const authenticationController = {
 };
 const authenticationService = { authenticate: vi.fn() };
 const destinyService = {};
-const notificationService = { sendMessage: vi.fn() };
+const mmsService = new MmsService({ notificationService: { sendMessage: vi.fn() } });
 const userService = {
     addUserMessage: vi.fn(),
     getUserByPhoneNumber: vi.fn(),
@@ -101,7 +101,7 @@ beforeEach(() => {
         authenticationController,
         authenticationService,
         destinyService,
-        notificationService,
+        mmsService,
         userService,
         worldRepository,
     });

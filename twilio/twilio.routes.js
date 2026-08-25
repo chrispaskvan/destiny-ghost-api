@@ -11,7 +11,6 @@ import twilio from 'twilio';
 import { z } from 'zod';
 
 import AuthenticationMiddleWare from '../authentication/authentication.middleware.js';
-import MmsService from './mms.service.js';
 import TwilioController from './twilio.controller.js';
 import configuration from '../helpers/config.js';
 import { BRAND_PREFIX, MAX_SMS_MESSAGE_LENGTH } from './twilio.constants.js';
@@ -28,13 +27,12 @@ const routes = ({
     authenticationController,
     authenticationService,
     destinyService,
-    notificationService,
+    mmsService,
     userService,
     worldRepository,
 }) => {
     const middleware = new AuthenticationMiddleWare({ authenticationController });
     const twilioRouter = Router();
-    const mmsService = new MmsService({ notificationService });
     const twilioController = new TwilioController({
         authenticationService,
         destinyService,
