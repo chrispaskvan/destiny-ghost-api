@@ -76,6 +76,31 @@ export const MEDIA_ERROR_REPLY = "Sorry, I couldn't process your image. Please t
 
 /**
  * @constant
+ * @description Reply sent when an emoji-only message doesn't match a known
+ * intent in {@link EMOJI_INTENT_REPLIES}.
+ */
+export const EMOJI_DEFAULT_REPLY = 'Got it 👍';
+
+/**
+ * @constant
+ * @description Maps emoji-only inbound messages to an intent-specific reply,
+ * so a 👍 or ❤️ doesn't fall through to item search and come back empty.
+ */
+export const EMOJI_INTENT_REPLIES = new Map([
+    ['👍', 'Got it 👍'],
+    ['👎', "Sorry to hear that. Reply HELP if something's not working."],
+    ['❤️', 'Glad to help! ❤️'],
+    ['🙏', "You're welcome!"],
+    ['❓', HELP_REPLY],
+    ['❔', HELP_REPLY],
+    ['🔥', 'Right?! 🔥'],
+    ['😂', '😂'],
+    ['😢', 'Sorry to hear that. Reply HELP if you need a hand.'],
+    ['👋', 'Hey there! Text a weapon or armor name to look it up, or HELP for options.'],
+]);
+
+/**
+ * @constant
  * @type {number}
  * {@link https://www.twilio.com/docs/messaging/guides/accepted-mime-types}
  * @description Maximum size of an MMS media attachment accepted for download.
