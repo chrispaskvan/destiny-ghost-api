@@ -92,7 +92,7 @@ export const EMOJI_INTENT_REPLIES = new Map([
     ['🔥', 'Right?! 🔥'],
     ['😂', '😂'],
     ['😢', 'Sorry to hear that. Reply HELP if you need a hand.'],
-    ['👋', 'Hey there! Text a weapon or armor name to look it up, or HELP for options.'],
+    ['👋', 'Hey there! Text a weapon name to look it up or HELP for options.'],
 ]);
 
 /**
