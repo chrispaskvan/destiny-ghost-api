@@ -119,11 +119,13 @@ class DestinyService {
             url: `${servicePlatform}/${this._api}/Manifest`,
         };
         const { data: responseBody, headers } =
-            /** @type {{ data: BungieResponse<DestinyManifest>, headers: Record<string, string> }} */ (
+            /** @type {{ data: BungieResponse<DestinyManifest>, headers: Record<string, string | undefined> }} */ (
                 await get(options, true)
             );
         const lastModified = headers['last-modified'];
-        const matches = headers['cache-control'].match(/max-age=(\d+)/);
+        // Bungie omits cache-control on some responses; missing or unparseable
+        // falls back to a zero max-age, same as a header without a max-age directive.
+        const matches = headers['cache-control']?.match(/max-age=(\d+)/);
         const maxAge = matches ? parseInt(matches[1], 10) : 0;
 
         if (responseBody.ErrorCode === 1) {
