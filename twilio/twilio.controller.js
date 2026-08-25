@@ -7,7 +7,10 @@
 import ClaimCheck from '../helpers/claim-check.js';
 import getShortUrl from '../helpers/bitly.js';
 import log from '../helpers/log.js';
+import { extractEmoji, normalizeEmoji, stripEmoji } from '../helpers/emoji.js';
 import {
+    EMOJI_DEFAULT_REPLY,
+    EMOJI_INTENT_REPLIES,
     HELP_KEYWORDS,
     HELP_REPLY,
     MAX_SMS_MESSAGE_LENGTH,
@@ -247,7 +250,19 @@ class TwilioController {
     async request({ body, cookies }) {
         let responseCookies = {};
         const user = await this.users.getUserByPhoneNumber(body.From);
-        const message = body.Body.trim().toLowerCase();
+        const rawMessage = body.Body.trim();
+        const emojiMatches = extractEmoji(rawMessage);
+        /**
+         * Emoji are stripped before keyword/search matching so a message like
+         * "gjallarhorn 🔥" resolves the same way "gjallarhorn" would. Stripping
+         * also normalizes surrounding whitespace, so it's only applied when
+         * emoji are actually present - messages with no emoji at all are left
+         * completely untouched (no incidental whitespace collapsing, no
+         * redundant regex pass). Emoji-only messages are handled separately
+         * below, before falling through to item search.
+         */
+        const strippedMessage = emojiMatches.length ? stripEmoji(rawMessage) : rawMessage;
+        const message = strippedMessage.toLowerCase();
 
         /**
          * Carrier compliance requires STOP/HELP/START to work for any inbound
@@ -316,6 +331,13 @@ class TwilioController {
 
         const { itemHash } = cookies;
 
+        if (emojiMatches.length && !strippedMessage) {
+            const reply =
+                EMOJI_INTENT_REPLIES.get(normalizeEmoji(emojiMatches[0])) ?? EMOJI_DEFAULT_REPLY;
+
+            return { cookies: responseCookies, message: reply };
+        }
+
         if (this.itemKeywords.has(message)) {
             return await this.itemKeywords.get(message).bind(this)(itemHash, responseCookies);
         }
@@ -324,8 +346,7 @@ class TwilioController {
             return await this.getXur(user, responseCookies);
         }
 
-        const searchTerm = body.Body.trim().toLowerCase();
-        const items = await this.queryItem(searchTerm);
+        const items = await this.queryItem(message);
 
         switch (items.length) {
             case 0: {

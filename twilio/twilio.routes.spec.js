@@ -8,6 +8,8 @@ import TwilioRouter from './twilio.routes.js';
 import TwilioController from './twilio.controller.js';
 import configuration from '../helpers/config.js';
 import {
+    EMOJI_DEFAULT_REPLY,
+    EMOJI_INTENT_REPLIES,
     MAX_SMS_MESSAGE_LENGTH,
     MEDIA_RECEIVED_REPLY,
     MEDIA_UNSUPPORTED_REPLY,
@@ -15,6 +17,22 @@ import {
 
 vi.mock('../helpers/bitly.js', () => ({
     default: vi.fn().mockResolvedValue('https://bit.ly/short'),
+}));
+
+/**
+ * twilio.controller.js imports ClaimCheck, which imports helpers/cache.js.
+ * cache.js connects to Redis at module load time, which hangs/fails in a
+ * test environment with no Redis available. Mock it explicitly (factory
+ * function, matching helpers/claim-check.spec.js) rather than relying on
+ * Vitest automocking, which still executes the real module body first.
+ */
+vi.mock('../helpers/cache.js', () => ({
+    default: {
+        hSet: vi.fn(),
+        hGet: vi.fn(),
+        hGetAll: vi.fn(),
+        expire: vi.fn(),
+    },
 }));
 
 const { getExpectedTwilioSignature } = twilio;
@@ -86,7 +104,7 @@ const userService = {
     getUserByPhoneNumber: vi.fn(),
     updateUser: vi.fn(),
 };
-const worldRepository = {};
+const worldRepository = { getItemByName: vi.fn() };
 
 let twilioRouter;
 
@@ -96,6 +114,7 @@ beforeEach(() => {
         dateRegistered: Temporal.Now.instant().toString(),
         type: 'mobile',
     });
+    worldRepository.getItemByName.mockResolvedValue([]);
 
     twilioRouter = TwilioRouter({
         authenticationController,
@@ -392,6 +411,156 @@ describe('TwilioRouter', () => {
                             expect(res._getData()).toContain("You're unsubscribed");
                             expect(res._getData()).toContain('Destiny-Ghost: ');
                             expect(userService.updateUser).not.toHaveBeenCalled();
+                            done();
+                        } catch (err) {
+                            reject(err);
+                        }
+                    });
+
+                    twilioRouter(req, res, next);
+                }));
+        });
+
+        describe('when the message is a single mapped emoji', () => {
+            it('should reply with the mapped intent without attempting item search', () =>
+                new Promise((done, reject) => {
+                    const body = signedBody({ Body: '👍' });
+                    const req = signedRequest({ body });
+
+                    res.on('end', () => {
+                        try {
+                            expect(res.statusCode).toEqual(StatusCodes.OK);
+                            expect(res._getData()).toContain(EMOJI_INTENT_REPLIES.get('👍'));
+                            expect(worldRepository.getItemByName).not.toHaveBeenCalled();
+                            done();
+                        } catch (err) {
+                            reject(err);
+                        }
+                    });
+
+                    twilioRouter(req, res, next);
+                }));
+        });
+
+        describe('when the message is a mapped emoji with a skin-tone modifier', () => {
+            it('should reply with the mapped intent, not the default acknowledgment', () =>
+                new Promise((done, reject) => {
+                    const body = signedBody({ Body: '👎🏽' });
+                    const req = signedRequest({ body });
+
+                    res.on('end', () => {
+                        try {
+                            expect(res.statusCode).toEqual(StatusCodes.OK);
+                            expect(res._getData()).toContain(EMOJI_INTENT_REPLIES.get('👎'));
+                            expect(res._getData()).not.toContain(EMOJI_DEFAULT_REPLY);
+                            done();
+                        } catch (err) {
+                            reject(err);
+                        }
+                    });
+
+                    twilioRouter(req, res, next);
+                }));
+        });
+
+        describe('when the message is a single unmapped emoji', () => {
+            it('should reply with the default emoji acknowledgment', () =>
+                new Promise((done, reject) => {
+                    const body = signedBody({ Body: '🦄' });
+                    const req = signedRequest({ body });
+
+                    res.on('end', () => {
+                        try {
+                            expect(res.statusCode).toEqual(StatusCodes.OK);
+                            expect(res._getData()).toContain(EMOJI_DEFAULT_REPLY);
+                            expect(worldRepository.getItemByName).not.toHaveBeenCalled();
+                            done();
+                        } catch (err) {
+                            reject(err);
+                        }
+                    });
+
+                    twilioRouter(req, res, next);
+                }));
+        });
+
+        describe('when the message is multiple emoji with no other mapped reply', () => {
+            it('should reply based on the first emoji in the message', () =>
+                new Promise((done, reject) => {
+                    const body = signedBody({ Body: '👍🔥' });
+                    const req = signedRequest({ body });
+
+                    res.on('end', () => {
+                        try {
+                            expect(res.statusCode).toEqual(StatusCodes.OK);
+                            expect(res._getData()).toContain(EMOJI_INTENT_REPLIES.get('👍'));
+                            done();
+                        } catch (err) {
+                            reject(err);
+                        }
+                    });
+
+                    twilioRouter(req, res, next);
+                }));
+        });
+
+        describe('when the message combines text and an emoji', () => {
+            it('should strip the emoji and run item search on the remaining text', () =>
+                new Promise((done, reject) => {
+                    const body = signedBody({ Body: 'gjallarhorn 🔥' });
+                    const req = signedRequest({ body });
+
+                    res.on('end', () => {
+                        try {
+                            expect(res.statusCode).toEqual(StatusCodes.OK);
+                            expect(worldRepository.getItemByName).toHaveBeenCalledWith(
+                                'gjallarhorn',
+                            );
+                            done();
+                        } catch (err) {
+                            reject(err);
+                        }
+                    });
+
+                    twilioRouter(req, res, next);
+                }));
+        });
+
+        describe('when the message has no emoji but multiple internal spaces', () => {
+            it('should search with the text unchanged, not collapsing whitespace', () =>
+                new Promise((done, reject) => {
+                    const body = signedBody({ Body: 'gjallarhorn  rifle' });
+                    const req = signedRequest({ body });
+
+                    res.on('end', () => {
+                        try {
+                            expect(res.statusCode).toEqual(StatusCodes.OK);
+                            expect(worldRepository.getItemByName).toHaveBeenCalledWith(
+                                'gjallarhorn  rifle',
+                            );
+                            done();
+                        } catch (err) {
+                            reject(err);
+                        }
+                    });
+
+                    twilioRouter(req, res, next);
+                }));
+        });
+
+        describe('when STOP is sent alongside a trailing emoji', () => {
+            it('should still match the STOP keyword after stripping the emoji', () =>
+                new Promise((done, reject) => {
+                    const body = signedBody({ Body: 'STOP 🛑' });
+                    const req = signedRequest({ body });
+
+                    res.on('end', () => {
+                        try {
+                            expect(res.statusCode).toEqual(StatusCodes.OK);
+                            expect(res._getData()).toContain("You're unsubscribed");
+                            expect(userService.updateUser).toHaveBeenCalledWith(
+                                expect.objectContaining({ isSubscribed: false }),
+                            );
                             done();
                         } catch (err) {
                             reject(err);
