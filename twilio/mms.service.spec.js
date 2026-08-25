@@ -1,4 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MmsService from './mms.service.js';
 import { MAX_MEDIA_BYTES, MEDIA_ERROR_REPLY } from './twilio.constants.js';
@@ -49,7 +51,8 @@ describe('MmsService', () => {
                 expect(analyzeSpy).toHaveBeenCalledOnce();
                 expect(snapshot.content).toEqual('image-bytes');
                 expect(snapshot.filePath.endsWith('.jpeg')).toBe(true);
-                expect(existsSync(snapshot.filePath)).toBe(false);
+                expect(dirname(snapshot.filePath).startsWith(join(tmpdir(), 'mms-'))).toBe(true);
+                expect(existsSync(dirname(snapshot.filePath))).toBe(false);
                 expect(notificationService.sendMessage).not.toHaveBeenCalled();
             });
         });

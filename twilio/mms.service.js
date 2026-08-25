@@ -4,10 +4,9 @@
  * @module mmsService
  * @author Chris Paskvan
  */
-import { randomUUID } from 'node:crypto';
-import { unlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import configuration from '../helpers/config.js';
 import log from '../helpers/log.js';
@@ -80,9 +79,15 @@ class MmsService {
             throw new Error(`Media of ${buffer.byteLength} bytes exceeds ${MAX_MEDIA_BYTES}`);
         }
 
-        const filePath = join(tmpdir(), `mms-${randomUUID()}.${contentType.split('/')[1]}`);
+        /**
+         * mkdtemp creates a private (0700) directory, keeping the image out of
+         * the shared, world-writable temp directory (CodeQL
+         * js/insecure-temporary-file).
+         */
+        const directory = await mkdtemp(join(tmpdir(), 'mms-'));
+        const filePath = join(directory, `image.${contentType.split('/')[1]}`);
 
-        await writeFile(filePath, buffer);
+        await writeFile(filePath, buffer, { mode: 0o600 });
 
         return filePath;
     }
@@ -105,7 +110,7 @@ class MmsService {
                 try {
                     await MmsService.analyzeImage(filePath);
                 } finally {
-                    await unlink(filePath).catch(err =>
+                    await rm(dirname(filePath), { force: true, recursive: true }).catch(err =>
                         log.warn({ err, filePath }, 'Failed to delete downloaded media'),
                     );
                 }
