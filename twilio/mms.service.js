@@ -53,10 +53,10 @@ class MmsService {
      * @private
      */
     async #download({ contentType, url }) {
-        const { hostname } = new URL(url);
+        const { hostname, protocol } = new URL(url);
 
-        if (hostname !== TWILIO_MEDIA_HOST) {
-            throw new Error(`Unexpected media host ${hostname}`);
+        if (protocol !== 'https:' || hostname !== TWILIO_MEDIA_HOST) {
+            throw new Error(`Unexpected media URL origin ${protocol}//${hostname}`);
         }
 
         /**

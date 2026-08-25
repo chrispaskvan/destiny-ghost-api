@@ -118,6 +118,25 @@ describe('MmsService', () => {
             });
         });
 
+        describe('when the media URL is not HTTPS', () => {
+            it('should refuse to download and send a failure reply to the sender', async () => {
+                const fetchMock = vi.fn();
+
+                vi.stubGlobal('fetch', fetchMock);
+
+                await mmsService.process({
+                    from,
+                    media: [{ contentType: 'image/jpeg', url: url.replace('https:', 'http:') }],
+                });
+
+                expect(fetchMock).not.toHaveBeenCalled();
+                expect(notificationService.sendMessage).toHaveBeenCalledWith(
+                    MEDIA_ERROR_REPLY,
+                    from,
+                );
+            });
+        });
+
         describe('when analysis fails', () => {
             it('should still delete the temporary file and send a failure reply', async () => {
                 let analyzedPath;
