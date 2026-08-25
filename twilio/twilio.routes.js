@@ -27,6 +27,7 @@ const routes = ({
     authenticationController,
     authenticationService,
     destinyService,
+    mmsService,
     userService,
     worldRepository,
 }) => {
@@ -35,6 +36,7 @@ const routes = ({
     const twilioController = new TwilioController({
         authenticationService,
         destinyService,
+        mmsService,
         userService,
         worldRepository,
     });

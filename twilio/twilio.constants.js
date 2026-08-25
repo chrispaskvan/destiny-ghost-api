@@ -55,3 +55,37 @@ export const HELP_REPLY =
  */
 export const START_REPLY =
     "You're re-subscribed. Up to 10 msgs/week. Msg&data rates may apply. Reply HELP for help, STOP to cancel.";
+
+/**
+ * @constant
+ * @description Reply acknowledging receipt of an MMS image queued for analysis.
+ */
+export const MEDIA_RECEIVED_REPLY = 'Got it. Your image is being analyzed.';
+
+/**
+ * @constant
+ * @description Reply sent when an MMS attachment is not an image.
+ */
+export const MEDIA_UNSUPPORTED_REPLY = 'Sorry, I can only analyze images.';
+
+/**
+ * @constant
+ * @description Follow-up message sent when downloading or analyzing an MMS image fails.
+ */
+export const MEDIA_ERROR_REPLY = "Sorry, I couldn't process your image. Please try again.";
+
+/**
+ * @constant
+ * @type {number}
+ * {@link https://www.twilio.com/docs/messaging/guides/accepted-mime-types}
+ * @description Maximum size of an MMS media attachment accepted for download.
+ */
+export const MAX_MEDIA_BYTES = 5 * 1024 * 1024;
+
+/**
+ * @constant
+ * @description The only host MMS media may be downloaded from. Media URLs arrive in
+ * signed webhook payloads, but pinning the host guards against fetching arbitrary
+ * URLs with account credentials attached.
+ */
+export const TWILIO_MEDIA_HOST = 'api.twilio.com';

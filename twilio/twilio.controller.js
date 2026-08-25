@@ -11,6 +11,8 @@ import {
     HELP_KEYWORDS,
     HELP_REPLY,
     MAX_SMS_MESSAGE_LENGTH,
+    MEDIA_RECEIVED_REPLY,
+    MEDIA_UNSUPPORTED_REPLY,
     START_KEYWORDS,
     START_REPLY,
     STOP_KEYWORDS,
@@ -28,6 +30,7 @@ class TwilioController {
     constructor(options = {}) {
         this.authentication = options.authenticationService;
         this.destiny = options.destinyService;
+        this.mms = options.mmsService;
         this.users = options.userService;
         this.world = options.worldRepository;
 
@@ -287,6 +290,29 @@ class TwilioController {
 
         responseCookies = { isRegistered: true, ...responseCookies };
         await this.users.addUserMessage(body);
+
+        const numMedia = Number(body.NumMedia) || 0;
+
+        if (numMedia > 0) {
+            const media = Array.from({ length: numMedia }, (_, index) => ({
+                contentType: body[`MediaContentType${index}`],
+                url: body[`MediaUrl${index}`],
+            })).filter(({ contentType, url }) => url && contentType?.startsWith('image/'));
+
+            if (!media.length) {
+                return { cookies: responseCookies, message: MEDIA_UNSUPPORTED_REPLY };
+            }
+
+            /**
+             * Deliberately not awaited: downloading and analyzing can exceed
+             * Twilio's webhook timeout, so acknowledge now and let the
+             * processing (which handles its own errors) finish in the
+             * background.
+             */
+            void this.mms.process({ from: body.From, media });
+
+            return { cookies: responseCookies, message: MEDIA_RECEIVED_REPLY };
+        }
 
         const { itemHash } = cookies;
 
