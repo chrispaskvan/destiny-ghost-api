@@ -3,10 +3,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { StatusCodes } from 'http-status-codes';
 import { createResponse, createRequest } from 'node-mocks-http';
 import twilio from 'twilio';
+import MmsService from './mms.service.js';
 import TwilioRouter from './twilio.routes.js';
 import TwilioController from './twilio.controller.js';
 import configuration from '../helpers/config.js';
-import { MAX_SMS_MESSAGE_LENGTH } from './twilio.constants.js';
+import {
+    MAX_SMS_MESSAGE_LENGTH,
+    MEDIA_RECEIVED_REPLY,
+    MEDIA_UNSUPPORTED_REPLY,
+} from './twilio.constants.js';
 
 vi.mock('../helpers/bitly.js', () => ({
     default: vi.fn().mockResolvedValue('https://bit.ly/short'),
@@ -75,6 +80,7 @@ const authenticationController = {
 };
 const authenticationService = { authenticate: vi.fn() };
 const destinyService = {};
+const notificationService = { sendMessage: vi.fn() };
 const userService = {
     addUserMessage: vi.fn(),
     getUserByPhoneNumber: vi.fn(),
@@ -95,6 +101,7 @@ beforeEach(() => {
         authenticationController,
         authenticationService,
         destinyService,
+        notificationService,
         userService,
         worldRepository,
     });
@@ -299,6 +306,71 @@ describe('TwilioRouter', () => {
                             done();
                         } catch (err) {
                             reject(err);
+                        }
+                    });
+
+                    twilioRouter(req, res, next);
+                }));
+        });
+
+        describe('when the message includes an image attachment', () => {
+            it('should acknowledge receipt and process the media in the background', () =>
+                new Promise((done, reject) => {
+                    const processSpy = vi
+                        .spyOn(MmsService.prototype, 'process')
+                        .mockResolvedValue();
+                    const body = signedBody({
+                        Body: '',
+                        NumMedia: '1',
+                        MediaContentType0: 'image/jpeg',
+                        MediaUrl0: `https://api.twilio.com/2010-04-01/Accounts/${sid('AC')}/Messages/${sid('MM')}/Media/${sid('ME')}`,
+                    });
+                    const req = signedRequest({ body });
+
+                    res.on('end', () => {
+                        try {
+                            expect(res.statusCode).toEqual(StatusCodes.OK);
+                            expect(res._getData()).toContain(MEDIA_RECEIVED_REPLY);
+                            expect(processSpy).toHaveBeenCalledWith({
+                                from: body.From,
+                                media: [{ contentType: 'image/jpeg', url: body.MediaUrl0 }],
+                            });
+                            done();
+                        } catch (err) {
+                            reject(err);
+                        } finally {
+                            processSpy.mockRestore();
+                        }
+                    });
+
+                    twilioRouter(req, res, next);
+                }));
+        });
+
+        describe('when the attachment is not an image', () => {
+            it('should reply that only images are supported without downloading anything', () =>
+                new Promise((done, reject) => {
+                    const processSpy = vi
+                        .spyOn(MmsService.prototype, 'process')
+                        .mockResolvedValue();
+                    const body = signedBody({
+                        Body: '',
+                        NumMedia: '1',
+                        MediaContentType0: 'video/mp4',
+                        MediaUrl0: `https://api.twilio.com/2010-04-01/Accounts/${sid('AC')}/Messages/${sid('MM')}/Media/${sid('ME')}`,
+                    });
+                    const req = signedRequest({ body });
+
+                    res.on('end', () => {
+                        try {
+                            expect(res.statusCode).toEqual(StatusCodes.OK);
+                            expect(res._getData()).toContain(MEDIA_UNSUPPORTED_REPLY);
+                            expect(processSpy).not.toHaveBeenCalled();
+                            done();
+                        } catch (err) {
+                            reject(err);
+                        } finally {
+                            processSpy.mockRestore();
                         }
                     });
 

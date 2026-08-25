@@ -140,6 +140,7 @@ export default () => {
         authenticationController,
         authenticationService,
         destinyService: destiny2Service,
+        notificationService,
         userService,
         worldRepository: world2,
     });
