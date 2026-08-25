@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * A module for interacting with the Bungie Destiny web API.
  *
@@ -28,7 +29,24 @@ const {
 const servicePlatform = `${host}/Platform`;
 
 /**
+ * @template [T=*]
+ * @typedef {import('../destiny/destiny.service.js').BungieResponse<T>} BungieResponse
+ */
+/** @typedef {import('./destiny2.cache.js').default} Destiny2Cache */
+/** @typedef {import('./destiny2.cache.js').Destiny2Character} Destiny2Character */
+/** @typedef {import('./destiny2.cache.js').PlayerStatistics} PlayerStatistics */
+
+/**
+ * A player returned by Bungie's global display-name search.
+ * @typedef {Object} PlayerSearchResult
+ * @property {string} bungieGlobalDisplayName
+ * @property {number} bungieGlobalDisplayNameCode
+ * @property {{ membershipId: string, membershipType: number, displayName: string }[]} [destinyMemberships]
+ */
+
+/**
  * Destiny2 Service Class
+ * @extends {DestinyService<Destiny2Cache>}
  */
 class Destiny2Service extends DestinyService {
     /**
@@ -40,9 +58,9 @@ class Destiny2Service extends DestinyService {
     /**
      * Find players by display name.
      *
-     * @param displayName
-     * @param {int} pageNumber
-     * @returns {Promise}
+     * @param {string} displayName
+     * @param {number} pageNumber
+     * @returns {Promise<PlayerSearchResult[]>}
      */
     static async findPlayers(displayName, pageNumber) {
         const options = {
@@ -54,7 +72,10 @@ class Destiny2Service extends DestinyService {
             },
             url: `${servicePlatform}/User/Search/GlobalName/${pageNumber}/`,
         };
-        const responseBody = await post(options);
+        const responseBody =
+            /** @type {BungieResponse<{ searchResults: PlayerSearchResult[] }>} */ (
+                await post(options)
+            );
 
         if (responseBody.ErrorCode === 1) {
             const {
@@ -74,11 +95,12 @@ class Destiny2Service extends DestinyService {
     /**
      * Get player PVP statistics.
      *
-     * @param membershipId
-     * @param membershipType
-     * @returns {Promise}
+     * @param {string} membershipId
+     * @param {number} membershipType
+     * @returns {Promise<PlayerStatistics>}
      */
     async getPlayerStatistics(membershipId, membershipType) {
+        /** @type {PlayerStatistics} */
         const emptyStatistics = {
             pvp: {
                 combatRating: null,
@@ -103,7 +125,7 @@ class Destiny2Service extends DestinyService {
             },
             url: `${servicePlatform}/Destiny2/${membershipType}/Account/${membershipId}/Stats`,
         };
-        const responseBody = await get(options);
+        const responseBody = /** @type {BungieResponse} */ (await get(options));
 
         if (responseBody.ErrorCode === 1) {
             const allPvP = responseBody.Response?.mergedAllCharacters?.results?.allPvP;
@@ -156,11 +178,13 @@ class Destiny2Service extends DestinyService {
     /**
      * Get user profile.
      *
-     * @param membershipId
-     * @param membershipType
-     * @returns {Promise}
+     * @param {string} membershipId
+     * @param {number} membershipType
+     * @param {boolean} [skipCache]
+     * @returns {Promise<Destiny2Character[]>}
      */
     async getProfile(membershipId, membershipType, skipCache) {
+        /** @type {Destiny2Character[] | undefined} */
         let characters;
 
         if (!skipCache) {
@@ -176,7 +200,10 @@ class Destiny2Service extends DestinyService {
                 },
                 url: `${servicePlatform}/Destiny2/${membershipType}/Profile/${membershipId}?components=Characters`,
             };
-            const responseBody = await get(options);
+            const responseBody =
+                /** @type {BungieResponse<{ characters: { data: Record<string, Destiny2Character> } }>} */ (
+                    await get(options)
+                );
 
             if (responseBody.ErrorCode === 1) {
                 const {
@@ -205,7 +232,10 @@ class Destiny2Service extends DestinyService {
                     ErrorStatus: status,
                     Message: message = 'Failed to get characters from profile.',
                 } = {},
-            } = err;
+            } =
+                /** @type {{ data?: { ErrorCode?: number, ErrorStatus?: string, Message?: string } }} */ (
+                    err
+                );
 
             throw new DestinyError(code, message, status);
         }
@@ -214,11 +244,11 @@ class Destiny2Service extends DestinyService {
     /**
      * Get Xur's inventory.
      *
-     * @param membershipId
-     * @param membershipType
-     * @param characterId
-     * @param accessToken
-     * @returns {Promise}
+     * @param {string} membershipId
+     * @param {number} membershipType
+     * @param {string} characterId
+     * @param {string} accessToken
+     * @returns {Promise<number[]>} The item hashes Xur is selling.
      */
     async getXur(membershipId, membershipType, characterId, accessToken) {
         const vendor = await this.cacheService.getVendor(strangeGearOffersHash);
@@ -243,7 +273,10 @@ class Destiny2Service extends DestinyService {
             },
             url: `${servicePlatform}/Destiny2/${membershipType}/Profile/${membershipId}/Character/${characterId}/Vendors/${strangeGearOffersHash}?components=402`,
         };
-        const responseBody = await get(options);
+        const responseBody =
+            /** @type {BungieResponse<{ sales: { data: Record<string, { itemHash: number }> } }>} */ (
+                await get(options)
+            );
 
         if (responseBody.ErrorCode === 1) {
             const {

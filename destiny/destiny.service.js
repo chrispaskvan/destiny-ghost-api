@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * A module for interacting with the Bungie Destiny web API.
  *
@@ -19,6 +20,64 @@ const {
 } = configuration;
 
 /**
+ * The envelope Bungie wraps around every platform response. `ErrorCode` is 1 on
+ * success; any other value is an error the services translate into a DestinyError.
+ * @template [T=*]
+ * @typedef {Object} BungieResponse
+ * @property {number} ErrorCode
+ * @property {string} [Message]
+ * @property {string} [ErrorStatus]
+ * @property {string} [Status]
+ * @property {T} Response
+ */
+
+/**
+ * An OAuth token grant exchanged with Bungie, minus the client credentials this
+ * service supplies itself.
+ * @typedef {{ code: string, grant_type: 'authorization_code' }
+ *   | { refresh_token: string, grant_type: 'refresh_token' }} OAuthGrant
+ */
+
+/**
+ * A Bungie OAuth token response.
+ * @typedef {Object} BungieAccessToken
+ * @property {string} access_token
+ * @property {number} expires_in
+ * @property {string} membership_id
+ * @property {string} refresh_token
+ * @property {string} [token_type]
+ */
+
+/**
+ * One of a Bungie.net account's linked Destiny platform memberships.
+ * @typedef {Object} DestinyMembership
+ * @property {string} displayName
+ * @property {string} membershipId
+ * @property {number} membershipType - Platform: 1 Xbox, 2 PSN, 3 Steam, etc.
+ * @property {number} [crossSaveOverride] - The membershipType that owns cross-saved data
+ */
+
+/**
+ * The current user, flattened to the fields this application stores.
+ * @typedef {Object} CurrentUser
+ * @property {string} displayName
+ * @property {string} membershipId
+ * @property {number} membershipType
+ * @property {string} [profilePicturePath]
+ */
+
+/**
+ * A Destiny 1 character summary as returned by the Account/Summary endpoint.
+ * @typedef {Object} DestinyCharacter
+ * @property {string} characterId
+ * @property {number} [characterLevel]
+ * @property {{ membershipId: string, membershipType: number }} [characterBase]
+ */
+
+/** @typedef {import('./destiny.cache.js').DestinyManifest} DestinyManifest */
+/** @typedef {import('./destiny.cache.js').ManifestResult} ManifestResult */
+
+/**
  * @constant
  * @type {string}
  * @description Base URL for all of the Bungie API services.
@@ -27,6 +86,10 @@ const servicePlatform = `${host}/platform`;
 
 /**
  * Destiny Service Class
+ *
+ * Generic over the cache implementation so `Destiny2Service` can reach the
+ * Destiny 2-only cache methods through the inherited `cacheService` field.
+ * @template {import('./destiny.cache.js').default} [TCache=import('./destiny.cache.js').default]
  */
 class DestinyService {
     /**
@@ -36,17 +99,16 @@ class DestinyService {
     _api = 'Destiny';
 
     /**
-     * @constructor
-     * @param options
+     * @param {{ cacheService: TCache }} options
      */
-    constructor(options = {}) {
+    constructor(options) {
         this.cacheService = options.cacheService;
     }
 
     /**
      * Get the latest Destiny Manifest definition.
      *
-     * @returns {Promise}
+     * @returns {Promise<ManifestResult>}
      * @protected
      */
     async getManifestFromBungie() {
@@ -56,7 +118,10 @@ class DestinyService {
             },
             url: `${servicePlatform}/${this._api}/Manifest`,
         };
-        const { data: responseBody, headers } = await get(options, true);
+        const { data: responseBody, headers } =
+            /** @type {{ data: BungieResponse<DestinyManifest>, headers: Record<string, string> }} */ (
+                await get(options, true)
+            );
         const lastModified = headers['last-modified'];
         const matches = headers['cache-control'].match(/max-age=(\d+)/);
         const maxAge = matches ? parseInt(matches[1], 10) : 0;
@@ -89,8 +154,8 @@ class DestinyService {
      * Get an access token.
      *
      * @static
-     * @param {*} data
-     * @returns
+     * @param {OAuthGrant} grant
+     * @returns {Promise<BungieAccessToken>}
      * @memberof DestinyService
      */
     static async getAccessToken(grant) {
@@ -114,11 +179,13 @@ class DestinyService {
     /**
      * Get Bungie access token from code.
      *
-     * @param code
-     * @returns {Promise}
+     * @param {string} code
+     * @returns {Promise<BungieAccessToken>}
      */
     async getAccessTokenFromCode(code) {
-        return await this.constructor.getAccessToken({
+        // Cast because `this.constructor` is typed as the base `Function`; going
+        // through it (rather than naming the class) keeps the static overridable.
+        return await /** @type {typeof DestinyService} */ (this.constructor).getAccessToken({
             code,
             grant_type: 'authorization_code',
         });
@@ -127,10 +194,11 @@ class DestinyService {
     /**
      * Refresh access token with Bungie.
      *
-     * @param refreshToken
+     * @param {string} refreshToken
+     * @returns {Promise<BungieAccessToken>}
      */
     async getAccessTokenFromRefreshToken(refreshToken) {
-        return await this.constructor.getAccessToken({
+        return await /** @type {typeof DestinyService} */ (this.constructor).getAccessToken({
             grant_type: 'refresh_token',
             refresh_token: refreshToken,
         });
@@ -139,8 +207,8 @@ class DestinyService {
     /**
      * Get Bungie App authorization URL.
      *
-     * @param state
-     * @returns {Promise}
+     * @param {string} state
+     * @returns {Promise<string>}
      */
     getAuthorizationUrl(state) {
         return Promise.resolve(
@@ -151,9 +219,9 @@ class DestinyService {
     /**
      * Get a list of the member's characters.
      *
-     * @param membershipId
-     * @param membershipType
-     * @returns {Promise}
+     * @param {string} membershipId
+     * @param {number} membershipType
+     * @returns {Promise<DestinyCharacter[]>}
      */
     async getCharacters(membershipId, membershipType) {
         const options = {
@@ -162,7 +230,10 @@ class DestinyService {
             },
             url: `${servicePlatform}/Destiny/${membershipType}/Account/${membershipId}/Summary/`,
         };
-        const responseBody = await get(options);
+        const responseBody =
+            /** @type {BungieResponse<{ data: { characters: DestinyCharacter[] } }>} */ (
+                await get(options)
+            );
 
         if (responseBody.ErrorCode === 1) {
             const {
@@ -184,8 +255,8 @@ class DestinyService {
     /**
      * Get the current user based on the Bungie access token.
      *
-     * @param accessToken
-     * @returns {Promise}
+     * @param {string} accessToken
+     * @returns {Promise<CurrentUser>}
      */
     async getCurrentUser(accessToken) {
         const options = {
@@ -195,7 +266,10 @@ class DestinyService {
             },
             url: `${servicePlatform}/User/GetMembershipsForCurrentUser/`,
         };
-        const responseBody = await get(options);
+        const responseBody =
+            /** @type {BungieResponse<{ destinyMemberships: DestinyMembership[], bungieNetUser?: { profilePicturePath?: string } } | undefined>} */ (
+                await get(options)
+            );
         const { Response: user, ErrorCode: errorCode } = responseBody;
 
         if (user === undefined || errorCode !== 1) {
@@ -219,8 +293,8 @@ class DestinyService {
     /**
      * Get the cached Destiny Manifest definition if available,
      *   otherwise get the latest from Bungie.
-     * @param {boolean} skipCache
-     * @returns {Promise}
+     * @param {boolean} [skipCache]
+     * @returns {Promise<ManifestResult>}
      */
     async getManifest(skipCache) {
         const cache = await this.cacheService.getManifest();
@@ -235,8 +309,10 @@ class DestinyService {
     }
 
     /**
-     * @param memberships
-     * @private
+     * Pick the membership that owns cross-saved data, falling back to the first.
+     *
+     * @param {DestinyMembership[]} memberships
+     * @returns {DestinyMembership}
      */
     #getPreferredMembership(memberships) {
         const [{ crossSaveOverride }] = memberships;
