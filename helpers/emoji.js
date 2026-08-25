@@ -19,7 +19,7 @@ const SKIN_TONE_MODIFIERS = /[\u{1F3FB}-\u{1F3FF}]/gu;
  * @description Extracts every emoji sequence present in the given text.
  */
 function extractEmoji(text = '') {
-    return Array.from(text.matchAll(getEmojiRegex()), match => match[0]);
+    return text.match(getEmojiRegex()) ?? [];
 }
 
 /**
