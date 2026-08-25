@@ -252,13 +252,15 @@ class TwilioController {
         const user = await this.users.getUserByPhoneNumber(body.From);
         const rawMessage = body.Body.trim();
         const emojiMatches = extractEmoji(rawMessage);
-        const strippedMessage = stripEmoji(rawMessage);
         /**
          * Emoji are stripped before keyword/search matching so a message like
          * "gjallarhorn 🔥" resolves the same way it would without the emoji.
-         * Emoji-only messages are handled separately below, before falling
-         * through to item search.
+         * Only applied when emoji are actually present, so messages without
+         * emoji are processed exactly as before (no incidental whitespace
+         * collapsing, no redundant regex pass). Emoji-only messages are
+         * handled separately below, before falling through to item search.
          */
+        const strippedMessage = emojiMatches.length ? stripEmoji(rawMessage) : rawMessage;
         const message = strippedMessage.toLowerCase();
 
         /**

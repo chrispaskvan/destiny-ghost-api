@@ -526,6 +526,28 @@ describe('TwilioRouter', () => {
                 }));
         });
 
+        describe('when the message has no emoji but multiple internal spaces', () => {
+            it('should search with the text unchanged, not collapsing whitespace', () =>
+                new Promise((done, reject) => {
+                    const body = signedBody({ Body: 'gjallarhorn  rifle' });
+                    const req = signedRequest({ body });
+
+                    res.on('end', () => {
+                        try {
+                            expect(res.statusCode).toEqual(StatusCodes.OK);
+                            expect(worldRepository.getItemByName).toHaveBeenCalledWith(
+                                'gjallarhorn  rifle',
+                            );
+                            done();
+                        } catch (err) {
+                            reject(err);
+                        }
+                    });
+
+                    twilioRouter(req, res, next);
+                }));
+        });
+
         describe('when STOP is sent alongside a trailing emoji', () => {
             it('should still match the STOP keyword after stripping the emoji', () =>
                 new Promise((done, reject) => {
