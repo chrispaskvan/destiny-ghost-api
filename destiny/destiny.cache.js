@@ -91,7 +91,7 @@ class DestinyCache {
     }
 
     /**
-     * Get the cached vendor's item hashes.
+     * Get the cached vendor.
      * @param {number} vendorHash
      * @returns {Promise<number[] | undefined>}
      */
