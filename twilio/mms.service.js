@@ -82,6 +82,10 @@ class MmsService {
                         });
                     }
 
+                    if (!response.body) {
+                        throw new Error(`Media download returned no body for ${url}`);
+                    }
+
                     /**
                      * Stream to disk while counting bytes so an oversized (or
                      * mislabeled) response is aborted at the cap instead of
@@ -141,11 +145,12 @@ class MmsService {
             }
         } catch (err) {
             log.error({ err, from }, 'Failed to process MMS media');
-            await this.notifications
-                .sendMessage(MEDIA_ERROR_REPLY, from)
-                .catch(sendErr =>
-                    log.error({ err: sendErr, from }, 'Failed to send the media failure reply'),
-                );
+
+            try {
+                await this.notifications.sendMessage(MEDIA_ERROR_REPLY, from);
+            } catch (sendErr) {
+                log.error({ err: sendErr, from }, 'Failed to send the media failure reply');
+            }
         }
     }
 }
