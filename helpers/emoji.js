@@ -9,6 +9,9 @@
  */
 import getEmojiRegex from 'emoji-regex';
 
+const VARIATION_SELECTORS = /[\u{FE0E}\u{FE0F}]/gu;
+const SKIN_TONE_MODIFIERS = /[\u{1F3FB}-\u{1F3FF}]/gu;
+
 /**
  * @function
  * @param {string} text - Inbound message text.
@@ -17,6 +20,20 @@ import getEmojiRegex from 'emoji-regex';
  */
 function extractEmoji(text = '') {
     return Array.from(text.matchAll(getEmojiRegex()), match => match[0]);
+}
+
+/**
+ * @function
+ * @param {string} emoji - A single emoji sequence.
+ * @returns {string} - The emoji stripped of variation selectors (U+FE0E/U+FE0F)
+ * and skin-tone modifiers, so lookalike sequences map to the same base emoji.
+ * @description Twilio delivers emoji with inconsistent qualification (e.g. a
+ * bare heart vs one with a variation selector, or a plain thumbs-down vs a
+ * skin-toned one). Without normalizing, intent lookups keyed on the base
+ * emoji silently miss these variants.
+ */
+function normalizeEmoji(emoji = '') {
+    return emoji.replace(SKIN_TONE_MODIFIERS, '').replace(VARIATION_SELECTORS, '');
 }
 
 /**
@@ -30,4 +47,4 @@ function stripEmoji(text = '') {
     return text.replace(getEmojiRegex(), '').replace(/\s+/g, ' ').trim();
 }
 
-export { extractEmoji, stripEmoji };
+export { extractEmoji, stripEmoji, normalizeEmoji };

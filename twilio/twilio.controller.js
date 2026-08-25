@@ -7,7 +7,7 @@
 import ClaimCheck from '../helpers/claim-check.js';
 import getShortUrl from '../helpers/bitly.js';
 import log from '../helpers/log.js';
-import { extractEmoji, stripEmoji } from '../helpers/emoji.js';
+import { extractEmoji, normalizeEmoji, stripEmoji } from '../helpers/emoji.js';
 import {
     EMOJI_DEFAULT_REPLY,
     EMOJI_INTENT_REPLIES,
@@ -329,7 +329,8 @@ class TwilioController {
         const { itemHash } = cookies;
 
         if (emojiMatches.length && !strippedMessage) {
-            const reply = EMOJI_INTENT_REPLIES.get(emojiMatches[0]) ?? EMOJI_DEFAULT_REPLY;
+            const reply =
+                EMOJI_INTENT_REPLIES.get(normalizeEmoji(emojiMatches[0])) ?? EMOJI_DEFAULT_REPLY;
 
             return { cookies: responseCookies, message: reply };
         }

@@ -442,6 +442,27 @@ describe('TwilioRouter', () => {
                 }));
         });
 
+        describe('when the message is a mapped emoji with a skin-tone modifier', () => {
+            it('should reply with the mapped intent, not the default acknowledgment', () =>
+                new Promise((done, reject) => {
+                    const body = signedBody({ Body: '👎🏽' });
+                    const req = signedRequest({ body });
+
+                    res.on('end', () => {
+                        try {
+                            expect(res.statusCode).toEqual(StatusCodes.OK);
+                            expect(res._getData()).toContain(EMOJI_INTENT_REPLIES.get('👎'));
+                            expect(res._getData()).not.toContain(EMOJI_DEFAULT_REPLY);
+                            done();
+                        } catch (err) {
+                            reject(err);
+                        }
+                    });
+
+                    twilioRouter(req, res, next);
+                }));
+        });
+
         describe('when the message is a single unmapped emoji', () => {
             it('should reply with the default emoji acknowledgment', () =>
                 new Promise((done, reject) => {

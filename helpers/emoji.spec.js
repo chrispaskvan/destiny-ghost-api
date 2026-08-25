@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extractEmoji, stripEmoji } from './emoji.js';
+import { extractEmoji, normalizeEmoji, stripEmoji } from './emoji.js';
 
 describe('extractEmoji()', () => {
     describe('when the text contains a single emoji', () => {
@@ -65,6 +65,33 @@ describe('stripEmoji()', () => {
     describe('when called with no argument', () => {
         it('should return an empty string', () => {
             expect(stripEmoji()).toEqual('');
+        });
+    });
+});
+
+describe('normalizeEmoji()', () => {
+    describe('when the emoji has a skin-tone modifier', () => {
+        it('should strip the modifier down to the base emoji', () => {
+            expect(normalizeEmoji('👎🏽')).toEqual('👎');
+        });
+    });
+
+    describe('when the emoji has a variation selector', () => {
+        it('should strip the selector down to the base emoji', () => {
+            expect(normalizeEmoji('❤️')).toEqual('❤');
+        });
+    });
+
+    describe('when the emoji is already a bare base sequence', () => {
+        it('should return it unchanged', () => {
+            expect(normalizeEmoji('❤')).toEqual('❤');
+            expect(normalizeEmoji('👍')).toEqual('👍');
+        });
+    });
+
+    describe('when called with no argument', () => {
+        it('should return an empty string', () => {
+            expect(normalizeEmoji()).toEqual('');
         });
     });
 });
