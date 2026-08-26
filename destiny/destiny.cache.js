@@ -1,4 +1,31 @@
+// @ts-check
 import log from '../helpers/log.js';
+
+/**
+ * The Redis client methods used by DestinyCache.
+ * Structural interface so the implementation detail (node-redis vs ioredis) stays decoupled.
+ * @typedef {Object} RedisClient
+ * @property {(key: string) => Promise<string | null>} get
+ * @property {(key: string, seconds: number, value: string) => Promise<string>} setEx
+ * @property {(key: string) => Promise<number>} ttl - Seconds remaining before the key expires
+ */
+
+/**
+ * The Bungie Destiny Manifest definition. Bungie returns many more fields than
+ * this; only the ones this application reads are modeled.
+ * @typedef {Object} DestinyManifest
+ * @property {string} version
+ * @property {Record<string, string>} [mobileWorldContentPaths] - Locale-keyed paths to the world content database
+ * @property {Record<string, string>} [jsonWorldContentPaths] - Locale-keyed paths to the JSON world content
+ */
+
+/**
+ * A manifest paired with its freshness metadata, as returned by both the cache
+ * and a live Bungie fetch.
+ * @typedef {Object} ManifestResult
+ * @property {{ manifest: DestinyManifest }} data
+ * @property {{ lastModified?: string, maxAge: number, wasCached?: boolean }} meta
+ */
 
 /**
  * Destiny Cache Class
@@ -11,7 +38,10 @@ class DestinyCache {
      */
     _manifestKey = 'destiny-manifest';
 
-    constructor(options = {}) {
+    /**
+     * @param {{ client: RedisClient }} options
+     */
+    constructor(options) {
         this.client = options.client;
     }
 
@@ -32,7 +62,8 @@ class DestinyCache {
 
     /**
      * Get the cached Destiny Manifest.
-     * @returns {Promise}
+     * @param {string} [manifestKey] - Defaults to this instance's manifest key.
+     * @returns {Promise<ManifestResult | undefined>}
      */
     async getManifest(manifestKey = this._manifestKey) {
         try {
@@ -61,8 +92,8 @@ class DestinyCache {
 
     /**
      * Get the cached vendor.
-     * @param vendorHash
-     * @returns {Promise}
+     * @param {number} vendorHash
+     * @returns {Promise<number[] | undefined>}
      */
     async getVendor(vendorHash) {
         try {
@@ -78,8 +109,8 @@ class DestinyCache {
 
     /**
      * Set the Destiny Manifest cache.
-     * @param manifest
-     * @returns {Promise}
+     * @param {{ lastModified?: string, manifest: DestinyManifest, maxAge: number }} entry
+     * @returns {Promise<string>} The client's reply, or 'Error' if the write failed.
      */
     async setManifest({ lastModified, manifest, maxAge }) {
         if (manifest && typeof manifest === 'object') {
@@ -101,9 +132,9 @@ class DestinyCache {
 
     /**
      * Set the vendor cache.
-     * @param hash
-     * @param vendor
-     * @returns {Promise}
+     * @param {number} hash
+     * @param {number[]} vendor - The vendor's item hashes.
+     * @returns {Promise<string>} The client's reply, or 'Error' if the write failed.
      */
     async setVendor(hash, vendor) {
         if (!hash || typeof hash !== 'number') {
@@ -113,7 +144,10 @@ class DestinyCache {
         try {
             return await this.client.setEx(
                 hash.toString(),
-                this.constructor.secondsUntilDailyReset(),
+                // Cast because `this.constructor` is typed as the base `Function`;
+                // going through it (rather than naming the class) keeps the static
+                // overridable by subclasses.
+                /** @type {typeof DestinyCache} */ (this.constructor).secondsUntilDailyReset(),
                 JSON.stringify(vendor),
             );
         } catch (err) {

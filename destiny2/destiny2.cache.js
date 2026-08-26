@@ -1,7 +1,32 @@
+// @ts-check
 import DestinyCache from '../destiny/destiny.cache.js';
 
 const charactersExpiration = 86400; // 24 hours
 const playerStatisticsExpiration = 3600; // 1 hour
+
+/**
+ * A Destiny 2 character from the Profile endpoint's Characters component.
+ * Bungie returns many more fields; only the ones this application reads are modeled.
+ * @typedef {Object} Destiny2Character
+ * @property {string} characterId
+ * @property {number} classHash
+ * @property {number} light - Power level
+ * @property {string} emblemPath
+ * @property {string} emblemBackgroundPath
+ */
+
+/**
+ * A player's PVP statistics, flattened to the display values this application caches.
+ * Fields are null when Bungie has no all-time PVP data for the player.
+ * @typedef {Object} PlayerStatistics
+ * @property {{
+ *     combatRating: string | null,
+ *     efficiency: string | null,
+ *     highestLightLevel: string | null,
+ *     kda: string | null,
+ *     kdr: string | null,
+ * }} pvp
+ */
 
 /**
  * Destiny Cache Class
@@ -14,12 +39,8 @@ class Destiny2Cache extends DestinyCache {
      */
     _manifestKey = 'destiny2-manifest';
 
-    constructor(options = {}) {
-        super(options);
-    }
-
     /**
-     * @param teeth
+     * @param {...(string | number)} teeth
      * @returns {string}
      */
     static #getCharactersCacheKey(...teeth) {
@@ -27,7 +48,7 @@ class Destiny2Cache extends DestinyCache {
     }
 
     /**
-     * @param teeth
+     * @param {...(string | number)} teeth
      * @returns {string}
      */
     static #getPlayerStatisticsCacheKey(...teeth) {
@@ -36,7 +57,8 @@ class Destiny2Cache extends DestinyCache {
 
     /**
      * Get the cached list of characters for the user.
-     * @param {*} membershipId
+     * @param {string} membershipId
+     * @returns {Promise<Destiny2Character[] | undefined>}
      */
     async getCharacters(membershipId) {
         const res = await this.client.get(Destiny2Cache.#getCharactersCacheKey(membershipId));
@@ -46,7 +68,8 @@ class Destiny2Cache extends DestinyCache {
 
     /**
      * Get the cached statistics for the player.
-     * @param {*} membershipId
+     * @param {string} membershipId
+     * @returns {Promise<PlayerStatistics | undefined>}
      */
     async getPlayerStatistics(membershipId) {
         const res = await this.client.get(Destiny2Cache.#getPlayerStatisticsCacheKey(membershipId));
@@ -56,8 +79,9 @@ class Destiny2Cache extends DestinyCache {
 
     /**
      * Set the list of characters for the user.
-     * @param {*} membershipId
-     * @param {*} characters
+     * @param {string} membershipId
+     * @param {Destiny2Character[]} characters
+     * @returns {Promise<string>}
      */
     async setCharacters(membershipId, characters) {
         if (!(membershipId && typeof membershipId === 'string')) {
@@ -77,8 +101,9 @@ class Destiny2Cache extends DestinyCache {
 
     /**
      * Set the statistics for the player.
-     * @param {*} membershipId
-     * @param {*} statistics
+     * @param {string} membershipId
+     * @param {PlayerStatistics} statistics
+     * @returns {Promise<string>}
      */
     async setPlayerStatistics(membershipId, statistics) {
         if (!(membershipId && typeof membershipId === 'string')) {
