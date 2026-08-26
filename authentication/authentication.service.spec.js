@@ -214,9 +214,10 @@ describe('AuthenticationService', () => {
             /**
              * Pins current behavior rather than endorsing it: revalidating against
              * Bungie replaces the stored document with Bungie's profile, so
-             * document-only fields (id, roles, phoneNumber) are dropped from the
-             * result. Callers reading `bungie.access_token`, `membershipId`, or
-             * `membershipType` are unaffected; `isAdministrator` reads `roles`.
+             * document-only fields (id, phoneNumber, roles) are dropped from the
+             * result and `displayName` comes from Bungie instead. Callers reading
+             * `bungie.access_token`, `membershipId`, or `membershipType` are
+             * unaffected. See issue #671.
              */
             it('returns the Bungie profile without the document-only fields', async () => {
                 vi.spyOn(Temporal.Now, 'instant').mockReturnValueOnce(

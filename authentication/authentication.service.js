@@ -27,8 +27,8 @@ import { z } from 'zod';
 /**
  * What authentication resolves to. When the stored token is still valid this is
  * the user document. When the token had to be revalidated against Bungie, that
- * profile is spread instead, so document-only fields such as `id` and `roles`
- * are absent on that path.
+ * profile is spread instead, so document-only fields such as `id` are absent on
+ * that path. See issue #671.
  * @typedef {UserDocument
  *   | (CurrentUser & { bungie: Partial<StoredBungieToken>, dateRegistered?: string })
  * } AuthenticatedUser
@@ -144,7 +144,8 @@ class AuthenticationService {
          * Held separately rather than reassigning `user` so the catch below still
          * sees the stored document. Note that when revalidation succeeds this
          * profile is what gets spread into the result, so document-only fields
-         * such as `id` and `roles` do not survive that path.
+         * do not survive that path and `displayName` comes from Bungie rather
+         * than the stored document. See issue #671.
          *
          * @type {CurrentUser | undefined}
          */
