@@ -187,5 +187,53 @@ describe('AuthenticationService', () => {
                 expect(cacheService.setUser).toHaveBeenCalledOnce();
             });
         });
+
+        describe('when the stored token is stale but Bungie still accepts it', () => {
+            const now = 11;
+            const accessToken = chance.hash();
+            const currentUser = {
+                displayName: chance.word(),
+                membershipId: chance.string({ pool: '0123456789' }),
+                membershipType: 2,
+                profilePicturePath: '/img/profile/avatars/Destiny26.jpg',
+            };
+
+            beforeEach(() => {
+                // Built fresh rather than reusing mockUser, which earlier tests
+                // mutate in place via `user.bungie = bungie`.
+                cacheService.getUser.mockImplementation(() =>
+                    Promise.resolve({
+                        ...structuredClone(mockUser),
+                        bungie: { access_token: accessToken, _ttl: 0 },
+                    }),
+                );
+                destinyService.getCurrentUser = vi.fn().mockResolvedValue(currentUser);
+                destinyService.getAccessTokenFromRefreshToken = vi.fn();
+            });
+
+            /**
+             * Pins current behavior rather than endorsing it: revalidating against
+             * Bungie replaces the stored document with Bungie's profile, so
+             * document-only fields (id, roles, phoneNumber) are dropped from the
+             * result. Callers reading `bungie.access_token`, `membershipId`, or
+             * `membershipType` are unaffected; `isAdministrator` reads `roles`.
+             */
+            it('returns the Bungie profile without the document-only fields', async () => {
+                vi.spyOn(Temporal.Now, 'instant').mockReturnValueOnce(
+                    Temporal.Instant.fromEpochMilliseconds(now),
+                );
+
+                const user = await authenticationService.authenticate({
+                    displayName,
+                    membershipType,
+                });
+
+                expect(user).toMatchObject(currentUser);
+                expect(user.bungie.access_token).toBe(accessToken);
+                expect(user).not.toHaveProperty('phoneNumber');
+                expect(user).not.toHaveProperty('roles');
+                expect(destinyService.getAccessTokenFromRefreshToken).not.toHaveBeenCalled();
+            });
+        });
     });
 });

@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * A module for sending SMS/MMS notifications.
  *
@@ -13,25 +14,56 @@ import { BRAND_PREFIX, MAX_SMS_MESSAGE_LENGTH } from '../twilio/twilio.constants
 import twilioRateLimiter from '../helpers/twilio-rate-limiter.js';
 
 /**
+ * The message payload handed to Twilio. `mediaUrl` is only set for MMS.
+ * @typedef {Object} TwilioMessage
+ * @property {string} to - Recipient phone number in E.164 format
+ * @property {string} from - The sending phone number
+ * @property {string} body - Brand-prefixed body, truncated to the SMS length cap
+ * @property {string} statusCallback - Webhook Twilio posts delivery updates to
+ * @property {string} [mediaUrl]
+ */
+
+/**
+ * A message as accepted by Twilio's REST client.
+ * @typedef {Object} SentMessage
+ * @property {string} sid - Twilio message SID
+ * @property {string} status - Delivery status ('queued' | 'sent' | 'delivered' | 'failed')
+ * @property {string} to
+ */
+
+/**
+ * The subset of the Twilio client this service uses.
+ * @typedef {Object} TwilioClient
+ * @property {{ create: (message: TwilioMessage) => Promise<SentMessage> }} messages
+ */
+
+/**
  * Notifications Class
  */
 class Notifications {
-    constructor(options = {}) {
+    /**
+     * @param {{ client: TwilioClient, limiter?: { schedule: <T>(fn: () => Promise<T>) => Promise<T> } }} options
+     */
+    constructor(options) {
         this.client = options.client;
         this.limiter = options.limiter ?? twilioRateLimiter;
     }
 
     /**
-     * @param body {string}
-     * @param to {string}
-     * @param mediaUrl {string}
-     * @returns {*}
+     * Send an SMS or MMS message through Twilio, rate limited and retried.
+     *
+     * @param {string} body - Message body, prefixed and truncated before sending.
+     * @param {string} to - Recipient phone number in E.164 format.
+     * @param {string} [mediaUrl] - Attachment URL; makes this an MMS.
+     * @param {{ claimCheckNumber?: string, notificationType?: string }} [options] - Correlates the delivery callback.
+     * @returns {Promise<SentMessage>}
      */
     async sendMessage(body, to, mediaUrl, { claimCheckNumber, notificationType } = {}) {
         const query =
             claimCheckNumber && notificationType
                 ? `?claim-check-number=${claimCheckNumber}&notification-type=${notificationType}`
                 : '';
+        /** @type {TwilioMessage} */
         const message = {
             to,
             from: configuration.twilio.phoneNumber,
