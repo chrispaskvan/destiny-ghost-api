@@ -204,7 +204,7 @@ describe('AuthenticationService', () => {
             });
 
             describe('when the stored record carries no refresh token', () => {
-                it('fails without calling Bungie', async () => {
+                it('fails without requesting a new token', async () => {
                     storedUser.bungie = { access_token, _ttl: 0 };
                     vi.spyOn(Temporal.Now, 'instant').mockReturnValueOnce(
                         Temporal.Instant.fromEpochMilliseconds(now),
