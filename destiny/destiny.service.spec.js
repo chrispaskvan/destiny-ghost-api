@@ -104,19 +104,23 @@ describe('DestinyService', () => {
             });
 
             describe('when ErrorCode is not 1', () => {
-                it('should throw', async () => {
+                it('should throw carrying the error details from the response', async () => {
                     get.mockImplementation(() =>
                         Promise.resolve({
                             ErrorCode: 0,
+                            ErrorStatus: 'Failed',
                             Message: 'Ok',
                             Response: {
                                 destinyMemberships: [],
                             },
-                            Status: 'Failed',
                         }),
                     );
 
-                    await expect(destinyService.getCurrentUser()).rejects.toThrow(DestinyError);
+                    await expect(destinyService.getCurrentUser()).rejects.toMatchObject({
+                        code: 0,
+                        message: 'Ok',
+                        status: 'Failed',
+                    });
                 });
             });
         });
@@ -179,6 +183,30 @@ describe('DestinyService', () => {
                     expect(result.meta.wasCached).toBeFalsy();
                     expect(cacheService.getManifest).toBeCalledTimes(1);
                     expect(cacheService.setManifest).toBeCalledTimes(1);
+                });
+            });
+
+            describe('when the response omits a usable cache-control max-age', () => {
+                it.each([
+                    ['the header is missing', undefined],
+                    ['the header has no max-age directive', 'public'],
+                ])('should return the manifest uncached when %s', (_, cacheControl) => {
+                    get.mockImplementation(() =>
+                        Promise.resolve({
+                            data: mockManifestResponse,
+                            headers: {
+                                ...(cacheControl ? { 'cache-control': cacheControl } : {}),
+                                'last-modified': lastModified,
+                            },
+                        }),
+                    );
+
+                    return destinyService.getManifest().then(result => {
+                        expect(result.data.manifest).toEqual(manifest1);
+                        expect(result.meta.maxAge).toBe(0);
+                        // A zero TTL would make Redis SETEX fail on every fetch.
+                        expect(cacheService.setManifest).not.toBeCalled();
+                    });
                 });
             });
         });

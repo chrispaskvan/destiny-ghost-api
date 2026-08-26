@@ -27,7 +27,6 @@ const {
  * @property {number} ErrorCode
  * @property {string} [Message]
  * @property {string} [ErrorStatus]
- * @property {string} [Status]
  * @property {T} Response
  */
 
@@ -123,8 +122,8 @@ class DestinyService {
                 await get(options, true)
             );
         const lastModified = headers['last-modified'];
-        // Bungie omits cache-control on some responses; missing or unparseable
-        // falls back to a zero max-age, same as a header without a max-age directive.
+        // Bungie omits cache-control on some responses; a missing or unparseable
+        // header yields a zero max-age, which skips the cache write below.
         const matches = headers['cache-control']?.match(/max-age=(\d+)/);
         const maxAge = matches ? parseInt(matches[1], 10) : 0;
 
@@ -140,7 +139,11 @@ class DestinyService {
                 },
             };
 
-            await this.cacheService.setManifest({ lastModified, manifest, maxAge });
+            // Redis rejects a zero TTL, so a response without a usable max-age is
+            // returned uncached rather than failing SETEX on every manifest fetch.
+            if (maxAge > 0) {
+                await this.cacheService.setManifest({ lastModified, manifest, maxAge });
+            }
 
             return result;
         }
@@ -275,7 +278,7 @@ class DestinyService {
         const { Response: user, ErrorCode: errorCode } = responseBody;
 
         if (user === undefined || errorCode !== 1) {
-            const { Message: message, Status: status } = responseBody;
+            const { Message: message, ErrorStatus: status } = responseBody;
 
             throw new DestinyError(errorCode, message, status);
         }
