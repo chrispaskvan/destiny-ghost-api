@@ -68,6 +68,7 @@ describe('DestinyService', () => {
         describe('when current user is defined', () => {
             describe('when displayName and membershipId exist', () => {
                 it('should return the current user', async () => {
+                    const accessToken = chance.hash();
                     const displayName = chance.word();
                     const membershipId = '2';
                     const membershipType = 2;
@@ -92,7 +93,7 @@ describe('DestinyService', () => {
                         }),
                     );
 
-                    const currentUser = await destinyService.getCurrentUser();
+                    const currentUser = await destinyService.getCurrentUser(accessToken);
 
                     expect(currentUser).toEqual({
                         displayName,
@@ -100,6 +101,13 @@ describe('DestinyService', () => {
                         membershipType,
                         profilePicturePath,
                     });
+                    expect(get).toHaveBeenCalledWith(
+                        expect.objectContaining({
+                            headers: expect.objectContaining({
+                                authorization: `Bearer ${accessToken}`,
+                            }),
+                        }),
+                    );
                 });
             });
 
@@ -116,7 +124,9 @@ describe('DestinyService', () => {
                         }),
                     );
 
-                    await expect(destinyService.getCurrentUser()).rejects.toMatchObject({
+                    await expect(
+                        destinyService.getCurrentUser(chance.hash()),
+                    ).rejects.toMatchObject({
                         code: 0,
                         message: 'Ok',
                         status: 'Failed',
