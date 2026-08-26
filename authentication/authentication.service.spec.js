@@ -3,7 +3,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Chance from 'chance';
-import AuthenticationService from './authentication.service.js';
+import AuthenticationService, { REVALIDATION_WINDOW_MS } from './authentication.service.js';
 import usersJson from '../mocks/users.json';
 
 const [mockUser] = usersJson;
@@ -37,8 +37,6 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
-const user1 = structuredClone(mockUser);
-
 describe('AuthenticationService', () => {
     describe('constructor', () => {
         it('required dependencies are injected', () => {
@@ -68,7 +66,25 @@ describe('AuthenticationService', () => {
         });
 
         describe('when current user is fresh', () => {
+            /**
+             * A genuinely unexpired token. mockUser's bungie carries no `_ttl`,
+             * which defaults to 0 and is therefore always stale — so these cases
+             * used to run the revalidation path despite their name.
+             */
+            let freshUser;
+
             beforeEach(async () => {
+                freshUser = {
+                    ...structuredClone(mockUser),
+                    bungie: { ...mockUser.bungie, _ttl: Number.MAX_SAFE_INTEGER },
+                };
+                cacheService.getUser.mockImplementation(() => Promise.resolve(freshUser));
+                userService.getUserByDisplayName.mockImplementation(() =>
+                    Promise.resolve(freshUser),
+                );
+                userService.getUserByPhoneNumber.mockImplementation(() =>
+                    Promise.resolve(freshUser),
+                );
                 destinyService.getCurrentUser = vi.fn().mockResolvedValue(mockUser);
             });
 
@@ -83,8 +99,9 @@ describe('AuthenticationService', () => {
                                 membershipType,
                             });
 
-                            expect(user).toEqual(user1);
+                            expect(user).toEqual(freshUser);
                             expect(cacheService.setUser).not.toHaveBeenCalled();
+                            expect(destinyService.getCurrentUser).not.toHaveBeenCalled();
                         });
                     });
                 });
@@ -117,7 +134,7 @@ describe('AuthenticationService', () => {
                                     phoneNumber,
                                 });
 
-                                expect(user).toEqual(user1);
+                                expect(user).toEqual(freshUser);
                                 expect(cacheService.setUser).not.toHaveBeenCalled();
                                 expect(userService.getUserByPhoneNumber).not.toHaveBeenCalled();
                             });
@@ -132,7 +149,7 @@ describe('AuthenticationService', () => {
                                     phoneNumber,
                                 });
 
-                                expect(user).toEqual(user1);
+                                expect(user).toEqual(freshUser);
                                 expect(cacheService.setUser).not.toHaveBeenCalled();
                                 expect(userService.getUserByPhoneNumber).toHaveBeenCalled();
                             });
@@ -210,7 +227,7 @@ describe('AuthenticationService', () => {
                     storedUser.id,
                     expectedToken,
                 );
-                expect(cacheService.setUser).toHaveBeenCalledOnce();
+                expect(cacheService.setUser).toHaveBeenCalledWith(storedUser);
             });
 
             describe('when the stored record carries no refresh token', () => {
@@ -231,35 +248,28 @@ describe('AuthenticationService', () => {
         describe('when the stored token is stale but Bungie still accepts it', () => {
             const now = 11;
             const accessToken = chance.hash();
+            /** The profile is fetched only to test the token, never returned. */
             const currentUser = {
                 displayName: chance.word(),
                 membershipId: chance.string({ pool: '0123456789' }),
                 membershipType: 2,
                 profilePicturePath: '/img/profile/avatars/Destiny26.jpg',
             };
+            let storedUser;
 
             beforeEach(() => {
-                // Built fresh rather than reusing mockUser, which earlier tests
+                // Built fresh rather than reusing mockUser, which other tests
                 // mutate in place via `user.bungie = bungie`.
-                cacheService.getUser.mockImplementation(() =>
-                    Promise.resolve({
-                        ...structuredClone(mockUser),
-                        bungie: { access_token: accessToken, _ttl: 0 },
-                    }),
-                );
+                storedUser = {
+                    ...structuredClone(mockUser),
+                    bungie: { access_token: accessToken, refresh_token: chance.hash(), _ttl: 0 },
+                };
+                cacheService.getUser.mockImplementation(() => Promise.resolve(storedUser));
                 destinyService.getCurrentUser = vi.fn().mockResolvedValue(currentUser);
                 destinyService.getAccessTokenFromRefreshToken = vi.fn();
             });
 
-            /**
-             * Pins current behavior rather than endorsing it: revalidating against
-             * Bungie replaces the stored document with Bungie's profile, so
-             * document-only fields (id, phoneNumber, roles) are dropped from the
-             * result and `displayName` comes from Bungie instead. Callers reading
-             * `bungie.access_token`, `membershipId`, or `membershipType` are
-             * unaffected. See issue #671.
-             */
-            it('returns the Bungie profile without the document-only fields', async () => {
+            it('returns the stored document, not the Bungie profile', async () => {
                 vi.spyOn(Temporal.Now, 'instant').mockReturnValueOnce(
                     Temporal.Instant.fromEpochMilliseconds(now),
                 );
@@ -269,11 +279,56 @@ describe('AuthenticationService', () => {
                     membershipType,
                 });
 
-                expect(user).toMatchObject(currentUser);
+                // Document-only fields survive, and displayName stays the stored one.
+                expect(user.phoneNumber).toBe(mockUser.phoneNumber);
+                expect(user.displayName).toBe(mockUser.displayName);
+                expect(user.displayName).not.toBe(currentUser.displayName);
                 expect(user.bungie.access_token).toBe(accessToken);
-                expect(user).not.toHaveProperty('phoneNumber');
-                expect(user).not.toHaveProperty('roles');
                 expect(destinyService.getAccessTokenFromRefreshToken).not.toHaveBeenCalled();
+            });
+
+            it('defers the next probe by stamping _ttl', async () => {
+                vi.spyOn(Temporal.Now, 'instant').mockReturnValueOnce(
+                    Temporal.Instant.fromEpochMilliseconds(now),
+                );
+
+                const user = await authenticationService.authenticate({
+                    displayName,
+                    membershipType,
+                });
+
+                expect(user.bungie._ttl).toBe(now + REVALIDATION_WINDOW_MS);
+                expect(cacheService.setUser).toHaveBeenCalledWith(user);
+            });
+
+            /**
+             * Without the stamp above, a record whose token predates `_ttl` would
+             * call Bungie on every single request, forever.
+             */
+            it('does not re-probe Bungie on the next request', async () => {
+                vi.spyOn(Temporal.Now, 'instant').mockReturnValue(
+                    Temporal.Instant.fromEpochMilliseconds(now),
+                );
+
+                await authenticationService.authenticate({ displayName, membershipType });
+                expect(destinyService.getCurrentUser).toHaveBeenCalledOnce();
+
+                await authenticationService.authenticate({ displayName, membershipType });
+                expect(destinyService.getCurrentUser).toHaveBeenCalledOnce();
+            });
+
+            it('still authenticates when caching the revalidated user fails', async () => {
+                cacheService.setUser.mockRejectedValueOnce(new Error('redis is down'));
+                vi.spyOn(Temporal.Now, 'instant').mockReturnValueOnce(
+                    Temporal.Instant.fromEpochMilliseconds(now),
+                );
+
+                const user = await authenticationService.authenticate({
+                    displayName,
+                    membershipType,
+                });
+
+                expect(user.phoneNumber).toBe(mockUser.phoneNumber);
             });
         });
     });
