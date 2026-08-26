@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * A module for downloading and processing MMS media attachments.
  *
@@ -21,14 +22,20 @@ const {
 } = configuration;
 
 /**
+ * One media attachment on an inbound MMS.
+ * @typedef {Object} MmsMedia
+ * @property {string} contentType - MIME type, e.g. 'image/jpeg'
+ * @property {string} url - Twilio-hosted media URL
+ */
+
+/**
  * MMS Service
  */
 class MmsService {
     /**
-     * @constructor
-     * @param options
+     * @param {{ notificationService: import('../notifications/notification.service.js').default }} options
      */
-    constructor(options = {}) {
+    constructor(options) {
         this.notifications = options.notificationService;
     }
 
@@ -48,10 +55,9 @@ class MmsService {
     /**
      * Download a media attachment into the given directory.
      *
-     * @param {{ contentType: string, url: string }} media
+     * @param {MmsMedia} media
      * @param {string} directory - Private directory to download into.
      * @returns {Promise<string>} Path to the downloaded file.
-     * @private
      */
     async #download({ contentType, url }, directory) {
         const { hostname, protocol } = new URL(url);
@@ -117,7 +123,7 @@ class MmsService {
      *
      * @param {Object} options
      * @param {string} options.from - The sender's phone number.
-     * @param {{ contentType: string, url: string }[]} options.media
+     * @param {MmsMedia[]} options.media
      * @returns {Promise<void>}
      */
     async process({ from, media }) {

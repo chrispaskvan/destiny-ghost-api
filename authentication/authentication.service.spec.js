@@ -154,15 +154,39 @@ describe('AuthenticationService', () => {
             const {
                 bungie: { access_token },
             } = mockUser;
+            const refreshToken = chance.hash();
             const expiresIn = 1;
             const now = 11;
+            /**
+             * The full shape DestinyService declares (BungieAccessToken). Stubbing
+             * a subset would let the spec pass while fields are dropped on the way
+             * to storage — losing refresh_token in particular would break the
+             * *next* refresh, not this one.
+             */
+            const refreshedToken = {
+                access_token: chance.hash(),
+                expires_in: expiresIn,
+                membership_id: chance.string({ pool: '0123456789' }),
+                refresh_token: chance.hash(),
+            };
+            let storedUser;
 
             beforeEach(async () => {
+                /**
+                 * Built fresh, and carrying a refresh token. mockUser is shared and
+                 * this path mutates it in place via `user.bungie = bungie`; it also
+                 * models only an access_token, so reusing it here asserted that a
+                 * refresh succeeds with no refresh token to send.
+                 */
+                storedUser = {
+                    ...structuredClone(mockUser),
+                    bungie: { access_token, refresh_token: refreshToken, _ttl: 0 },
+                };
+                cacheService.getUser.mockImplementation(() => Promise.resolve(storedUser));
                 destinyService.getCurrentUser = vi.fn().mockRejectedValueOnce();
-                destinyService.getAccessTokenFromRefreshToken = vi.fn().mockResolvedValue({
-                    access_token,
-                    expires_in: expiresIn,
-                });
+                destinyService.getAccessTokenFromRefreshToken = vi
+                    .fn()
+                    .mockResolvedValue(refreshedToken);
             });
 
             it('refreshes Bungie token', async () => {
@@ -175,16 +199,81 @@ describe('AuthenticationService', () => {
                     membershipType,
                 });
 
-                expect(user).toEqual({
-                    ...user1,
-                    bungie: {
-                        _ttl: now + expiresIn * 1000,
-                        access_token,
-                        expires_in: expiresIn,
-                    },
-                });
-                expect(userService.updateUserBungie).toHaveBeenCalledOnce();
+                const expectedToken = { ...refreshedToken, _ttl: now + expiresIn * 1000 };
+
+                expect(user).toEqual({ ...storedUser, bungie: expectedToken });
+                expect(destinyService.getAccessTokenFromRefreshToken).toHaveBeenCalledWith(
+                    refreshToken,
+                );
+                // Every field must survive to storage, not just the new access token.
+                expect(userService.updateUserBungie).toHaveBeenCalledWith(
+                    storedUser.id,
+                    expectedToken,
+                );
                 expect(cacheService.setUser).toHaveBeenCalledOnce();
+            });
+
+            describe('when the stored record carries no refresh token', () => {
+                it('fails without requesting a new token', async () => {
+                    storedUser.bungie = { access_token, _ttl: 0 };
+                    vi.spyOn(Temporal.Now, 'instant').mockReturnValueOnce(
+                        Temporal.Instant.fromEpochMilliseconds(now),
+                    );
+
+                    await expect(
+                        authenticationService.authenticate({ displayName, membershipType }),
+                    ).rejects.toThrow(/Unable to refresh/);
+                    expect(destinyService.getAccessTokenFromRefreshToken).not.toHaveBeenCalled();
+                });
+            });
+        });
+
+        describe('when the stored token is stale but Bungie still accepts it', () => {
+            const now = 11;
+            const accessToken = chance.hash();
+            const currentUser = {
+                displayName: chance.word(),
+                membershipId: chance.string({ pool: '0123456789' }),
+                membershipType: 2,
+                profilePicturePath: '/img/profile/avatars/Destiny26.jpg',
+            };
+
+            beforeEach(() => {
+                // Built fresh rather than reusing mockUser, which earlier tests
+                // mutate in place via `user.bungie = bungie`.
+                cacheService.getUser.mockImplementation(() =>
+                    Promise.resolve({
+                        ...structuredClone(mockUser),
+                        bungie: { access_token: accessToken, _ttl: 0 },
+                    }),
+                );
+                destinyService.getCurrentUser = vi.fn().mockResolvedValue(currentUser);
+                destinyService.getAccessTokenFromRefreshToken = vi.fn();
+            });
+
+            /**
+             * Pins current behavior rather than endorsing it: revalidating against
+             * Bungie replaces the stored document with Bungie's profile, so
+             * document-only fields (id, phoneNumber, roles) are dropped from the
+             * result and `displayName` comes from Bungie instead. Callers reading
+             * `bungie.access_token`, `membershipId`, or `membershipType` are
+             * unaffected. See issue #671.
+             */
+            it('returns the Bungie profile without the document-only fields', async () => {
+                vi.spyOn(Temporal.Now, 'instant').mockReturnValueOnce(
+                    Temporal.Instant.fromEpochMilliseconds(now),
+                );
+
+                const user = await authenticationService.authenticate({
+                    displayName,
+                    membershipType,
+                });
+
+                expect(user).toMatchObject(currentUser);
+                expect(user.bungie.access_token).toBe(accessToken);
+                expect(user).not.toHaveProperty('phoneNumber');
+                expect(user).not.toHaveProperty('roles');
+                expect(destinyService.getAccessTokenFromRefreshToken).not.toHaveBeenCalled();
             });
         });
     });

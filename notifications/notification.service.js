@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * A module for sending SMS/MMS notifications.
  *
@@ -13,25 +14,46 @@ import { BRAND_PREFIX, MAX_SMS_MESSAGE_LENGTH } from '../twilio/twilio.constants
 import twilioRateLimiter from '../helpers/twilio-rate-limiter.js';
 
 /**
+ * Twilio's own payload and response types, rather than hand-rolled copies that
+ * would drift from the SDK (the client already ships its declarations).
+ * @typedef {import('twilio/lib/rest/api/v2010/account/message.js').MessageListInstanceCreateOptions} TwilioMessage
+ * @typedef {import('twilio/lib/rest/api/v2010/account/message.js').MessageInstance} SentMessage
+ */
+
+/**
+ * The subset of the Twilio client this service uses. Kept structural so tests can
+ * substitute a stub without constructing a real client.
+ * @typedef {Object} TwilioClient
+ * @property {{ create: (message: TwilioMessage) => Promise<SentMessage> }} messages
+ */
+
+/**
  * Notifications Class
  */
 class Notifications {
-    constructor(options = {}) {
+    /**
+     * @param {{ client: TwilioClient, limiter?: { schedule: <T>(fn: () => Promise<T>) => Promise<T> } }} options
+     */
+    constructor(options) {
         this.client = options.client;
         this.limiter = options.limiter ?? twilioRateLimiter;
     }
 
     /**
-     * @param body {string}
-     * @param to {string}
-     * @param mediaUrl {string}
-     * @returns {*}
+     * Send an SMS or MMS message through Twilio, rate limited and retried.
+     *
+     * @param {string} body - Message body, prefixed and truncated before sending.
+     * @param {string} to - Recipient phone number in E.164 format.
+     * @param {string} [mediaUrl] - Attachment URL; makes this an MMS.
+     * @param {{ claimCheckNumber?: string, notificationType?: string }} [options] - Correlates the delivery callback.
+     * @returns {Promise<SentMessage>}
      */
     async sendMessage(body, to, mediaUrl, { claimCheckNumber, notificationType } = {}) {
         const query =
             claimCheckNumber && notificationType
                 ? `?claim-check-number=${claimCheckNumber}&notification-type=${notificationType}`
                 : '';
+        /** @type {TwilioMessage} */
         const message = {
             to,
             from: configuration.twilio.phoneNumber,
@@ -40,7 +62,12 @@ class Notifications {
         };
 
         if (mediaUrl) {
-            message.mediaUrl = mediaUrl;
+            // The SDK types this as an array. A bare string also reaches Twilio
+            // intact (serialize.map passes scalars through), and with the
+            // client's `arrayFormat: 'repeat'` a single-element array encodes to
+            // the identical body — so this matches the contract without
+            // changing the request.
+            message.mediaUrl = [mediaUrl];
         }
 
         return await withRetry(
