@@ -155,15 +155,24 @@ class AuthenticationService {
             try {
                 revalidated = await this.destinyService.getCurrentUser(accessToken);
             } catch {
-                // `refresh_token` is optional on stored tokens; a record without
-                // one has always failed here rather than being guarded.
-                const bungie = /** @type {RefreshedBungieToken} */ (
-                    await this.destinyService.getAccessTokenFromRefreshToken(
-                        /** @type {string} */ (refreshToken),
-                    )
-                );
+                /**
+                 * Legacy records may carry only an access_token, so there is
+                 * nothing to refresh with. Previously this still called Bungie
+                 * without the parameter and surfaced whatever it returned; both
+                 * that and this reach the client as a 500, so failing here only
+                 * trades an opaque remote error for a clear local one.
+                 */
+                if (!refreshToken) {
+                    throw new Error(
+                        'Cannot refresh the Bungie token: the stored record has no refresh_token.',
+                    );
+                }
 
-                bungie._ttl = now + bungie.expires_in * 1000;
+                const token =
+                    await this.destinyService.getAccessTokenFromRefreshToken(refreshToken);
+                /** @type {RefreshedBungieToken} */
+                const bungie = { ...token, _ttl: now + token.expires_in * 1000 };
+
                 user.bungie = bungie;
                 await Promise.all([
                     this.cacheService.setUser(user),

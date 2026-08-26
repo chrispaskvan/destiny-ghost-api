@@ -154,10 +154,23 @@ describe('AuthenticationService', () => {
             const {
                 bungie: { access_token },
             } = mockUser;
+            const refreshToken = chance.hash();
             const expiresIn = 1;
             const now = 11;
+            let storedUser;
 
             beforeEach(async () => {
+                /**
+                 * Built fresh, and carrying a refresh token. mockUser is shared and
+                 * this path mutates it in place via `user.bungie = bungie`; it also
+                 * models only an access_token, so reusing it here asserted that a
+                 * refresh succeeds with no refresh token to send.
+                 */
+                storedUser = {
+                    ...structuredClone(mockUser),
+                    bungie: { access_token, refresh_token: refreshToken, _ttl: 0 },
+                };
+                cacheService.getUser.mockImplementation(() => Promise.resolve(storedUser));
                 destinyService.getCurrentUser = vi.fn().mockRejectedValueOnce();
                 destinyService.getAccessTokenFromRefreshToken = vi.fn().mockResolvedValue({
                     access_token,
@@ -176,15 +189,32 @@ describe('AuthenticationService', () => {
                 });
 
                 expect(user).toEqual({
-                    ...user1,
+                    ...storedUser,
                     bungie: {
                         _ttl: now + expiresIn * 1000,
                         access_token,
                         expires_in: expiresIn,
                     },
                 });
+                expect(destinyService.getAccessTokenFromRefreshToken).toHaveBeenCalledWith(
+                    refreshToken,
+                );
                 expect(userService.updateUserBungie).toHaveBeenCalledOnce();
                 expect(cacheService.setUser).toHaveBeenCalledOnce();
+            });
+
+            describe('when the stored record carries no refresh token', () => {
+                it('fails without calling Bungie', async () => {
+                    storedUser.bungie = { access_token, _ttl: 0 };
+                    vi.spyOn(Temporal.Now, 'instant').mockReturnValueOnce(
+                        Temporal.Instant.fromEpochMilliseconds(now),
+                    );
+
+                    await expect(
+                        authenticationService.authenticate({ displayName, membershipType }),
+                    ).rejects.toThrow(/no refresh_token/);
+                    expect(destinyService.getAccessTokenFromRefreshToken).not.toHaveBeenCalled();
+                });
             });
         });
 
