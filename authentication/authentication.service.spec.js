@@ -157,6 +157,18 @@ describe('AuthenticationService', () => {
             const refreshToken = chance.hash();
             const expiresIn = 1;
             const now = 11;
+            /**
+             * The full shape DestinyService declares (BungieAccessToken). Stubbing
+             * a subset would let the spec pass while fields are dropped on the way
+             * to storage — losing refresh_token in particular would break the
+             * *next* refresh, not this one.
+             */
+            const refreshedToken = {
+                access_token: chance.hash(),
+                expires_in: expiresIn,
+                membership_id: chance.string({ pool: '0123456789' }),
+                refresh_token: chance.hash(),
+            };
             let storedUser;
 
             beforeEach(async () => {
@@ -172,10 +184,9 @@ describe('AuthenticationService', () => {
                 };
                 cacheService.getUser.mockImplementation(() => Promise.resolve(storedUser));
                 destinyService.getCurrentUser = vi.fn().mockRejectedValueOnce();
-                destinyService.getAccessTokenFromRefreshToken = vi.fn().mockResolvedValue({
-                    access_token,
-                    expires_in: expiresIn,
-                });
+                destinyService.getAccessTokenFromRefreshToken = vi
+                    .fn()
+                    .mockResolvedValue(refreshedToken);
             });
 
             it('refreshes Bungie token', async () => {
@@ -188,18 +199,17 @@ describe('AuthenticationService', () => {
                     membershipType,
                 });
 
-                expect(user).toEqual({
-                    ...storedUser,
-                    bungie: {
-                        _ttl: now + expiresIn * 1000,
-                        access_token,
-                        expires_in: expiresIn,
-                    },
-                });
+                const expectedToken = { ...refreshedToken, _ttl: now + expiresIn * 1000 };
+
+                expect(user).toEqual({ ...storedUser, bungie: expectedToken });
                 expect(destinyService.getAccessTokenFromRefreshToken).toHaveBeenCalledWith(
                     refreshToken,
                 );
-                expect(userService.updateUserBungie).toHaveBeenCalledOnce();
+                // Every field must survive to storage, not just the new access token.
+                expect(userService.updateUserBungie).toHaveBeenCalledWith(
+                    storedUser.id,
+                    expectedToken,
+                );
                 expect(cacheService.setUser).toHaveBeenCalledOnce();
             });
 
