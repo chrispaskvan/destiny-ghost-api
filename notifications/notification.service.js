@@ -14,25 +14,15 @@ import { BRAND_PREFIX, MAX_SMS_MESSAGE_LENGTH } from '../twilio/twilio.constants
 import twilioRateLimiter from '../helpers/twilio-rate-limiter.js';
 
 /**
- * The message payload handed to Twilio. `mediaUrl` is only set for MMS.
- * @typedef {Object} TwilioMessage
- * @property {string} to - Recipient phone number in E.164 format
- * @property {string} from - The sending phone number
- * @property {string} body - Brand-prefixed body, truncated to the SMS length cap
- * @property {string} statusCallback - Webhook Twilio posts delivery updates to
- * @property {string} [mediaUrl]
+ * Twilio's own payload and response types, rather than hand-rolled copies that
+ * would drift from the SDK (the client already ships its declarations).
+ * @typedef {import('twilio/lib/rest/api/v2010/account/message.js').MessageListInstanceCreateOptions} TwilioMessage
+ * @typedef {import('twilio/lib/rest/api/v2010/account/message.js').MessageInstance} SentMessage
  */
 
 /**
- * A message as accepted by Twilio's REST client.
- * @typedef {Object} SentMessage
- * @property {string} sid - Twilio message SID
- * @property {string} status - Delivery status ('queued' | 'sent' | 'delivered' | 'failed')
- * @property {string} to
- */
-
-/**
- * The subset of the Twilio client this service uses.
+ * The subset of the Twilio client this service uses. Kept structural so tests can
+ * substitute a stub without constructing a real client.
  * @typedef {Object} TwilioClient
  * @property {{ create: (message: TwilioMessage) => Promise<SentMessage> }} messages
  */
@@ -72,7 +62,12 @@ class Notifications {
         };
 
         if (mediaUrl) {
-            message.mediaUrl = mediaUrl;
+            // The SDK types this as an array. A bare string also reaches Twilio
+            // intact (serialize.map passes scalars through), and with the
+            // client's `arrayFormat: 'repeat'` a single-element array encodes to
+            // the identical body — so this matches the contract without
+            // changing the request.
+            message.mediaUrl = [mediaUrl];
         }
 
         return await withRetry(
