@@ -222,7 +222,7 @@ describe('AuthenticationService', () => {
 
                     await expect(
                         authenticationService.authenticate({ displayName, membershipType }),
-                    ).rejects.toThrow(/no refresh_token/);
+                    ).rejects.toThrow(/Unable to refresh/);
                     expect(destinyService.getAccessTokenFromRefreshToken).not.toHaveBeenCalled();
                 });
             });

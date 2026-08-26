@@ -1,5 +1,6 @@
 // @ts-check
 import { z } from 'zod';
+import log from '../helpers/log.js';
 
 /** @typedef {import('../users/user.service.js').User} User */
 
@@ -163,9 +164,14 @@ class AuthenticationService {
                  * trades an opaque remote error for a clear local one.
                  */
                 if (!refreshToken) {
-                    throw new Error(
-                        'Cannot refresh the Bungie token: the stored record has no refresh_token.',
+                    // The handler returns `message` verbatim to the client, so the
+                    // field-level detail stays in the log.
+                    log.warn(
+                        { userId: user.id },
+                        'Stored Bungie token has no refresh_token; cannot refresh.',
                     );
+
+                    throw new Error('Unable to refresh Bungie authentication.');
                 }
 
                 const token =
