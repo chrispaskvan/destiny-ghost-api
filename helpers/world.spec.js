@@ -1,7 +1,7 @@
 /**
  * World Model Tests
  */
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ZipEntry, createZipArchiveSync } from 'node:zlib';
@@ -157,6 +157,38 @@ describe('updateManifest archive extraction', () => {
         expect(existsSync(join(temporaryDirectory, 'emptydir'))).toBe(false);
         expect(existsSync(join(temporaryDirectory, 'world.content.zip'))).toBe(false);
         expect(run).toHaveBeenCalled();
+    });
+
+    it('should skip entries whose basename escapes the output directory', async () => {
+        const archive = Buffer.concat([
+            ...createZipArchiveSync([
+                ZipEntry.createSync('nested/..', Buffer.from('escapes')),
+                ZipEntry.createSync('.', Buffer.from('current')),
+                ZipEntry.createSync('world.content', Buffer.from('SQLite format 3\0DATA')),
+            ]),
+        ]);
+
+        vi.stubGlobal(
+            'fetch',
+            vi.fn(async () => new Response(archive)),
+        );
+
+        const world = new World({ pool: { run: vi.fn().mockResolvedValue([[], []]) } });
+
+        world.directory = temporaryDirectory;
+
+        const manifest = {
+            mobileWorldContentPaths: { en: '/common/sqlite/en/world.content' },
+        };
+
+        // Without the guard the hostile entries resolve to a directory and the
+        // whole update fails with EISDIR before reaching world.content.
+        await expect(world.updateManifest(manifest)).resolves.toEqual(manifest);
+
+        expect(readFileSync(join(temporaryDirectory, 'world.content')).toString()).toEqual(
+            'SQLite format 3\0DATA',
+        );
+        expect(readdirSync(temporaryDirectory)).toEqual(['world.content']);
     });
 
     it('should reject and still delete the archive when the download is not a zip', async () => {

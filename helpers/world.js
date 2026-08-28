@@ -166,11 +166,20 @@ class World {
                         continue;
                     }
 
-                    const destination = join(outputPath, basename(entry.name));
+                    const fileName = basename(entry.name);
+
+                    // basename() strips traversal, but still returns '.' or '..' for
+                    // names like `nested/..`, which resolve to a directory and would
+                    // fail the whole update with EISDIR.
+                    if (fileName === '' || fileName === '.' || fileName === '..') {
+                        log.warn({ entry: entry.name }, 'Skipping unsafe archive entry');
+
+                        continue;
+                    }
 
                     await pipeline(
                         await zipFile.stream(entry.name),
-                        createWriteStream(destination),
+                        createWriteStream(join(outputPath, fileName)),
                     );
                 }
             } finally {
