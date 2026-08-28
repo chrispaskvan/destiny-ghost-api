@@ -98,6 +98,8 @@ Node version is pinned by `.nvmrc` (`nvm use`) and `engines` requires Node 26.x 
 
 `.husky/post-commit` and `.husky/post-checkout` rebuild a [graphify](https://github.com/Graphify-Labs/graphify) knowledge graph in the gitignored `.graphify/`. Both exit silently when that directory is absent, so they are a no-op unless you opt in by building a graph. They need an interpreter that can import `graphify`, `numpy`, and `tree_sitter` — resolved from `GRAPHIFY_PYTHON_BIN`, then `.graphify/.graphify_python` (written by every graphify run), then `PATH`. Note that `graphify hook install` regenerates both hooks and drops the `.graphify` output path along with the rest of these changes.
 
+`.gitattributes` assigns `merge=graphify` to `.graphify/graph.json`. That driver is not registered by cloning — it needs `git config merge.graphify.driver "<python> -m graphify merge-driver %O %A %B"` locally, which `graphify hook install` sets up. Nothing breaks without it: `.graphify/` is gitignored here, so the attribute matches no tracked file and stays inert unless you start committing graph outputs.
+
 ## Working Style
 
 These are values, not rules. They describe what good contributions look like here:

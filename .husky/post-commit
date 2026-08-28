@@ -51,8 +51,19 @@ if [ -z "$CHANGED" ]; then
     exit 0
 fi
 
-# Skip when only $GRAPHIFY_OUT/ artifacts changed (avoids rebuild loop when graph outputs are tracked in git)
-_NON_GRAPH=$(echo "$CHANGED" | grep -v "^${GRAPHIFY_OUT%/}/" || true)
+# Skip when only $GRAPHIFY_OUT/ artifacts changed (avoids rebuild loop when graph
+# outputs are tracked in git). Matched as a literal prefix rather than a regex:
+# the default .graphify begins with a dot, which grep would read as "any
+# character", so a path like xgraphify/ would be filtered out too.
+_GFY_OUT_PREFIX="${GRAPHIFY_OUT%/}/"
+# Prefix stripping rather than `case`: macOS /bin/sh is bash 3.2, whose parser
+# ends a $( ) substitution at the first unbalanced `)` -- a case pattern's.
+_NON_GRAPH=$(printf '%s\n' "$CHANGED" | while IFS= read -r _f; do
+    [ -n "$_f" ] || continue
+    if [ "${_f#"$_GFY_OUT_PREFIX"}" = "$_f" ]; then
+        printf '%s\n' "$_f"
+    fi
+done) || true
 if [ -z "$_NON_GRAPH" ]; then
     exit 0
 fi
