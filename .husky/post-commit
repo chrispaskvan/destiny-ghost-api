@@ -23,6 +23,15 @@ if [ -n "${WINDIR:-}" ] || [ -n "${MSYSTEM:-}" ]; then
     export GRAPHIFY_MAX_WORKERS="${GRAPHIFY_MAX_WORKERS:-1}"
 fi
 
+# Only run if the output dir exists (graph has been built before). Keeps this
+# tracked hook a silent no-op for anyone on the team who does not use graphify,
+# and it goes first deliberately: everything below shells out to git, which the
+# template itself notes costs 1s+ per exec on AV-scanned machines. A `test -d`
+# is free by comparison, so non-users pay nothing on every commit.
+if [ ! -d "$GRAPHIFY_OUT" ]; then
+    exit 0
+fi
+
 # Skip during rebase/merge/cherry-pick to avoid blocking --continue with unstaged changes
 # git exports GIT_DIR to hooks; the rev-parse fallback only runs when invoked by
 # hand (each git exec costs 1s+ on AV-scanned Windows machines).
@@ -37,12 +46,6 @@ GIT_DIR=${GIT_DIR:-$(git rev-parse --git-dir 2>/dev/null)}
 _GFY_GITDIR=$(cd "$(git rev-parse --git-dir 2>/dev/null)" 2>/dev/null && pwd)
 _GFY_COMMONDIR=$(cd "$(git rev-parse --git-common-dir 2>/dev/null)" 2>/dev/null && pwd)
 if [ -n "$_GFY_COMMONDIR" ] && [ "$_GFY_GITDIR" != "$_GFY_COMMONDIR" ]; then
-    exit 0
-fi
-
-# Only run if the output dir exists (graph has been built before). Keeps this
-# tracked hook a silent no-op for anyone on the team who does not use graphify.
-if [ ! -d "$GRAPHIFY_OUT" ]; then
     exit 0
 fi
 
