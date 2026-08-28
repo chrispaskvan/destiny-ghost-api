@@ -94,6 +94,10 @@ pnpm start:dev   # run locally (requires .env)
 
 Node version is pinned by `.nvmrc` (`nvm use`) and `engines` requires Node 26.x with pnpm 10+.
 
+### Knowledge graph hooks (optional)
+
+`.husky/post-commit` and `.husky/post-checkout` rebuild a [graphify](https://github.com/Graphify-Labs/graphify) knowledge graph in the gitignored `.graphify/`. Both exit silently when that directory is absent, so they are a no-op unless you opt in by building a graph. They need an interpreter that can import `graphify`, `numpy`, and `tree_sitter` — resolved from `GRAPHIFY_PYTHON_BIN`, then `.graphify/.graphify_python` (written by every graphify run), then `PATH`. Note that `graphify hook install` regenerates both hooks and drops the `.graphify` output path along with the rest of these changes.
+
 ## Working Style
 
 These are values, not rules. They describe what good contributions look like here:
