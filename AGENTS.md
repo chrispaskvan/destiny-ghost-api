@@ -56,6 +56,7 @@ Conventions you'll see everywhere and should follow:
 * **JSDoc** on modules, classes, and public methods. `pnpm typecheck` runs `tsc --noEmit` against `jsconfig.json`, but `checkJs` is off — only files with a `// @ts-check` pragma are type-checked (e.g., `users/user.service.js`). No TypeScript source files.
 * **`StatusCodes` from `http-status-codes`** instead of numeric literals.
 * **`log` from `helpers/log.js`** (Pino) — never `console.*`.
+* **Error messages are private by default.** The global handler (`loaders/error.middleware.js`) replies with the status's reason phrase and logs the real message, so a `throw` can say whatever is useful for debugging. To send a message to the client, set `expose = true` on the error (the `http-errors` convention) and write one that names no internal concept. See [the ADR](./adr-files/client-safe-error-messages.md).
 * **Zod** for input validation and schemas.
 * **Destructuring-heavy** style, `async/await` over promise chains, arrow functions with parens as-needed.
 

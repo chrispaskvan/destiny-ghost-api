@@ -1,11 +1,9 @@
 import { existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { StatusCodes } from 'http-status-codes';
 
-import DestinyError from '../destiny/destiny.error.js';
-import ResponseError from '../helpers/response.error.js';
 import Routes from './routes.js';
+import errorMiddleware from './error.middleware.js';
 import expressLoader from './express.js';
 import hook from '../helpers/performance.js';
 import log from '../helpers/log.js';
@@ -78,44 +76,7 @@ const loaders = {
             });
         });
 
-        app.use((err, _req, res, next) => {
-            const { code, message, status, statusCode, statusText } = err;
-
-            log.error(err);
-
-            if (!res.headersSent) {
-                if (err instanceof DestinyError) {
-                    res.status(StatusCodes.NOT_FOUND).json({
-                        errors: [
-                            {
-                                code,
-                                message,
-                                status,
-                            },
-                        ],
-                    });
-                } else if (err instanceof ResponseError) {
-                    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-                        errors: [
-                            {
-                                status,
-                                statusText,
-                            },
-                        ],
-                    });
-                } else {
-                    res.status(statusCode ?? StatusCodes.INTERNAL_SERVER_ERROR).json({
-                        errors: [
-                            {
-                                message,
-                            },
-                        ],
-                    });
-                }
-            } else {
-                next(err);
-            }
-        });
+        app.use(errorMiddleware);
     },
 };
 
