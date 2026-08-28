@@ -131,9 +131,15 @@ class World {
             return Promise.resolve(manifest);
         }
 
+        // Runs from finally blocks and catch handlers, so it must never throw —
+        // a failure here would mask the error that actually aborted the update.
         const cleanupFile = path => {
-            if (existsSync(path)) {
-                unlinkSync(path);
+            try {
+                if (existsSync(path)) {
+                    unlinkSync(path);
+                }
+            } catch (err) {
+                log.warn({ err, path }, 'Failed to remove the temporary archive');
             }
         };
 
@@ -183,7 +189,14 @@ class World {
                     );
                 }
             } finally {
-                await zipFile?.close();
+                try {
+                    await zipFile?.close();
+                } catch (err) {
+                    // A failed close must not skip the cleanup below, nor replace
+                    // the error that actually aborted the extraction.
+                    log.warn({ err }, 'Failed to close the manifest archive');
+                }
+
                 cleanupFile(zipPath);
             }
         };

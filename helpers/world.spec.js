@@ -1,10 +1,10 @@
 /**
  * World Model Tests
  */
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ZipEntry, createZipArchiveSync } from 'node:zlib';
+import { ZipEntry, ZipFile, createZipArchiveSync } from 'node:zlib';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import World from './world.js';
 import itif from './itif.js';
@@ -122,6 +122,7 @@ describe('updateManifest archive extraction', () => {
 
     afterEach(() => {
         vi.unstubAllGlobals();
+        vi.restoreAllMocks();
         rmSync(temporaryDirectory, { recursive: true, force: true });
     });
 
@@ -189,6 +190,54 @@ describe('updateManifest archive extraction', () => {
             'SQLite format 3\0DATA',
         );
         expect(readdirSync(temporaryDirectory)).toEqual(['world.content']);
+    });
+
+    it('should delete the archive and surface the original error when close fails', async () => {
+        const archive = Buffer.concat([
+            ...createZipArchiveSync([
+                ZipEntry.createSync('world.content', Buffer.from('SQLite format 3\0DATA')),
+            ]),
+        ]);
+
+        vi.stubGlobal(
+            'fetch',
+            vi.fn(async () => new Response(archive)),
+        );
+
+        // ZipFile.open() resolves to an internal subclass instance whose methods are
+        // not on ZipFile.prototype, so the spies have to target the real prototype.
+        const probePath = join(temporaryDirectory, 'probe.zip');
+
+        writeFileSync(probePath, archive);
+
+        const probe = await ZipFile.open(probePath);
+        const zipPrototype = Object.getPrototypeOf(probe);
+        const close = zipPrototype.close;
+
+        await probe.close();
+        rmSync(probePath);
+
+        vi.spyOn(zipPrototype, 'stream').mockRejectedValue(new Error('stream failed'));
+        // Close for real before throwing, otherwise the handle leaks and vitest hangs.
+        vi.spyOn(zipPrototype, 'close').mockImplementation(async function failingClose() {
+            await close.call(this);
+
+            throw new Error('close failed');
+        });
+
+        const world = new World({ pool: { run: vi.fn() } });
+
+        world.directory = temporaryDirectory;
+
+        // The close failure must not replace the error that aborted extraction...
+        await expect(
+            world.updateManifest({
+                mobileWorldContentPaths: { en: '/common/sqlite/en/world.content' },
+            }),
+        ).rejects.toThrow('stream failed');
+
+        // ...nor skip the cleanup that follows it.
+        expect(existsSync(join(temporaryDirectory, 'world.content.zip'))).toBe(false);
     });
 
     it('should reject and still delete the archive when the download is not a zip', async () => {
