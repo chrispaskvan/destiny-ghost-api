@@ -1,8 +1,11 @@
 /**
  * World Model Tests
  */
-import { existsSync } from 'node:fs';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { ZipEntry, createZipArchiveSync } from 'node:zlib';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import World from './world.js';
 import itif from './itif.js';
 import { postmasterHash } from '../destiny/destiny.constants.js';
@@ -102,6 +105,77 @@ describe('updateManifest path safety', () => {
         const result = await w.updateManifest(manifest);
 
         expect(result).toEqual(manifest);
+    });
+});
+
+describe('updateManifest archive extraction', () => {
+    let temporaryDirectory;
+
+    beforeEach(async () => {
+        const { existsSync: actualExistsSync } = await vi.importActual('node:fs');
+
+        // The suite above pins existsSync to true; these tests need the real thing.
+        vi.mocked(existsSync).mockImplementation(actualExistsSync);
+
+        temporaryDirectory = mkdtempSync(join(tmpdir(), 'world-unzip-'));
+    });
+
+    afterEach(() => {
+        vi.unstubAllGlobals();
+        rmSync(temporaryDirectory, { recursive: true, force: true });
+    });
+
+    it('should write every file entry, flatten paths, and delete the archive', async () => {
+        const archive = Buffer.concat([
+            ...createZipArchiveSync([
+                ZipEntry.createSync('world.content', Buffer.from('SQLite format 3\0DATA')),
+                ZipEntry.createSync('nested/dir/extra.txt', Buffer.from('extra')),
+                ZipEntry.createSync('emptydir/', Buffer.alloc(0)),
+            ]),
+        ]);
+
+        vi.stubGlobal(
+            'fetch',
+            vi.fn(async () => new Response(archive)),
+        );
+
+        const run = vi.fn().mockResolvedValue([[], []]);
+        const world = new World({ pool: { run } });
+
+        world.directory = temporaryDirectory;
+
+        const manifest = {
+            mobileWorldContentPaths: { en: '/common/sqlite/en/world.content' },
+        };
+
+        await expect(world.updateManifest(manifest)).resolves.toEqual(manifest);
+
+        expect(readFileSync(join(temporaryDirectory, 'world.content')).toString()).toEqual(
+            'SQLite format 3\0DATA',
+        );
+        expect(readFileSync(join(temporaryDirectory, 'extra.txt')).toString()).toEqual('extra');
+        expect(existsSync(join(temporaryDirectory, 'emptydir'))).toBe(false);
+        expect(existsSync(join(temporaryDirectory, 'world.content.zip'))).toBe(false);
+        expect(run).toHaveBeenCalled();
+    });
+
+    it('should reject and still delete the archive when the download is not a zip', async () => {
+        vi.stubGlobal(
+            'fetch',
+            vi.fn(async () => new Response(Buffer.from('definitely not a zip'))),
+        );
+
+        const world = new World({ pool: { run: vi.fn() } });
+
+        world.directory = temporaryDirectory;
+
+        await expect(
+            world.updateManifest({
+                mobileWorldContentPaths: { en: '/common/sqlite/en/world.content' },
+            }),
+        ).rejects.toThrow();
+
+        expect(existsSync(join(temporaryDirectory, 'world.content.zip'))).toBe(false);
     });
 });
 
