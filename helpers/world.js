@@ -4,7 +4,7 @@
 import { readdirSync, statSync, existsSync, createWriteStream, unlinkSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
-import { open } from 'yauzl';
+import { ZipFile } from 'node:zlib';
 import log from './log.js';
 import sanitizeDirectory from './sanitize-directory.js';
 
@@ -131,9 +131,15 @@ class World {
             return Promise.resolve(manifest);
         }
 
+        // Runs from finally blocks and catch handlers, so it must never throw —
+        // a failure here would mask the error that actually aborted the update.
         const cleanupFile = path => {
-            if (existsSync(path)) {
-                unlinkSync(path);
+            try {
+                if (existsSync(path)) {
+                    unlinkSync(path);
+                }
+            } catch (err) {
+                log.warn({ err, path }, 'Failed to remove the temporary archive');
             }
         };
 
@@ -154,47 +160,45 @@ class World {
             }
         };
 
-        const unzipFile = (zipPath, outputPath) => {
-            return new Promise((resolve, reject) => {
-                open(zipPath, { lazyEntries: true }, (err, zipFile) => {
-                    if (err) {
-                        cleanupFile(zipPath);
-                        return reject(err);
+        const unzipFile = async (zipPath, outputPath) => {
+            let zipFile;
+
+            try {
+                zipFile = await ZipFile.open(zipPath);
+
+                // Directory and symlink entries are both excluded by isFile.
+                for (const [, entry] of zipFile.entriesSync()) {
+                    if (!entry.isFile) {
+                        continue;
                     }
 
-                    zipFile.readEntry();
+                    const fileName = basename(entry.name);
 
-                    zipFile.on('entry', entry => {
-                        zipFile.openReadStream(entry, (err, readStream) => {
-                            if (err) {
-                                cleanupFile(zipPath);
-                                return reject(err);
-                            }
+                    // basename() strips traversal, but still returns '.' or '..' for
+                    // names like `nested/..`, which resolve to a directory and would
+                    // fail the whole update with EISDIR.
+                    if (fileName === '' || fileName === '.' || fileName === '..') {
+                        log.warn({ entry: entry.name }, 'Skipping unsafe archive entry');
 
-                            const sanitizedFileName = basename(entry.fileName);
-                            const writeStream = createWriteStream(
-                                `${outputPath}/${sanitizedFileName}`,
-                            );
+                        continue;
+                    }
 
-                            readStream.pipe(writeStream);
+                    await pipeline(
+                        await zipFile.stream(entry.name),
+                        createWriteStream(join(outputPath, fileName)),
+                    );
+                }
+            } finally {
+                try {
+                    await zipFile?.close();
+                } catch (err) {
+                    // A failed close must not skip the cleanup below, nor replace
+                    // the error that actually aborted the extraction.
+                    log.warn({ err }, 'Failed to close the manifest archive');
+                }
 
-                            writeStream.on('finish', () => {
-                                zipFile.readEntry();
-                            });
-
-                            writeStream.on('error', err => {
-                                cleanupFile(zipPath);
-                                reject(err);
-                            });
-                        });
-                    });
-
-                    zipFile.on('end', () => {
-                        cleanupFile(zipPath);
-                        resolve();
-                    });
-                });
-            });
+                cleanupFile(zipPath);
+            }
         };
 
         try {
@@ -207,7 +211,7 @@ class World {
 
             return manifest;
         } catch (err) {
-            log.error('Error updating manifest:', err);
+            log.error({ err }, 'Error updating manifest');
 
             throw err;
         }
