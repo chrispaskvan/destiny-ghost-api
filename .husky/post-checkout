@@ -155,10 +155,13 @@ export GRAPHIFY_REBUILD_LOG="$_GRAPHIFY_LOG"
 echo "[graphify] Branch switched - launching background rebuild (log: $_GRAPHIFY_LOG)"
 "$GRAPHIFY_PYTHON" -c "import os, subprocess, sys
 _src = '''
-from graphify.watch import _rebuild_code, _apply_resource_limits
 from pathlib import Path
 import os, signal, sys, threading
 try:
+    # Imported inside the try, as post-commit does: a broken or wrong-arch
+    # install raises here, and outside the try it escaped as a bare traceback
+    # in the log instead of the handled one-line message below.
+    from graphify.watch import _rebuild_code, _apply_resource_limits
     _apply_resource_limits()
     _timeout = int(os.environ.get('GRAPHIFY_REBUILD_TIMEOUT', '600'))
     if _timeout > 0:
