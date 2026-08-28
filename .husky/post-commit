@@ -158,7 +158,9 @@ if [ -z "$GRAPHIFY_PYTHON" ]; then
     fi
 fi
 
-export GRAPHIFY_CHANGED="$CHANGED"
+# The filtered list, not $CHANGED: if graph outputs are ever tracked, the
+# rebuild should not be handed its own artifacts as changed_paths.
+export GRAPHIFY_CHANGED="$_NON_GRAPH"
 
 # Run the rebuild detached so git commit returns immediately. Full-repo rebuilds
 # can take hours; blocking the post-commit hook stalls the shell. The Python
