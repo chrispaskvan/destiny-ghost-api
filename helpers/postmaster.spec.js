@@ -12,14 +12,16 @@ vi.mock('./retry.js', () => ({
 
 // Mock nodemailer
 vi.mock('nodemailer', () => ({
-    createTransport: vi.fn(() => ({
-        sendMail: vi.fn(options =>
-            Promise.resolve({
-                accepted: [options.to],
-                messageId: 'mock-message-id',
-            }),
-        ),
-    })),
+    default: {
+        createTransport: vi.fn(() => ({
+            sendMail: vi.fn(options =>
+                Promise.resolve({
+                    accepted: [options.to],
+                    messageId: 'mock-message-id',
+                }),
+            ),
+        })),
+    },
 }));
 
 const postmaster = new Postmaster();

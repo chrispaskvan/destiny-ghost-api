@@ -1,4 +1,4 @@
-import { createTransport } from 'nodemailer';
+import nodemailer from 'nodemailer';
 import configuration from './config.js';
 import { withRetry } from './retry.js';
 
@@ -12,7 +12,7 @@ const SMTP_CONNECTION_ERRORS = new Set(['ECONNECTION', 'ETIMEDOUT', 'EHOSTUNREAC
  */
 class Postmaster {
     constructor() {
-        this.transporter = createTransport(smtpConfiguration);
+        this.transporter = nodemailer.createTransport(smtpConfiguration);
     }
 
     /**
