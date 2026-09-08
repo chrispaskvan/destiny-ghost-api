@@ -378,7 +378,7 @@ class TwilioController {
             return {};
         }
 
-        responseCookies = { isRegistered: true, ...responseCookies };
+        responseCookies = { isRegistered: 'true', ...responseCookies };
         // SmsStatus is a standard Twilio field on every inbound SMS/MMS webhook,
         // even though bodySchema (twilio.routes.js) doesn't validate it (SmsSid is).
         await this.users.addUserMessage(
@@ -444,7 +444,10 @@ class TwilioController {
                 // the raw manifest item - see queryItem()'s branches.
                 const item = /** @type {ItemResult} */ (items[0]);
 
-                responseCookies = { itemHash: item.itemHash, ...responseCookies };
+                responseCookies = {
+                    itemHash: item.itemHash !== undefined ? String(item.itemHash) : undefined,
+                    ...responseCookies,
+                };
                 item.itemCategory = (item.itemCategory ?? '').replace(/Weapon/g, '').trim();
 
                 return {
