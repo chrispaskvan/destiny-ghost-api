@@ -93,6 +93,23 @@ function signedRequest({ body, cookie }) {
     return req;
 }
 
+/**
+ * Twilio's Messaging status-callback payload is smaller than an inbound
+ * message's - no `Body`, `NumMedia`, `SmsMessageSid`, or
+ * `MessagingServiceSid` - matching `statusCallbackBodySchema` in
+ * twilio.routes.js.
+ */
+function signedStatusBody(overrides = {}) {
+    return {
+        MessageSid: sid('SM'),
+        SmsSid: sid('SM'),
+        AccountSid: sid('AC'),
+        From: '+15005550006',
+        To: '+15005550001',
+        ...overrides,
+    };
+}
+
 function getStatusCallbackUrl() {
     return `${process.env.PROTOCOL}://${process.env.DOMAIN}/twilio/destiny/s`;
 }
@@ -607,7 +624,7 @@ describe('TwilioRouter', () => {
                         phoneNumber: '+15005550001',
                     });
 
-                    const body = signedBody({ MessageStatus: 'delivered' });
+                    const body = signedStatusBody({ MessageStatus: 'delivered' });
                     const req = signedStatusRequest({ body });
 
                     res.on('end', () => {
@@ -630,7 +647,7 @@ describe('TwilioRouter', () => {
         describe('when the signature is invalid', () => {
             it('should reject the request without recording anything', () =>
                 new Promise((done, reject) => {
-                    const body = signedBody({ MessageStatus: 'delivered' });
+                    const body = signedStatusBody({ MessageStatus: 'delivered' });
                     const req = signedStatusRequest({ body, signature: 'not-a-valid-signature' });
 
                     res.on('end', () => {
@@ -650,7 +667,7 @@ describe('TwilioRouter', () => {
         describe('when the payload has no MessageStatus or SmsStatus', () => {
             it('should reply with empty TwiML without looking up or recording a message', () =>
                 new Promise((done, reject) => {
-                    const body = signedBody();
+                    const body = signedStatusBody();
                     const req = signedStatusRequest({ body });
 
                     res.on('end', () => {

@@ -68,6 +68,22 @@ const routes = ({
         NumMedia: z.coerce.number().int().min(0),
     });
 
+    /**
+     * Twilio's Messaging status-callback webhook (`/destiny/s`) carries a
+     * different, smaller payload than an inbound message (`/destiny/r`) - it
+     * has no `Body`, `NumMedia`, `SmsMessageSid`, or `MessagingServiceSid`.
+     * Validating it against `bodySchema` would reject real status callbacks.
+     */
+    const statusCallbackBodySchema = z.object({
+        MessageSid: z.string().length(34),
+        SmsSid: z.string().length(34).optional(),
+        AccountSid: z.string().length(34),
+        From: z.string(),
+        To: z.string(),
+        MessageStatus: z.string().optional(),
+        SmsStatus: z.string().optional(),
+    });
+
     twilioRouter.route('/destiny/r').post(
         (req, res, next) => {
             const rawHeader = req.headers['x-twilio-signature'];
@@ -159,7 +175,7 @@ const routes = ({
         const notificationType = query['notification-type'];
 
         try {
-            bodySchema.parse(body);
+            statusCallbackBodySchema.parse(body);
         } catch (err) {
             const message = err instanceof z.ZodError ? err.issues[0].message : 'Bad Request';
 
