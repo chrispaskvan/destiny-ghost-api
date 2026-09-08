@@ -1,3 +1,4 @@
+// @ts-check
 import Bottleneck from 'bottleneck';
 import configuration from './config.js';
 import log from './log.js';

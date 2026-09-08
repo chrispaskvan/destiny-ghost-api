@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * A module for importing the Application Insights client.
  *

@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * @returns {number} - The current epoch time in seconds
  */

@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Convert a date string to a Temporal.Instant.
  * Falls back to the Unix epoch for invalid or missing values.
