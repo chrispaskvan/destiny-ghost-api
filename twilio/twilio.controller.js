@@ -151,9 +151,9 @@ class TwilioController {
                 itemCategory: `${tierTypeName} ${damageType ? `${damageType} ` : ''}${itemCategory}${
                     filteredCategories.length < 2 ? `${itemTypeDisplayName ?? ''}` : ''
                 }`,
-                icon: `https://www.bungie.net${icon ?? ''}`,
+                icon: icon ? `https://www.bungie.net${icon}` : undefined,
                 itemHash: hash,
-                itemName: name,
+                itemName: name ?? '',
                 itemType,
             },
         ];
@@ -379,8 +379,8 @@ class TwilioController {
         }
 
         responseCookies = { isRegistered: true, ...responseCookies };
-        // SmsSid/SmsStatus are standard Twilio fields on every inbound SMS/MMS
-        // webhook, even though bodySchema (twilio.routes.js) doesn't validate them.
+        // SmsStatus is a standard Twilio field on every inbound SMS/MMS webhook,
+        // even though bodySchema (twilio.routes.js) doesn't validate it (SmsSid is).
         await this.users.addUserMessage(
             /** @type {Omit<import('../users/user.service.js').UserMessage, 'id'>} */ (body),
         );
@@ -483,13 +483,14 @@ class TwilioController {
         const user = await this.users.getUserByPhoneNumber(phoneNumber);
 
         if (user) {
-            // FIXME: this webhook's payload carries MessageStatus, not SmsStatus
-            // (destructured as `status` above) - the stored document may end up
-            // without the SmsStatus field that deleteUserMessages() queries on.
-            // Verify against a real Twilio status-callback payload before
-            // trusting this cast.
+            // This webhook's payload carries MessageStatus (destructured as
+            // `status` above), not SmsStatus - map it explicitly so stored
+            // records stay eligible for deleteUserMessages()'s SmsStatus query.
             await this.users.addUserMessage(
-                /** @type {Omit<import('../users/user.service.js').UserMessage, 'id'>} */ (message),
+                /** @type {Omit<import('../users/user.service.js').UserMessage, 'id'>} */ ({
+                    ...message,
+                    SmsStatus: status,
+                }),
             );
             if (claimCheck) {
                 await ClaimCheck.updatePhoneNumber(claimCheck, phoneNumber, status);

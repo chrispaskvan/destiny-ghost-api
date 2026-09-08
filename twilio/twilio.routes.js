@@ -70,7 +70,8 @@ const routes = ({
 
     twilioRouter.route('/destiny/r').post(
         (req, res, next) => {
-            const header = /** @type {string} */ (req.headers['x-twilio-signature'] ?? '');
+            const rawHeader = req.headers['x-twilio-signature'];
+            const header = Array.isArray(rawHeader) ? (rawHeader[0] ?? '') : (rawHeader ?? '');
             const reconstructedUrl = `${process.env.PROTOCOL}://${process.env.DOMAIN}/twilio/destiny/r`;
 
             if (!validateRequest(authToken, header, reconstructedUrl, req.body)) {
@@ -151,7 +152,8 @@ const routes = ({
     );
 
     twilioRouter.route('/destiny/s').post(async (req, res) => {
-        const header = /** @type {string} */ (req.headers['x-twilio-signature'] ?? '');
+        const rawHeader = req.headers['x-twilio-signature'];
+        const header = Array.isArray(rawHeader) ? (rawHeader[0] ?? '') : (rawHeader ?? '');
         const { body, query = {}, originalUrl } = req;
         const claimCheck = query['claim-check-number'];
         const notificationType = query['notification-type'];
