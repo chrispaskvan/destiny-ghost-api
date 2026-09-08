@@ -105,7 +105,7 @@ Node version is pinned by `.nvmrc` (`nvm use`) and `engines` requires Node 26.x 
 These are values, not rules. They describe what good contributions look like here:
 
 * **Surface your thinking.** If a request is ambiguous or you see multiple reasonable interpretations, name them rather than picking silently. If a simpler approach exists than what was asked for, propose it.
-* **Solve the actual problem, minimally.** No speculative abstractions, no configurability nobody asked for, no error handling for impossible states. The best diff is the one where every changed line traces to the request.
+* **Solve the actual problem, minimally.** No speculative abstractions, no configurability nobody asked for, no error handling or validation for scenarios that can't happen — trust internal code and framework guarantees. The best diff is the one where every changed line traces to the request.
 * **Keep diffs surgical.** Match the surrounding style even where you'd choose differently. Mention unrelated dead code or improvement opportunities instead of folding them into the current change — they're often welcome, but as their own change.
 * **Define done before you start.** Turn tasks into verifiable goals ("write a failing test, make it pass") and prove your work with `pnpm test`, `pnpm lint`, and `pnpm typecheck` before calling it complete.
 * **Think out loud about tradeoffs.** This is a project that values learning — a well-reasoned unconventional approach beats an unexamined conventional one.
