@@ -271,9 +271,8 @@ class UserController {
     }
 
     /**
-     * @typedef {Object} CurrentUserResult
-     * @property {string} [ETag]
-     * @property {UserResponse} [user]
+     * ETag and user are always set together, never one without the other.
+     * @typedef {{ ETag: string, user: UserResponse } | { ETag?: undefined, user?: undefined }} CurrentUserResult
      */
 
     /**
@@ -475,10 +474,13 @@ class UserController {
         await this.users.updateUser(/** @type {User} */ (/** @type {unknown} */ (user)));
     }
     /**
-     * Sign In with Bungie and PSN/XBox Live
+     * Sign In with Bungie and PSN/XBox Live. The incoming displayName is
+     * never read — it's immediately overwritten below from the Bungie
+     * response — so it's typed loosely to match the OAuth-callback caller,
+     * which doesn't have one yet.
      * @param {Object} param0
      * @param {string} param0.code
-     * @param {string} param0.displayName
+     * @param {string} [param0.displayName]
      * @returns {Promise<MutableUser | undefined>}
      */
     async signIn({ code, displayName }) {
