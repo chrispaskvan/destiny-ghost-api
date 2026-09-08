@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Twilio inbound and outbound request URLs. See the article
  * at {@link https://twilio.radicalskills.com/projects/getting-started-with-twiml/1.html}
@@ -23,6 +24,19 @@ const {
     twilio: { attributes, authToken },
 } = configuration;
 
+/**
+ * @typedef {Object} TwilioRoutesOptions
+ * @property {unknown} authenticationController
+ * @property {import('../authentication/authentication.service.js').default} authenticationService
+ * @property {import('../destiny2/destiny2.service.js').default} destinyService
+ * @property {import('./mms.service.js').default} mmsService
+ * @property {import('../users/user.service.js').default} userService
+ * @property {import('../helpers/world2.js').default} worldRepository
+ */
+
+/**
+ * @param {TwilioRoutesOptions} options
+ */
 const routes = ({
     authenticationController,
     authenticationService,
@@ -56,7 +70,7 @@ const routes = ({
 
     twilioRouter.route('/destiny/r').post(
         (req, res, next) => {
-            const header = req.headers['x-twilio-signature'];
+            const header = /** @type {string} */ (req.headers['x-twilio-signature'] ?? '');
             const reconstructedUrl = `${process.env.PROTOCOL}://${process.env.DOMAIN}/twilio/destiny/r`;
 
             if (!validateRequest(authToken, header, reconstructedUrl, req.body)) {
@@ -81,7 +95,9 @@ const routes = ({
 
                 return next();
             } catch (err) {
-                return res.status(StatusCodes.BAD_REQUEST).json({ error: err.issues[0].message });
+                const message = err instanceof z.ZodError ? err.issues[0].message : 'Bad Request';
+
+                return res.status(StatusCodes.BAD_REQUEST).json({ error: message });
             }
         },
         (req, res, next) => middleware.authenticateUser(req, res, next),
@@ -135,7 +151,7 @@ const routes = ({
     );
 
     twilioRouter.route('/destiny/s').post(async (req, res) => {
-        const header = req.headers['x-twilio-signature'];
+        const header = /** @type {string} */ (req.headers['x-twilio-signature'] ?? '');
         const { body, query = {}, originalUrl } = req;
         const claimCheck = query['claim-check-number'];
         const notificationType = query['notification-type'];
@@ -143,7 +159,9 @@ const routes = ({
         try {
             bodySchema.parse(body);
         } catch (err) {
-            return res.status(StatusCodes.BAD_REQUEST).json({ error: err.issues[0].message });
+            const message = err instanceof z.ZodError ? err.issues[0].message : 'Bad Request';
+
+            return res.status(StatusCodes.BAD_REQUEST).json({ error: message });
         }
 
         if (
