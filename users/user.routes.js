@@ -1,3 +1,4 @@
+// @ts-check
 import { StatusCodes } from 'http-status-codes';
 import { Router } from 'express';
 import AuthenticationMiddleWare from '../authentication/authentication.middleware.js';
@@ -5,21 +6,48 @@ import UserController from './user.controller.js';
 import csrfProtection, { generateToken } from '../helpers/csrf.middleware.js';
 import log from '../helpers/log.js';
 
+/** @typedef {import('./user.controller.js').MutableUser} MutableUser */
+
+/**
+ * Custom fields this app stores on the session. `@types/express-session`'s
+ * `SessionData` is empty by default and meant to be augmented via a `.d.ts`
+ * `declare module` block; this project has no TypeScript source files, so
+ * instead `req.session` is cast to this type at each access site.
+ * @typedef {Object} AppSessionData
+ * @property {string} [displayName]
+ * @property {number} [membershipType]
+ * @property {string} [state]
+ */
+
+/** @typedef {import('express-session').Session & AppSessionData} AppSession */
+
+/**
+ * The session shape once `authenticateUser` middleware has confirmed the
+ * request is authenticated — displayName/membershipType are guaranteed set
+ * by the sign-in flow that establishes the session in the first place.
+ * @typedef {Object} AuthenticatedSessionData
+ * @property {string} displayName
+ * @property {number} membershipType
+ */
+
 /**
  * Sign the user in by setting the session.
  *
- * @param req
- * @param res
- * @param user
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {MutableUser} user
+ * @param {import('express').NextFunction} next
  * @private
  */
 function signIn(req, res, user, next) {
     req.session.regenerate(err => {
         if (err) return next(err);
 
-        req.session.displayName = user.displayName;
-        req.session.membershipType = user.membershipType;
-        req.session.state = undefined;
+        const session = /** @type {AppSession} */ (req.session);
+
+        session.displayName = user.displayName;
+        session.membershipType = user.membershipType;
+        session.state = undefined;
 
         if (req.accepts(['json', 'html']) === 'html') {
             res.redirect(`${process.env.WEBSITE}/?auth=success`);
@@ -86,6 +114,19 @@ function signIn(req, res, user, next) {
  *          profilePicturePath:
  *            type: string
  */
+
+/**
+ * @typedef {Object} UserRoutesOptions
+ * @property {unknown} authenticationController
+ * @property {import('../destiny/destiny.service.js').default} destinyService
+ * @property {import('../notifications/notification.service.js').default} notificationService
+ * @property {import('./user.service.js').default} userService
+ * @property {import('../helpers/world2.js').default} worldRepository
+ */
+
+/**
+ * @param {UserRoutesOptions} options
+ */
 const routes = ({
     authenticationController,
     destinyService,
@@ -133,9 +174,7 @@ const routes = ({
     userRouter.route('/current').get(
         async (req, res, next) => await middleware.authenticateUser(req, res, next),
         async (req, res) => {
-            const {
-                session: { displayName, membershipType },
-            } = req;
+            const { displayName, membershipType } = /** @type {AppSessionData} */ (req.session);
 
             if (!displayName || !membershipType) {
                 return res.status(StatusCodes.NOT_FOUND).end();
@@ -200,8 +239,10 @@ const routes = ({
             try {
                 const {
                     body: { channel },
-                    session: { displayName, membershipType },
                 } = req;
+                const { displayName, membershipType } = /** @type {AuthenticatedSessionData} */ (
+                    /** @type {unknown} */ (req.session)
+                );
 
                 if (!channel || !['email', 'phone'].includes(channel)) {
                     return res
@@ -217,7 +258,7 @@ const routes = ({
 
                 return res.status(StatusCodes.ACCEPTED).end();
             } catch (err) {
-                if (err.message.includes('not found')) {
+                if (err instanceof Error && err.message.includes('not found')) {
                     return res.status(StatusCodes.BAD_REQUEST).send('User registration not found.');
                 }
 
@@ -280,8 +321,10 @@ const routes = ({
             try {
                 const {
                     body: { channel, code },
-                    session: { displayName, membershipType },
                 } = req;
+                const { displayName, membershipType } = /** @type {AuthenticatedSessionData} */ (
+                    /** @type {unknown} */ (req.session)
+                );
 
                 if (!channel || !['email', 'phone'].includes(channel)) {
                     return res
@@ -399,8 +442,8 @@ const routes = ({
     userRouter.route('/signIn/Bungie').get(async (req, res, next) => {
         const {
             query: { code, state: queryState },
-            session: { displayName, state: sessionState },
         } = req;
+        const { displayName, state: sessionState } = /** @type {AppSessionData} */ (req.session);
         const wantsHtml = req.accepts(['json', 'html']) === 'html';
 
         if (displayName) {
@@ -410,7 +453,7 @@ const routes = ({
 
             return res.status(StatusCodes.OK).json({ displayName });
         }
-        if (sessionState !== queryState) {
+        if (!sessionState || sessionState !== queryState || typeof code !== 'string' || !code) {
             if (wantsHtml) {
                 return res.redirect(`${process.env.WEBSITE}/?error=unauthorized`);
             }
@@ -421,8 +464,6 @@ const routes = ({
         const user = await userController.signIn({
             code,
             displayName,
-            queryState,
-            sessionState,
         });
         if (!user) {
             if (wantsHtml) {
@@ -512,10 +553,10 @@ const routes = ({
         (req, res, next) => middleware.authenticateUser(req, res, next),
         csrfProtection,
         async (req, res) => {
-            const {
-                body: user,
-                session: { displayName, membershipType },
-            } = req;
+            const { body: user } = req;
+            const { displayName, membershipType } = /** @type {AuthenticatedSessionData} */ (
+                /** @type {unknown} */ (req.session)
+            );
 
             if (!(user.firstName && user.lastName && user.phoneNumber && user.emailAddress)) {
                 return res.status(StatusCodes.UNPROCESSABLE_ENTITY).end();
@@ -571,8 +612,10 @@ const routes = ({
                 const {
                     body: patches,
                     headers: { 'if-match': ETag },
-                    session: { displayName, membershipType },
                 } = req;
+                const { displayName, membershipType } = /** @type {AuthenticatedSessionData} */ (
+                    /** @type {unknown} */ (req.session)
+                );
 
                 if (!ETag) {
                     return res.status(StatusCodes.PRECONDITION_REQUIRED).end();
@@ -589,10 +632,10 @@ const routes = ({
                     ? res.status(StatusCodes.NO_CONTENT).end()
                     : res.status(StatusCodes.NOT_FOUND).send('user not found');
             } catch (err) {
-                if (err.message === 'precondition failed') {
+                if (err instanceof Error && err.message === 'precondition failed') {
                     return res.status(StatusCodes.PRECONDITION_FAILED).end();
                 }
-                if (err.message === 'invalid patch') {
+                if (err instanceof Error && err.message === 'invalid patch') {
                     return res.status(StatusCodes.UNPROCESSABLE_ENTITY).end();
                 }
 

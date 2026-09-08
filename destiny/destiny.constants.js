@@ -4,7 +4,7 @@
 
 /**
  * @constant
- * @type {string}
+ * @type {number}
  * @description Postmaster Vendor Number
  */
 export const postmasterHash = 2762206170;

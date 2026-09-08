@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * A module for managing users.
  *
@@ -13,6 +14,56 @@ import { getBlob, getCode } from '../helpers/tokens.js';
 import { postmasterHash } from '../destiny/destiny.constants.js';
 import notificationTypes from '../notifications/notification.types.js';
 
+/** @typedef {import('./user.service.js').User} User */
+/** @typedef {import('./user.service.js').AnonymousUser} AnonymousUser */
+/** @typedef {import('../helpers/documents.js').CosmosDocument<User>} UserDocument */
+/** @typedef {import('rfc6902').Operation} PatchOperation */
+
+/**
+ * A version-stamped patch entry appended to a user document's edit history.
+ * @typedef {Object} VersionedPatch
+ * @property {PatchOperation[]} patch
+ * @property {number} version
+ */
+
+/**
+ * In-flight verification-code state, set only during sendCipher/decipher and
+ * not part of the persisted schema.
+ * @typedef {Object} MembershipTokens
+ * @property {string} [code]
+ * @property {string} [blob]
+ * @property {number} [timeStamp]
+ */
+
+/**
+ * @typedef {Object} Membership
+ * @property {MembershipTokens} [tokens]
+ * @property {*} [message]
+ * @property {*} [postmark]
+ */
+
+/**
+ * The user document as this controller manipulates it in practice: the
+ * persisted registered-user fields, optional anonymous-user fields (a user
+ * starts anonymous and is merged with registration data over time), plus
+ * fields set only in memory during specific flows.
+ * @typedef {Omit<Partial<User>, 'patches'> & Partial<AnonymousUser> & {
+ *   _etag?: string,
+ *   membership?: Membership,
+ *   patches?: VersionedPatch[],
+ *   version?: number,
+ * }} MutableUser
+ */
+
+/**
+ * Constructor options for UserController.
+ * @typedef {Object} UserControllerOptions
+ * @property {import('../destiny/destiny.service.js').default} destinyService
+ * @property {import('../notifications/notification.service.js').default} notificationService
+ * @property {import('./user.service.js').default} userService
+ * @property {import('../helpers/world2.js').default} worldRepository
+ */
+
 /**
  * Time To Live for Tokens
  * @type {number}
@@ -23,7 +74,10 @@ const ttl = 300;
  * User Controller Class
  */
 class UserController {
-    constructor(options = {}) {
+    /**
+     * @param {UserControllerOptions} options
+     */
+    constructor(options) {
         this.destiny = options.destinyService;
         this.notifications = options.notificationService;
         this.postmaster = new Postmaster();
@@ -39,7 +93,6 @@ class UserController {
      *
      * @param {string} code
      * @returns {string}
-     * @private
      */
     static #buildVerificationMessage(code) {
         return `Enter ${code} to verify your phone number. Up to 10 msgs/week. Msg&data rates may apply. Reply HELP for help, STOP to cancel.`;
@@ -49,7 +102,6 @@ class UserController {
      * Build the SMS text sent after successful registration.
      *
      * @returns {string}
-     * @private
      */
     static #buildWelcomeMessage() {
         return 'Welcome! Message frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to cancel.';
@@ -59,34 +111,39 @@ class UserController {
      * Get the phone number format into the Twilio standard: e164.
      * Deny phone numbers from China, North Korea, and Russia.
      *
-     * @param phoneNumber
+     * @param {string} phoneNumber
      * @returns {string}
-     * @private
      */
     static #cleanPhoneNumber(phoneNumber) {
         const cleaned = parsePhoneNumber(phoneNumber[0] === '+' ? phoneNumber : `+1${phoneNumber}`);
 
         if (!cleaned.valid || ['CN', 'KP', 'RU'].includes(cleaned.regionCode)) {
-            throw new Error('phone number is invalid', { cause: cleaned.error });
+            throw new Error('phone number is invalid', {
+                cause: 'error' in cleaned ? cleaned.error : undefined,
+            });
         }
 
-        return cleaned?.number?.e164;
+        return cleaned.number.e164;
     }
+
+    /**
+     * @typedef {Object} UserResponse
+     * @property {string} [dateRegistered]
+     * @property {string} [displayName]
+     * @property {string} [emailAddress]
+     * @property {string} [firstName]
+     * @property {string} [lastName]
+     * @property {{ rel: string, href: string }[]} links
+     * @property {{ enabled: boolean, type: string }[]} notifications
+     * @property {string} [phoneNumber]
+     * @property {string} [profilePicturePath]
+     */
 
     /**
      * Hypermedia as the Engine of Application State (HATEOAS)
      *
-     * @param dateRegistered
-     * @param displayName
-     * @param emailAddress
-     * @param firstName
-     * @param lastName
-     * @param membershipType
-     * @param notifications
-     * @param phoneNumber
-     * @param profilePicturePath
-     * @returns {{displayName: *, membershipType: *, links: [null], profilePicturePath: *}}
-     * @private
+     * @param {Pick<MutableUser, 'dateRegistered' | 'displayName' | 'emailAddress' | 'firstName' | 'lastName' | 'notifications' | 'phoneNumber' | 'profilePicturePath'>} param0
+     * @returns {UserResponse}
      */
     static #getUserResponse({
         dateRegistered,
@@ -125,6 +182,11 @@ class UserController {
         };
     }
 
+    /**
+     * @param {VersionedPatch[]} patches
+     * @param {MutableUser} user
+     * @returns {MutableUser}
+     */
     static #applyPatches(patches, user) {
         for (const { patch } of patches) {
             applyPatch(user, patch);
@@ -136,10 +198,11 @@ class UserController {
     /**
      * Allow only replace operations of mutable fields.
      *
-     * @param patches
-     * @private
+     * @param {PatchOperation[]} patches
+     * @returns {PatchOperation[]}
      */
     static #scrubOperations(patches) {
+        /** @type {Map<string, (value: unknown) => boolean>} */
         const mutableValidators = new Map([
             ['/firstName', value => typeof value === 'string'],
             ['/lastName', value => typeof value === 'string'],
@@ -151,7 +214,9 @@ class UserController {
                 return false;
             }
             if (mutableValidators.has(patch.path)) {
-                return mutableValidators.get(patch.path)(patch.value);
+                return /** @type {(value: unknown) => boolean} */ (
+                    mutableValidators.get(patch.path)
+                )(patch.value);
             }
             if (notificationEnabledPattern.test(patch.path)) {
                 return typeof patch.value === 'boolean';
@@ -166,18 +231,20 @@ class UserController {
      *
      * @param {Object} param0
      * @param {string} param0.displayName
-     * @param {string} param0.membershipType
+     * @param {number} param0.membershipType
      * @param {string} param0.channel
      * @param {string} param0.code
-     * @returns {Promise<Object>}
+     * @returns {Promise<MutableUser>}
      */
     async decipher({ displayName, membershipType, channel, code }) {
-        const user = await this.users.getUserByDisplayName(displayName, membershipType);
+        const user = /** @type {MutableUser | undefined} */ (
+            await this.users.getUserByDisplayName(displayName, membershipType)
+        );
 
         if (!user) {
             throw new Error('user not found');
         }
-        if (getEpoch() > user?.membership?.tokens?.timeStamp + ttl) {
+        if (getEpoch() > (user?.membership?.tokens?.timeStamp ?? 0) + ttl) {
             throw new Error('token expired');
         }
         if (
@@ -192,7 +259,8 @@ class UserController {
 
     /**
      * Delete inconsequential message documents for the given user.
-     * @param {Object} user
+     * @param {MutableUser} user
+     * @returns {Promise<void>}
      */
     async deleteUserMessages(user) {
         if (user?.phoneNumber) {
@@ -203,25 +271,22 @@ class UserController {
     }
 
     /**
-     * @typedef {Object} CurrentUser
-     * @property {string} ETag
-     * @property {Object} User
+     * ETag and user are always set together, never one without the other.
+     * @typedef {{ ETag: string, user: UserResponse } | { ETag?: undefined, user?: undefined }} CurrentUserResult
      */
 
     /**
      * Get current user.
-     * @param req
-     * @param res
-     * @returns {Promise<CurrentUser>}
+     * @param {string} displayName
+     * @param {number} membershipType
+     * @returns {Promise<CurrentUserResult>}
      */
     async getCurrentUser(displayName, membershipType) {
         const user = await this.users.getUserByDisplayName(displayName, membershipType);
 
-        if (user) {
-            const {
-                bungie: { access_token: accessToken },
-                _etag: ETag,
-            } = user;
+        if (user?.bungie) {
+            const { access_token: accessToken } = user.bungie;
+            const { _etag: ETag } = user;
             const bungieUser = await this.destiny.getCurrentUser(accessToken);
 
             return bungieUser
@@ -237,8 +302,8 @@ class UserController {
 
     /**
      * Check if the email address is registered to a current user.
-     * @param req
-     * @param res
+     * @param {string} emailAddress
+     * @returns {Promise<UserDocument | undefined>}
      */
     async getUserByEmailAddress(emailAddress) {
         return await this.users.getUserByEmailAddress(emailAddress);
@@ -246,8 +311,9 @@ class UserController {
 
     /**
      * Get user by id.
-     * @param req
-     * @param res
+     * @param {string} id
+     * @param {string} version
+     * @returns {Promise<MutableUser | undefined>}
      */
     async getUserById(id, version) {
         let versionNumber = parseInt(version, 10);
@@ -256,11 +322,11 @@ class UserController {
             versionNumber = 0;
         }
 
-        const user = await this.users.getUserById(id);
+        const user = /** @type {MutableUser | undefined} */ (await this.users.getUserById(id));
 
         if (user) {
             if (versionNumber) {
-                const patches = user.patches.filter(patch => patch.version <= versionNumber) || [];
+                const patches = user.patches?.filter(patch => patch.version <= versionNumber) || [];
 
                 if (patches.length > 0) {
                     const patchedUser = UserController.#applyPatches(
@@ -283,27 +349,36 @@ class UserController {
 
     /**
      * Check if the phone number is registered to a current user.
-     * @param req
-     * @param res
+     * @param {string} phoneNumber
+     * @returns {Promise<UserDocument | undefined>}
      */
     async getUserByPhoneNumber(phoneNumber) {
         return await this.users.getUserByPhoneNumber(phoneNumber);
     }
 
     /**
+     * @typedef {Object} JoinRequest
+     * @property {{ emailAddress?: string, phoneNumber?: string }} [tokens]
+     */
+
+    /**
      * Confirm registration request by creating an account if appropriate.
      *
-     * @param req
-     * @param res
+     * @param {JoinRequest} user
+     * @returns {Promise<MutableUser | undefined>}
      */
     async join(user) {
-        const registeredUser = await this.users.getUserByEmailAddressToken(
-            user?.tokens?.emailAddress,
+        if (!user?.tokens?.emailAddress) {
+            return undefined;
+        }
+
+        const registeredUser = /** @type {MutableUser | undefined} */ (
+            await this.users.getUserByEmailAddressToken(user.tokens.emailAddress)
         );
 
         if (
             !registeredUser ||
-            getEpoch() > registeredUser?.membership?.tokens?.timeStamp + ttl ||
+            getEpoch() > (registeredUser?.membership?.tokens?.timeStamp ?? 0) + ttl ||
             user?.tokens?.phoneNumber !== registeredUser?.membership?.tokens?.code
         ) {
             return undefined;
@@ -325,7 +400,7 @@ class UserController {
             }));
         }
 
-        await this.users.updateUser(registeredUser);
+        await this.users.updateUser(/** @type {User} */ (/** @type {unknown} */ (registeredUser)));
 
         if (isNewRegistration && registeredUser.phoneNumber) {
             try {
@@ -345,10 +420,16 @@ class UserController {
     /**
      * Send a verification code to the user.
      *
-     * @param {*} user
+     * @param {Object} param0
+     * @param {string} param0.displayName
+     * @param {number} param0.membershipType
+     * @param {string} param0.channel
+     * @returns {Promise<void>}
      */
     async sendCipher({ displayName, membershipType, channel }) {
-        const user = await this.users.getUserByDisplayName(displayName, membershipType);
+        const user = /** @type {MutableUser | undefined} */ (
+            await this.users.getUserByDisplayName(displayName, membershipType)
+        );
 
         if (!(user?.dateRegistered && user?.emailAddress && user?.phoneNumber)) {
             throw new Error('registration not found');
@@ -366,8 +447,12 @@ class UserController {
                 },
             });
 
-            user.membership.message = await this.notifications.sendMessage(
-                UserController.#buildVerificationMessage(user.membership.tokens.code),
+            const membership = /** @type {Membership} */ (user.membership);
+
+            membership.message = await this.notifications.sendMessage(
+                UserController.#buildVerificationMessage(
+                    /** @type {string} */ (membership.tokens?.code),
+                ),
                 user.phoneNumber,
                 user.type === 'mobile' ? iconUrl : '',
             );
@@ -383,15 +468,22 @@ class UserController {
                 },
             });
 
-            user.membership.postmark = await this.postmaster.confirm(user, iconUrl, '/confirm');
+            const membership = /** @type {Membership} */ (user.membership);
+
+            membership.postmark = await this.postmaster.confirm(user, iconUrl, '/confirm');
         }
 
-        await this.users.updateUser(user);
+        await this.users.updateUser(/** @type {User} */ (/** @type {unknown} */ (user)));
     }
     /**
-     * Sign In with Bungie and PSN/XBox Live
-     * @param req
-     * @param res
+     * Sign In with Bungie and PSN/XBox Live. The incoming displayName is
+     * never read — it's immediately overwritten below from the Bungie
+     * response — so it's typed loosely to match the OAuth-callback caller,
+     * which doesn't have one yet.
+     * @param {Object} param0
+     * @param {string} param0.code
+     * @param {string} [param0.displayName]
+     * @returns {Promise<MutableUser | undefined>}
      */
     async signIn({ code, displayName }) {
         const bungie = await this.destiny.getAccessTokenFromCode(code);
@@ -405,6 +497,7 @@ class UserController {
         ({ displayName } = currentUser);
 
         const { membershipId, membershipType, profilePicturePath } = currentUser;
+        /** @type {MutableUser} */
         const user = {
             bungie,
             displayName,
@@ -412,30 +505,43 @@ class UserController {
             membershipType,
             profilePicturePath,
         };
-        const destinyGhostUser = await this.users.getUserByMembershipId(user.membershipId);
+        const destinyGhostUser = /** @type {MutableUser | undefined} */ (
+            await this.users.getUserByMembershipId(/** @type {string} */ (user.membershipId))
+        );
 
         if (!destinyGhostUser) {
-            return await this.users.createAnonymousUser(user).then(() => user);
+            return await this.users
+                .createAnonymousUser(/** @type {AnonymousUser} */ (user))
+                .then(() => user);
         }
 
         Object.assign(destinyGhostUser, user);
 
         return (
             destinyGhostUser.dateRegistered
-                ? this.users.updateUser(destinyGhostUser)
-                : this.users.updateAnonymousUser(destinyGhostUser)
+                ? this.users.updateUser(
+                      /** @type {User} */ (/** @type {unknown} */ (destinyGhostUser)),
+                  )
+                : this.users.updateAnonymousUser(/** @type {AnonymousUser} */ (destinyGhostUser))
         ).then(() => user);
     }
 
     /**
      * User initial application request.
-     * @param req
-     * @param res
+     * @param {Object} param0
+     * @param {string} param0.displayName
+     * @param {number} param0.membershipType
+     * @param {MutableUser} param0.user
+     * @returns {Promise<MutableUser | undefined>}
      */
     async signUp({ displayName, membershipType, user }) {
-        const bungieUser = await this.users.getUserByDisplayName(displayName, membershipType);
+        const bungieUser = /** @type {MutableUser | undefined} */ (
+            await this.users.getUserByDisplayName(displayName, membershipType)
+        );
 
-        user.phoneNumber = UserController.#cleanPhoneNumber(user.phoneNumber);
+        user.phoneNumber = UserController.#cleanPhoneNumber(
+            /** @type {string} */ (user.phoneNumber),
+        );
         Object.assign(user, bungieUser, {
             membership: {
                 tokens: {
@@ -447,7 +553,7 @@ class UserController {
         });
 
         const userPromises = [
-            this.users.getUserByEmailAddress(user.emailAddress),
+            this.users.getUserByEmailAddress(/** @type {string} */ (user.emailAddress)),
             this.users.getUserByPhoneNumber(user.phoneNumber),
         ];
         const users = await Promise.all(userPromises);
@@ -458,24 +564,24 @@ class UserController {
         }
 
         const iconUrl = await this.world.getVendorIcon(postmasterHash);
-        const promises = [];
-
-        promises.push(
+        const membership = /** @type {Membership} */ (user.membership);
+        const promises = [
             this.notifications.sendMessage(
-                UserController.#buildVerificationMessage(user.membership.tokens.code),
+                UserController.#buildVerificationMessage(
+                    /** @type {string} */ (membership.tokens?.code),
+                ),
                 user.phoneNumber,
                 user.type === 'mobile' ? iconUrl : '',
             ),
-        );
-        promises.push(this.postmaster.register(user, iconUrl, '/register'));
+            this.postmaster.register(user, iconUrl, '/register'),
+        ];
 
-        const result = await Promise.all(promises);
-        const [message, postMark] = result;
+        const [message, postMark] = await Promise.all(promises);
 
-        user.membership.message = message;
-        user.membership.postmark = postMark;
+        membership.message = message;
+        membership.postmark = postMark;
 
-        await this.users.updateUser(user);
+        await this.users.updateUser(/** @type {User} */ (/** @type {unknown} */ (user)));
 
         return user;
     }
@@ -483,12 +589,17 @@ class UserController {
     /**
      * Uses JSON patch as described {@link https://github.com/Starcounter-Jack/JSON-Patch here}.
      * {@tutorial http://williamdurand.fr/2014/02/14/please-do-not-patch-like-an-idiot}
-     * @param req
-     * @param res
-     * @returns {Promise}
+     * @param {Object} param0
+     * @param {string} param0.ETag
+     * @param {string} param0.displayName
+     * @param {number} param0.membershipType
+     * @param {PatchOperation[]} param0.patches
+     * @returns {Promise<MutableUser | undefined>}
      */
     async update({ ETag, displayName, membershipType, patches }) {
-        const user = await this.users.getUserByDisplayName(displayName, membershipType, true);
+        const user = /** @type {MutableUser | undefined} */ (
+            await this.users.getUserByDisplayName(displayName, membershipType, true)
+        );
 
         if (!user) {
             return undefined;
@@ -517,7 +628,7 @@ class UserController {
             version,
         });
 
-        await this.users.updateUser(user);
+        await this.users.updateUser(/** @type {User} */ (/** @type {unknown} */ (user)));
 
         return user;
     }

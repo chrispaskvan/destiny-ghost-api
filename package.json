@@ -76,6 +76,7 @@
     "devDependencies": {
         "@biomejs/biome": "2.5.12",
         "@types/express": "^5.0.6",
+        "@types/express-session": "^1.19.0",
         "@vitest/coverage-v8": "^5.0.0",
         "chance": "^1.1.13",
         "husky": "^9.1.7",

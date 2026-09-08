@@ -238,6 +238,14 @@ describe('UserController', () => {
     });
 
     describe('join', () => {
+        describe('when the request is missing an email address token', () => {
+            it('should return undefined without querying the user service', async () => {
+                const user = await userController.join({ tokens: {} });
+
+                expect(userService.getUserByEmailAddressToken).not.toHaveBeenCalled();
+                expect(user).toBeUndefined();
+            });
+        });
         describe('when user is not found', () => {
             it('should return undefined', async () => {
                 userService.getUserByEmailAddressToken.mockImplementation(() => Promise.resolve());
@@ -271,6 +279,7 @@ describe('UserController', () => {
 
                     const user = await userController.join({
                         tokens: {
+                            emailAddress: 'some-token',
                             phoneNumber: code,
                         },
                     });
@@ -296,6 +305,7 @@ describe('UserController', () => {
 
                     const user = await userController.join({
                         tokens: {
+                            emailAddress: 'some-token',
                             phoneNumber: 'wrong-code',
                         },
                     });
