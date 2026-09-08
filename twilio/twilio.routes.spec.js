@@ -93,6 +93,49 @@ function signedRequest({ body, cookie }) {
     return req;
 }
 
+/**
+ * Twilio's Messaging status-callback payload is smaller than an inbound
+ * message's - no `Body`, `NumMedia`, `SmsMessageSid`, or
+ * `MessagingServiceSid` - matching `statusCallbackBodySchema` in
+ * twilio.routes.js.
+ */
+function signedStatusBody(overrides = {}) {
+    return {
+        MessageSid: sid('SM'),
+        SmsSid: sid('SM'),
+        AccountSid: sid('AC'),
+        From: '+15005550006',
+        To: '+15005550001',
+        ...overrides,
+    };
+}
+
+function getStatusCallbackUrl() {
+    return `${process.env.PROTOCOL}://${process.env.DOMAIN}/twilio/destiny/s`;
+}
+
+function signedStatusRequest({ body, signature: signatureOverride }) {
+    const signature =
+        signatureOverride ?? getExpectedTwilioSignature(authToken, getStatusCallbackUrl(), body);
+
+    /**
+     * Unlike /destiny/r, this route reconstructs its signed URL from
+     * req.originalUrl rather than a hardcoded path. node-mocks-http defaults
+     * originalUrl to the `url` option, which lacks the /twilio prefix Express
+     * adds in production (routes.use('/twilio', twilioRouter) in
+     * loaders/routes.js), so it's set explicitly here to match reality.
+     */
+    return createRequest({
+        method: 'POST',
+        url: '/destiny/s',
+        originalUrl: '/twilio/destiny/s',
+        body,
+        headers: {
+            'x-twilio-signature': signature,
+        },
+    });
+}
+
 const authenticationController = {
     authenticate: vi.fn(() => ({ displayName: 'test-user', membershipType: 2 })),
 };
@@ -561,6 +604,77 @@ describe('TwilioRouter', () => {
                             expect(userService.updateUser).toHaveBeenCalledWith(
                                 expect.objectContaining({ isSubscribed: false }),
                             );
+                            done();
+                        } catch (err) {
+                            reject(err);
+                        }
+                    });
+
+                    twilioRouter(req, res, next);
+                }));
+        });
+    });
+
+    describe('POST /destiny/s', () => {
+        describe('when the signature and schema are valid', () => {
+            it('should record the delivery status and reply with empty TwiML', () =>
+                new Promise((done, reject) => {
+                    userService.getUserByPhoneNumber.mockResolvedValue({
+                        dateRegistered: Temporal.Now.instant().toString(),
+                        phoneNumber: '+15005550001',
+                    });
+
+                    const body = signedStatusBody({ MessageStatus: 'delivered' });
+                    const req = signedStatusRequest({ body });
+
+                    res.on('end', () => {
+                        try {
+                            expect(res.statusCode).toEqual(StatusCodes.OK);
+                            expect(userService.getUserByPhoneNumber).toHaveBeenCalledWith(body.To);
+                            expect(userService.addUserMessage).toHaveBeenCalledWith(
+                                expect.objectContaining({ SmsStatus: 'delivered' }),
+                            );
+                            done();
+                        } catch (err) {
+                            reject(err);
+                        }
+                    });
+
+                    twilioRouter(req, res, next);
+                }));
+        });
+
+        describe('when the signature is invalid', () => {
+            it('should reject the request without recording anything', () =>
+                new Promise((done, reject) => {
+                    const body = signedStatusBody({ MessageStatus: 'delivered' });
+                    const req = signedStatusRequest({ body, signature: 'not-a-valid-signature' });
+
+                    res.on('end', () => {
+                        try {
+                            expect(res.statusCode).toEqual(StatusCodes.FORBIDDEN);
+                            expect(userService.addUserMessage).not.toHaveBeenCalled();
+                            done();
+                        } catch (err) {
+                            reject(err);
+                        }
+                    });
+
+                    twilioRouter(req, res, next);
+                }));
+        });
+
+        describe('when the payload has no MessageStatus or SmsStatus', () => {
+            it('should reply with empty TwiML without looking up or recording a message', () =>
+                new Promise((done, reject) => {
+                    const body = signedStatusBody();
+                    const req = signedStatusRequest({ body });
+
+                    res.on('end', () => {
+                        try {
+                            expect(res.statusCode).toEqual(StatusCodes.OK);
+                            expect(userService.getUserByPhoneNumber).not.toHaveBeenCalled();
+                            expect(userService.addUserMessage).not.toHaveBeenCalled();
                             done();
                         } catch (err) {
                             reject(err);

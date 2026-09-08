@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * A module for handling Twilio requests and responses.
  *
@@ -7,6 +8,7 @@
 import ClaimCheck from '../helpers/claim-check.js';
 import getShortUrl from '../helpers/bitly.js';
 import log from '../helpers/log.js';
+import DestinyError from '../destiny/destiny.error.js';
 import { extractEmoji, normalizeEmoji, stripEmoji } from '../helpers/emoji.js';
 import {
     EMOJI_DEFAULT_REPLY,
@@ -22,34 +24,91 @@ import {
     STOP_REPLY,
 } from './twilio.constants.js';
 
+/** @typedef {import('../authentication/authentication.service.js').UserDocument} UserDocument */
+/** @typedef {import('../helpers/world2.js').ItemDefinition} ItemDefinition */
+
+/**
+ * The reply this controller returns for one inbound SMS/MMS webhook. Route
+ * handlers turn this into TwiML.
+ * @typedef {Object} TwilioReply
+ * @property {Record<string, string | undefined>} [cookies]
+ * @property {string} [message]
+ * @property {string} [media]
+ */
+
+/**
+ * @typedef {(itemHash: string | undefined, cookies: Record<string, string | undefined>) => Promise<TwilioReply>} ItemKeywordHandler
+ */
+
+/**
+ * A single item, ready for display in reply text: either the detail shape
+ * #getItem() builds for a unique match, or the manifest item as returned by
+ * World2#getItemByName() (already carrying itemCategory/itemName) when
+ * multiple distinct items are shown ungrouped.
+ * @typedef {Object} ItemResult
+ * @property {string} [itemCategory]
+ * @property {string} [icon]
+ * @property {number} [itemHash]
+ * @property {string} [itemName]
+ * @property {number} [itemType]
+ */
+
+/**
+ * The Twilio webhook body this controller reads, across both the inbound
+ * SMS/MMS webhook (POST /destiny/r) and the delivery-status callback
+ * (POST /destiny/s). Twilio sends many more fields; only the ones read here
+ * are modeled. MediaContentType{N}/MediaUrl{N} are dynamic, indexed by
+ * NumMedia, hence the index signature.
+ * @typedef {{
+ *   From: string,
+ *   Body?: string,
+ *   NumMedia?: string,
+ *   SmsSid?: string,
+ *   SmsStatus?: string,
+ *   To?: string,
+ *   MessageStatus?: string,
+ *   ClaimCheck?: string,
+ * } & Record<string, string | undefined>} TwilioWebhookBody
+ */
+
+/**
+ * Constructor options for TwilioController.
+ * @typedef {Object} TwilioControllerOptions
+ * @property {import('../authentication/authentication.service.js').default} authenticationService
+ * @property {import('../destiny2/destiny2.service.js').default} destinyService
+ * @property {import('./mms.service.js').default} mmsService
+ * @property {import('../users/user.service.js').default} userService
+ * @property {import('../helpers/world2.js').default} worldRepository
+ */
+
 /**
  * Twilio Controller
  */
 class TwilioController {
     /**
      * @constructor
-     * @param options
+     * @param {TwilioControllerOptions} options
      */
-    constructor(options = {}) {
+    constructor(options) {
         this.authentication = options.authenticationService;
         this.destiny = options.destinyService;
         this.mms = options.mmsService;
         this.users = options.userService;
         this.world = options.worldRepository;
 
-        this.itemKeywords = new Map([
-            ['more', this.constructor.getMore],
-            ['rank', this.getRank],
-            ['stars', this.getStars],
-            ['votes', this.getVotes],
-        ]);
+        /**
+         * Only 'more' has a handler; 'rank'/'stars'/'votes' were removed at
+         * some point but never cleaned up here, so they crashed request()
+         * with a generic TypeError instead of falling through to item search.
+         * @type {Map<string, ItemKeywordHandler>}
+         */
+        this.itemKeywords = new Map([['more', TwilioController.getMore]]);
     }
 
     /**
      * Search database.
-     * @param item {string}
-     * @returns {Promise}
-     * @private
+     * @param {ItemDefinition} item
+     * @returns {Promise<ItemResult[]>}
      */
     async #getItem(item) {
         const {
@@ -57,41 +116,54 @@ class TwilioController {
             displayProperties: { icon, name } = {},
             hash,
             inventory: { tierTypeName = '' } = {},
-            itemCategoryHashes,
+            itemCategoryHashes = [],
             itemType,
             itemTypeDisplayName,
         } = item;
-        const itemCategories = await Promise.all(
-            itemCategoryHashes.map(
-                async itemCategoryHash => await this.world.getItemCategory(itemCategoryHash),
-            ),
+        const itemCategories = /** @type {import('../helpers/world2.js').CategoryDefinition[]} */ (
+            (
+                await Promise.all(
+                    itemCategoryHashes.map(
+                        async itemCategoryHash =>
+                            await this.world.getItemCategory(itemCategoryHash),
+                    ),
+                )
+            ).filter(Boolean)
         );
-        const filteredCategories = itemCategories.filter(({ hash1 }) => hash1 > 1);
+        const filteredCategories = itemCategories.filter(
+            ({ hash: categoryHash }) => categoryHash > 1,
+        );
         const sortedCategories = filteredCategories.toSorted((a, b) => a.hash - b.hash);
         const itemCategory = sortedCategories
-            .reduce((memo, { shortTitle }) => `${memo + shortTitle} `, ' ')
+            .reduce((memo, { shortTitle = '' }) => `${memo + shortTitle} `, ' ')
             .trim();
         let damageType;
 
         if (defaultDamageTypeHash) {
-            ({
-                displayProperties: { name: damageType } = {},
-            } = await this.world.getDamageTypeByHash(defaultDamageTypeHash));
+            const damageTypeDefinition =
+                await this.world.getDamageTypeByHash(defaultDamageTypeHash);
+
+            damageType = damageTypeDefinition?.displayProperties?.name;
         }
 
         return [
             {
                 itemCategory: `${tierTypeName} ${damageType ? `${damageType} ` : ''}${itemCategory}${
-                    filteredCategories.length < 2 ? `${itemTypeDisplayName}` : ''
+                    filteredCategories.length < 2 ? `${itemTypeDisplayName ?? ''}` : ''
                 }`,
-                icon: `https://www.bungie.net${icon}`,
+                icon: icon ? `https://www.bungie.net${icon}` : undefined,
                 itemHash: hash,
-                itemName: name,
+                itemName: name ?? '',
                 itemType,
             },
         ];
     }
 
+    /**
+     * @param {string | undefined} itemHash
+     * @param {Record<string, string | undefined>} [cookies]
+     * @returns {Promise<TwilioReply>}
+     */
     static async getMore(itemHash, cookies = {}) {
         if (itemHash) {
             const shortURL = await getShortUrl(`https://www.light.gg/db/items/${itemHash}`);
@@ -142,18 +214,19 @@ class TwilioController {
     /**
      * Get Xur's inventory.
      *
-     * @param {*} user
-     * @param {*} cookies
-     * @returns
+     * @param {UserDocument} user
+     * @param {Record<string, string | undefined>} cookies
+     * @returns {Promise<TwilioReply>}
      * @memberof TwilioController
      */
     async getXur(user, cookies) {
         try {
-            const {
-                bungie: { access_token: accessToken },
-                membershipId,
-                membershipType,
-            } = await this.authentication.authenticate(user);
+            const authenticatedUser = await this.authentication.authenticate(user);
+            const { bungie, membershipId, membershipType } = /** @type {UserDocument} */ (
+                authenticatedUser
+            );
+            const { access_token: accessToken } =
+                /** @type {NonNullable<UserDocument['bungie']>} */ (bungie);
             const characters = await this.destiny.getProfile(membershipId, membershipType);
 
             if (characters?.length) {
@@ -161,18 +234,23 @@ class TwilioController {
                     membershipId,
                     membershipType,
                     characters[0].characterId,
-                    accessToken,
+                    /** @type {string} */ (accessToken),
                 );
                 const weaponCategory = await this.world.getWeaponCategory();
-                const items = await Promise.all(
-                    itemHashes.map(itemHash => this.world.getItemByHash(itemHash)),
+                const items = /** @type {ItemDefinition[]} */ (
+                    (
+                        await Promise.all(
+                            itemHashes.map(itemHash => this.world.getItemByHash(itemHash)),
+                        )
+                    ).filter(Boolean)
                 );
-                const weapons = items.filter(({ itemCategoryHashes }) =>
+                const weapons = items.filter(({ itemCategoryHashes = [] }) =>
                     itemCategoryHashes.includes(weaponCategory),
                 );
                 const result = weapons
                     .reduce(
-                        (memo, { displayProperties }) => `${memo + displayProperties.name}\n`,
+                        (memo, { displayProperties }) =>
+                            `${memo + (displayProperties?.name ?? '')}\n`,
                         ' ',
                     )
                     .trim();
@@ -188,7 +266,7 @@ class TwilioController {
                 message: 'Perhaps your Ghost can help you find what you need.',
             };
         } catch (err) {
-            if (err.name === 'DestinyError') {
+            if (err instanceof DestinyError) {
                 return {
                     cookies,
                     message: err.message.substring(0, MAX_SMS_MESSAGE_LENGTH),
@@ -206,18 +284,18 @@ class TwilioController {
 
     /**
      * Search for an item that matches the name provided.
-     * @param itemName
-     * @returns {Promise}
+     * @param {string} itemName
+     * @returns {Promise<(ItemDefinition | ItemResult)[]>}
      */
     async queryItem(itemName) {
         const allItems = await this.world.getItemByName(itemName.replace(/[\u2018\u2019]/g, "'"));
         const items = allItems.filter(
-            ({ itemType }) => !itemName.includes('Catalyst') && [2, 3, 4].includes(itemType),
+            ({ itemType }) => !itemName.includes('Catalyst') && [2, 3, 4].includes(itemType ?? -1),
         );
 
         if (items.length > 0) {
             if (items.length > 1) {
-                const groups = Object.groupBy(items, item => item.itemName);
+                const groups = Object.groupBy(items, item => item.itemName ?? '');
                 const keys = Object.keys(groups);
 
                 if (keys.length === 1) {
@@ -234,23 +312,26 @@ class TwilioController {
     }
 
     /**
-     *
-     * @param req
-     * @param res
+     * @returns {string}
      */
     static fallback() {
         return TwilioController.getRandomResponseForAnError();
     }
 
     /**
-     *
-     * @param req
-     * @param res
+     * @param {{ body: TwilioWebhookBody, cookies: Record<string, string | undefined> }} param0
+     * @returns {Promise<TwilioReply>}
      */
     async request({ body, cookies }) {
         let responseCookies = {};
         const user = await this.users.getUserByPhoneNumber(body.From);
-        const rawMessage = body.Body.trim();
+        /**
+         * `bodySchema` in twilio.routes.js requires `Body` for this route
+         * (POST /destiny/r); it's optional on `TwilioWebhookBody` only
+         * because the status-callback route (POST /destiny/s) shares the
+         * type and doesn't send `Body`.
+         */
+        const rawMessage = /** @type {string} */ (body.Body).trim();
         const emojiMatches = extractEmoji(rawMessage);
         /**
          * Emoji are stripped before keyword/search matching so a message like
@@ -303,8 +384,12 @@ class TwilioController {
             return {};
         }
 
-        responseCookies = { isRegistered: true, ...responseCookies };
-        await this.users.addUserMessage(body);
+        responseCookies = { isRegistered: 'true', ...responseCookies };
+        // SmsStatus is a standard Twilio field on every inbound SMS/MMS webhook,
+        // even though bodySchema (twilio.routes.js) doesn't validate it (SmsSid is).
+        await this.users.addUserMessage(
+            /** @type {Omit<import('../users/user.service.js').UserMessage, 'id'>} */ (body),
+        );
 
         const numMedia = Number(body.NumMedia) || 0;
 
@@ -312,7 +397,10 @@ class TwilioController {
             const media = Array.from({ length: numMedia }, (_, index) => ({
                 contentType: body[`MediaContentType${index}`],
                 url: body[`MediaUrl${index}`],
-            })).filter(({ contentType, url }) => url && contentType?.startsWith('image/'));
+            })).filter(
+                /** @returns {item is import('./mms.service.js').MmsMedia} */
+                item => Boolean(item.url && item.contentType?.startsWith('image/')),
+            );
 
             if (!media.length) {
                 return { cookies: responseCookies, message: MEDIA_UNSUPPORTED_REPLY };
@@ -339,7 +427,9 @@ class TwilioController {
         }
 
         if (this.itemKeywords.has(message)) {
-            return await this.itemKeywords.get(message).bind(this)(itemHash, responseCookies);
+            const handler = /** @type {ItemKeywordHandler} */ (this.itemKeywords.get(message));
+
+            return await handler.bind(this)(itemHash, responseCookies);
         }
 
         if (message === 'xur') {
@@ -356,23 +446,33 @@ class TwilioController {
                 };
             }
             case 1: {
-                responseCookies = { itemHash: items[0].itemHash, ...responseCookies };
-                items[0].itemCategory = items[0].itemCategory.replace(/Weapon/g, '').trim();
+                // A single result is always the #getItem() detail shape, never
+                // the raw manifest item - see queryItem()'s branches.
+                const item = /** @type {ItemResult} */ (items[0]);
+
+                responseCookies = {
+                    itemHash: item.itemHash !== undefined ? String(item.itemHash) : undefined,
+                    ...responseCookies,
+                };
+                item.itemCategory = (item.itemCategory ?? '').replace(/Weapon/g, '').trim();
 
                 return {
                     cookies: responseCookies,
-                    message: `${items[0].itemName} ${items[0].itemCategory}`.substring(
+                    message: `${item.itemName} ${item.itemCategory}`.substring(
                         0,
                         MAX_SMS_MESSAGE_LENGTH,
                     ),
-                    media: user.type === 'landline' ? undefined : items[0].icon,
+                    media: user.type === 'landline' ? undefined : item.icon,
                 };
             }
             default: {
-                const groups = Object.groupBy(items, item => item.itemName);
+                const groups = Object.groupBy(items, item => item.itemName ?? '');
                 const keys = Object.keys(groups);
                 const result = keys
-                    .reduce((memo, key) => `${memo}\n${key} ${groups[key][0].itemCategory}`, ' ')
+                    .reduce(
+                        (memo, key) => `${memo}\n${key} ${groups[key]?.[0]?.itemCategory ?? ''}`,
+                        ' ',
+                    )
                     .trim();
 
                 return {
@@ -384,16 +484,35 @@ class TwilioController {
     }
 
     /**
-     *
-     * @param req
-     * @param res
+     * @param {TwilioWebhookBody} message
+     * @returns {Promise<void>}
      */
     async statusCallback(message) {
-        const { ClaimCheck: claimCheck, MessageStatus: status, To: phoneNumber } = message;
+        const {
+            ClaimCheck: claimCheck,
+            MessageStatus: messageStatus,
+            SmsStatus: smsStatus,
+            To: phoneNumber,
+        } = message;
+        // This webhook's payload carries MessageStatus, not SmsStatus - fall
+        // back to a legacy SmsStatus field if Twilio ever sends one instead.
+        const status = messageStatus ?? smsStatus;
+
+        if (!phoneNumber || !status) {
+            log.warn({ message }, 'Ignoring status callback missing To or status.');
+
+            return;
+        }
+
         const user = await this.users.getUserByPhoneNumber(phoneNumber);
 
         if (user) {
-            await this.users.addUserMessage(message);
+            await this.users.addUserMessage(
+                /** @type {Omit<import('../users/user.service.js').UserMessage, 'id'>} */ ({
+                    ...message,
+                    SmsStatus: status,
+                }),
+            );
             if (claimCheck) {
                 await ClaimCheck.updatePhoneNumber(claimCheck, phoneNumber, status);
             }

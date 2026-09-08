@@ -75,6 +75,7 @@
     },
     "devDependencies": {
         "@biomejs/biome": "2.5.12",
+        "@types/cookie-parser": "^1.4.10",
         "@types/express": "^5.0.6",
         "@types/express-session": "^1.19.0",
         "@vitest/coverage-v8": "^5.0.0",

@@ -17,7 +17,12 @@ import log from './log.js';
  * @property {{ name?: string, icon?: string }} [displayProperties]
  */
 
-/** @typedef {DefinitionRecord} CategoryDefinition */
+/**
+ * A DestinyItemCategoryDefinition record — a DefinitionRecord plus the
+ * short display label twilio.controller.js groups items by.
+ * @typedef {DefinitionRecord & { shortTitle?: string }} CategoryDefinition
+ */
+
 /** @typedef {DefinitionRecord} ClassDefinition */
 /** @typedef {DefinitionRecord} DamageTypeDefinition */
 /** @typedef {DefinitionRecord} LoreDefinition */
@@ -28,7 +33,7 @@ import log from './log.js';
  * Bungie returns many more fields; only the ones this app reads are modeled.
  * @typedef {Object} ItemDefinition
  * @property {number} hash
- * @property {{ name?: string }} [displayProperties]
+ * @property {{ name?: string, icon?: string }} [displayProperties]
  * @property {string} [flavorText]
  * @property {string} [itemTypeAndTierDisplayName]
  * @property {number} [itemType]
@@ -36,6 +41,8 @@ import log from './log.js';
  * @property {number} [defaultDamageTypeHash]
  * @property {{ tierTypeName?: string }} [inventory]
  * @property {number[]} [itemCategoryHashes]
+ * @property {string} [itemCategory] - Added by getItemByName(), aliasing itemTypeAndTierDisplayName
+ * @property {string} [itemName] - Added by getItemByName(), aliasing displayProperties.name
  */
 
 /**

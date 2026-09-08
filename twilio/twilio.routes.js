@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Twilio inbound and outbound request URLs. See the article
  * at {@link https://twilio.radicalskills.com/projects/getting-started-with-twiml/1.html}
@@ -23,6 +24,19 @@ const {
     twilio: { attributes, authToken },
 } = configuration;
 
+/**
+ * @typedef {Object} TwilioRoutesOptions
+ * @property {unknown} authenticationController
+ * @property {import('../authentication/authentication.service.js').default} authenticationService
+ * @property {import('../destiny2/destiny2.service.js').default} destinyService
+ * @property {import('./mms.service.js').default} mmsService
+ * @property {import('../users/user.service.js').default} userService
+ * @property {import('../helpers/world2.js').default} worldRepository
+ */
+
+/**
+ * @param {TwilioRoutesOptions} options
+ */
 const routes = ({
     authenticationController,
     authenticationService,
@@ -54,9 +68,26 @@ const routes = ({
         NumMedia: z.coerce.number().int().min(0),
     });
 
+    /**
+     * Twilio's Messaging status-callback webhook (`/destiny/s`) carries a
+     * different, smaller payload than an inbound message (`/destiny/r`) - it
+     * has no `Body`, `NumMedia`, `SmsMessageSid`, or `MessagingServiceSid`.
+     * Validating it against `bodySchema` would reject real status callbacks.
+     */
+    const statusCallbackBodySchema = z.object({
+        MessageSid: z.string().length(34),
+        SmsSid: z.string().length(34).optional(),
+        AccountSid: z.string().length(34),
+        From: z.string(),
+        To: z.string(),
+        MessageStatus: z.string().optional(),
+        SmsStatus: z.string().optional(),
+    });
+
     twilioRouter.route('/destiny/r').post(
         (req, res, next) => {
-            const header = req.headers['x-twilio-signature'];
+            const rawHeader = req.headers['x-twilio-signature'];
+            const header = Array.isArray(rawHeader) ? (rawHeader[0] ?? '') : (rawHeader ?? '');
             const reconstructedUrl = `${process.env.PROTOCOL}://${process.env.DOMAIN}/twilio/destiny/r`;
 
             if (!validateRequest(authToken, header, reconstructedUrl, req.body)) {
@@ -81,7 +112,9 @@ const routes = ({
 
                 return next();
             } catch (err) {
-                return res.status(StatusCodes.BAD_REQUEST).json({ error: err.issues[0].message });
+                const message = err instanceof z.ZodError ? err.issues[0].message : 'Bad Request';
+
+                return res.status(StatusCodes.BAD_REQUEST).json({ error: message });
             }
         },
         (req, res, next) => middleware.authenticateUser(req, res, next),
@@ -135,16 +168,11 @@ const routes = ({
     );
 
     twilioRouter.route('/destiny/s').post(async (req, res) => {
-        const header = req.headers['x-twilio-signature'];
+        const rawHeader = req.headers['x-twilio-signature'];
+        const header = Array.isArray(rawHeader) ? (rawHeader[0] ?? '') : (rawHeader ?? '');
         const { body, query = {}, originalUrl } = req;
         const claimCheck = query['claim-check-number'];
         const notificationType = query['notification-type'];
-
-        try {
-            bodySchema.parse(body);
-        } catch (err) {
-            return res.status(StatusCodes.BAD_REQUEST).json({ error: err.issues[0].message });
-        }
 
         if (
             !validateRequest(
@@ -157,6 +185,14 @@ const routes = ({
             res.writeHead(StatusCodes.FORBIDDEN);
 
             return res.end();
+        }
+
+        try {
+            statusCallbackBodySchema.parse(body);
+        } catch (err) {
+            const message = err instanceof z.ZodError ? err.issues[0].message : 'Bad Request';
+
+            return res.status(StatusCodes.BAD_REQUEST).json({ error: message });
         }
 
         await twilioController.statusCallback({
