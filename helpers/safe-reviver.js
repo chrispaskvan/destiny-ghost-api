@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * A module for parsing JSON without prototype-polluting keys.
  *

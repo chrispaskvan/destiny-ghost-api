@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * A module for detecting and stripping emoji from inbound SMS/MMS text.
  *

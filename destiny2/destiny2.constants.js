@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Vendor Hash Constants
  */

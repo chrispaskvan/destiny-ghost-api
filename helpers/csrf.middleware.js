@@ -1,3 +1,4 @@
+// @ts-check
 import { csrfSync } from 'csrf-sync';
 
 /**

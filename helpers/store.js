@@ -1,3 +1,4 @@
+// @ts-check
 import { RedisStore } from 'connect-redis';
 import client from './cache.js';
 
