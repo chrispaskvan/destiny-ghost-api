@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * A module for accessing the Destiny World database.
  *
@@ -9,29 +10,60 @@ import World from './world.js';
 import log from './log.js';
 
 /**
+ * A Destiny 2 definition record's common shape — nearly every manifest
+ * table shares `hash` plus a localized `displayProperties.name`.
+ * @typedef {Object} DefinitionRecord
+ * @property {number} hash
+ * @property {{ name?: string, icon?: string }} [displayProperties]
+ */
+
+/** @typedef {DefinitionRecord} CategoryDefinition */
+/** @typedef {DefinitionRecord} ClassDefinition */
+/** @typedef {DefinitionRecord} DamageTypeDefinition */
+/** @typedef {DefinitionRecord} LoreDefinition */
+/** @typedef {DefinitionRecord} VendorDefinition */
+
+/**
+ * A Destiny 2 inventory item, as defined by DestinyInventoryItemDefinition.
+ * Bungie returns many more fields; only the ones this app reads are modeled.
+ * @typedef {Object} ItemDefinition
+ * @property {number} hash
+ * @property {{ name?: string }} [displayProperties]
+ * @property {string} [flavorText]
+ * @property {string} [itemTypeAndTierDisplayName]
+ */
+
+/**
  * World2 Repository
  */
 class World2 extends World {
     /**
      * Weapon Category
-     * @private
+     * @type {number | undefined}
      */
     #weaponCategory;
 
+    /**
+     * @param {{ directory?: string, pool?: import('./world.js').ManifestPool }} [options]
+     */
     constructor(options = {}) {
         super(options);
     }
 
     /**
-     * @private
+     * @protected
+     * @param {string} [fileName]
+     * @returns {Promise<void>}
      */
     async bootstrap(fileName) {
-        const databasePath = fileName ? join(this.directory, basename(fileName)) : undefined;
+        const directory = /** @type {string} */ (this.directory);
+        const databasePath = fileName ? join(directory, basename(fileName)) : undefined;
 
         log.info(`Loading the second world from ${databasePath}`);
 
         if (databasePath) {
             try {
+                const pool = /** @type {import('./world.js').ManifestPool} */ (this.pool);
                 const [
                     categoryDefinitions,
                     classDefinitions,
@@ -39,7 +71,7 @@ class World2 extends World {
                     itemDefinitions,
                     loreDefinitions,
                     vendorDefinitions,
-                ] = await this.pool.run({
+                ] = await pool.run({
                     databasePath,
                     queries: [
                         'SELECT json FROM DestinyItemCategoryDefinition',
@@ -51,42 +83,59 @@ class World2 extends World {
                     ],
                 });
 
+                /** @type {ClassDefinition[]} */
                 const classes = classDefinitions.map(({ json: classDefinition }) =>
                     JSON.parse(classDefinition),
                 );
+                /** @type {DamageTypeDefinition[]} */
                 const damageTypes = damageTypeDefinitions.map(({ json: damageType }) =>
                     JSON.parse(damageType),
                 );
+                /** @type {LoreDefinition[]} */
                 const lores = loreDefinitions.map(({ json: lore }) => JSON.parse(lore));
+                /** @type {VendorDefinition[]} */
                 const vendors = vendorDefinitions.map(({ json: vendor }) => JSON.parse(vendor));
 
+                /** @type {CategoryDefinition[]} */
                 this.categories = categoryDefinitions.map(({ json: category }) =>
                     JSON.parse(category),
                 );
+                /** @type {Map<number, CategoryDefinition>} */
                 this.categoryHashMap = new Map(
                     this.categories.map(category => [category.hash, category]),
                 );
+                /** @type {Map<number, ClassDefinition>} */
                 this.classHashMap = new Map(
                     classes.map(characterClass => [characterClass.hash, characterClass]),
                 );
+                /** @type {Map<number, DamageTypeDefinition>} */
                 this.damageTypeHashMap = new Map(
                     damageTypes.map(damageType => [damageType.hash, damageType]),
                 );
+                /** @type {ItemDefinition[]} */
                 this.items = itemDefinitions.map(({ json: item }) => JSON.parse(item));
+                /** @type {Map<number, ItemDefinition>} */
                 this.itemHashMap = new Map(this.items.map(item => [item.hash, item]));
+                /** @type {Map<number, LoreDefinition>} */
                 this.loreDefinitionHashMap = new Map(lores.map(lore => [lore.hash, lore]));
+                /** @type {Map<number, VendorDefinition>} */
                 this.vendorHashMap = new Map(vendors.map(vendor => [vendor.hash, vendor]));
             } catch (err) {
-                log.error(`Error loading the second world: ${err.message}`);
+                log.error(
+                    `Error loading the second world: ${err instanceof Error ? err.message : String(err)}`,
+                );
                 throw err;
             }
         }
     }
 
+    /**
+     * @returns {Promise<number>}
+     */
     async getWeaponCategory() {
         await this.bootstrapped;
-        this.#weaponCategory ||= this.categories.find(
-            category => category?.displayProperties?.name === 'Weapon',
+        this.#weaponCategory ??= /** @type {CategoryDefinition} */ (
+            this.categories.find(category => category?.displayProperties?.name === 'Weapon')
         ).hash;
 
         return this.#weaponCategory;
@@ -94,7 +143,8 @@ class World2 extends World {
 
     /**
      * Get the class according to the provided hash.
-     * @param classHash {string}
+     * @param {number} classHash
+     * @returns {Promise<ClassDefinition | undefined>}
      */
     async getClassByHash(classHash) {
         await this.bootstrapped;
@@ -104,7 +154,8 @@ class World2 extends World {
 
     /**
      * Get the damage type according to the provided hash.
-     * @param classHash {string}
+     * @param {number} damageTypeHash
+     * @returns {Promise<DamageTypeDefinition | undefined>}
      */
     async getDamageTypeByHash(damageTypeHash) {
         await this.bootstrapped;
@@ -114,8 +165,8 @@ class World2 extends World {
 
     /**
      * Get item by the hash provided.
-     * @param itemHash
-     * @returns {*}
+     * @param {number} itemHash
+     * @returns {Promise<ItemDefinition | undefined>}
      */
     async getItemByHash(itemHash) {
         await this.bootstrapped;
@@ -125,29 +176,29 @@ class World2 extends World {
 
     /**
      * Look up the item(s) with matching strings in their name(s).
-     * @param itemName {string}
-     * @returns {Promise}
+     * @param {string} itemName
+     * @returns {Promise<ItemDefinition[]>}
      */
     async getItemByName(itemName) {
         await this.bootstrapped;
 
-        const items = this.items.filter(({ displayProperties: { name } = '' }) =>
-            name.toLowerCase().includes(itemName.toLowerCase()),
+        const items = this.items.filter(({ displayProperties: { name } = {} }) =>
+            (name ?? '').toLowerCase().includes(itemName.toLowerCase()),
         );
 
         return items.map(item =>
             Object.assign(item, {
                 flavorText: item.flavorText,
                 itemCategory: item.itemTypeAndTierDisplayName,
-                itemName: item.displayProperties.name,
+                itemName: item.displayProperties?.name,
             }),
         );
     }
 
     /**
      * Get the category definition for the provided hash.
-     * @param itemCategoryHash
-     * @returns {Promise}
+     * @param {number} itemCategoryHash
+     * @returns {Promise<CategoryDefinition | undefined>}
      */
     async getItemCategory(itemCategoryHash) {
         await this.bootstrapped;
@@ -157,8 +208,8 @@ class World2 extends World {
 
     /**
      * Get the lore by item hash.
-     * @param hash
-     * @returns {Promise}
+     * @param {number} hash
+     * @returns {Promise<LoreDefinition | undefined>}
      */
     async getLore(hash) {
         await this.bootstrapped;
@@ -168,8 +219,8 @@ class World2 extends World {
 
     /**
      * Get vendor's icon.
-     * @param vendorHash
-     * @returns {Promise}
+     * @param {number} vendorHash
+     * @returns {Promise<string | undefined>}
      */
     async getVendorIcon(vendorHash) {
         await this.bootstrapped;

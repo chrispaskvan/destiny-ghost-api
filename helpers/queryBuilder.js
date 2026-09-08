@@ -1,17 +1,21 @@
+// @ts-check
 /**
  * Query Builder Class
  */
 class QueryBuilder {
     constructor() {
+        /** @type {Record<string, import('@azure/cosmos').SqlParameter['value']>[]} */
         this.filters = [];
+        /** @type {string[]} */
         this.fields = [];
+        /** @type {string[]} */
         this.joins = [];
         this.table = '';
     }
 
     /**
      *
-     * @param selections
+     * @param {string | string[]} selections
      * @returns {QueryBuilder}
      */
     select(selections) {
@@ -47,7 +51,7 @@ class QueryBuilder {
 
     /**
      *
-     * @param table
+     * @param {string} table
      * @returns {QueryBuilder}
      */
     from(table) {
@@ -67,7 +71,7 @@ class QueryBuilder {
 
     /**
      *
-     * @param key
+     * @param {string} key
      * @returns {QueryBuilder}
      */
     join(key) {
@@ -86,11 +90,12 @@ class QueryBuilder {
 
     /**
      *
-     * @param key
-     * @param value
+     * @param {string} key
+     * @param {import('@azure/cosmos').SqlParameter['value']} value
      * @returns {QueryBuilder}
      */
     where(key, value) {
+        /** @type {Record<string, import('@azure/cosmos').SqlParameter['value']>} */
         const filter = {};
 
         filter[key] = value;
@@ -101,15 +106,18 @@ class QueryBuilder {
 
     /**
      *
-     * @returns {*}
+     * @returns {import('@azure/cosmos').SqlQuerySpec}
      */
     getQuery() {
         const tableAlias = this.table ? this.table[0].toLowerCase() : 'r';
         const fields = this.fields.length
             ? `${tableAlias}.${this.fields.join(`, ${tableAlias}.`)}`
             : '*';
+        /** @type {string | undefined} */
         let childAlias;
+        /** @type {import('@azure/cosmos').SqlParameter[]} */
         const parameters = [];
+        /** @type {string} */
         let sql;
 
         sql = `SELECT ${fields} FROM ${this.table || 'root'} ${tableAlias}`;
