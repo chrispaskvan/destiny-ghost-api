@@ -1,18 +1,55 @@
+// @ts-check
 /**
  * A module for accessing the Destiny World database.
  */
 import { readdirSync, statSync, existsSync, createWriteStream, unlinkSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
+// @types/node does not yet declare Node's zlib zip API (this Node version supports it).
+// @ts-expect-error
 import { ZipFile } from 'node:zlib';
 import log from './log.js';
 import sanitizeDirectory from './sanitize-directory.js';
 
 /**
+ * A row from a manifest SQLite table. This repository issues both
+ * `SELECT * ...` (full row, e.g. an id column plus `json`) and
+ * `SELECT json ...` (single column) queries; only `json` is ever read, but
+ * a `SELECT *` row may carry other columns this type doesn't enumerate.
+ * @typedef {{ json: string } & Record<string, unknown>} ManifestRow
+ */
+
+/**
+ * The subset of tinypool's `Pool` used by this repository. Structural so
+ * tests can substitute a stub.
+ * @typedef {Object} ManifestPool
+ * @property {(data: { databasePath: string, queries: string[] }) => Promise<ManifestRow[][]>} run
+ */
+
+/**
+ * A Destiny Grimoire Card, as defined by DestinyGrimoireCardDefinition.
+ * Bungie returns many more fields; only the ones this app reads are modeled.
+ * @typedef {Object} GrimoireCardDefinition
+ * @property {number} cardId
+ * @property {string} cardName
+ */
+
+/**
+ * A Destiny Vendor, as defined by DestinyVendorDefinition.
+ * @typedef {Object} VendorDefinition
+ * @property {number} hash
+ * @property {{ vendorIcon?: string }} [summary]
+ */
+
+/**
  * World Repository
  */
 class World {
+    /**
+     * @param {{ directory?: string, pool?: ManifestPool }} [options]
+     */
     constructor({ directory, pool } = {}) {
+        /** @type {Promise<void> | null} */
         this.bootstrapped = null;
         this.pool = pool;
 
@@ -33,16 +70,20 @@ class World {
     }
 
     /**
-     * @private
+     * @protected
+     * @param {string} [fileName]
+     * @returns {Promise<void>}
      */
     async bootstrap(fileName) {
-        const databasePath = fileName ? join(this.directory, basename(fileName)) : undefined;
+        const directory = /** @type {string} */ (this.directory);
+        const databasePath = fileName ? join(directory, basename(fileName)) : undefined;
 
         log.info(`Loading the first world from ${databasePath}`);
 
         if (databasePath) {
             try {
-                const [grimoireCards, vendorDefinitions] = await this.pool.run({
+                const pool = /** @type {ManifestPool} */ (this.pool);
+                const [grimoireCards, vendorDefinitions] = await pool.run({
                     databasePath,
                     queries: [
                         'SELECT * FROM DestinyGrimoireCardDefinition',
@@ -50,14 +91,19 @@ class World {
                     ],
                 });
 
+                /** @type {VendorDefinition[]} */
                 const vendors = vendorDefinitions.map(({ json: vendor }) => JSON.parse(vendor));
 
+                /** @type {GrimoireCardDefinition[]} */
                 this.grimoireCards = grimoireCards.map(({ json: grimoireCard }) =>
                     JSON.parse(grimoireCard),
                 );
+                /** @type {Map<number, VendorDefinition>} */
                 this.vendorHashMap = new Map(vendors.map(vendor => [vendor.hash, vendor]));
             } catch (err) {
-                log.error(`Error loading the first world: ${err.message}`);
+                log.error(
+                    `Error loading the first world: ${err instanceof Error ? err.message : String(err)}`,
+                );
                 throw err;
             }
         }
@@ -66,8 +112,8 @@ class World {
     /**
      * Get a random number of cards.
      *
-     * @param numberOfCards {integer}
-     * @returns {Promise}
+     * @param {number} numberOfCards
+     * @returns {Promise<GrimoireCardDefinition[]>}
      */
     async getGrimoireCards(numberOfCards) {
         if (typeof numberOfCards !== 'number' || !Number.isFinite(numberOfCards)) {
@@ -96,8 +142,8 @@ class World {
     /**
      * Get a random vendor icon.
      *
-     * @param vendorHash {string}
-     * @returns {Promise<string>}
+     * @param {number} vendorHash
+     * @returns {Promise<string | undefined>}
      */
     async getVendorIcon(vendorHash) {
         await this.bootstrapped;
@@ -111,14 +157,12 @@ class World {
     /**
      * Download and unzip the manifest database.
      *
-     * @param manifest
-     * @returns {*}
+     * @param {import('../destiny/destiny.cache.js').DestinyManifest} manifest
+     * @returns {Promise<import('../destiny/destiny.cache.js').DestinyManifest>}
      */
     async updateManifest(manifest) {
-        const { directory: databaseDirectory } = this;
-        const {
-            mobileWorldContentPaths: { en: relativeUrl },
-        } = manifest;
+        const databaseDirectory = /** @type {string} */ (this.directory);
+        const { mobileWorldContentPaths: { en: relativeUrl } = {} } = manifest;
         const fileName = basename(relativeUrl || '');
 
         if (!fileName || fileName === '.' || fileName === '..') {
@@ -133,7 +177,7 @@ class World {
 
         // Runs from finally blocks and catch handlers, so it must never throw —
         // a failure here would mask the error that actually aborted the update.
-        const cleanupFile = path => {
+        const cleanupFile = (/** @type {string} */ path) => {
             try {
                 if (existsSync(path)) {
                     unlinkSync(path);
@@ -143,7 +187,7 @@ class World {
             }
         };
 
-        const downloadFile = async (url, path) => {
+        const downloadFile = async (/** @type {string} */ url, /** @type {string} */ path) => {
             try {
                 const response = await fetch(url);
 
@@ -160,7 +204,10 @@ class World {
             }
         };
 
-        const unzipFile = async (zipPath, outputPath) => {
+        const unzipFile = async (
+            /** @type {string} */ zipPath,
+            /** @type {string} */ outputPath,
+        ) => {
             let zipFile;
 
             try {

@@ -1,17 +1,37 @@
+// @ts-check
+/**
+ * A single named parameter substituted into the query text produced by
+ * getQuery().
+ * @typedef {Object} QueryParameter
+ * @property {string} name
+ * @property {string | number | boolean | null} value
+ */
+
+/**
+ * The query produced by getQuery(): parameterized query text plus its
+ * bound parameter values.
+ * @typedef {Object} Query
+ * @property {string} query
+ * @property {QueryParameter[]} [parameters]
+ */
+
 /**
  * Query Builder Class
  */
 class QueryBuilder {
     constructor() {
+        /** @type {Record<string, QueryParameter['value']>[]} */
         this.filters = [];
+        /** @type {string[]} */
         this.fields = [];
+        /** @type {string[]} */
         this.joins = [];
         this.table = '';
     }
 
     /**
      *
-     * @param selections
+     * @param {string | string[]} selections
      * @returns {QueryBuilder}
      */
     select(selections) {
@@ -47,7 +67,7 @@ class QueryBuilder {
 
     /**
      *
-     * @param table
+     * @param {string} table
      * @returns {QueryBuilder}
      */
     from(table) {
@@ -67,7 +87,7 @@ class QueryBuilder {
 
     /**
      *
-     * @param key
+     * @param {string} key
      * @returns {QueryBuilder}
      */
     join(key) {
@@ -86,11 +106,12 @@ class QueryBuilder {
 
     /**
      *
-     * @param key
-     * @param value
+     * @param {string} key
+     * @param {QueryParameter['value']} value
      * @returns {QueryBuilder}
      */
     where(key, value) {
+        /** @type {Record<string, QueryParameter['value']>} */
         const filter = {};
 
         filter[key] = value;
@@ -101,15 +122,18 @@ class QueryBuilder {
 
     /**
      *
-     * @returns {*}
+     * @returns {Query}
      */
     getQuery() {
         const tableAlias = this.table ? this.table[0].toLowerCase() : 'r';
         const fields = this.fields.length
             ? `${tableAlias}.${this.fields.join(`, ${tableAlias}.`)}`
             : '*';
+        /** @type {string | undefined} */
         let childAlias;
+        /** @type {QueryParameter[]} */
         const parameters = [];
+        /** @type {string} */
         let sql;
 
         sql = `SELECT ${fields} FROM ${this.table || 'root'} ${tableAlias}`;
