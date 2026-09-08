@@ -2,7 +2,6 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![CI](https://github.com/chrispaskvan/destiny-ghost-api/actions/workflows/ci.yml/badge.svg)](https://github.com/chrispaskvan/destiny-ghost-api/actions/workflows/ci.yml)
-[![Type check](https://github.com/chrispaskvan/destiny-ghost-api/actions/workflows/ci.yml/badge.svg?query=workflow%3Aci)](https://github.com/chrispaskvan/destiny-ghost-api/actions/workflows/ci.yml)
 [![Node.js](https://img.shields.io/badge/Node.js-26.x-green?logo=node.js)](https://nodejs.org/)
 [![pnpm](https://img.shields.io/badge/pnpm-10.x-orange?logo=pnpm)](https://pnpm.io)
 [![Biome](https://img.shields.io/badge/Lint%2FFormat-Biome-60A5FA?logo=biome)](https://biomejs.dev)
