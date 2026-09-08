@@ -1,6 +1,10 @@
 # destiny-ghost-api
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![CI](https://github.com/chrispaskvan/destiny-ghost-api/actions/workflows/ci.yml/badge.svg)](https://github.com/chrispaskvan/destiny-ghost-api/actions/workflows/ci.yml)
+[![Node.js](https://img.shields.io/badge/Node.js-26.x-green?logo=node.js)](https://nodejs.org/)
+[![pnpm](https://img.shields.io/badge/pnpm-10.x-orange?logo=pnpm)](https://pnpm.io)
+[![Biome](https://img.shields.io/badge/Lint%2FFormat-Biome-60A5FA?logo=biome)](https://biomejs.dev)
 [![Codacy Badge](https://api.codacy.com/project/badge/Grade/eb80d748233e4f0c836a329ddb390be4)](https://app.codacy.com/manual/chrispaskvan/destiny-ghost-api?utm_source=github.com\&utm_medium=referral\&utm_content=chrispaskvan/destiny-ghost-api\&utm_campaign=Badge_Grade_Dashboard)
 [![Codacy Badge](https://api.codacy.com/project/badge/Coverage/f3739ef16c3a4c9d9ad08423744fa5d3)](https://www.codacy.com/manual/chrispaskvan/destiny-ghost-api?utm_source=github.com\&utm_medium=referral\&utm_content=chrispaskvan/destiny-ghost-api\&utm_campaign=Badge_Coverage)
 [![Maintainability](https://qlty.sh/gh/chrispaskvan/projects/destiny-ghost-api/maintainability.svg)](https://qlty.sh/gh/chrispaskvan/projects/destiny-ghost-api)
