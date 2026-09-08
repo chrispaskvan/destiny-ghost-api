@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Created by chris on 9/25/15.
  */
@@ -9,6 +10,14 @@ import getMaxAgeFromCacheControl from '../helpers/get-max-age-from-cache-control
 import log from '../helpers/log.js';
 import toTemporalInstant from '../helpers/to-temporal-instant.js';
 
+/** @typedef {import('../users/user.routes.js').AuthenticatedSessionData} AuthenticatedSessionData */
+
+/**
+ * @typedef {Object} Destiny2RoutesOptions
+ * @property {unknown} authenticationController
+ * @property {import('./destiny2.controller.js').default} destiny2Controller
+ */
+
 const inventoryStreamBackpressureIdleTimeoutMs = 30 * 1000;
 const inventoryStreamWriteResult = Object.freeze({
     closed: 'closed',
@@ -17,11 +26,16 @@ const inventoryStreamWriteResult = Object.freeze({
 });
 
 function getInventoryStreamBackpressureIdleTimeoutMs() {
-    const value = Number.parseInt(process.env.INVENTORY_STREAM_BACKPRESSURE_TIMEOUT_MS, 10);
+    const value = Number.parseInt(process.env.INVENTORY_STREAM_BACKPRESSURE_TIMEOUT_MS ?? '', 10);
 
     return Number.isFinite(value) && value > 0 ? value : inventoryStreamBackpressureIdleTimeoutMs;
 }
 
+/**
+ * @param {import('express').Response} res
+ * @param {string} chunk
+ * @returns {Promise<string>}
+ */
 async function writeChunk(res, chunk) {
     if (res.writableEnded || res.destroyed) {
         return inventoryStreamWriteResult.closed;
@@ -35,7 +49,9 @@ async function writeChunk(res, chunk) {
         const socket = res.socket;
         const previousSocketTimeout = socket?.timeout;
         let cleaned = false;
+        /** @type {import('express').Response | undefined} */
         let drainEmitter;
+        /** @type {NodeJS.Timeout | undefined} */
         let timeout;
         const handleDrain = () => {
             resolveWith(
@@ -62,7 +78,7 @@ async function writeChunk(res, chunk) {
         const cleanup = () => {
             if (cleaned) return;
             cleaned = true;
-            drainEmitter.off('drain', handleDrain);
+            drainEmitter?.off('drain', handleDrain);
             res.off('close', handleClose);
 
             if (socket?.setTimeout) {
@@ -72,6 +88,7 @@ async function writeChunk(res, chunk) {
                 clearTimeout(timeout);
             }
         };
+        /** @param {string} result */
         const resolveWith = result => {
             cleanup();
             resolve(result);
@@ -92,6 +109,13 @@ async function writeChunk(res, chunk) {
     return drained;
 }
 
+/**
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {string} writeResult
+ * @param {string} context
+ * @returns {boolean}
+ */
 function handleWriteResult(req, res, writeResult, context) {
     if (writeResult === inventoryStreamWriteResult.ok) return false;
 
@@ -123,9 +147,8 @@ function handleWriteResult(req, res, writeResult, context) {
 
 /**
  * Destiny Routes
- * @param authenticationController
- * @param destiny2Controller
- * @returns {*}
+ * @param {Destiny2RoutesOptions} options
+ * @returns {import('express').Router}
  */
 const routes = ({ authenticationController, destiny2Controller }) => {
     const destiny2Router = Router();
@@ -156,9 +179,9 @@ const routes = ({ authenticationController, destiny2Controller }) => {
     destiny2Router.route('/characters').get(
         async (req, res, next) => await middleware.authenticateUser(req, res, next),
         async (req, res) => {
-            const {
-                session: { displayName, membershipType },
-            } = req;
+            const { displayName, membershipType } = /** @type {AuthenticatedSessionData} */ (
+                /** @type {unknown} */ (req.session)
+            );
             const characterBases = await destiny2Controller.getCharacters(
                 displayName,
                 membershipType,
@@ -198,8 +221,8 @@ const routes = ({ authenticationController, destiny2Controller }) => {
             return res.status(StatusCodes.SERVICE_UNAVAILABLE).end();
         }
 
-        let page = parseInt(req.query.page, 10);
-        let size = parseInt(req.query.size, 10);
+        let page = parseInt(typeof req.query.page === 'string' ? req.query.page : '', 10);
+        let size = parseInt(typeof req.query.size === 'string' ? req.query.size : '', 10);
 
         if (Number.isNaN(page) && Number.isNaN(size)) {
             let first = true;
@@ -374,9 +397,9 @@ const routes = ({ authenticationController, destiny2Controller }) => {
     destiny2Router.route('/xur').get(
         async (req, res, next) => await middleware.authenticateUser(req, res, next),
         async (req, res) => {
-            const {
-                session: { displayName, membershipType },
-            } = req;
+            const { displayName, membershipType } = /** @type {AuthenticatedSessionData} */ (
+                /** @type {unknown} */ (req.session)
+            );
             const items = await destiny2Controller.getXur(displayName, membershipType);
 
             if (items) {

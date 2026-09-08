@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * A module for handling Destiny 2 routes.
  *
@@ -6,6 +7,21 @@
  */
 import DestinyController from '../destiny/destiny.controller.js';
 
+/** @typedef {import('./destiny2.cache.js').Destiny2Character} Destiny2Character */
+
+/**
+ * A character summary flattened from a Bungie profile character and its
+ * manifest class definition, as returned by getCharacters().
+ * @typedef {Object} CharacterSummary
+ * @property {string} characterId
+ * @property {number} classHash
+ * @property {string} [className]
+ * @property {string} emblem
+ * @property {string} backgroundPath
+ * @property {number} powerLevel
+ * @property {{ rel: string, href: string }[]} links
+ */
+
 /**
  * Destiny Controller Service
  */
@@ -13,7 +29,9 @@ class Destiny2Controller extends DestinyController {
     /**
      * Get characters for the current user.
      *
-     * @returns {*|Array}
+     * @param {string} displayName
+     * @param {number} membershipType
+     * @returns {Promise<CharacterSummary[]>}
      */
     async getCharacters(displayName, membershipType) {
         const currentUser = await this.users.getUserByDisplayName(displayName, membershipType);
@@ -24,7 +42,7 @@ class Destiny2Controller extends DestinyController {
         );
 
         return Promise.all(
-            characters.map(async character => {
+            characters.map(async (/** @type {Destiny2Character} */ character) => {
                 const {
                     emblemBackgroundPath: backgroundPath,
                     characterId,
@@ -67,6 +85,7 @@ class Destiny2Controller extends DestinyController {
     /**
      * Get the current manifest definition from Bungie.
      *
+     * @param {boolean} [skipCache]
      * @returns Promise
      * @memberof Destiny2Controller
      */
@@ -79,8 +98,8 @@ class Destiny2Controller extends DestinyController {
      *
      * @param {string} displayName - The display name of the user.
      * @param {string|number} membershipType - The membership type of the user.
-     * @param {string|number} characterId - The character ID to use (optional).
-     * @returns {*|Array}
+     * @param {string|number} [characterId] - The character ID to use (optional).
+     * @returns {Promise<Array<import('../helpers/world2.js').ItemDefinition | undefined> | number[] | undefined>}
      */
     async getXur(displayName, membershipType, characterId) {
         const currentUser = await this.users.getUserByDisplayName(displayName, membershipType);
@@ -103,7 +122,10 @@ class Destiny2Controller extends DestinyController {
             }
 
             const items = await Promise.all(
-                itemHashes.map(async itemHash => await this.world.getItemByHash(itemHash)),
+                itemHashes.map(
+                    async (/** @type {number} */ itemHash) =>
+                        await this.world.getItemByHash(itemHash),
+                ),
             );
 
             return items;
