@@ -453,7 +453,7 @@ const routes = ({
 
             return res.status(StatusCodes.OK).json({ displayName });
         }
-        if (sessionState !== queryState || typeof code !== 'string' || !code) {
+        if (!sessionState || sessionState !== queryState || typeof code !== 'string' || !code) {
             if (wantsHtml) {
                 return res.redirect(`${process.env.WEBSITE}/?error=unauthorized`);
             }

@@ -142,7 +142,7 @@ class UserController {
     /**
      * Hypermedia as the Engine of Application State (HATEOAS)
      *
-     * @param {MutableUser} user
+     * @param {Pick<MutableUser, 'dateRegistered' | 'displayName' | 'emailAddress' | 'firstName' | 'lastName' | 'notifications' | 'phoneNumber' | 'profilePicturePath'>} param0
      * @returns {UserResponse}
      */
     static #getUserResponse({
@@ -282,13 +282,11 @@ class UserController {
      * @returns {Promise<CurrentUserResult>}
      */
     async getCurrentUser(displayName, membershipType) {
-        const user = /** @type {MutableUser | undefined} */ (
-            await this.users.getUserByDisplayName(displayName, membershipType)
-        );
+        const user = await this.users.getUserByDisplayName(displayName, membershipType);
 
         if (user?.bungie) {
             const { access_token: accessToken } = user.bungie;
-            const ETag = /** @type {string} */ (user._etag);
+            const { _etag: ETag } = user;
             const bungieUser = await this.destiny.getCurrentUser(accessToken);
 
             return bungieUser

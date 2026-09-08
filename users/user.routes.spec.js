@@ -1233,6 +1233,55 @@ describe('UserRouter', () => {
                 }));
         });
 
+        describe('when the session never established a state (both state values are undefined)', () => {
+            it('should redirect a browser client with an error', () =>
+                new Promise((done, reject) => {
+                    const req = createRequest({
+                        method: 'GET',
+                        url: '/signIn/Bungie',
+                        headers: { accept: 'text/html' },
+                        query: { code: 'oauth-code' },
+                        session: {},
+                    });
+
+                    res.on('end', () => {
+                        try {
+                            expect(res.statusCode).toEqual(StatusCodes.MOVED_TEMPORARILY);
+                            expect(res._getRedirectUrl()).toContain('error=unauthorized');
+                            expect(destinyService.getAccessTokenFromCode).not.toHaveBeenCalled();
+                            done();
+                        } catch (err) {
+                            reject(err);
+                        }
+                    });
+
+                    userRouter(req, res, next);
+                }));
+
+            it('should return 401 to an API client', () =>
+                new Promise((done, reject) => {
+                    const req = createRequest({
+                        method: 'GET',
+                        url: '/signIn/Bungie',
+                        headers: { accept: 'application/json' },
+                        query: { code: 'oauth-code' },
+                        session: {},
+                    });
+
+                    res.on('end', () => {
+                        try {
+                            expect(res.statusCode).toEqual(StatusCodes.UNAUTHORIZED);
+                            expect(destinyService.getAccessTokenFromCode).not.toHaveBeenCalled();
+                            done();
+                        } catch (err) {
+                            reject(err);
+                        }
+                    });
+
+                    userRouter(req, res, next);
+                }));
+        });
+
         describe('when code is missing', () => {
             it('should redirect a browser client with an error', () =>
                 new Promise((done, reject) => {
