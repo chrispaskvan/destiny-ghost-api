@@ -12,10 +12,11 @@ import log from './log.js';
 import sanitizeDirectory from './sanitize-directory.js';
 
 /**
- * A single row from a manifest SQLite table, as issued by this repository's
- * `SELECT * | json FROM ...` queries — always one JSON-encoded column.
- * @typedef {Object} ManifestRow
- * @property {string} json
+ * A row from a manifest SQLite table. This repository issues both
+ * `SELECT * ...` (full row, e.g. an id column plus `json`) and
+ * `SELECT json ...` (single column) queries; only `json` is ever read, but
+ * a `SELECT *` row may carry other columns this type doesn't enumerate.
+ * @typedef {{ json: string } & Record<string, unknown>} ManifestRow
  */
 
 /**

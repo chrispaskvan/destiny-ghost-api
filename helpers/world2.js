@@ -31,6 +31,11 @@ import log from './log.js';
  * @property {{ name?: string }} [displayProperties]
  * @property {string} [flavorText]
  * @property {string} [itemTypeAndTierDisplayName]
+ * @property {number} [itemType]
+ * @property {string} [itemTypeDisplayName]
+ * @property {number} [defaultDamageTypeHash]
+ * @property {{ tierTypeName?: string }} [inventory]
+ * @property {number[]} [itemCategoryHashes]
  */
 
 /**
@@ -182,8 +187,9 @@ class World2 extends World {
     async getItemByName(itemName) {
         await this.bootstrapped;
 
+        const lowerCaseItemName = itemName.toLowerCase();
         const items = this.items.filter(({ displayProperties: { name } = {} }) =>
-            (name ?? '').toLowerCase().includes(itemName.toLowerCase()),
+            (name ?? '').toLowerCase().includes(lowerCaseItemName),
         );
 
         return items.map(item =>

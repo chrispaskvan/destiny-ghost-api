@@ -1,10 +1,26 @@
 // @ts-check
 /**
+ * A single named parameter substituted into the query text produced by
+ * getQuery().
+ * @typedef {Object} QueryParameter
+ * @property {string} name
+ * @property {string | number | boolean | null} value
+ */
+
+/**
+ * The query produced by getQuery(): parameterized query text plus its
+ * bound parameter values.
+ * @typedef {Object} Query
+ * @property {string} query
+ * @property {QueryParameter[]} [parameters]
+ */
+
+/**
  * Query Builder Class
  */
 class QueryBuilder {
     constructor() {
-        /** @type {Record<string, import('@azure/cosmos').SqlParameter['value']>[]} */
+        /** @type {Record<string, QueryParameter['value']>[]} */
         this.filters = [];
         /** @type {string[]} */
         this.fields = [];
@@ -91,11 +107,11 @@ class QueryBuilder {
     /**
      *
      * @param {string} key
-     * @param {import('@azure/cosmos').SqlParameter['value']} value
+     * @param {QueryParameter['value']} value
      * @returns {QueryBuilder}
      */
     where(key, value) {
-        /** @type {Record<string, import('@azure/cosmos').SqlParameter['value']>} */
+        /** @type {Record<string, QueryParameter['value']>} */
         const filter = {};
 
         filter[key] = value;
@@ -106,7 +122,7 @@ class QueryBuilder {
 
     /**
      *
-     * @returns {import('@azure/cosmos').SqlQuerySpec}
+     * @returns {Query}
      */
     getQuery() {
         const tableAlias = this.table ? this.table[0].toLowerCase() : 'r';
@@ -115,7 +131,7 @@ class QueryBuilder {
             : '*';
         /** @type {string | undefined} */
         let childAlias;
-        /** @type {import('@azure/cosmos').SqlParameter[]} */
+        /** @type {QueryParameter[]} */
         const parameters = [];
         /** @type {string} */
         let sql;
