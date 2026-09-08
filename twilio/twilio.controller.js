@@ -479,13 +479,25 @@ class TwilioController {
      * @returns {Promise<void>}
      */
     async statusCallback(message) {
-        const { ClaimCheck: claimCheck, MessageStatus: status, To: phoneNumber = '' } = message;
+        const {
+            ClaimCheck: claimCheck,
+            MessageStatus: messageStatus,
+            SmsStatus: smsStatus,
+            To: phoneNumber,
+        } = message;
+        // This webhook's payload carries MessageStatus, not SmsStatus - fall
+        // back to a legacy SmsStatus field if Twilio ever sends one instead.
+        const status = messageStatus ?? smsStatus;
+
+        if (!phoneNumber || !status) {
+            log.warn({ message }, 'Ignoring status callback missing To or status.');
+
+            return;
+        }
+
         const user = await this.users.getUserByPhoneNumber(phoneNumber);
 
         if (user) {
-            // This webhook's payload carries MessageStatus (destructured as
-            // `status` above), not SmsStatus - map it explicitly so stored
-            // records stay eligible for deleteUserMessages()'s SmsStatus query.
             await this.users.addUserMessage(
                 /** @type {Omit<import('../users/user.service.js').UserMessage, 'id'>} */ ({
                     ...message,
