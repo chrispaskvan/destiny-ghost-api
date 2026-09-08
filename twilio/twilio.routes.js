@@ -174,14 +174,6 @@ const routes = ({
         const claimCheck = query['claim-check-number'];
         const notificationType = query['notification-type'];
 
-        try {
-            statusCallbackBodySchema.parse(body);
-        } catch (err) {
-            const message = err instanceof z.ZodError ? err.issues[0].message : 'Bad Request';
-
-            return res.status(StatusCodes.BAD_REQUEST).json({ error: message });
-        }
-
         if (
             !validateRequest(
                 authToken,
@@ -193,6 +185,14 @@ const routes = ({
             res.writeHead(StatusCodes.FORBIDDEN);
 
             return res.end();
+        }
+
+        try {
+            statusCallbackBodySchema.parse(body);
+        } catch (err) {
+            const message = err instanceof z.ZodError ? err.issues[0].message : 'Bad Request';
+
+            return res.status(StatusCodes.BAD_REQUEST).json({ error: message });
         }
 
         await twilioController.statusCallback({

@@ -61,7 +61,7 @@ import {
  * NumMedia, hence the index signature.
  * @typedef {{
  *   From: string,
- *   Body: string,
+ *   Body?: string,
  *   NumMedia?: string,
  *   SmsSid?: string,
  *   SmsStatus?: string,
@@ -325,7 +325,13 @@ class TwilioController {
     async request({ body, cookies }) {
         let responseCookies = {};
         const user = await this.users.getUserByPhoneNumber(body.From);
-        const rawMessage = body.Body.trim();
+        /**
+         * `bodySchema` in twilio.routes.js requires `Body` for this route
+         * (POST /destiny/r); it's optional on `TwilioWebhookBody` only
+         * because the status-callback route (POST /destiny/s) shares the
+         * type and doesn't send `Body`.
+         */
+        const rawMessage = /** @type {string} */ (body.Body).trim();
         const emojiMatches = extractEmoji(rawMessage);
         /**
          * Emoji are stripped before keyword/search matching so a message like
