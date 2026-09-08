@@ -453,7 +453,7 @@ const routes = ({
 
             return res.status(StatusCodes.OK).json({ displayName });
         }
-        if (sessionState !== queryState) {
+        if (sessionState !== queryState || typeof code !== 'string' || !code) {
             if (wantsHtml) {
                 return res.redirect(`${process.env.WEBSITE}/?error=unauthorized`);
             }
@@ -462,7 +462,7 @@ const routes = ({
         }
 
         const user = await userController.signIn({
-            code: /** @type {string} */ (code),
+            code,
             displayName,
         });
         if (!user) {

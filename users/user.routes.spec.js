@@ -1233,6 +1233,55 @@ describe('UserRouter', () => {
                 }));
         });
 
+        describe('when code is missing', () => {
+            it('should redirect a browser client with an error', () =>
+                new Promise((done, reject) => {
+                    const req = createRequest({
+                        method: 'GET',
+                        url: '/signIn/Bungie',
+                        headers: { accept: 'text/html' },
+                        query: { state: queryState },
+                        session: { state: queryState },
+                    });
+
+                    res.on('end', () => {
+                        try {
+                            expect(res.statusCode).toEqual(StatusCodes.MOVED_TEMPORARILY);
+                            expect(res._getRedirectUrl()).toContain('error=unauthorized');
+                            expect(destinyService.getAccessTokenFromCode).not.toHaveBeenCalled();
+                            done();
+                        } catch (err) {
+                            reject(err);
+                        }
+                    });
+
+                    userRouter(req, res, next);
+                }));
+
+            it('should return 401 to an API client', () =>
+                new Promise((done, reject) => {
+                    const req = createRequest({
+                        method: 'GET',
+                        url: '/signIn/Bungie',
+                        headers: { accept: 'application/json' },
+                        query: { state: queryState },
+                        session: { state: queryState },
+                    });
+
+                    res.on('end', () => {
+                        try {
+                            expect(res.statusCode).toEqual(StatusCodes.UNAUTHORIZED);
+                            expect(destinyService.getAccessTokenFromCode).not.toHaveBeenCalled();
+                            done();
+                        } catch (err) {
+                            reject(err);
+                        }
+                    });
+
+                    userRouter(req, res, next);
+                }));
+        });
+
         describe('when userController.signIn returns undefined (user not found)', () => {
             beforeEach(() => {
                 destinyService.getAccessTokenFromCode.mockResolvedValue({ access_token: 'token' });

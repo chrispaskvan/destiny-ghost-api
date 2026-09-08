@@ -370,8 +370,12 @@ class UserController {
      * @returns {Promise<MutableUser | undefined>}
      */
     async join(user) {
+        if (!user?.tokens?.emailAddress) {
+            return undefined;
+        }
+
         const registeredUser = /** @type {MutableUser | undefined} */ (
-            await this.users.getUserByEmailAddressToken(user?.tokens?.emailAddress ?? '')
+            await this.users.getUserByEmailAddressToken(user.tokens.emailAddress)
         );
 
         if (
