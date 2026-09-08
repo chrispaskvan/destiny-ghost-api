@@ -139,9 +139,18 @@ class World2 extends World {
      */
     async getWeaponCategory() {
         await this.bootstrapped;
-        this.#weaponCategory ??= /** @type {CategoryDefinition} */ (
-            this.categories.find(category => category?.displayProperties?.name === 'Weapon')
-        ).hash;
+
+        if (this.#weaponCategory === undefined) {
+            const weaponCategory = this.categories.find(
+                category => category?.displayProperties?.name === 'Weapon',
+            );
+
+            if (!weaponCategory) {
+                throw new Error('Weapon category definition not found in manifest');
+            }
+
+            this.#weaponCategory = weaponCategory.hash;
+        }
 
         return this.#weaponCategory;
     }
@@ -187,7 +196,12 @@ class World2 extends World {
     async getItemByName(itemName) {
         await this.bootstrapped;
 
-        const lowerCaseItemName = itemName.toLowerCase();
+        const lowerCaseItemName = itemName.trim().toLowerCase();
+
+        if (!lowerCaseItemName) {
+            return [];
+        }
+
         const items = this.items.filter(({ displayProperties: { name } = {} }) =>
             (name ?? '').toLowerCase().includes(lowerCaseItemName),
         );
