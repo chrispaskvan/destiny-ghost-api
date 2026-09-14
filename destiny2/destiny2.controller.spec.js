@@ -79,6 +79,36 @@ describe('Destiny2Controller', () => {
 
                     expect(className).toEqual('Hunter');
                 });
+
+                it('should default className to an empty string when the class definition is missing from the manifest', async () => {
+                    userService.getUserByDisplayName = vi.fn().mockResolvedValue({
+                        membershipId: '1',
+                    });
+                    destiny2Controller = new Destiny2Controller({
+                        destinyService: destiny2Service,
+                        userService,
+                        worldRepository: {
+                            getClassByHash: vi.fn().mockResolvedValue(undefined),
+                        },
+                    });
+
+                    const [{ className }] = await destiny2Controller.getCharacters(
+                        displayName,
+                        membershipType,
+                    );
+
+                    expect(className).toEqual('');
+                });
+            });
+
+            describe('when no user is found', () => {
+                it('should throw', async () => {
+                    userService.getUserByDisplayName = vi.fn().mockResolvedValue(undefined);
+
+                    await expect(
+                        destiny2Controller.getCharacters(displayName, membershipType),
+                    ).rejects.toThrow('User is not registered.');
+                });
             });
         });
     });
@@ -113,6 +143,19 @@ describe('Destiny2Controller', () => {
                         characterId,
                         accessToken,
                     );
+                });
+            });
+
+            describe('when the user has no Bungie access token', () => {
+                it('should throw', async () => {
+                    userService.getUserByDisplayName = vi.fn().mockResolvedValue({
+                        bungie: {},
+                        membershipId: '1',
+                    });
+
+                    await expect(
+                        destiny2Controller.getXur(displayName, membershipType),
+                    ).rejects.toThrow('User is not registered with Bungie.');
                 });
             });
         });

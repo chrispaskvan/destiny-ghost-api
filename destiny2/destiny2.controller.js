@@ -15,7 +15,7 @@ import DestinyController from '../destiny/destiny.controller.js';
  * @typedef {Object} CharacterSummary
  * @property {string} characterId
  * @property {number} classHash
- * @property {string} [className]
+ * @property {string} className
  * @property {string} emblem
  * @property {string} backgroundPath
  * @property {number} powerLevel
@@ -57,7 +57,7 @@ class Destiny2Controller extends DestinyController {
                     emblemPath: emblem,
                 } = character;
                 const classDefinition = await this.world.getClassByHash(classHash);
-                const { displayProperties: { name: className } = {} } = classDefinition ?? {};
+                const { displayProperties: { name: className = '' } = {} } = classDefinition ?? {};
 
                 return {
                     characterId,
