@@ -168,6 +168,39 @@ describe('Destiny2Router', () => {
                 destiny2Router(req, res, next);
             }));
 
+        it('should paginate using the first value when page/size are repeated query parameters', () =>
+            new Promise((done, reject) => {
+                world.items = [
+                    { hash: 1, displayProperties: { name: 'One' } },
+                    { hash: 2, displayProperties: { name: 'Two' } },
+                    { hash: 3, displayProperties: { name: 'Three' } },
+                ];
+
+                const req = createRequest({
+                    method: 'GET',
+                    url: '/inventory',
+                    query: { page: ['1', '2'], size: ['2', '3'] },
+                    headers: configuration.notificationHeaders,
+                });
+
+                res.on('end', () => {
+                    try {
+                        expect(res.statusCode).toEqual(StatusCodes.OK);
+
+                        const body = JSON.parse(res._getData());
+
+                        expect(body.page.number).toEqual(1);
+                        expect(body.page.size).toEqual(2);
+                        expect(body.data).toEqual(world.items.slice(0, 2));
+                        done();
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
+
+                destiny2Router(req, res, next);
+            }));
+
         it('should wait for drain when the response stream applies backpressure', () =>
             new Promise((done, reject) => {
                 const req = createRequest({
