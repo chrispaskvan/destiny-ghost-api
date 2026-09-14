@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Destiny Error Class
  */

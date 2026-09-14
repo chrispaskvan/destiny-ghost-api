@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Created by chris on 9/25/15.
  */
@@ -8,14 +9,20 @@ import authorizeUser from '../authorization/authorization.middleware.js';
 import getMaxAgeFromCacheControl from '../helpers/get-max-age-from-cache-control.js';
 import toTemporalInstant from '../helpers/to-temporal-instant.js';
 
+/** @typedef {import('../users/user.routes.js').AppSessionData} AppSessionData */
+
+/**
+ * @typedef {Object} DestinyRoutesOptions
+ * @property {import('./destiny.service.js').default} destinyService
+ * @property {import('../users/user.service.js').default} userService
+ * @property {import('../helpers/world.js').default} worldRepository
+ */
+
 /**
  * Destiny Routes
  *
- * @param authenticationController
- * @param destinyService
- * @param userService
- * @param worldRepository
- * @returns {*}
+ * @param {DestinyRoutesOptions} options
+ * @returns {import('express').Router}
  */
 const routes = ({ destinyService, userService, worldRepository }) => {
     const destinyRouter = Router();
@@ -33,7 +40,7 @@ const routes = ({ destinyService, userService, worldRepository }) => {
     destinyRouter.route('/signIn/').get(async (req, res) => {
         const { state, url } = await destinyController.getAuthorizationUrl();
 
-        req.session.state = state;
+        /** @type {AppSessionData} */ (req.session).state = state;
         res.send(url);
     });
 

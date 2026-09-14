@@ -49,6 +49,24 @@ describe('DestinyController', () => {
             expect(destinyService.getCurrentUser).toHaveBeenCalledWith('token123');
             expect(result).toEqual({ id: 1, name: 'Test' });
         });
+
+        it('should throw when no user is found for the displayName/membershipType', async () => {
+            userService.getUserByDisplayName.mockResolvedValue(undefined);
+
+            await expect(controller.getCurrentUser('displayName', 2)).rejects.toThrow(
+                'User is not registered with Bungie.',
+            );
+            expect(destinyService.getCurrentUser).not.toHaveBeenCalled();
+        });
+
+        it('should throw when the user has no Bungie access token', async () => {
+            userService.getUserByDisplayName.mockResolvedValue({ bungie: {} });
+
+            await expect(controller.getCurrentUser('displayName', 2)).rejects.toThrow(
+                'User is not registered with Bungie.',
+            );
+            expect(destinyService.getCurrentUser).not.toHaveBeenCalled();
+        });
     });
 
     describe('getGrimoireCards', () => {
