@@ -24,6 +24,7 @@ import DestinyController from '../destiny/destiny.controller.js';
 
 /**
  * Destiny Controller Service
+ * @extends {DestinyController<import('./destiny2.service.js').default, import('../helpers/world2.js').default>}
  */
 class Destiny2Controller extends DestinyController {
     /**
@@ -35,6 +36,11 @@ class Destiny2Controller extends DestinyController {
      */
     async getCharacters(displayName, membershipType) {
         const currentUser = await this.users.getUserByDisplayName(displayName, membershipType);
+
+        if (!currentUser) {
+            throw new Error('User is not registered.');
+        }
+
         const characters = await this.destiny.getProfile(
             currentUser.membershipId,
             membershipType,
@@ -50,9 +56,8 @@ class Destiny2Controller extends DestinyController {
                     light: powerLevel,
                     emblemPath: emblem,
                 } = character;
-                const {
-                    displayProperties: { name: className },
-                } = await this.world.getClassByHash(classHash);
+                const classDefinition = await this.world.getClassByHash(classHash);
+                const { displayProperties: { name: className } = {} } = classDefinition ?? {};
 
                 return {
                     characterId,
@@ -97,12 +102,17 @@ class Destiny2Controller extends DestinyController {
      * Get Xur's inventory.
      *
      * @param {string} displayName - The display name of the user.
-     * @param {string|number} membershipType - The membership type of the user.
-     * @param {string|number} [characterId] - The character ID to use (optional).
+     * @param {number} membershipType - The membership type of the user.
+     * @param {string} [characterId] - The character ID to use (optional).
      * @returns {Promise<Array<import('../helpers/world2.js').ItemDefinition | undefined> | number[] | undefined>}
      */
     async getXur(displayName, membershipType, characterId) {
         const currentUser = await this.users.getUserByDisplayName(displayName, membershipType);
+
+        if (!currentUser?.bungie?.access_token) {
+            throw new Error('User is not registered with Bungie.');
+        }
+
         const {
             bungie: { access_token: accessToken },
             membershipId,
