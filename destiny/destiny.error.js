@@ -5,18 +5,16 @@ class DestinyError extends Error {
     /**
      * Create a new error from an error response to a Destiny web API request.
      *
-     * @param code
-     * @param message
-     * @param status
+     * @param {number} code
+     * @param {string} message
+     * @param {string} status
      */
     constructor(code, message, status) {
         super(message);
 
-        Object.assign(this, {
-            code,
-            name: 'DestinyError',
-            status,
-        });
+        this.code = code;
+        this.name = 'DestinyError';
+        this.status = status;
     }
 }
 

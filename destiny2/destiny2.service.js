@@ -237,7 +237,7 @@ class Destiny2Service extends DestinyService {
                     err
                 );
 
-            throw new DestinyError(code, message, status);
+            throw new DestinyError(code ?? -1, message, status ?? '');
         }
     }
 

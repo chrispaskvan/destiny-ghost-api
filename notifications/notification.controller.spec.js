@@ -9,9 +9,13 @@ import ClaimCheck from '../helpers/claim-check.js';
 import log from '../helpers/log.js';
 
 vi.mock('bullmq', () => ({
+    // Matches real BullMQ's constructor, which only accepts a message - a
+    // second argument (e.g. `{ cause }`) is silently dropped, unlike native
+    // `Error`. Forwarding it here would let notification.controller.js's own
+    // `unrecoverableError.cause = err` assignment go untested.
     UnrecoverableError: class UnrecoverableError extends Error {
-        constructor(message, options) {
-            super(message, options);
+        constructor(message) {
+            super(message);
             this.name = 'UnrecoverableError';
         }
     },
@@ -32,6 +36,7 @@ vi.mock('../helpers/log.js', () => ({
     default: {
         info: vi.fn(),
         error: vi.fn(),
+        warn: vi.fn(),
     },
 }));
 vi.mock('../helpers/retry.js', async importOriginal => {
@@ -288,7 +293,7 @@ describe('NotificationController', () => {
                 expect(notificationService.sendMessage).toHaveBeenCalledWith(
                     'Test Weapon\nTest Weapon',
                     phoneNumber,
-                    null,
+                    undefined,
                     { claimCheckNumber, notificationType: notificationTypes.Xur },
                 );
                 expect(ClaimCheck.updatePhoneNumber).toHaveBeenCalledWith(
@@ -324,7 +329,37 @@ describe('NotificationController', () => {
                 expect(notificationService.sendMessage).toHaveBeenCalledWith(
                     '', // Empty message since no weapons found
                     phoneNumber,
-                    null,
+                    undefined,
+                    { claimCheckNumber, notificationType: notificationTypes.Xur },
+                );
+            });
+
+            it('should filter out item hashes missing from the manifest instead of throwing', async () => {
+                const weaponCategoryHash = 1;
+                const missingItemHash = 999999;
+                const itemHashes = [123456, missingItemHash];
+
+                authenticationService.authenticate.mockResolvedValue({
+                    bungie: { access_token: accessToken },
+                });
+                destinyService.getProfile.mockResolvedValue([mockCharacter]);
+                destinyService.getXur.mockResolvedValue(itemHashes);
+                worldRepository.getWeaponCategory.mockResolvedValue(weaponCategoryHash);
+                worldRepository.getItemByHash.mockImplementation(itemHash =>
+                    Promise.resolve(itemHash === missingItemHash ? undefined : mockItem),
+                );
+                notificationService.sendMessage.mockResolvedValue({ status: 'sent' });
+                ClaimCheck.updatePhoneNumber.mockResolvedValue();
+
+                await sendMethod(mockUser, {
+                    claimCheckNumber,
+                    notificationType: notificationTypes.Xur,
+                });
+
+                expect(notificationService.sendMessage).toHaveBeenCalledWith(
+                    'Test Weapon',
+                    phoneNumber,
+                    undefined,
                     { claimCheckNumber, notificationType: notificationTypes.Xur },
                 );
             });
@@ -359,6 +394,38 @@ describe('NotificationController', () => {
                 expect(ClaimCheck.updatePhoneNumber).not.toHaveBeenCalled();
             });
 
+            it('should skip and log a warning when authentication finds no user', async () => {
+                authenticationService.authenticate.mockResolvedValue(undefined);
+
+                await sendMethod(mockUser, {
+                    claimCheckNumber,
+                    notificationType: notificationTypes.Xur,
+                });
+
+                expect(log.warn).toHaveBeenCalledWith(
+                    { membershipId, membershipType },
+                    'Skipping Xur notification: user could not be authenticated.',
+                );
+                expect(destinyService.getProfile).not.toHaveBeenCalled();
+                expect(notificationService.sendMessage).not.toHaveBeenCalled();
+            });
+
+            it('should skip and log a warning when the authenticated user has no Bungie access token', async () => {
+                authenticationService.authenticate.mockResolvedValue({ bungie: {} });
+
+                await sendMethod(mockUser, {
+                    claimCheckNumber,
+                    notificationType: notificationTypes.Xur,
+                });
+
+                expect(log.warn).toHaveBeenCalledWith(
+                    { membershipId, membershipType },
+                    'Skipping Xur notification: user could not be authenticated.',
+                );
+                expect(destinyService.getProfile).not.toHaveBeenCalled();
+                expect(notificationService.sendMessage).not.toHaveBeenCalled();
+            });
+
             it('should send fallback SMS when Xur vendor is unavailable', async () => {
                 const xurNotFoundErr = new DestinyError(
                     1627,
@@ -382,7 +449,7 @@ describe('NotificationController', () => {
                 expect(notificationService.sendMessage).toHaveBeenCalledWith(
                     "Xur has closed shop. He'll return Friday.",
                     phoneNumber,
-                    null,
+                    undefined,
                     { claimCheckNumber, notificationType: notificationTypes.Xur },
                 );
                 expect(log.info).toHaveBeenCalledWith(JSON.stringify('sent'));

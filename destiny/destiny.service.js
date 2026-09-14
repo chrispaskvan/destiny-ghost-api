@@ -280,7 +280,7 @@ class DestinyService {
         if (user === undefined || errorCode !== 1) {
             const { Message: message, ErrorStatus: status } = responseBody;
 
-            throw new DestinyError(errorCode, message, status);
+            throw new DestinyError(errorCode, message ?? '', status ?? '');
         }
 
         const { destinyMemberships, bungieNetUser: { profilePicturePath } = {} } = user;

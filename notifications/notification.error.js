@@ -1,13 +1,10 @@
+// @ts-check
 /**
  * Notification Error Class
  */
 class NotificationError extends Error {
     /**
-     * Create a new error from an error response to a Destiny web API request.
-     *
-     * @param code
-     * @param message
-     * @param status
+     * @param {string} message
      */
     constructor(message) {
         super(message);
