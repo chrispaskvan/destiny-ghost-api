@@ -221,8 +221,18 @@ const routes = ({ authenticationController, destiny2Controller }) => {
             return res.status(StatusCodes.SERVICE_UNAVAILABLE).end();
         }
 
-        let page = parseInt(typeof req.query.page === 'string' ? req.query.page : '', 10);
-        let size = parseInt(typeof req.query.size === 'string' ? req.query.size : '', 10);
+        /**
+         * `req.query.page`/`size` can be a `ParsedQs`/array when the client
+         * repeats the param (e.g. `?page=1&page=2`). The old
+         * `parseInt(req.query.page, 10)` coerced an array via `toString()`
+         * (joining with commas) and then read the leading digits, so
+         * `['1', '2']` parsed as `1` - equivalent to just reading the first
+         * element. Mirror that here instead of always falling back to NaN.
+         */
+        const pageParam = Array.isArray(req.query.page) ? req.query.page[0] : req.query.page;
+        const sizeParam = Array.isArray(req.query.size) ? req.query.size[0] : req.query.size;
+        let page = parseInt(typeof pageParam === 'string' ? pageParam : '', 10);
+        let size = parseInt(typeof sizeParam === 'string' ? sizeParam : '', 10);
 
         if (Number.isNaN(page) && Number.isNaN(size)) {
             let first = true;
