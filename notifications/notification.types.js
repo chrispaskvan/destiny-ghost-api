@@ -1,6 +1,7 @@
+// @ts-check
 /**
  * Allowed Actions
- * @type {{Gunsmith: string, Xur: string}}
+ * @type {{ Foundry: string, Gunsmith: string, IronBanner: string, Xur: string }}
  */
 const notificationTypes = {
     Foundry: 'Orders',

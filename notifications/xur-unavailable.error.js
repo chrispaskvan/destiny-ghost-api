@@ -1,3 +1,4 @@
+// @ts-check
 import DestinyError from '../destiny/destiny.error.js';
 
 /**
@@ -5,6 +6,11 @@ import DestinyError from '../destiny/destiny.error.js';
  * cannot be retrieved (e.g., vendor not present in-game).
  */
 class XurUnavailableError extends DestinyError {
+    /**
+     * @param {number} code
+     * @param {string} message
+     * @param {{ cause?: unknown }} [options]
+     */
     constructor(code, message, options) {
         super(code, message, 'XurUnavailableError');
         this.name = 'XurUnavailableError';

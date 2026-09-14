@@ -1,3 +1,4 @@
+// @ts-check
 import { UnrecoverableError } from 'bullmq';
 import pLimit from 'p-limit';
 import publisher from '../helpers/publisher.js';
@@ -11,10 +12,33 @@ import ClaimCheck from '../helpers/claim-check.js';
 import log from '../helpers/log.js';
 
 /**
+ * Constructor options for NotificationController.
+ * @typedef {Object} NotificationControllerOptions
+ * @property {import('../authentication/authentication.service.js').default} authenticationService
+ * @property {import('../destiny2/destiny2.service.js').default} destinyService
+ * @property {import('./notification.service.js').default} notificationService
+ * @property {import('../users/user.service.js').default} userService
+ * @property {import('../helpers/world2.js').default} worldRepository
+ */
+
+/**
+ * The queued job payload: the JSON-serialized user this controller
+ * published (via helpers/publisher.js) and now receives back (via
+ * helpers/subscriber.js) to process a notification for.
+ * @typedef {Object} QueuedUser
+ * @property {string} membershipId
+ * @property {number} membershipType
+ * @property {string} phoneNumber
+ */
+
+/**
  * Controller class for Notification routes.
  */
 class NotificationController {
-    constructor(options = {}) {
+    /**
+     * @param {NotificationControllerOptions} options
+     */
+    constructor(options) {
         this.authentication = options.authenticationService;
         this.destiny = options.destinyService;
         this.notifications = options.notificationService;
@@ -26,19 +50,27 @@ class NotificationController {
     }
 
     /**
-     * @param user
-     * @param notificationType
+     * @param {QueuedUser} user
+     * @param {{ claimCheckNumber: string, notificationType: string }} param1
      * @returns {Promise<void>}
-     * @private
      */
     async #send(user, { claimCheckNumber, notificationType }) {
         const { membershipId, membershipType, phoneNumber } = user;
 
         if (notificationType === notificationTypes.Xur) {
             try {
-                const {
-                    bungie: { access_token: accessToken },
-                } = await this.authentication.authenticate(user);
+                const authenticatedUser = await this.authentication.authenticate(user);
+
+                if (!authenticatedUser?.bungie?.access_token) {
+                    log.warn(
+                        { membershipId, membershipType },
+                        'Skipping Xur notification: user could not be authenticated.',
+                    );
+
+                    return;
+                }
+
+                const { access_token: accessToken } = authenticatedUser.bungie;
                 const characters = await this.destiny.getProfile(membershipId, membershipType);
 
                 if (characters?.length) {
@@ -52,7 +84,7 @@ class NotificationController {
                             accessToken,
                         );
                     } catch (xurErr) {
-                        if (isTransientError(xurErr)) throw xurErr;
+                        if (xurErr instanceof Error && isTransientError(xurErr)) throw xurErr;
                         if (
                             xurErr instanceof DestinyError &&
                             xurErr.status === 'DestinyVendorNotFound'
@@ -65,19 +97,27 @@ class NotificationController {
                     }
 
                     const weaponCategory = await this.world.getWeaponCategory();
-                    const items = await Promise.all(
-                        itemHashes.map(itemHash => this.world.getItemByHash(itemHash)),
+                    const items = (
+                        await Promise.all(
+                            itemHashes.map(
+                                /** @param {number} itemHash */
+                                itemHash => this.world.getItemByHash(itemHash),
+                            ),
+                        )
+                    ).filter(
+                        /** @returns {item is import('../helpers/world2.js').ItemDefinition} */
+                        item => Boolean(item),
                     );
                     const message = items
-                        .filter(({ itemCategoryHashes }) =>
+                        .filter(({ itemCategoryHashes = [] }) =>
                             itemCategoryHashes.includes(weaponCategory),
                         )
-                        .map(({ displayProperties: { name } }) => name)
+                        .map(({ displayProperties: { name } = {} }) => name)
                         .join('\n');
                     const { status } = await this.notifications.sendMessage(
                         message,
                         phoneNumber,
-                        null,
+                        undefined,
                         {
                             claimCheckNumber,
                             notificationType,
@@ -91,7 +131,7 @@ class NotificationController {
                     const { status } = await this.notifications.sendMessage(
                         "Xur has closed shop. He'll return Friday.",
                         phoneNumber,
-                        null,
+                        undefined,
                         {
                             claimCheckNumber,
                             notificationType,
@@ -104,7 +144,7 @@ class NotificationController {
                     return;
                 }
 
-                if (isTransientError(err)) {
+                if (err instanceof Error && isTransientError(err)) {
                     throw err;
                 }
 
@@ -112,9 +152,19 @@ class NotificationController {
                     throw err;
                 }
 
-                throw new UnrecoverableError(err instanceof Error ? err.message : String(err), {
-                    cause: err,
-                });
+                /**
+                 * Unlike native `Error`, BullMQ's `UnrecoverableError` constructor
+                 * only accepts a message - a second `{ cause }` argument is
+                 * silently dropped. Set `cause` as a property afterward so it's
+                 * not lost.
+                 */
+                const unrecoverableError = new UnrecoverableError(
+                    err instanceof Error ? err.message : String(err),
+                );
+
+                unrecoverableError.cause = err;
+
+                throw unrecoverableError;
             }
         }
     }
@@ -122,8 +172,8 @@ class NotificationController {
     /**
      * Send notification(s)
      *
-     * @param {*} subscription
-     * @param {*} phoneNumber
+     * @param {string} subscription
+     * @param {string} [phoneNumber]
      */
     async create(subscription, phoneNumber) {
         const claimCheck = new ClaimCheck();
@@ -151,6 +201,7 @@ class NotificationController {
 
         const users = await this.users.getSubscribedUsers(subscription);
         const limit = pLimit(20);
+        /** @param {import('../users/user.service.js').SubscribedUser} user */
         const sendNotification = async user => {
             await this.publisher.sendNotification(user, {
                 notificationType: subscription,

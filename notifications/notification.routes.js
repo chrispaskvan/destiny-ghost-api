@@ -1,3 +1,4 @@
+// @ts-check
 import { Router } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import { getIdempotencyKey, setIdempotencyKey } from '../helpers/idempotency-keys.js';
@@ -23,14 +24,19 @@ import authorizeUser from '../authorization/authorization.middleware.js';
  */
 
 /**
+ * @typedef {Object} NotificationRoutesOptions
+ * @property {import('../authentication/authentication.service.js').default} authenticationService
+ * @property {import('../destiny2/destiny2.service.js').default} destinyService
+ * @property {import('./notification.service.js').default} notificationService
+ * @property {import('../users/user.service.js').default} userService
+ * @property {import('../helpers/world2.js').default} worldRepository
+ */
+
+/**
  * Notification Routes
  *
- * @param authenticationService
- * @param destinyService
- * @param notificationService
- * @param userService
- * @param worldRepository
- * @returns {*}
+ * @param {NotificationRoutesOptions} options
+ * @returns {import('express').Router}
  */
 const routes = ({
     authenticationService,
@@ -77,7 +83,7 @@ const routes = ({
             let claimCheck = await getIdempotencyKey(idempotencyKey);
 
             if (!claimCheck) {
-                claimCheck = await notificationController.create(subscription, null);
+                claimCheck = await notificationController.create(subscription, undefined);
                 await setIdempotencyKey(idempotencyKey, claimCheck);
             }
 
