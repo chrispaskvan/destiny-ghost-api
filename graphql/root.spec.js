@@ -48,6 +48,39 @@ describe('root', () => {
             );
         });
 
+        it('should return empty statistics and no user when destinyMemberships is missing', async () => {
+            const playerWithNoMembership = {};
+
+            mockContext.destiny2Service.constructor.findPlayers = vi
+                .fn()
+                .mockResolvedValue([playerWithNoMembership]);
+            mockContext.destiny2Service.getPlayerStatistics = vi
+                .fn()
+                .mockResolvedValue({ pvp: {} });
+            mockContext.isAdministrator = true;
+            mockContext.userService.getUserByDisplayName.mockClear();
+
+            const players = await root.findPlayers(
+                {
+                    displayName: 'no-membership-player',
+                },
+                mockContext,
+            );
+
+            expect(mockContext.destiny2Service.getPlayerStatistics).toHaveBeenCalledWith(
+                undefined,
+                undefined,
+            );
+            expect(mockContext.userService.getUserByDisplayName).not.toHaveBeenCalled();
+            expect(players).toEqual([
+                {
+                    destinyMemberships: [],
+                    statistics: { pvp: {} },
+                    user: null,
+                },
+            ]);
+        });
+
         it.skip('should return players with statistics and no user', async () => {
             mockContext.isAdministrator = false;
 

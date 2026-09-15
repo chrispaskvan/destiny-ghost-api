@@ -48,7 +48,15 @@ const root = {
                               )
                             : null;
 
-                    return Object.assign(player, { statistics, user });
+                    // graphql/schema.js declares Player.destinyMemberships as a
+                    // non-null list ([Membership!]!) - normalize a missing value
+                    // here so a Bungie response without it doesn't null-propagate
+                    // the whole GraphQL result.
+                    return Object.assign(player, {
+                        destinyMemberships: player.destinyMemberships ?? [],
+                        statistics,
+                        user,
+                    });
                 }),
             ),
         );
