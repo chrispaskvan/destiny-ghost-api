@@ -11,12 +11,34 @@
  * signals maintenance as HTTP 200 with a body ErrorCode of 5 — those surface
  * as DestinyError above this layer and do not trip the breaker.
  */
-import CircuitBreaker from 'opossum';
+// @ts-check
+import { createRequire } from 'node:module';
 import { StatusCodes } from 'http-status-codes';
 import { get as httpGet, post as httpPost } from './request.js';
 import ResponseError from './response.error.js';
 import configuration from './config.js';
 import log from './log.js';
+
+/**
+ * opossum ships no type declarations. Importing it normally lets TypeScript
+ * fall back to structurally inferring types from its internal JS source,
+ * which is fragile (liable to change silently on an opossum version bump)
+ * and produced incorrect shapes for `stats`/etc. `require` returns a plain
+ * `any`, so this module's own minimal `Breaker` typedef below is what's
+ * actually relied on.
+ * @type {new (fn: (...args: *[]) => *, options: *) => Breaker}
+ */
+const CircuitBreaker = createRequire(import.meta.url)('opossum');
+
+/**
+ * Minimal shape of the opossum CircuitBreaker instance this module uses.
+ * @typedef {Object} Breaker
+ * @property {(event: string, listener: (...args: *[]) => void) => void} on
+ * @property {(fn: (...args: *[]) => *, ...args: *[]) => Promise<*>} fire
+ * @property {boolean} opened
+ * @property {boolean} halfOpen
+ * @property {{ failures: number, rejects: number, successes: number, timeouts: number }} stats
+ */
 
 const defaults = {
     errorThresholdPercentage: 50,
@@ -32,7 +54,7 @@ const options = {
     ...overrides,
     // Non-transient responses (4xx other than 408/429) are the caller's
     // problem, not a Bungie outage; they reject but never open the circuit.
-    errorFilter: err => err instanceof ResponseError && !err.isTransient,
+    errorFilter: (/** @type {unknown} */ err) => err instanceof ResponseError && !err.isTransient,
 };
 // The breaker owns outage handling, so one quick retry replaces the
 // request helper's default ladder of three with long backoff.
@@ -52,7 +74,7 @@ breaker.on('close', () => log.info('Bungie circuit breaker closed'));
  * Fire the breaker, translating its open-circuit rejection into a 503 the
  * error middleware understands.
  *
- * @param {Function} fn - Underlying request helper.
+ * @param {(...args: *[]) => *} fn - Underlying request helper.
  * @param {...*} args - Arguments forwarded to the helper.
  * @returns {Promise<*>}
  */
@@ -60,12 +82,15 @@ async function fire(fn, ...args) {
     try {
         return await breaker.fire(fn, ...args);
     } catch (err) {
-        if (err.code === 'EOPENBREAKER') {
-            err.message = 'Bungie API circuit breaker is open.';
-            err.statusCode = StatusCodes.SERVICE_UNAVAILABLE;
+        /** @type {Error & { code?: string, statusCode?: number }} */
+        const typedErr = /** @type {*} */ (err);
+
+        if (typedErr.code === 'EOPENBREAKER') {
+            typedErr.message = 'Bungie API circuit breaker is open.';
+            typedErr.statusCode = StatusCodes.SERVICE_UNAVAILABLE;
         }
 
-        throw err;
+        throw typedErr;
     }
 }
 
@@ -78,10 +103,10 @@ async function fire(fn, ...args) {
  * caller-provided signal is combined, not replaced, so the cap always
  * applies.
  *
- * @param {object} requestOptions
- * @returns {object}
+ * @param {Omit<import('./request.js').RequestOptions, 'method'>} requestOptions
+ * @returns {Omit<import('./request.js').RequestOptions, 'method'>}
  */
-const withSignal = ({ signal, ...requestOptions } = {}) => ({
+const withSignal = ({ signal, ...requestOptions }) => ({
     ...requestOptions,
     signal: signal
         ? AbortSignal.any([signal, AbortSignal.timeout(socketTimeout)])
@@ -91,9 +116,9 @@ const withSignal = ({ signal, ...requestOptions } = {}) => ({
 /**
  * GET from the Bungie API through the circuit breaker.
  *
- * @param {object} requestOptions - Options for {@link module:helpers/request~get}.
+ * @param {Omit<import('./request.js').RequestOptions, 'method'>} requestOptions - Options for {@link module:helpers/request~get}.
  * @param {boolean} [includeHeaders=false]
- * @param {object} [retryOptions]
+ * @param {import('./request.js').RetryOptions} [retryOptions]
  * @returns {Promise<*>}
  */
 async function get(requestOptions, includeHeaders = false, retryOptions) {
@@ -106,8 +131,8 @@ async function get(requestOptions, includeHeaders = false, retryOptions) {
 /**
  * POST to the Bungie API through the circuit breaker.
  *
- * @param {object} requestOptions - Options for {@link module:helpers/request~post}.
- * @param {object} [retryOptions]
+ * @param {Omit<import('./request.js').RequestOptions, 'method'>} requestOptions - Options for {@link module:helpers/request~post}.
+ * @param {import('./request.js').RetryOptions} [retryOptions]
  * @returns {Promise<*>}
  */
 async function post(requestOptions, retryOptions) {

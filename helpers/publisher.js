@@ -6,6 +6,7 @@
  * @author Chris Paskvan
  * @requires azure
  */
+// @ts-check
 import { Queue, QueueEvents } from 'bullmq';
 import applicationInsights from './application-insights.js';
 import client from './jobs.js';
@@ -13,6 +14,7 @@ import context from './async-context.js';
 import log from './log.js';
 
 class PublisherError extends Error {
+    /** @param {string} message */
     constructor(message) {
         super(message);
         this.name = 'PublisherError';
@@ -20,22 +22,27 @@ class PublisherError extends Error {
 }
 
 /**
+ * A queued notification's user, as much as this module reads from it.
+ * @typedef {Object} QueuedUser
+ * @property {string} phoneNumber
+ */
+
+/**
  * @class Message Publisher
  */
 class Publisher {
     /**
      * BullMQ Queue
-     * @private
+     * @type {import('bullmq').Queue}
      */
     #queue;
+    /** @type {import('bullmq').QueueEvents} */
     #queueEvents;
 
     /**
      * Create a new instance of the Publisher.
      * @constructor
-     * @param {string} topic - The topic to publish messages to.
-     * @param {object} cache - The cache to use for storing messages.
-     * @returns {Publisher} - A new instance of the Publisher.
+     * @param {string} [topic] - The topic to publish messages to.
      */
     constructor(topic = 'notifications') {
         this.#queue = new Queue(topic, {
@@ -103,6 +110,7 @@ class Publisher {
 
     /**
      * Missing Notification Type Error
+     * @returns {never}
      */
     static throwIfMissingNotificationType() {
         throw new PublisherError('notification type is required');
@@ -110,6 +118,7 @@ class Publisher {
 
     /**
      * Missing Claim Check Number Error
+     * @returns {never}
      */
     static throwIfMissingClaimCheckNumber() {
         throw new PublisherError('claim check number is required');
@@ -118,15 +127,19 @@ class Publisher {
     /**
      * Send notification of a specific type to a user.
      *
-     * @param user
-     * @param notificationType - required
-     * @returns {Promise}
+     * @param {QueuedUser} user
+     * @param {{ notificationType: string, claimCheckNumber: string }} param1
+     * @returns {Promise<*>}
      */
     async sendNotification(
         user,
         {
-            notificationType = this.constructor.throwIfMissingNotificationType(),
-            claimCheckNumber = this.constructor.throwIfMissingClaimCheckNumber(),
+            notificationType = /** @type {typeof Publisher} */ (
+                this.constructor
+            ).throwIfMissingNotificationType(),
+            claimCheckNumber = /** @type {typeof Publisher} */ (
+                this.constructor
+            ).throwIfMissingClaimCheckNumber(),
         },
     ) {
         const { traceId } = context.getStore()?.get('logger')?.bindings() || {};
