@@ -1,5 +1,11 @@
+// @ts-check
 const TIMEOUT_SENTINEL = Symbol('timeout');
 
+/**
+ * @template T
+ * @param {Promise<T>[]} externalPromises
+ * @param {number} timeout
+ */
 async function processExternalPromisesWithTimeout(externalPromises, timeout) {
     const controller = new AbortController();
     const { signal } = controller;

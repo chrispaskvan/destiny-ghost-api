@@ -1,10 +1,19 @@
+// @ts-check
 import { readFileSync, readdirSync } from 'node:fs';
 
+/**
+ * @param {string} file
+ * @returns {Record<string, *>}
+ */
 function loadFile(file) {
     const data = readFileSync(`./settings/${file}`, 'utf8');
 
     return {
-        [file.split('.')[0].replace(/[-_](.)/g, (_, c) => c.toUpperCase())]: JSON.parse(data),
+        [file
+            .split('.')[0]
+            .replace(/[-_](.)/g, (/** @type {string} */ _, /** @type {string} */ c) =>
+                c.toUpperCase(),
+            )]: JSON.parse(data),
     };
 }
 

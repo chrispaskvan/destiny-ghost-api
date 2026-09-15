@@ -1,5 +1,7 @@
+// @ts-check
 import cache from './cache.js';
 
+/** @param {unknown} idempotencyKey */
 const getIdempotencyKey = async idempotencyKey => {
     if (!(idempotencyKey && typeof idempotencyKey === 'string')) {
         throw new Error('idempotencyKey is a required string');
@@ -8,6 +10,10 @@ const getIdempotencyKey = async idempotencyKey => {
     return await cache.get(idempotencyKey);
 };
 
+/**
+ * @param {unknown} idempotencyKey
+ * @param {unknown} claimCheckNumber
+ */
 const setIdempotencyKey = async (idempotencyKey, claimCheckNumber) => {
     if (!(idempotencyKey && typeof idempotencyKey === 'string')) {
         throw new Error('idempotencyKey is a required string');

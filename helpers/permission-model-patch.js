@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Shim for process.binding("natives") blocked by the Node.js Permission Model.
  *
@@ -31,10 +32,17 @@
  */
 import { builtinModules } from 'node:module';
 
-process.binding = function binding(name) {
+/**
+ * `process.binding` is a deprecated, unofficial Node internal with no type
+ * declarations - cast to assign a shim for it.
+ * @param {string} name
+ */
+const binding = name => {
     if (name === 'natives') {
         return Object.fromEntries(builtinModules.map(mod => [mod, '']));
     }
 
     throw new Error(`process.binding('${name}') is not supported with the permission model`);
 };
+
+/** @type {any} */ (process).binding = binding;

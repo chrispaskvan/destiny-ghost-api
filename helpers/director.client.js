@@ -1,9 +1,14 @@
+// @ts-check
 import { post } from './request.js';
 
 class DirectorClient {
     query =
         'query FindPlayersHeroNameAndFriends($displayName: String!) { findPlayers(displayName: $displayName) { bungieGlobalDisplayName bungieGlobalDisplayNameCode destinyMemberships { crossSaveOverride membershipType membershipId displayName bungieGlobalDisplayName bungieGlobalDisplayNameCode } destinyMemberships { crossSaveOverride membershipType membershipId displayName bungieGlobalDisplayName bungieGlobalDisplayNameCode } statistics { pvp { kdr highestLightLevel } } user { firstName lastName } } }';
 
+    /**
+     * @param {string} displayName
+     * @param {Record<string, string>} cookies
+     */
     async findPlayers(displayName, cookies) {
         const cookieHeader = Object.entries(cookies)
             .map(([key, value]) => `${key}=${value}`)

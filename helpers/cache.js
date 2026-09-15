@@ -1,3 +1,4 @@
+// @ts-check
 import { createClient } from 'redis';
 import configuration from './config.js';
 import log from './log.js';
@@ -16,7 +17,7 @@ const redisConfiguration = {
     socket: {
         connectTimeout: 60000,
         lazyConnect: false,
-        reconnectStrategy: (retries, cause) => {
+        reconnectStrategy: (/** @type {number} */ retries, /** @type {Error} */ cause) => {
             if (fatalReconnectErrorPattern.test(cause?.message ?? '')) {
                 log.error({ err: cause }, 'Redis authentication failed; not retrying.');
 

@@ -1,6 +1,8 @@
+// @ts-check
 import { realpathSync } from 'node:fs';
 import { normalize, resolve, sep } from 'node:path';
 
+/** @param {string} directory */
 export default function sanitizeDirectory(directory) {
     if (directory.includes('\0')) {
         throw new Error('Invalid database directory');
