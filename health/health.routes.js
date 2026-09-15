@@ -1,15 +1,22 @@
+// @ts-check
 import { Router } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import HealthController from './health.controller.js';
 
 /**
+ * @typedef {Object} HealthRoutesOptions
+ * @property {import('../destiny/destiny.service.js').default} destinyService
+ * @property {import('../destiny2/destiny2.service.js').default} destiny2Service
+ * @property {import('../helpers/documents.js').default} documents
+ * @property {import('../helpers/world.js').default} worldRepository
+ * @property {import('../helpers/world2.js').default} world2Repository
+ */
+
+/**
  * Destiny Routes
- * @param destinyService
- * @param destiny2Service
- * @param documents
- * @param worldRepository
- * @param world2Repository
- * @returns {*}
+ *
+ * @param {HealthRoutesOptions} options
+ * @returns {import('express').Router}
  */
 const routes = ({
     destinyService,
