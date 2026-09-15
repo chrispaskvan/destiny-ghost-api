@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * A module for reporting the health status of dependent services.
  *
@@ -24,16 +25,39 @@ const notAvailable = 'N/A';
  */
 let failures;
 
+/** @typedef {import('../destiny/destiny.service.js').default} DestinyService */
+/** @typedef {import('../destiny2/destiny2.service.js').default} Destiny2Service */
+/** @typedef {import('../helpers/documents.js').default} Documents */
+/** @typedef {import('../helpers/world.js').default} World */
+/** @typedef {import('../helpers/world2.js').default} World2 */
+
+/**
+ * Only `getMemoryUsage`/`getMetrics` are exercised without a full set of
+ * dependencies (see health.controller.spec.js), so every property here is
+ * optional to allow that construction; every other method assumes its
+ * dependency is present, matching how the routes always construct this
+ * class in production.
+ * @typedef {Object} HealthControllerOptions
+ * @property {DestinyService} [destinyService]
+ * @property {Destiny2Service} [destiny2Service]
+ * @property {Documents} [documents]
+ * @property {World} [worldRepository]
+ * @property {World2} [world2Repository]
+ */
+
 /**
  * Destiny Controller Service
  */
 class HealthController {
+    /**
+     * @param {HealthControllerOptions} [options]
+     */
     constructor(options = {}) {
-        this.destinyService = options.destinyService;
-        this.destiny2Service = options.destiny2Service;
-        this.documents = options.documents;
-        this.world = options.worldRepository;
-        this.world2 = options.world2Repository;
+        this.destinyService = /** @type {DestinyService} */ (options.destinyService);
+        this.destiny2Service = /** @type {Destiny2Service} */ (options.destiny2Service);
+        this.documents = /** @type {Documents} */ (options.documents);
+        this.world = /** @type {World} */ (options.worldRepository);
+        this.world2 = /** @type {World2} */ (options.world2Repository);
     }
 
     async getDestinyManifestVersion() {
@@ -52,16 +76,16 @@ class HealthController {
         return manifest?.version;
     }
 
+    /**
+     * @returns {Promise<number>}
+     */
     async getDocumentCount() {
         const documents = await this.documents.getDocuments(
             'Users',
             'SELECT VALUE COUNT(1) FROM Users',
-            {
-                enableCrossPartitionQuery: true,
-            },
         );
 
-        return documents[0];
+        return /** @type {number[]} */ (documents)[0];
     }
 
     /**
@@ -69,10 +93,11 @@ class HealthController {
      * {@link https://deepu.tech/memory-management-in-v8/|Visualizing memory management in V8 Engine (JavaScript, NodeJS, Deno, WebAssembly)}
      *
      * @static
-     * @returns
+     * @returns {{ rss: number, heapTotal: number, heapUsed: number, external: number, totalAvailableSize: number }}
      * @memberof HealthController
      */
     static getMemoryUsage() {
+        /** @param {number} bytes */
         const convertBytesToMegaBytes = bytes => Math.floor(bytes / (1024 * 1024));
         const { rss, heapTotal, heapUsed, external } = process.memoryUsage();
         const { total_available_size: totalAvailableSize } = getHeapStatistics();
@@ -87,7 +112,7 @@ class HealthController {
     }
 
     async getMetrics() {
-        const memory = await this.constructor.getMemoryUsage();
+        const memory = /** @type {typeof HealthController} */ (this.constructor).getMemoryUsage();
 
         applicationInsights.trackMetric({
             name: 'Ratio of RSS Memory to Total Available Size',
@@ -113,6 +138,9 @@ class HealthController {
         return responseBody.status.description;
     }
 
+    /**
+     * @param {Error} err
+     */
     static unhealthy(err) {
         failures += 1;
         log.error(
@@ -124,7 +152,7 @@ class HealthController {
     }
 
     async getWorldItem() {
-        const [{ cardName } = {}] = await this.world.getGrimoireCards(1);
+        const [{ cardName = '' } = {}] = await this.world.getGrimoireCards(1);
 
         return convert(cardName);
     }
