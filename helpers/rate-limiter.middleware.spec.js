@@ -1,12 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { StatusCodes } from 'http-status-codes';
 
-const { consume } = vi.hoisted(() => ({ consume: vi.fn() }));
+const { consume, MockRateLimiterRes } = vi.hoisted(() => ({
+    consume: vi.fn(),
+    MockRateLimiterRes: class RateLimiterRes {
+        constructor(remainingPoints, msBeforeNext) {
+            this.remainingPoints = remainingPoints;
+            this.msBeforeNext = msBeforeNext;
+        }
+    },
+}));
 
 vi.mock('rate-limiter-flexible', () => ({
     RateLimiterRedis: class {
         consume = consume;
     },
+    RateLimiterRes: MockRateLimiterRes,
 }));
 vi.mock('./cache.js', () => ({
     default: { isReady: true },
@@ -40,7 +49,7 @@ describe('rateLimiterMiddleware', () => {
     });
 
     it('should respond 429 when the limit is exceeded and Redis is ready', async () => {
-        consume.mockRejectedValue({ remainingPoints: 0, msBeforeNext: 1000 });
+        consume.mockRejectedValue(new MockRateLimiterRes(0, 1000));
         cache.isReady = true;
 
         rateLimiterMiddleware(req, res, next);
@@ -52,7 +61,7 @@ describe('rateLimiterMiddleware', () => {
     });
 
     it('should fail open and call next when Redis is not ready', async () => {
-        consume.mockRejectedValue(new Error('connection lost'));
+        consume.mockRejectedValue(new MockRateLimiterRes(0, 1000));
         cache.isReady = false;
 
         rateLimiterMiddleware(req, res, next);
@@ -60,5 +69,17 @@ describe('rateLimiterMiddleware', () => {
 
         expect(next).toHaveBeenCalled();
         expect(res.status).not.toHaveBeenCalled();
+    });
+
+    it('should fail open and call next when the backend rejects with a plain Error while Redis is ready', async () => {
+        consume.mockRejectedValue(new Error('connection lost'));
+        cache.isReady = true;
+
+        rateLimiterMiddleware(req, res, next);
+        await new Promise(resolve => setImmediate(resolve));
+
+        expect(next).toHaveBeenCalled();
+        expect(res.status).not.toHaveBeenCalled();
+        expect(res.set).not.toHaveBeenCalled();
     });
 });

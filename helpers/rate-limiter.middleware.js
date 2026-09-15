@@ -1,6 +1,6 @@
 // @ts-check
 import { StatusCodes } from 'http-status-codes';
-import { RateLimiterRedis } from 'rate-limiter-flexible';
+import { RateLimiterRedis, RateLimiterRes } from 'rate-limiter-flexible';
 import client from './cache.js';
 
 const options = {
@@ -48,17 +48,25 @@ const rateLimiterMiddleware = (req, res, next) => {
             setRateLimitHeaders(rateLimiterRes, res);
             next();
         })
-        .catch(rateLimiterRes => {
-            // node-redis' client has no `.status` property (that's an
-            // ioredis-only API) - this always read `undefined`, so the
-            // rate limiter never actually enforced a 429; every rejection
-            // fell through to `next()`. `isReady` is node-redis' real
-            // connection-state flag.
-            if (!client.isReady) {
-                next();
-            } else {
-                setRateLimitHeaders(rateLimiterRes, res);
+        .catch(rejection => {
+            // `consume()` rejects with a `RateLimiterRes` when the limit is
+            // actually exceeded, but can also reject with a plain `Error`
+            // when the underlying Redis command itself fails (independent
+            // of `client.isReady`, which only reflects connection-handshake
+            // state, not per-command success). Only a genuine
+            // `RateLimiterRes` rejection should ever produce a 429; any
+            // other rejection - including a not-ready client - fails open.
+            //
+            // Separately: node-redis' client has no `.status` property
+            // (that's an ioredis-only API) - checking it always read
+            // `undefined`, so the rate limiter never actually enforced a
+            // 429; every rejection fell through to `next()`. `isReady` is
+            // node-redis' real connection-state flag.
+            if (rejection instanceof RateLimiterRes && client.isReady) {
+                setRateLimitHeaders(rejection, res);
                 res.status(StatusCodes.TOO_MANY_REQUESTS).end();
+            } else {
+                next();
             }
         });
 };
