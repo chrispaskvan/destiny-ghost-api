@@ -1,3 +1,4 @@
+// @ts-check
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
@@ -6,16 +7,15 @@ import { z } from 'zod';
  * This factory is context-aware. It accepts dependencies like services and the
  * authenticated user object, making them available to all registered tools.
  *
- * @param {object} deps - The dependencies for the server.
- * @param {object} deps.destinyController - The Destiny 2 controller instance.
- * @param {object} deps.user - The authenticated user object.
+ * @param {Object} deps - The dependencies for the server.
+ * @param {import('../destiny2/destiny2.controller.js').default} deps.destinyController - The Destiny 2 controller instance.
+ * @param {import('../destiny/destiny.service.js').CurrentUser} deps.user - The authenticated user object.
  * @returns {McpServer} A new McpServer instance configured for the given user.
  */
-
 export function createMcpServer({ destinyController, user }) {
     const server = new McpServer({
         name: 'destiny-ghost',
-        version: process.env.npm_package_version,
+        version: process.env.npm_package_version ?? '0.0.0',
     });
     const characterSchema = z.object({
         characterId: z.string(),
@@ -73,9 +73,12 @@ export function createMcpServer({ destinyController, user }) {
                 throw new Error('Validation of Xur inventory failed');
             }
 
+            // A successful array-schema parse guarantees `items` isn't undefined.
+            const validItems = /** @type {NonNullable<typeof items>} */ (items);
+
             return {
-                content: [{ type: 'text', text: `Retrieved ${items.length} items.` }],
-                structuredContent: { items },
+                content: [{ type: 'text', text: `Retrieved ${validItems.length} items.` }],
+                structuredContent: { items: validItems },
             };
         },
     );
