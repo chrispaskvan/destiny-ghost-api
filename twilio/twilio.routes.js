@@ -24,9 +24,11 @@ const {
     twilio: { attributes, authToken },
 } = configuration;
 
+/** @typedef {import('../authentication/authentication.controller.js').default} AuthenticationController */
+
 /**
  * @typedef {Object} TwilioRoutesOptions
- * @property {unknown} authenticationController
+ * @property {AuthenticationController} authenticationController
  * @property {import('../authentication/authentication.service.js').default} authenticationService
  * @property {import('../destiny2/destiny2.service.js').default} destinyService
  * @property {import('./mms.service.js').default} mmsService
