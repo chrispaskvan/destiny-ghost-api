@@ -48,6 +48,30 @@ describe('createMcpServer', () => {
         });
     });
 
+    it('should fall back to a default version when npm_package_version is unset', () => {
+        const originalVersion = process.env.npm_package_version;
+
+        delete process.env.npm_package_version;
+
+        try {
+            createMcpServer({
+                destinyController: mockDestinyController,
+                user: mockUser,
+            });
+
+            expect(McpServer).toHaveBeenCalledWith({
+                name: 'destiny-ghost',
+                version: '0.0.0',
+            });
+        } finally {
+            if (originalVersion === undefined) {
+                delete process.env.npm_package_version;
+            } else {
+                process.env.npm_package_version = originalVersion;
+            }
+        }
+    });
+
     it('should register the "get-characters" tool', () => {
         createMcpServer({
             destinyController: mockDestinyController,
