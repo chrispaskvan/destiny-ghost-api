@@ -44,7 +44,7 @@ describe('createMcpServer', () => {
 
         expect(McpServer).toHaveBeenCalledWith({
             name: 'destiny-ghost',
-            version: process.env.npm_package_version,
+            version: process.env.npm_package_version ?? '0.0.0',
         });
     });
 
