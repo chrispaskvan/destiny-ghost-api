@@ -11,10 +11,11 @@ import log from '../helpers/log.js';
 import toTemporalInstant from '../helpers/to-temporal-instant.js';
 
 /** @typedef {import('../users/user.routes.js').AuthenticatedSessionData} AuthenticatedSessionData */
+/** @typedef {import('../authentication/authentication.controller.js').default} AuthenticationController */
 
 /**
  * @typedef {Object} Destiny2RoutesOptions
- * @property {unknown} authenticationController
+ * @property {AuthenticationController} authenticationController
  * @property {import('./destiny2.controller.js').default} destiny2Controller
  */
 

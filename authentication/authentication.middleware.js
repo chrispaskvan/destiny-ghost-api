@@ -1,5 +1,14 @@
+// @ts-check
 import { StatusCodes } from 'http-status-codes';
 import { z } from 'zod';
+
+/** @typedef {import('./authentication.controller.js').default} AuthenticationController */
+
+/**
+ * Constructor options for AuthenticationMiddleware.
+ * @typedef {Object} AuthenticationMiddlewareOptions
+ * @property {AuthenticationController} authenticationController
+ */
 
 /**
  * User Authentication Middleware Class
@@ -7,7 +16,7 @@ import { z } from 'zod';
 class AuthenticationMiddleware {
     /**
      * @constructor
-     * @param options
+     * @param {AuthenticationMiddlewareOptions} options
      */
     constructor(options) {
         const schema = z.object({
@@ -16,15 +25,16 @@ class AuthenticationMiddleware {
 
         schema.parse(options);
 
+        /** @type {AuthenticationController} */
         this.authentication = options.authenticationController;
     }
 
     /**
      * Authenticate user request.
-     * @param req
-     * @param res
-     * @param next
-     * @returns {Promise.<void>}
+     * @param {import('express').Request} req
+     * @param {import('express').Response} res
+     * @param {import('express').NextFunction} next
+     * @returns {Promise<void>}
      */
     async authenticateUser(req, res, next) {
         const user = await this.authentication.authenticate(req);
