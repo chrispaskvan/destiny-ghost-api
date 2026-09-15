@@ -1,5 +1,16 @@
+// @ts-check
 import { z } from 'zod';
 import configuration from '../helpers/config.js';
+
+/** @typedef {import('./authentication.service.js').default} AuthenticationService */
+/** @typedef {import('../users/user.service.js').User} User */
+/** @typedef {import('../users/user.routes.js').AppSessionData} AppSessionData */
+
+/**
+ * Constructor options for AuthenticationController.
+ * @typedef {Object} AuthenticationControllerOptions
+ * @property {AuthenticationService} authenticationService
+ */
 
 /**
  * User Authentication Controller Class
@@ -7,7 +18,7 @@ import configuration from '../helpers/config.js';
 class AuthenticationController {
     /**
      * @constructor
-     * @param options
+     * @param {AuthenticationControllerOptions} options
      */
     constructor(options) {
         const schema = z.object({
@@ -16,19 +27,18 @@ class AuthenticationController {
 
         schema.parse(options);
 
+        /** @type {AuthenticationService} */
         this.authentication = options.authenticationService;
     }
 
     /**
      * Authenticate user request.
-     * @param req
-     * @returns {Promise.<*>}
+     * @param {import('express').Request} req
+     * @returns {Promise<User | undefined>}
      */
     async authenticate(req) {
-        const {
-            session: { displayName, membershipType },
-            body: { From: phoneNumber } = {},
-        } = req;
+        const { displayName, membershipType } = /** @type {AppSessionData} */ (req.session);
+        const { From: phoneNumber } = /** @type {{ From?: string }} */ (req.body ?? {});
         const user = await this.authentication.authenticate({
             displayName,
             membershipType,
@@ -36,15 +46,17 @@ class AuthenticationController {
         });
 
         if (user) {
+            const session = /** @type {AppSessionData} */ (req.session);
+
             if (!displayName) {
-                req.session.displayName = user.displayName;
+                session.displayName = user.displayName;
             }
             if (!membershipType) {
-                req.session.membershipType = user.membershipType;
+                session.membershipType = user.membershipType;
             }
 
-            req.session.dateRegistered = user.dateRegistered;
-            req.session.membershipId = user.bungie.membership_id;
+            session.dateRegistered = user.dateRegistered;
+            session.membershipId = user.bungie?.membership_id;
         }
 
         return user;
@@ -53,11 +65,14 @@ class AuthenticationController {
     /**
      * Identify if the user is an administrator.
      *
-     * @param user
+     * @param {{ displayName: string, membershipType: number }} user
      * @returns {boolean}
      */
     static isAdministrator(user) {
-        return !!configuration.administrators.find(
+        /** @type {{ displayName: string, membershipType: number }[]} */
+        const administrators = configuration.administrators;
+
+        return !!administrators.find(
             administrator =>
                 administrator.displayName === user.displayName &&
                 administrator.membershipType === user.membershipType,

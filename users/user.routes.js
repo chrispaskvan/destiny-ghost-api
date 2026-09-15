@@ -117,9 +117,11 @@ function signIn(req, res, user, next) {
  *            type: string
  */
 
+/** @typedef {import('../authentication/authentication.controller.js').default} AuthenticationController */
+
 /**
  * @typedef {Object} UserRoutesOptions
- * @property {unknown} authenticationController
+ * @property {AuthenticationController} authenticationController
  * @property {import('../destiny/destiny.service.js').default} destinyService
  * @property {import('../notifications/notification.service.js').default} notificationService
  * @property {import('./user.service.js').default} userService
