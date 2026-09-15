@@ -41,7 +41,7 @@ const servicePlatform = `${host}/Platform`;
  * @typedef {Object} PlayerSearchResult
  * @property {string} bungieGlobalDisplayName
  * @property {number} bungieGlobalDisplayNameCode
- * @property {{ membershipId: string, membershipType: number, displayName: string }[]} [destinyMemberships]
+ * @property {{ membershipId: string, membershipType: number, displayName: string, crossSaveOverride?: number }[]} [destinyMemberships]
  */
 
 /**
@@ -93,10 +93,12 @@ class Destiny2Service extends DestinyService {
     }
 
     /**
-     * Get player PVP statistics.
+     * Get player PVP statistics. Tolerates a missing membershipId/membershipType
+     * (returns empty statistics) since its sole caller, graphql/root.js, looks
+     * up the player's cross-saved membership and may not find one.
      *
-     * @param {string} membershipId
-     * @param {number} membershipType
+     * @param {string | undefined} membershipId
+     * @param {number | undefined} membershipType
      * @returns {Promise<PlayerStatistics>}
      */
     async getPlayerStatistics(membershipId, membershipType) {

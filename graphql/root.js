@@ -1,11 +1,23 @@
+// @ts-check
 import pLimit from 'p-limit';
 
+/**
+ * @typedef {Object} GraphQLContext
+ * @property {import('../destiny2/destiny2.service.js').default} destiny2Service
+ * @property {boolean} isAdministrator
+ * @property {import('../users/user.service.js').default} userService
+ */
+
 const root = {
+    /**
+     * @param {{ displayName: string, pageNumber?: number }} args
+     * @param {GraphQLContext} context
+     */
     async findPlayers({ displayName, pageNumber = 0 }, context) {
-        const players = await context.destiny2Service.constructor.findPlayers(
-            displayName,
-            pageNumber,
-        );
+        const players =
+            await /** @type {typeof import('../destiny2/destiny2.service.js').default} */ (
+                context.destiny2Service.constructor
+            ).findPlayers(displayName, pageNumber);
 
         const limit = pLimit(11);
 
@@ -16,7 +28,7 @@ const root = {
                         displayName: activeDisplayName,
                         membershipId,
                         membershipType,
-                    } = player.destinyMemberships.find(
+                    } = (player.destinyMemberships ?? []).find(
                         membership =>
                             membership.crossSaveOverride === membership.membershipType ||
                             membership.crossSaveOverride === 0,
@@ -29,11 +41,22 @@ const root = {
                         context.isAdministrator && activeDisplayName
                             ? await context.userService.getUserByDisplayName(
                                   activeDisplayName,
-                                  membershipType,
+                                  // displayName/membershipId/membershipType all come from the
+                                  // same found membership, so activeDisplayName being defined
+                                  // guarantees membershipType is too.
+                                  /** @type {number} */ (membershipType),
                               )
                             : null;
 
-                    return Object.assign(player, { statistics, user });
+                    // graphql/schema.js declares Player.destinyMemberships as a
+                    // non-null list ([Membership!]!) - normalize a missing value
+                    // here so a Bungie response without it doesn't null-propagate
+                    // the whole GraphQL result.
+                    return Object.assign(player, {
+                        destinyMemberships: player.destinyMemberships ?? [],
+                        statistics,
+                        user,
+                    });
                 }),
             ),
         );
