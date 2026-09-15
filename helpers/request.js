@@ -1,6 +1,25 @@
+// @ts-check
 import ResponseError from './response.error.js';
 import log from './log.js';
 import { getBackoffDelay, isTransientError } from './retry.js';
+
+/**
+ * `url`/`data` plus anything from `RequestInit` (e.g. `redirect`) other than
+ * `method`/`headers`/`body`, which this module manages itself.
+ * @typedef {{
+ *   url: string,
+ *   method: string,
+ *   headers?: Record<string, string>,
+ *   data?: *,
+ * } & Omit<RequestInit, 'method' | 'headers' | 'body'>} RequestOptions
+ */
+
+/**
+ * @typedef {Object} RetryOptions
+ * @property {number} [maxRetries=3]
+ * @property {number} [baseDelay=1000]
+ * @property {number} [maxDelay=15000]
+ */
 
 /**
  * Parse a Retry-After header value into milliseconds.
@@ -13,7 +32,7 @@ function parseRetryAfter(value) {
 
     if (!Number.isNaN(seconds)) return Math.max(0, seconds * 1000);
 
-    const ms = new Date(value) - Date.now();
+    const ms = new Date(value).getTime() - Date.now();
 
     return Number.isNaN(ms) ? null : Math.max(0, ms);
 }
@@ -21,22 +40,16 @@ function parseRetryAfter(value) {
 /**
  * HTTP Request Client
  *
- * @param {object} options
- * @param {string} options.url - The request URL.
- * @param {string} options.method - The HTTP method.
- * @param {object} [options.headers] - Request headers.
- * @param {*} [options.data] - Request body.
- * @param {object} [retryOptions] - Retry configuration (second argument).
- * @param {number} [retryOptions.maxRetries=3]
- * @param {number} [retryOptions.baseDelay=1000]
- * @param {number} [retryOptions.maxDelay=15000]
- * @returns {Promise<{ data: *, headers: object }>}
+ * @param {RequestOptions} options
+ * @param {RetryOptions} [retryOptions] - Retry configuration (second argument).
+ * @returns {Promise<{ data: *, headers: Record<string, string> }>}
  */
 async function request(
-    { url, method, headers = {}, data: body, ...rest } = {},
+    { url, method, headers = {}, data: body, ...rest },
     { maxRetries = 3, baseDelay = 1000, maxDelay = 15000 } = {},
 ) {
     const retries = Number.isFinite(maxRetries) ? Math.max(0, Math.trunc(maxRetries)) : 0;
+    /** @type {RequestInit & { headers: Record<string, string> }} */
     const init = { method, headers: { ...headers }, ...rest };
 
     if (body !== undefined) {
@@ -53,7 +66,7 @@ async function request(
         try {
             response = await fetch(url, init);
         } catch (networkErr) {
-            if (attempt < retries && isTransientError(networkErr)) {
+            if (attempt < retries && networkErr instanceof Error && isTransientError(networkErr)) {
                 const delay = getBackoffDelay(attempt, baseDelay, maxDelay);
 
                 log.warn(
@@ -117,14 +130,26 @@ async function request(
 
         return { data, headers: Object.fromEntries(response.headers) };
     }
+
+    // Unreachable: every loop iteration above continues, throws, or returns.
+    throw new Error('Exhausted retries without a response or error');
 }
 
+/**
+ * @param {Omit<RequestOptions, 'method'>} options
+ * @param {boolean} [includeHeaders]
+ * @param {RetryOptions} [retryOptions]
+ */
 async function get(options, includeHeaders = false, retryOptions) {
     const result = await request({ method: 'get', ...options }, retryOptions);
 
     return includeHeaders ? result : result.data;
 }
 
+/**
+ * @param {Omit<RequestOptions, 'method'>} options
+ * @param {RetryOptions} [retryOptions]
+ */
 async function post(options, retryOptions) {
     const { data } = await request(
         { method: 'post', ...options },

@@ -1,3 +1,4 @@
+// @ts-check
 import { createHook } from 'node:async_hooks';
 import { performance, PerformanceObserver } from 'node:perf_hooks';
 
@@ -7,12 +8,19 @@ const trackedResources = new Map();
 const hook = createHook({
     init(id, type, _triggerID, resource) {
         if (['GETADDRINFOREQWRAP', 'HTTPCLIENTREQUEST'].includes(type)) {
+            /**
+             * Node types `resource` as a bare `object` since its shape is an
+             * undocumented internal AsyncResource specific to each `type`.
+             * @type {any}
+             */
+            const internalResource = resource;
+
             performance.mark(`gjallarhorn-${id}-init`);
             trackedResources.set(
                 id,
                 type === 'GETADDRINFOREQWRAP'
-                    ? `DNS Lookup: ${resource.hostname}`
-                    : `HTTP Request: ${resource.req.method} ${resource.req.connection._host}${resource.req.path}`,
+                    ? `DNS Lookup: ${internalResource.hostname}`
+                    : `HTTP Request: ${internalResource.req.method} ${internalResource.req.connection._host}${internalResource.req.path}`,
             );
         }
     },

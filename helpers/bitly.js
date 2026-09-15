@@ -12,13 +12,14 @@
  * @requires request
  * @requires util
  */
+// @ts-check
 import configuration from './config.js';
 import { post } from './request.js';
 
 /**
  * @function
- * @param {string} url - URL to be shortened.
- * @returns {Promise} - The resulting short URL.
+ * @param {string} longUrl - URL to be shortened.
+ * @returns {Promise<string>} - The resulting short URL.
  * @description Transform the provided URL into a custom short URL.
  */
 async function getShortUrl(longUrl) {

@@ -6,18 +6,21 @@
  * @requires cuid
  * @requires pino
  */
+// @ts-check
 import { createId } from '@paralleldrive/cuid2';
 import pino from 'pino';
 import context from './async-context.js';
 
 const productionOnlyOptions = {
     formatters: {
-        level: label => ({ level: label.toUpperCase() }),
+        level: (/** @type {string} */ label) => ({ level: label.toUpperCase() }),
     },
     timestamp: pino.stdTimeFunctions.isoTime,
 };
+/** @type {import('pino').LoggerOptions} */
 let options;
 const unsupportedWorkerExecArgvPrefixes = ['--max-old-space-size', '--disable-proto='];
+/** @param {string[]} execArgv */
 const getWorkerExecArgv = execArgv =>
     execArgv.filter(
         arg => !unsupportedWorkerExecArgvPrefixes.some(prefix => arg.startsWith(prefix)),
@@ -46,6 +49,11 @@ const log = new Proxy(logger, {
         return Reflect.get(target, property, receiver);
     },
 });
+/**
+ * @param {import('express').Request} _req
+ * @param {import('express').Response} _res
+ * @param {import('express').NextFunction} next
+ */
 const contextMiddleware = (_req, _res, next) => {
     const child = logger.child({ traceId: createId() });
     const store = new Map();

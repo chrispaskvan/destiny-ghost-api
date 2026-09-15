@@ -1,3 +1,8 @@
+// @ts-check
+/**
+ * @param {string} header
+ * @returns {number | undefined}
+ */
 const getMaxAgeFromCacheControl = header => {
     const maxAgeString = header.split('max-age=')[1];
     let maxAge;

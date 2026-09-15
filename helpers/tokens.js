@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * A module for creating tokens.
  *
@@ -10,7 +11,7 @@ import { randomBytes as _randomBytes } from 'node:crypto';
 
 /**
  * Returns true if the number is an integer greater than 0.
- * @param number
+ * @param {number} number
  * @returns {boolean}
  */
 function isNormalInteger(number) {

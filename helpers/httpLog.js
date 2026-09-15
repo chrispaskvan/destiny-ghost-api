@@ -8,65 +8,84 @@
  * @requires pino
  * @requires cuid
  */
-import PinoHttp from 'pino-http';
+// @ts-check
+import { createRequire } from 'node:module';
 import { createId } from '@paralleldrive/cuid2';
 import { stdSerializers } from 'pino';
 import context from './async-context.js';
 import log from './log.js';
 
-class HttpLog extends PinoHttp {
-    constructor() {
-        super({
-            customErrorObject: (_req, _res, _err, loggableObject) => {
-                const { traceId } = context.getStore()?.get('logger')?.bindings() || {};
+/**
+ * `pino-http`'s `.d.ts` has no `export =`, so under this project's module
+ * resolution (no esModuleInterop) a default import type-checks as the
+ * whole module namespace instead of the callable factory - the same issue
+ * worked around for `base64url`/`ioredis` elsewhere. `require` sidesteps
+ * the mistyped default import.
+ * @type {typeof import('pino-http').default}
+ */
+const PinoHttp = createRequire(import.meta.url)('pino-http');
 
-                return {
-                    traceId,
-                    ...loggableObject,
-                };
-            },
-            customReceivedObject: (req, res, loggableObject) => {
-                const {
-                    session: { displayName, membershipType } = {},
-                    body: { From: phoneNumber } = {},
-                } = req;
-                const { traceId } = context.getStore()?.get('logger')?.bindings() || {};
+/** @type {import('pino-http').Options<import('express').Request, import('express').Response>} */
+const options = {
+    customErrorObject: (_req, _res, _err, loggableObject) => {
+        const { traceId } = context.getStore()?.get('logger')?.bindings() || {};
 
-                res.setHeader('X-Trace-Id', traceId);
+        return {
+            traceId,
+            ...loggableObject,
+        };
+    },
+    customReceivedObject: (req, res, loggableObject) => {
+        const { displayName, membershipType } =
+            /** @type {import('../users/user.routes.js').AppSessionData} */ (
+                /** @type {unknown} */ (req.session)
+            ) ?? {};
+        const { From: phoneNumber } = req.body ?? {};
+        const { traceId } = context.getStore()?.get('logger')?.bindings() || {};
 
-                return {
-                    displayName,
-                    membershipType,
-                    phoneNumber,
-                    traceId,
-                    ...loggableObject,
-                };
-            },
-            customSuccessObject: (_req, _res, loggableObject) => {
-                const { traceId } = context.getStore()?.get('logger')?.bindings() || {};
+        res.setHeader('X-Trace-Id', traceId ?? '');
 
-                return {
-                    traceId,
-                    ...loggableObject,
-                };
-            },
-            genReqId: (req, res) => {
-                let requestId = req.headers['x-request-id'];
+        return {
+            displayName,
+            membershipType,
+            phoneNumber,
+            traceId,
+            ...loggableObject,
+        };
+    },
+    customSuccessObject: (_req, _res, loggableObject) => {
+        const { traceId } = context.getStore()?.get('logger')?.bindings() || {};
 
-                requestId ||= createId();
-                res.setHeader('X-Request-Id', requestId);
+        return {
+            traceId,
+            ...loggableObject,
+        };
+    },
+    genReqId: (req, res) => {
+        let requestId = req.headers['x-request-id'];
 
-                return requestId;
-            },
-            logger: log,
-            serializers: {
-                err: stdSerializers.err,
-                req: stdSerializers.req,
-                res: stdSerializers.res,
-            },
-            useLevel: 'info',
-        });
-    }
-}
+        requestId ||= createId();
+        res.setHeader('X-Request-Id', requestId);
 
-export default new HttpLog();
+        return requestId;
+    },
+    logger: log,
+    serializers: {
+        err: stdSerializers.err,
+        req: stdSerializers.req,
+        res: stdSerializers.res,
+    },
+    useLevel: 'info',
+};
+
+/**
+ * `PinoHttp` is a factory function, not a class - this was previously
+ * wrapped in `class HttpLog extends PinoHttp { constructor() { super(...) } }`
+ * and instantiated via `new HttpLog()`. That "worked" only because
+ * `PinoHttp()` returns an object (the logger middleware function), and a
+ * derived class's `super()` call substitutes that returned object for
+ * `this` - an obscure JS quirk TypeScript's type system doesn't model
+ * (`extends` requires an actual constructor type). Calling the factory
+ * directly is equivalent and far more legible.
+ */
+export default PinoHttp(options);

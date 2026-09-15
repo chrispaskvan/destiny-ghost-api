@@ -1,6 +1,17 @@
-import Redis from 'ioredis';
+// @ts-check
+import { createRequire } from 'node:module';
 import configuration from './config.js';
 import log from './log.js';
+
+/**
+ * `ioredis`'s CJS `.d.ts` doesn't declare `export =`, so under this
+ * project's module resolution (no esModuleInterop) a default import type-
+ * checks as the whole module namespace instead of the constructable class -
+ * the same issue worked around in destiny/destiny.controller.js for
+ * `base64url`. `require` sidesteps the mistyped default import.
+ * @type {typeof import('ioredis').default}
+ */
+const Redis = createRequire(import.meta.url)('ioredis');
 
 const { redis } = configuration;
 /**

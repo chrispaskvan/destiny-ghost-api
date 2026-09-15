@@ -331,6 +331,40 @@ describe('request retry logic', () => {
         expect(result).toEqual({ ok: true });
     });
 
+    it('respects Retry-After header given as an HTTP-date', async () => {
+        const now = new Date('2024-01-01T00:00:00.000Z');
+
+        vi.setSystemTime(now);
+
+        const retryAfterDate = new Date(now.getTime() + 3000);
+        const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+        const fetchMock = vi
+            .fn()
+            .mockResolvedValueOnce(
+                makeResponse(429, 'rate limited', {
+                    contentType: 'text/plain',
+                    headers: { 'retry-after': retryAfterDate.toUTCString() },
+                }),
+            )
+            .mockResolvedValueOnce(makeResponse(200, { ok: true }));
+
+        vi.stubGlobal('fetch', fetchMock);
+
+        const promise = get({ url: 'https://example.com/api' });
+
+        await vi.runAllTimersAsync();
+
+        const result = await promise;
+
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        expect(result).toEqual({ ok: true });
+
+        const retryCall = setTimeoutSpy.mock.calls.find(([, ms]) => ms === 3000);
+
+        expect(retryCall).toBeDefined();
+        setTimeoutSpy.mockRestore();
+    });
+
     it('exhausts retries and throws on persistent transient errors', async () => {
         const fetchMock = vi
             .fn()

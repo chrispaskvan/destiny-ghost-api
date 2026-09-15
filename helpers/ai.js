@@ -1,3 +1,4 @@
+// @ts-check
 import { GoogleGenAI } from '@google/genai';
 import configuration from './config.js';
 import log from './log.js';
@@ -20,6 +21,9 @@ class AI {
         this.ai = new GoogleGenAI({ apiKey });
     }
 
+    /**
+     * @param {string} path
+     */
     async getPlayersFromFile(path) {
         const { mimeType, uri: fileUri } = await withRetry(
             () => this.ai.files.upload({ file: path }),

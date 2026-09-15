@@ -1,3 +1,4 @@
+// @ts-check
 import log from './log.js';
 
 /**
@@ -84,7 +85,14 @@ const TRANSIENT_NETWORK_CODES = new Set([
  * @returns {boolean}
  */
 function isTransientError(err) {
-    const { status, code } = err;
+    /**
+     * SDK errors this checks against (Twilio RestException, Google GenAI
+     * ApiError, DestinyError, network errors) expose `status`/`code`, none
+     * of which are on the base `Error` type.
+     */
+    const { status, code } = /** @type {{ status?: unknown, code?: unknown }} */ (
+        /** @type {unknown} */ (err)
+    );
 
     if (typeof status === 'number') {
         return status === 408 || status === 429 || status >= 500;
@@ -92,8 +100,18 @@ function isTransientError(err) {
 
     if (err instanceof TypeError && /fetch failed/i.test(err.message)) return true;
 
-    return code !== undefined && TRANSIENT_NETWORK_CODES.has(code);
+    return typeof code === 'string' && TRANSIENT_NETWORK_CODES.has(code);
 }
+
+const TRANSIENT_SMTP_CODES = new Set([
+    'ECONNECTION',
+    'ECONNRESET',
+    'EDNS',
+    'EHOSTUNREACH',
+    'ESOCKET',
+    'ETIMEDOUT',
+]);
+const PERMANENT_SMTP_CODES = new Set(['EAUTH', 'EENVELOPE', 'ENOAUTH']);
 
 /**
  * SMTP-aware transient error check for Nodemailer.
@@ -106,26 +124,16 @@ function isTransientError(err) {
  * - err.code is EAUTH, ENOAUTH, EENVELOPE (config/credential errors)
  * - err.responseCode is 5xx (550, 553, etc.)
  *
- * @param {Error} err
+ * @param {Error & { code?: string, responseCode?: number }} err
  * @returns {boolean}
  */
-const TRANSIENT_SMTP_CODES = new Set([
-    'ECONNECTION',
-    'ECONNRESET',
-    'EDNS',
-    'EHOSTUNREACH',
-    'ESOCKET',
-    'ETIMEDOUT',
-]);
-const PERMANENT_SMTP_CODES = new Set(['EAUTH', 'EENVELOPE', 'ENOAUTH']);
-
 function isTransientSmtpError(err) {
-    if (PERMANENT_SMTP_CODES.has(err.code)) return false;
-    if (TRANSIENT_SMTP_CODES.has(err.code)) return true;
+    if (err.code !== undefined && PERMANENT_SMTP_CODES.has(err.code)) return false;
+    if (err.code !== undefined && TRANSIENT_SMTP_CODES.has(err.code)) return true;
 
     const { responseCode } = err;
 
-    if (responseCode >= 400 && responseCode < 500) return true;
+    if (responseCode !== undefined && responseCode >= 400 && responseCode < 500) return true;
 
     return false;
 }
