@@ -470,7 +470,13 @@ class UserController {
 
             const membership = /** @type {Membership} */ (user.membership);
 
-            membership.postmark = await this.postmaster.confirm(user, iconUrl, '/confirm');
+            membership.postmark = await this.postmaster.confirm(
+                /** @type {import('../helpers/postmaster.js').EmailUser} */ (
+                    /** @type {unknown} */ (user)
+                ),
+                iconUrl,
+                '/confirm',
+            );
         }
 
         await this.users.updateUser(/** @type {User} */ (/** @type {unknown} */ (user)));
@@ -573,7 +579,13 @@ class UserController {
                 user.phoneNumber,
                 user.type === 'mobile' ? iconUrl : '',
             ),
-            this.postmaster.register(user, iconUrl, '/register'),
+            this.postmaster.register(
+                /** @type {import('../helpers/postmaster.js').EmailUser} */ (
+                    /** @type {unknown} */ (user)
+                ),
+                iconUrl,
+                '/register',
+            ),
         ];
 
         const [message, postMark] = await Promise.all(promises);

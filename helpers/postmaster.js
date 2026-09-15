@@ -1,3 +1,4 @@
+// @ts-check
 import nodemailer from 'nodemailer';
 import configuration from './config.js';
 import { withRetry } from './retry.js';
@@ -6,6 +7,14 @@ const { smtp: smtpConfiguration } = configuration;
 const website = process.env.WEBSITE;
 
 const SMTP_CONNECTION_ERRORS = new Set(['ECONNECTION', 'ETIMEDOUT', 'EHOSTUNREACH', 'ECONNRESET']);
+
+/**
+ * The subset of a user this module reads to send an email.
+ * @typedef {Object} EmailUser
+ * @property {string} emailAddress
+ * @property {string} firstName
+ * @property {{ tokens: { blob: string } }} membership
+ */
 
 /**
  * Postmaster Class
@@ -19,7 +28,6 @@ class Postmaster {
      * Get a random color.
      *
      * @returns {string}
-     * @private
      */
     static #getRandomColor() {
         let color = '#';
@@ -35,12 +43,11 @@ class Postmaster {
     /**
      * Send email with user token
      *
-     * @param {Object} user - User object with emailAddress, firstName, and membership.tokens.blob
-     * @param {string} image - Optional image URL
+     * @param {EmailUser} user - User object with emailAddress, firstName, and membership.tokens.blob
+     * @param {string | undefined} image - Optional image URL
      * @param {string} url - URL path for the action
      * @param {string} action - Action type ('registration' or 'confirmation')
-     * @returns {Promise}
-     * @private
+     * @returns {Promise<*>}
      */
     #sendEmail(user, image, url, action) {
         const {
@@ -64,7 +71,8 @@ class Postmaster {
         };
 
         return withRetry(() => this.transporter.sendMail(mailOptions), {
-            shouldRetry: err => SMTP_CONNECTION_ERRORS.has(err.code),
+            shouldRetry: (/** @type {Error & { code?: string } } */ err) =>
+                err.code !== undefined && SMTP_CONNECTION_ERRORS.has(err.code),
             maxRetries: 1,
         });
     }
@@ -72,10 +80,10 @@ class Postmaster {
     /**
      * Send confirmation email to user.
      *
-     * @param user
-     * @param image
-     * @param url
-     * @returns {Promise}
+     * @param {EmailUser} user
+     * @param {string | undefined} image
+     * @param {string} url
+     * @returns {Promise<*>}
      */
     confirm(user, image, url) {
         return this.#sendEmail(user, image, url, 'confirmation');
@@ -84,10 +92,10 @@ class Postmaster {
     /**
      * Send registration email to user.
      *
-     * @param user
-     * @param image
-     * @param url
-     * @returns {Promise}
+     * @param {EmailUser} user
+     * @param {string | undefined} image
+     * @param {string} url
+     * @returns {Promise<*>}
      */
     register(user, image, url) {
         return this.#sendEmail(user, image, url, 'registration');

@@ -5,6 +5,7 @@
  * @summary Publish messages to topics accordingly.
  * @author Chris Paskvan
  */
+// @ts-check
 import { Worker } from 'bullmq';
 import client from './jobs.js';
 import log from './log.js';
@@ -13,13 +14,14 @@ import safeReviver from './safe-reviver.js';
 class Subscriber {
     /**
      * BullMQ Worker
-     * @private
+     * @type {import('bullmq').Worker[]}
      */
     #workers = [];
 
     /**
      * @constructor
-     * @param {string} queueName - The queue name to subscribe to.
+     * @param {(user: *, options: { claimCheckNumber: string, notificationType: string }) => Promise<void>} callback
+     * @param {string} [queueName] - The queue name to subscribe to.
      */
     listen(callback, queueName = 'notifications') {
         const worker = new Worker(
@@ -61,8 +63,8 @@ class Subscriber {
                     log.error(
                         {
                             jobId: job.id,
-                            error: err.message,
-                            stack: err.stack,
+                            error: err instanceof Error ? err.message : String(err),
+                            stack: err instanceof Error ? err.stack : undefined,
                         },
                         'Failed to process message',
                     );

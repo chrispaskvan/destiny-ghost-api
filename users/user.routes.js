@@ -17,6 +17,8 @@ import log from '../helpers/log.js';
  * @property {string} [displayName]
  * @property {number} [membershipType]
  * @property {string} [state]
+ * @property {string} [membershipId]
+ * @property {string} [dateRegistered]
  */
 
 /** @typedef {import('express-session').Session & AppSessionData} AppSession */
