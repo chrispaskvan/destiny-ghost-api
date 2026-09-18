@@ -1,6 +1,6 @@
 {
     "name": "destiny-ghost-api",
-    "version": "2.22.3-The-Martlet",
+    "version": "2.22.4-The-Martlet",
     "description": "Node.js API for querying the Destiny database via SMS messages.",
     "main": "start.js",
     "type": "module",
