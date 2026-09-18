@@ -124,10 +124,12 @@ async function request(
             }
 
             /**
-             * A non-transient 4xx is the caller's problem, not an outage - an
-             * expired Bungie token probed on purpose lands here - so it is a
-             * warning. The url and status ride along either way, since the
-             * error alone names no upstream.
+             * A non-transient response means this request was refused, not that
+             * the upstream is down, and some callers expect a share of them - a
+             * token deliberately probed to see whether it still works, say. It
+             * warns rather than errors so those do not crowd the error stream,
+             * while the url and status ride along either way, since the error
+             * alone names no upstream.
              */
             log[responseError.isTransient ? 'error' : 'warn'](
                 { err: responseError, status: response.status, url },
