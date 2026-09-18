@@ -97,7 +97,7 @@ export default () => {
     const notificationService = new NotificationService({
         client: messageClient,
     });
-    const mmsService = new MmsService({ aiService: ai, notificationService });
+    const mmsService = new MmsService({ aiService: ai, destiny2Service, notificationService });
 
     /**
      * Routes

@@ -12,6 +12,8 @@ import { join } from 'node:path';
 import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 
+import pLimit from 'p-limit';
+
 import configuration from '../helpers/config.js';
 import log from '../helpers/log.js';
 import { isTransientError, withRetry } from '../helpers/retry.js';
@@ -19,12 +21,16 @@ import {
     MAX_MEDIA_BYTES,
     MEDIA_ERROR_REPLY,
     MEDIA_NO_PLAYERS_REPLY,
+    PLAYER_LOOKUP_CONCURRENCY,
     TWILIO_MEDIA_HOST,
+    UNKNOWN_STATISTIC,
 } from './twilio.constants.js';
 
 const {
     twilio: { accountSid, authToken },
 } = configuration;
+
+/** @typedef {import('../destiny2/destiny2.service.js').default} Destiny2Service */
 
 /**
  * One media attachment on an inbound MMS.
@@ -40,11 +46,91 @@ class MmsService {
     /**
      * @param {Object} options
      * @param {import('../helpers/ai.js').AI} options.aiService
+     * @param {Destiny2Service} options.destiny2Service
      * @param {import('../notifications/notification.service.js').default} options.notificationService
      */
     constructor(options) {
         this.ai = options.aiService;
+        this.destiny2 = options.destiny2Service;
         this.notifications = options.notificationService;
+    }
+
+    /**
+     * Look up one player's lifetime PvP kill/death ratio.
+     *
+     * Bungie searches by name prefix, and a global display name is not unique on
+     * its own - the numeric code is what separates two players who share one - so
+     * anything other than a single exact match is reported as unknown rather than
+     * guessed at. When the image gives a name carrying its code, that narrows the
+     * match to the one player.
+     *
+     * @param {string} displayName
+     * @returns {Promise<string | undefined>} The ratio, or undefined when the
+     * player could not be identified.
+     */
+    async #getKillDeathRatio(displayName) {
+        const [name, code] = displayName.split('#');
+        const players =
+            await /** @type {typeof import('../destiny2/destiny2.service.js').default} */ (
+                this.destiny2.constructor
+            ).findPlayers(name, 0);
+        const matches = players.filter(
+            player =>
+                player.bungieGlobalDisplayName?.toLowerCase() === name.toLowerCase() &&
+                (!code || String(player.bungieGlobalDisplayNameCode) === code),
+        );
+
+        if (matches.length !== 1) {
+            log.info({ displayName, matches: matches.length }, 'Could not identify the player');
+
+            return undefined;
+        }
+
+        /**
+         * The membership the player actually plays on: either the one cross save
+         * points at, or an account that never enabled it.
+         */
+        const { membershipId, membershipType } =
+            (matches[0].destinyMemberships ?? []).find(
+                membership =>
+                    membership.crossSaveOverride === membership.membershipType ||
+                    membership.crossSaveOverride === 0,
+            ) ?? {};
+        const {
+            pvp: { kdr },
+        } = await this.destiny2.getPlayerStatistics(membershipId, membershipType);
+
+        return kdr ?? undefined;
+    }
+
+    /**
+     * Pair every display name with its kill/death ratio, one reply line each.
+     *
+     * @param {string[]} displayNames
+     * @returns {Promise<string[]>}
+     */
+    async #getRoster(displayNames) {
+        const limit = pLimit(PLAYER_LOOKUP_CONCURRENCY);
+
+        return await Promise.all(
+            displayNames.map(displayName =>
+                limit(async () => {
+                    try {
+                        const killDeathRatio = await this.#getKillDeathRatio(displayName);
+
+                        return `${displayName} ${killDeathRatio ?? UNKNOWN_STATISTIC}`;
+                    } catch (err) {
+                        /**
+                         * One player Bungie cannot answer for must not cost the
+                         * sender the rest of the roster.
+                         */
+                        log.warn({ err, displayName }, 'Failed to look up the player');
+
+                        return `${displayName} ${UNKNOWN_STATISTIC}`;
+                    }
+                }),
+            ),
+        );
     }
 
     /**
@@ -131,7 +217,8 @@ class MmsService {
     }
 
     /**
-     * Download each image, analyze it, reply with what it held, and clean up.
+     * Download each image, read the roster off it, reply with each player's
+     * kill/death ratio, and clean up.
      * Never rejects: the webhook has already acknowledged receipt, so failures
      * are logged and reported to the sender as a follow-up message instead.
      *
@@ -171,11 +258,14 @@ class MmsService {
                 }
 
                 /**
-                 * Sent after the cleanup above rather than inside the try, so a
-                 * slow round trip to Twilio cannot keep the image on disk.
+                 * Looked up and sent after the cleanup above rather than inside
+                 * the try, so neither Bungie nor Twilio can keep the image on
+                 * disk while they take their time.
                  */
+                const roster = players.length ? await this.#getRoster(players) : [];
+
                 await this.notifications.sendMessage(
-                    players.length ? players.join('\n') : MEDIA_NO_PLAYERS_REPLY,
+                    roster.length ? roster.join('\n') : MEDIA_NO_PLAYERS_REPLY,
                     from,
                 );
             }

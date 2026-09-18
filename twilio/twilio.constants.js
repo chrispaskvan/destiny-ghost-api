@@ -84,6 +84,22 @@ export const MEDIA_NO_PLAYERS_REPLY = "I couldn't make out any players in that i
 
 /**
  * @constant
+ * @description Stands in for a statistic that could not be looked up, so a player
+ * the search cannot identify still appears in the reply.
+ */
+export const UNKNOWN_STATISTIC = '?';
+
+/**
+ * @constant
+ * @type {number}
+ * @description How many players to look up at once. A roster is a dozen names and
+ * each one costs a search plus a statistics call, so this keeps a single image from
+ * firing all of them at the shared Bungie circuit breaker at once.
+ */
+export const PLAYER_LOOKUP_CONCURRENCY = 6;
+
+/**
+ * @constant
  * @description Maps emoji-only inbound messages to an intent-specific reply,
  * so a 👍 or ❤️ doesn't fall through to item search and come back empty.
  * Keys are normalized (via {@link normalizeEmoji}) to their base sequence,
