@@ -48,6 +48,13 @@ ENV PROTOCOL=$PROTOCOL
 ARG WEBSITE=https://app.destiny-ghost.com
 ENV WEBSITE=$WEBSITE
 
+# os.tmpdir() defaults to /tmp, which the permission model in
+# package.json#start:production does not grant. /var/tmp is granted read and
+# write, exists in the base image, and is world-writable, so temporary files
+# (MMS media, App Insights status logs) land somewhere the runtime is allowed
+# to use.
+ENV TMPDIR=/var/tmp
+
 EXPOSE $PORT
 
 # Enable corepack as root before switching to the unprivileged user

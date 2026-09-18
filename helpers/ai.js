@@ -23,6 +23,8 @@ class AI {
 
     /**
      * @param {string} path
+     * @returns {Promise<string[] | undefined>} Display names, or undefined when
+     * the model answers with no text at all.
      */
     async getPlayersFromFile(path) {
         const { mimeType, uri: fileUri } = await withRetry(

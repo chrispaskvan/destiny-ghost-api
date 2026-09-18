@@ -123,7 +123,18 @@ async function request(
                 continue;
             }
 
-            log.error({ err: responseError }, 'HTTP request failed!');
+            /**
+             * A non-transient response means this request was refused, not that
+             * the upstream is down, and some callers expect a share of them - a
+             * token deliberately probed to see whether it still works, say. It
+             * warns rather than errors so those do not crowd the error stream,
+             * while the url and status ride along either way, since the error
+             * alone names no upstream.
+             */
+            log[responseError.isTransient ? 'error' : 'warn'](
+                { err: responseError, status: response.status, url },
+                'HTTP request failed!',
+            );
 
             throw responseError;
         }

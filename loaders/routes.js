@@ -22,6 +22,7 @@ import UserCache from '../users/user.cache.js';
 import UserService from '../users/user.service.js';
 import World from '../helpers/world.js';
 import World2 from '../helpers/world2.js';
+import ai from '../helpers/ai.js';
 import client from '../helpers/cache.js';
 import Documents from '../helpers/documents.js';
 import configuration from '../helpers/config.js';
@@ -96,7 +97,7 @@ export default () => {
     const notificationService = new NotificationService({
         client: messageClient,
     });
-    const mmsService = new MmsService({ notificationService });
+    const mmsService = new MmsService({ aiService: ai, destiny2Service, notificationService });
 
     /**
      * Routes
