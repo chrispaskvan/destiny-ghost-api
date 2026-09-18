@@ -6,6 +6,10 @@ vi.mock('@google/genai', () => ({
     GoogleGenAI: class {
         files = { delete: vi.fn(), upload: vi.fn() };
         models = { generateContent: vi.fn() };
+
+        constructor(options) {
+            this.options = options;
+        }
     },
 }));
 vi.mock('./config.js', () => ({
@@ -83,14 +87,10 @@ describe('AI', () => {
 
             const result = await aiInstance.getPlayersFromFile(testFilePath);
 
-            expect(mockUpload).toHaveBeenCalledWith({
-                file: testFilePath,
-                config: { httpOptions: { timeout: expect.any(Number) } },
-            });
+            expect(mockUpload).toHaveBeenCalledWith({ file: testFilePath });
             expect(mockGenerateContent).toHaveBeenCalledWith({
                 model: 'test-model',
                 config: {
-                    httpOptions: { timeout: expect.any(Number) },
                     responseMimeType: 'text/plain',
                 },
                 contents: [
@@ -256,10 +256,7 @@ describe('AI', () => {
 
             await aiInstance.getPlayersFromFile(testFilePath);
 
-            expect(mockDelete).toHaveBeenCalledWith({
-                name: testFileName,
-                config: { httpOptions: { timeout: expect.any(Number) } },
-            });
+            expect(mockDelete).toHaveBeenCalledWith({ name: testFileName });
         });
 
         it('should delete the uploaded file even when generation fails', async () => {
@@ -273,10 +270,7 @@ describe('AI', () => {
             await expect(aiInstance.getPlayersFromFile(testFilePath)).rejects.toThrow(
                 'Content generation failed',
             );
-            expect(mockDelete).toHaveBeenCalledWith({
-                name: testFileName,
-                config: { httpOptions: { timeout: expect.any(Number) } },
-            });
+            expect(mockDelete).toHaveBeenCalledWith({ name: testFileName });
         });
 
         it('should keep the answer when the delete fails', async () => {
@@ -342,6 +336,33 @@ describe('AI', () => {
             );
         });
 
+        /**
+         * Passing httpOptions to files.upload replaces the options the SDK builds
+         * for a resumable upload - the empty apiVersion and the X-Goog-Upload-*
+         * headers - and the upload fails with a 404 in production. The cap has to
+         * ride on the client, which the SDK merges into every request instead.
+         */
+        it('should cap the client rather than the individual calls', async () => {
+            mockUpload.mockResolvedValue({
+                mimeType: testMimeType,
+                name: testFileName,
+                uri: testFileUri,
+            });
+            mockGenerateContent.mockResolvedValue({ text: testPlayerNames });
+
+            expect(aiInstance.ai.options.httpOptions).toEqual({ timeout: expect.any(Number) });
+
+            await aiInstance.getPlayersFromFile(testFilePath);
+
+            for (const call of [
+                ...mockUpload.mock.calls,
+                ...mockDelete.mock.calls,
+                ...mockGenerateContent.mock.calls,
+            ]) {
+                expect(call[0].config?.httpOptions).toBeUndefined();
+            }
+        });
+
         describe('when settings configure a thinking budget and a timeout', () => {
             afterEach(() => {
                 vi.doUnmock('./config.js');
@@ -373,10 +394,10 @@ describe('AI', () => {
 
                 await configuredAi.getPlayersFromFile(testFilePath);
 
+                expect(configuredAi.ai.options.httpOptions).toEqual({ timeout: 5000 });
                 expect(configuredAi.ai.models.generateContent).toHaveBeenCalledWith(
                     expect.objectContaining({
                         config: {
-                            httpOptions: { timeout: 5000 },
                             responseMimeType: 'text/plain',
                             thinkingConfig: { thinkingBudget: 0 },
                         },
@@ -399,10 +420,7 @@ describe('AI', () => {
 
             const result = await aiInstance.getPlayersFromFile(jpegFilePath);
 
-            expect(mockUpload).toHaveBeenCalledWith({
-                file: jpegFilePath,
-                config: { httpOptions: { timeout: expect.any(Number) } },
-            });
+            expect(mockUpload).toHaveBeenCalledWith({ file: jpegFilePath });
             expect(mockGenerateContent).toHaveBeenCalledWith(
                 expect.objectContaining({
                     contents: expect.arrayContaining([
