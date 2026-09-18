@@ -17,8 +17,15 @@ const {
 } = configuration;
 
 /**
- * The SDK applies this per request, which is what is wanted: retry backoff
- * sleeps are not covered by it, so each attempt gets the full allowance.
+ * Given to the client rather than to each call. The SDK merges client options
+ * into every request (ApiClient.patchHttpOptions), so the ceiling still reaches
+ * all three - and files.upload is the reason it has to be done this way:
+ * ApiClient.fetchUploadUrl *replaces* its own options with whatever a call
+ * passes, discarding the empty apiVersion and the X-Goog-Upload-* headers a
+ * resumable upload needs, which fails the upload with a 404.
+ *
+ * Per request is still the granularity that applies: retry backoff sleeps fall
+ * outside it, so each attempt gets the full allowance.
  */
 const httpOptions = { timeout };
 
@@ -40,7 +47,7 @@ class AI {
     };
 
     constructor() {
-        this.ai = new GoogleGenAI({ apiKey });
+        this.ai = new GoogleGenAI({ apiKey, httpOptions });
     }
 
     /**
@@ -58,7 +65,7 @@ class AI {
         if (!name) return;
 
         try {
-            await this.ai.files.delete({ name, config: { httpOptions } });
+            await this.ai.files.delete({ name });
         } catch (err) {
             log.warn({ err, name }, 'Failed to delete the uploaded file');
         }
@@ -74,14 +81,13 @@ class AI {
             mimeType,
             name,
             uri: fileUri,
-        } = await withRetry(() => this.ai.files.upload({ file: path, config: { httpOptions } }), {
+        } = await withRetry(() => this.ai.files.upload({ file: path }), {
             shouldRetry: isTransientError,
         });
 
         log.info({ fileUri, mimeType, path }, 'File uploaded to the AI');
 
         const config = {
-            httpOptions,
             responseMimeType: 'text/plain',
             ...(thinkingConfig && { thinkingConfig }),
         };
