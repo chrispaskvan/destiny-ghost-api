@@ -277,6 +277,32 @@ describe('MmsService', () => {
                     );
                 },
             );
+            it('should match a code that kept the leading zero the game shows', async () => {
+                aiService.getPlayersFromFile.mockResolvedValue(['Player1#0420']);
+                FakeDestiny2Service.findPlayers.mockResolvedValue([
+                    playerMatching('Player1', { bungieGlobalDisplayNameCode: 420 }),
+                ]);
+
+                await mmsService.process({ from, media: [{ contentType: 'image/jpeg', url }] });
+
+                expect(destiny2Service.getPlayerStatistics).toHaveBeenCalledWith('4611686018', 3);
+                expect(notificationService.sendMessage).toHaveBeenCalledWith(
+                    'Player1#0420 1.42',
+                    from,
+                );
+            });
+
+            it('should fall back to the name when the code is unreadable', async () => {
+                aiService.getPlayersFromFile.mockResolvedValue(['Player1#????']);
+                FakeDestiny2Service.findPlayers.mockResolvedValue([playerMatching('Player1')]);
+
+                await mmsService.process({ from, media: [{ contentType: 'image/jpeg', url }] });
+
+                expect(notificationService.sendMessage).toHaveBeenCalledWith(
+                    'Player1#???? 1.42',
+                    from,
+                );
+            });
         });
 
         describe('when looking a player up fails', () => {

@@ -69,9 +69,15 @@ class MmsService {
      * player could not be identified.
      */
     async #getKillDeathRatio(displayName) {
-        // The model transcribes what it sees, so the code may arrive spaced
-        // off the name ("Player #1234"); Bungie matches neither half padded.
-        const [name, code] = displayName.split('#').map(part => part.trim());
+        /**
+         * The model transcribes what it sees, so the code may arrive spaced off
+         * the name ("Player #1234") and keeps the leading zero the game displays
+         * ("#0420") that Bungie's numeric field does not. Parsing settles both,
+         * and an unreadable code falls back to matching on the name alone -
+         * still safe, since only a lone exact match is trusted below.
+         */
+        const [name, rawCode] = displayName.split('#').map(part => part.trim());
+        const code = Number.parseInt(rawCode, 10);
         const players =
             await /** @type {typeof import('../destiny2/destiny2.service.js').default} */ (
                 this.destiny2.constructor
@@ -79,7 +85,7 @@ class MmsService {
         const matches = players.filter(
             player =>
                 player.bungieGlobalDisplayName?.toLowerCase() === name.toLowerCase() &&
-                (!code || String(player.bungieGlobalDisplayNameCode) === code),
+                (Number.isNaN(code) || player.bungieGlobalDisplayNameCode === code),
         );
 
         if (matches.length !== 1) {
