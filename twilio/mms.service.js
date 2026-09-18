@@ -40,6 +40,33 @@ const {
  */
 
 /**
+ * Lay the roster out as a column, the ratio first and the name after it.
+ *
+ * Leading with the ratio leaves the one variable width field last, so nothing
+ * has to be padded between the two and every name starts at the same column.
+ * That survives the proportional fonts most SMS clients render in, where
+ * padding inserted between fields does not: a run of spaces is narrower than
+ * the glyphs it is meant to line up against.
+ *
+ * Ratios are right aligned against the longest, so an occasional two digit
+ * ratio shifts the names as a group rather than breaking the column, and a
+ * missing one occupies the same width as a present one.
+ *
+ * @param {{ displayName: string, killDeathRatio: string }[]} roster
+ * @returns {string}
+ */
+const formatRoster = roster => {
+    const ratioWidth = Math.max(...roster.map(({ killDeathRatio }) => killDeathRatio.length));
+
+    return roster
+        .map(
+            ({ displayName, killDeathRatio }) =>
+                `${killDeathRatio.padStart(ratioWidth)} ${displayName}`,
+        )
+        .join('\n');
+};
+
+/**
  * MMS Service
  */
 class MmsService {
@@ -112,10 +139,13 @@ class MmsService {
     }
 
     /**
-     * Pair every display name with its kill/death ratio, one reply line each.
+     * Pair every display name with its kill/death ratio.
+     *
+     * Returns the parts rather than finished lines: the column widths depend on
+     * the whole roster, so the formatting happens once, afterwards.
      *
      * @param {string[]} displayNames
-     * @returns {Promise<string[]>}
+     * @returns {Promise<{ displayName: string, killDeathRatio: string }[]>}
      */
     async #getRoster(displayNames) {
         const limit = pLimit(PLAYER_LOOKUP_CONCURRENCY);
@@ -126,7 +156,7 @@ class MmsService {
                     try {
                         const killDeathRatio = await this.#getKillDeathRatio(displayName);
 
-                        return `${displayName} ${killDeathRatio ?? UNKNOWN_STATISTIC}`;
+                        return { displayName, killDeathRatio: killDeathRatio ?? UNKNOWN_STATISTIC };
                     } catch (err) {
                         /**
                          * One player Bungie cannot answer for must not cost the
@@ -134,7 +164,7 @@ class MmsService {
                          */
                         log.warn({ err, displayName }, 'Failed to look up the player');
 
-                        return `${displayName} ${UNKNOWN_STATISTIC}`;
+                        return { displayName, killDeathRatio: UNKNOWN_STATISTIC };
                     }
                 }),
             ),
@@ -272,8 +302,13 @@ class MmsService {
                  */
                 const roster = players.length ? await this.#getRoster(players) : [];
 
+                /**
+                 * The leading break pair puts the roster on its own lines: the
+                 * brand prefix is added centrally when the message is sent, and
+                 * a column reads badly when the first row starts after it.
+                 */
                 await this.notifications.sendMessage(
-                    roster.length ? roster.join('\n') : MEDIA_NO_PLAYERS_REPLY,
+                    roster.length ? `\n\n${formatRoster(roster)}` : MEDIA_NO_PLAYERS_REPLY,
                     from,
                 );
             }

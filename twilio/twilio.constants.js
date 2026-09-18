@@ -85,9 +85,10 @@ export const MEDIA_NO_PLAYERS_REPLY = "I couldn't make out any players in that i
 /**
  * @constant
  * @description Stands in for a statistic that could not be looked up, so a player
- * the search cannot identify still appears in the reply.
+ * the search cannot identify still appears in the reply. Shaped like the ratio it
+ * stands in for, so a missing value leaves the column's width alone.
  */
-export const UNKNOWN_STATISTIC = '?';
+export const UNKNOWN_STATISTIC = '?.??';
 
 /**
  * @constant

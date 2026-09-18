@@ -104,7 +104,7 @@ describe('MmsService', () => {
                 await mmsService.process({ from, media: [{ contentType: 'image/jpeg', url }] });
 
                 expect(notificationService.sendMessage).toHaveBeenCalledWith(
-                    'Player1 1.42\nPlayer2 0.87',
+                    '\n\n1.42 Player1\n0.87 Player2',
                     from,
                 );
             });
@@ -211,6 +211,37 @@ describe('MmsService', () => {
             });
         });
 
+        describe('when one ratio is wider than the others', () => {
+            it('should right align them so every name starts at one column', async () => {
+                aiService.getPlayersFromFile.mockResolvedValue([
+                    'Lyn',
+                    'WAREAGLE1123',
+                    'lady_helz8',
+                ]);
+                destiny2Service.getPlayerStatistics
+                    .mockResolvedValueOnce({ pvp: { kdr: '1.42' } })
+                    .mockResolvedValueOnce({ pvp: { kdr: '10.53' } })
+                    .mockResolvedValueOnce({ pvp: { kdr: null } });
+                vi.stubGlobal(
+                    'fetch',
+                    vi.fn().mockResolvedValue(new Response('image-bytes', { status: 200 })),
+                );
+
+                await mmsService.process({ from, media: [{ contentType: 'image/jpeg', url }] });
+
+                expect(notificationService.sendMessage).toHaveBeenCalledWith(
+                    [
+                        '',
+                        '',
+                        ' 1.42 Lyn',
+                        '10.53 WAREAGLE1123',
+                        ` ${UNKNOWN_STATISTIC} lady_helz8`,
+                    ].join('\n'),
+                    from,
+                );
+            });
+        });
+
         describe('when a display name cannot be matched to exactly one player', () => {
             beforeEach(() => {
                 aiService.getPlayersFromFile.mockResolvedValue(['Player1']);
@@ -240,7 +271,7 @@ describe('MmsService', () => {
 
                 expect(destiny2Service.getPlayerStatistics).not.toHaveBeenCalled();
                 expect(notificationService.sendMessage).toHaveBeenCalledWith(
-                    `Player1 ${UNKNOWN_STATISTIC}`,
+                    `\n\n${UNKNOWN_STATISTIC} Player1`,
                     from,
                 );
             });
@@ -272,7 +303,7 @@ describe('MmsService', () => {
                         2,
                     );
                     expect(notificationService.sendMessage).toHaveBeenCalledWith(
-                        `${extractedName} 1.42`,
+                        `\n\n1.42 ${extractedName}`,
                         from,
                     );
                 },
@@ -287,7 +318,7 @@ describe('MmsService', () => {
 
                 expect(destiny2Service.getPlayerStatistics).toHaveBeenCalledWith('4611686018', 3);
                 expect(notificationService.sendMessage).toHaveBeenCalledWith(
-                    'Player1#0420 1.42',
+                    '\n\n1.42 Player1#0420',
                     from,
                 );
             });
@@ -299,7 +330,7 @@ describe('MmsService', () => {
                 await mmsService.process({ from, media: [{ contentType: 'image/jpeg', url }] });
 
                 expect(notificationService.sendMessage).toHaveBeenCalledWith(
-                    'Player1#???? 1.42',
+                    '\n\n1.42 Player1#????',
                     from,
                 );
             });
@@ -321,7 +352,7 @@ describe('MmsService', () => {
                 await mmsService.process({ from, media: [{ contentType: 'image/jpeg', url }] });
 
                 expect(notificationService.sendMessage).toHaveBeenCalledWith(
-                    `Player1 ${UNKNOWN_STATISTIC}\nPlayer2 1.42`,
+                    `\n\n${UNKNOWN_STATISTIC} Player1\n1.42 Player2`,
                     from,
                 );
             });
