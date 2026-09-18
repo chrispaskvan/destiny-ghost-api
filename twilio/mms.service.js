@@ -15,7 +15,12 @@ import { pipeline } from 'node:stream/promises';
 import configuration from '../helpers/config.js';
 import log from '../helpers/log.js';
 import { isTransientError, withRetry } from '../helpers/retry.js';
-import { MAX_MEDIA_BYTES, MEDIA_ERROR_REPLY, TWILIO_MEDIA_HOST } from './twilio.constants.js';
+import {
+    MAX_MEDIA_BYTES,
+    MEDIA_ERROR_REPLY,
+    MEDIA_NO_PLAYERS_REPLY,
+    TWILIO_MEDIA_HOST,
+} from './twilio.constants.js';
 
 const {
     twilio: { accountSid, authToken },
@@ -33,23 +38,32 @@ const {
  */
 class MmsService {
     /**
-     * @param {{ notificationService: import('../notifications/notification.service.js').default }} options
+     * @param {Object} options
+     * @param {import('../helpers/ai.js').AI} options.aiService
+     * @param {import('../notifications/notification.service.js').default} options.notificationService
      */
     constructor(options) {
+        this.ai = options.aiService;
         this.notifications = options.notificationService;
     }
 
     /**
-     * Upload the downloaded image to the AI service for analysis.
+     * Read the display names off the downloaded image.
      *
-     * Stub: the follow-up issue wires this to ai#getPlayersFromFile
-     * (helpers/ai.js), which already accepts a file path.
+     * The AI answers with one comma delimited line, so a blank response yields a
+     * single empty entry rather than no entries - both mean the same thing here
+     * and both collapse to an empty list.
      *
      * @param {string} filePath - Path to the downloaded image.
-     * @returns {Promise<void>}
+     * @returns {Promise<string[]>} Display names, in the order they appear.
      */
-    static async analyzeImage(filePath) {
-        log.info({ filePath }, 'Image ready for AI analysis');
+    async analyzeImage(filePath) {
+        const players = (await this.ai.getPlayersFromFile(filePath)) ?? [];
+        const displayNames = players.map(player => player.trim()).filter(Boolean);
+
+        log.info({ filePath, playerCount: displayNames.length }, 'Image analyzed');
+
+        return displayNames;
     }
 
     /**
@@ -117,7 +131,7 @@ class MmsService {
     }
 
     /**
-     * Download each image, hand it to the AI analysis stub, and clean up.
+     * Download each image, analyze it, reply with what it held, and clean up.
      * Never rejects: the webhook has already acknowledged receipt, so failures
      * are logged and reported to the sender as a follow-up message instead.
      *
@@ -142,10 +156,12 @@ class MmsService {
                  */
                 const directory = await mkdtemp(join(tmpdir(), 'mms-'));
 
+                let players;
+
                 try {
                     const filePath = await this.#download(item, directory);
 
-                    await MmsService.analyzeImage(filePath);
+                    players = await this.analyzeImage(filePath);
                 } finally {
                     try {
                         await rm(directory, { force: true, recursive: true });
@@ -153,6 +169,15 @@ class MmsService {
                         log.warn({ err: rmErr, directory }, 'Failed to delete downloaded media');
                     }
                 }
+
+                /**
+                 * Sent after the cleanup above rather than inside the try, so a
+                 * slow round trip to Twilio cannot keep the image on disk.
+                 */
+                await this.notifications.sendMessage(
+                    players.length ? players.join('\n') : MEDIA_NO_PLAYERS_REPLY,
+                    from,
+                );
             }
         } catch (err) {
             log.error({ err, from }, 'Failed to process MMS media');

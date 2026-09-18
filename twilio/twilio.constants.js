@@ -77,6 +77,13 @@ export const MEDIA_ERROR_REPLY = "Sorry, I couldn't process your image. Please t
 
 /**
  * @constant
+ * @description Follow-up message sent when an image analyzed cleanly but held no
+ * recognizable display names.
+ */
+export const MEDIA_NO_PLAYERS_REPLY = "I couldn't make out any players in that image.";
+
+/**
+ * @constant
  * @description Maps emoji-only inbound messages to an intent-specific reply,
  * so a 👍 or ❤️ doesn't fall through to item search and come back empty.
  * Keys are normalized (via {@link normalizeEmoji}) to their base sequence,
