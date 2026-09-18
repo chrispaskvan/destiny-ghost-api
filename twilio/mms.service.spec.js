@@ -245,32 +245,38 @@ describe('MmsService', () => {
                 );
             });
 
-            it('should use the code to pick between players sharing a name', async () => {
-                aiService.getPlayersFromFile.mockResolvedValue(['Player1#5678']);
-                FakeDestiny2Service.findPlayers.mockResolvedValue([
-                    playerMatching('Player1'),
-                    playerMatching('Player1', {
-                        bungieGlobalDisplayNameCode: 5678,
-                        destinyMemberships: [
-                            {
-                                membershipId: '4611686019',
-                                membershipType: 2,
-                                displayName: 'Player1',
-                                crossSaveOverride: 0,
-                            },
-                        ],
-                    }),
-                ]);
+            it.each([['Player1#5678'], ['Player1 #5678'], ['Player1 # 5678']])(
+                'should use the code in %s to pick between players sharing a name',
+                async extractedName => {
+                    aiService.getPlayersFromFile.mockResolvedValue([extractedName]);
+                    FakeDestiny2Service.findPlayers.mockResolvedValue([
+                        playerMatching('Player1'),
+                        playerMatching('Player1', {
+                            bungieGlobalDisplayNameCode: 5678,
+                            destinyMemberships: [
+                                {
+                                    membershipId: '4611686019',
+                                    membershipType: 2,
+                                    displayName: 'Player1',
+                                    crossSaveOverride: 0,
+                                },
+                            ],
+                        }),
+                    ]);
 
-                await mmsService.process({ from, media: [{ contentType: 'image/jpeg', url }] });
+                    await mmsService.process({ from, media: [{ contentType: 'image/jpeg', url }] });
 
-                expect(FakeDestiny2Service.findPlayers).toHaveBeenCalledWith('Player1', 0);
-                expect(destiny2Service.getPlayerStatistics).toHaveBeenCalledWith('4611686019', 2);
-                expect(notificationService.sendMessage).toHaveBeenCalledWith(
-                    'Player1#5678 1.42',
-                    from,
-                );
-            });
+                    expect(FakeDestiny2Service.findPlayers).toHaveBeenCalledWith('Player1', 0);
+                    expect(destiny2Service.getPlayerStatistics).toHaveBeenCalledWith(
+                        '4611686019',
+                        2,
+                    );
+                    expect(notificationService.sendMessage).toHaveBeenCalledWith(
+                        `${extractedName} 1.42`,
+                        from,
+                    );
+                },
+            );
         });
 
         describe('when looking a player up fails', () => {

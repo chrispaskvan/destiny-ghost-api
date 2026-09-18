@@ -69,7 +69,9 @@ class MmsService {
      * player could not be identified.
      */
     async #getKillDeathRatio(displayName) {
-        const [name, code] = displayName.split('#');
+        // The model transcribes what it sees, so the code may arrive spaced
+        // off the name ("Player #1234"); Bungie matches neither half padded.
+        const [name, code] = displayName.split('#').map(part => part.trim());
         const players =
             await /** @type {typeof import('../destiny2/destiny2.service.js').default} */ (
                 this.destiny2.constructor
