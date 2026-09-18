@@ -1,10 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import aiInstance from './ai.js';
 import { withRetry, isTransientError } from './retry.js';
 
 vi.mock('@google/genai', () => ({
     GoogleGenAI: class {
-        files = { upload: vi.fn() };
+        files = { delete: vi.fn(), upload: vi.fn() };
         models = { generateContent: vi.fn() };
     },
 }));
@@ -31,17 +31,21 @@ describe('AI', () => {
     const testFilePath = '/path/to/test/image.png';
     const testMimeType = 'image/png';
     const testFileUri = 'gs://test-bucket/test-file-uri';
+    const testFileName = 'files/test-file-name';
     const testPlayerNames =
         'Player1,Player2,Player3,Player4,Player5,Player6,Player7,Player8,Player9,Player10,Player11,Player12';
 
+    let mockDelete;
     let mockUpload;
     let mockGenerateContent;
 
     beforeEach(() => {
         vi.clearAllMocks();
 
+        mockDelete = aiInstance.ai.files.delete;
         mockUpload = aiInstance.ai.files.upload;
         mockGenerateContent = aiInstance.ai.models.generateContent;
+        mockDelete.mockResolvedValue(undefined);
     });
 
     describe('constructor', () => {
@@ -79,10 +83,14 @@ describe('AI', () => {
 
             const result = await aiInstance.getPlayersFromFile(testFilePath);
 
-            expect(mockUpload).toHaveBeenCalledWith({ file: testFilePath });
+            expect(mockUpload).toHaveBeenCalledWith({
+                file: testFilePath,
+                config: { httpOptions: { timeout: expect.any(Number) } },
+            });
             expect(mockGenerateContent).toHaveBeenCalledWith({
                 model: 'test-model',
                 config: {
+                    httpOptions: { timeout: expect.any(Number) },
                     responseMimeType: 'text/plain',
                 },
                 contents: [
@@ -238,6 +246,145 @@ describe('AI', () => {
             );
         });
 
+        it('should delete the uploaded file once it has an answer', async () => {
+            mockUpload.mockResolvedValue({
+                mimeType: testMimeType,
+                name: testFileName,
+                uri: testFileUri,
+            });
+            mockGenerateContent.mockResolvedValue({ text: testPlayerNames });
+
+            await aiInstance.getPlayersFromFile(testFilePath);
+
+            expect(mockDelete).toHaveBeenCalledWith({
+                name: testFileName,
+                config: { httpOptions: { timeout: expect.any(Number) } },
+            });
+        });
+
+        it('should delete the uploaded file even when generation fails', async () => {
+            mockUpload.mockResolvedValue({
+                mimeType: testMimeType,
+                name: testFileName,
+                uri: testFileUri,
+            });
+            mockGenerateContent.mockRejectedValue(new Error('Content generation failed'));
+
+            await expect(aiInstance.getPlayersFromFile(testFilePath)).rejects.toThrow(
+                'Content generation failed',
+            );
+            expect(mockDelete).toHaveBeenCalledWith({
+                name: testFileName,
+                config: { httpOptions: { timeout: expect.any(Number) } },
+            });
+        });
+
+        it('should keep the answer when the delete fails', async () => {
+            mockUpload.mockResolvedValue({
+                mimeType: testMimeType,
+                name: testFileName,
+                uri: testFileUri,
+            });
+            mockGenerateContent.mockResolvedValue({ text: 'Player1,Player2' });
+            mockDelete.mockRejectedValue(new Error('delete failed'));
+
+            const log = (await import('./log')).default;
+
+            await expect(aiInstance.getPlayersFromFile(testFilePath)).resolves.toEqual([
+                'Player1',
+                'Player2',
+            ]);
+            expect(log.warn).toHaveBeenCalledWith(
+                { err: expect.any(Error), name: testFileName },
+                'Failed to delete the uploaded file',
+            );
+        });
+
+        it('should not attempt a delete when the upload named no file', async () => {
+            mockUpload.mockResolvedValue({ mimeType: testMimeType, uri: testFileUri });
+            mockGenerateContent.mockResolvedValue({ text: testPlayerNames });
+
+            await aiInstance.getPlayersFromFile(testFilePath);
+
+            expect(mockDelete).not.toHaveBeenCalled();
+        });
+
+        it('should report how long the model took, on success and on failure', async () => {
+            mockUpload.mockResolvedValue({
+                mimeType: testMimeType,
+                name: testFileName,
+                uri: testFileUri,
+            });
+
+            const log = (await import('./log')).default;
+
+            mockGenerateContent.mockResolvedValue({ text: testPlayerNames });
+            await aiInstance.getPlayersFromFile(testFilePath);
+
+            expect(log.info).toHaveBeenCalledWith(
+                { durationMs: expect.any(Number), model: 'test-model' },
+                'The AI finished with the image',
+            );
+
+            vi.clearAllMocks();
+            mockDelete.mockResolvedValue(undefined);
+            mockUpload.mockResolvedValue({
+                mimeType: testMimeType,
+                name: testFileName,
+                uri: testFileUri,
+            });
+            mockGenerateContent.mockRejectedValue(new Error('Content generation failed'));
+
+            await expect(aiInstance.getPlayersFromFile(testFilePath)).rejects.toThrow();
+            expect(log.info).toHaveBeenCalledWith(
+                { durationMs: expect.any(Number), model: 'test-model' },
+                'The AI finished with the image',
+            );
+        });
+
+        describe('when settings configure a thinking budget and a timeout', () => {
+            afterEach(() => {
+                vi.doUnmock('./config.js');
+                vi.resetModules();
+            });
+
+            it('should pass both to the model', async () => {
+                vi.resetModules();
+                vi.doMock('./config.js', () => ({
+                    default: {
+                        gemini: {
+                            apiKey: 'test-api-key',
+                            model: 'test-model',
+                            thinkingBudget: 0,
+                            timeout: 5000,
+                        },
+                    },
+                }));
+
+                const { default: configuredAi } = await import('./ai.js');
+
+                configuredAi.ai.files.delete.mockResolvedValue(undefined);
+                configuredAi.ai.files.upload.mockResolvedValue({
+                    mimeType: testMimeType,
+                    name: testFileName,
+                    uri: testFileUri,
+                });
+                configuredAi.ai.models.generateContent.mockResolvedValue({ text: 'Player1' });
+
+                await configuredAi.getPlayersFromFile(testFilePath);
+
+                expect(configuredAi.ai.models.generateContent).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        config: {
+                            httpOptions: { timeout: 5000 },
+                            responseMimeType: 'text/plain',
+                            thinkingConfig: { thinkingBudget: 0 },
+                        },
+                    }),
+                );
+            });
+        });
+
         it('should handle different file types', async () => {
             const jpegFilePath = '/path/to/test/image.jpg';
             const jpegMimeType = 'image/jpeg';
@@ -252,7 +399,10 @@ describe('AI', () => {
 
             const result = await aiInstance.getPlayersFromFile(jpegFilePath);
 
-            expect(mockUpload).toHaveBeenCalledWith({ file: jpegFilePath });
+            expect(mockUpload).toHaveBeenCalledWith({
+                file: jpegFilePath,
+                config: { httpOptions: { timeout: expect.any(Number) } },
+            });
             expect(mockGenerateContent).toHaveBeenCalledWith(
                 expect.objectContaining({
                     contents: expect.arrayContaining([
