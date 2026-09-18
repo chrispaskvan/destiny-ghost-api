@@ -1,6 +1,6 @@
 {
     "name": "destiny-ghost-api",
-    "version": "2.22.2-The-Martlet",
+    "version": "2.22.3-The-Martlet",
     "description": "Node.js API for querying the Destiny database via SMS messages.",
     "main": "start.js",
     "type": "module",
@@ -9,7 +9,7 @@
         "format": "remark . --quiet --frail --output",
         "lint": "biome check --write .",
         "lint:ci": "biome check .",
-        "start:production": "NODE_ENV=production node --permission --allow-fs-read=./ --allow-fs-read=/agents/ --allow-fs-write=./databases --allow-fs-write=/var/ --allow-worker --allow-addons --allow-net --disable-proto=delete --disable-warning=SecurityWarning --disable-warning=ExperimentalWarning --import=./helpers/permission-model-patch.js -r dotenv/config --max-old-space-size=8192 --unhandled-rejections=strict start.js",
+        "start:production": "NODE_ENV=production node --permission --allow-fs-read=./ --allow-fs-read=/agents/ --allow-fs-read=/var/tmp/ --allow-fs-write=./databases --allow-fs-write=/var/log/ --allow-fs-write=/var/tmp/ --allow-worker --allow-addons --allow-net --disable-proto=delete --disable-warning=SecurityWarning --disable-warning=ExperimentalWarning --import=./helpers/permission-model-patch.js -r dotenv/config --max-old-space-size=8192 --unhandled-rejections=strict start.js",
         "start:dev": "NODE_ENV=development pnpm start",
         "start": "node --disable-proto=delete -r dotenv/config --max-old-space-size=8192 --unhandled-rejections=strict start.js",
         "swagger": "rm -f openapi.json && swagger-jsdoc -d openapi.cjs ./**/*.routes.js -o openapi.json",

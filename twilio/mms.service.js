@@ -134,7 +134,11 @@ class MmsService {
                  * out of the shared, world-writable temp directory (CodeQL
                  * js/insecure-temporary-file). Owned here for its whole
                  * lifecycle: created before the download, removed after
-                 * analysis or on any failure in between.
+                 * analysis or on any failure in between. In production the
+                 * image sets TMPDIR to a directory the permission model grants
+                 * both read and write access to, since /tmp is neither - the
+                 * recursive rm below lstats the directory, so a write-only
+                 * grant leaks it.
                  */
                 const directory = await mkdtemp(join(tmpdir(), 'mms-'));
 

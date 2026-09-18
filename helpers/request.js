@@ -123,7 +123,16 @@ async function request(
                 continue;
             }
 
-            log.error({ err: responseError }, 'HTTP request failed!');
+            /**
+             * A non-transient 4xx is the caller's problem, not an outage - an
+             * expired Bungie token probed on purpose lands here - so it is a
+             * warning. The url and status ride along either way, since the
+             * error alone names no upstream.
+             */
+            log[responseError.isTransient ? 'error' : 'warn'](
+                { err: responseError, status: response.status, url },
+                'HTTP request failed!',
+            );
 
             throw responseError;
         }

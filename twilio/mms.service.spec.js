@@ -163,6 +163,38 @@ describe('MmsService', () => {
             });
         });
 
+        /**
+         * The suite runs without --permission, so nothing above would notice
+         * production losing access to its temporary directory - which is how
+         * every MMS download once failed with ERR_ACCESS_DENIED on /tmp, and
+         * then leaked its directory when only the write half was granted.
+         */
+        describe('the temporary directory production downloads into', () => {
+            const grantsIn = flag => {
+                const { scripts } = JSON.parse(readFileSync('package.json', 'utf8'));
+
+                return [...scripts['start:production'].matchAll(flag)].map(([, grant]) => grant);
+            };
+            const temporaryDirectory = () => {
+                const [, directory] =
+                    readFileSync('Dockerfile', 'utf8').match(/^ENV TMPDIR=(\S+)$/m) ?? [];
+
+                return directory;
+            };
+
+            it.each([
+                ['read', /--allow-fs-read=(\S+)/g],
+                ['write', /--allow-fs-write=(\S+)/g],
+            ])('should be covered by a %s grant in the production start script', (_, flag) => {
+                const directory = temporaryDirectory();
+
+                expect(directory).toBeDefined();
+                expect(
+                    grantsIn(flag).some(grant => join(directory, '/').startsWith(join(grant, '/'))),
+                ).toBe(true);
+            });
+        });
+
         describe('when sending the failure reply itself fails', () => {
             it('should resolve without throwing', async () => {
                 notificationService.sendMessage.mockRejectedValue(new Error('twilio down'));
