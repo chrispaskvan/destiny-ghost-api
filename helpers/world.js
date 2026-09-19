@@ -78,34 +78,35 @@ class World {
         const directory = /** @type {string} */ (this.directory);
         const databasePath = fileName ? join(directory, basename(fileName)) : undefined;
 
+        if (!databasePath) {
+            return;
+        }
+
         log.info(`Loading the first world from ${databasePath}`);
 
-        if (databasePath) {
-            try {
-                const pool = /** @type {ManifestPool} */ (this.pool);
-                const [grimoireCards, vendorDefinitions] = await pool.run({
-                    databasePath,
-                    queries: [
-                        'SELECT * FROM DestinyGrimoireCardDefinition',
-                        'SELECT * FROM DestinyVendorDefinition',
-                    ],
-                });
+        try {
+            const pool = /** @type {ManifestPool} */ (this.pool);
+            const [grimoireCards, vendorDefinitions] = await pool.run({
+                databasePath,
+                queries: [
+                    'SELECT * FROM DestinyGrimoireCardDefinition',
+                    'SELECT * FROM DestinyVendorDefinition',
+                ],
+            });
 
-                /** @type {VendorDefinition[]} */
-                const vendors = vendorDefinitions.map(({ json: vendor }) => JSON.parse(vendor));
+            /** @type {VendorDefinition[]} */
+            const vendors = vendorDefinitions.map(({ json: vendor }) => JSON.parse(vendor));
 
-                /** @type {GrimoireCardDefinition[]} */
-                this.grimoireCards = grimoireCards.map(({ json: grimoireCard }) =>
-                    JSON.parse(grimoireCard),
-                );
-                /** @type {Map<number, VendorDefinition>} */
-                this.vendorHashMap = new Map(vendors.map(vendor => [vendor.hash, vendor]));
-            } catch (err) {
-                log.error(
-                    `Error loading the first world: ${err instanceof Error ? err.message : String(err)}`,
-                );
-                throw err;
-            }
+            /** @type {GrimoireCardDefinition[]} */
+            this.grimoireCards = grimoireCards.map(({ json: grimoireCard }) =>
+                JSON.parse(grimoireCard),
+            );
+            /** @type {Map<number, VendorDefinition>} */
+            this.vendorHashMap = new Map(vendors.map(vendor => [vendor.hash, vendor]));
+        } catch (err) {
+            log.error({ err }, 'Error loading the first world');
+
+            throw err;
         }
     }
 

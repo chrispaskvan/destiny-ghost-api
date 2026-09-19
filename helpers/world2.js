@@ -71,73 +71,72 @@ class World2 extends World {
         const directory = /** @type {string} */ (this.directory);
         const databasePath = fileName ? join(directory, basename(fileName)) : undefined;
 
+        if (!databasePath) {
+            return;
+        }
+
         log.info(`Loading the second world from ${databasePath}`);
 
-        if (databasePath) {
-            try {
-                const pool = /** @type {import('./world.js').ManifestPool} */ (this.pool);
-                const [
-                    categoryDefinitions,
-                    classDefinitions,
-                    damageTypeDefinitions,
-                    itemDefinitions,
-                    loreDefinitions,
-                    vendorDefinitions,
-                ] = await pool.run({
-                    databasePath,
-                    queries: [
-                        'SELECT json FROM DestinyItemCategoryDefinition',
-                        'SELECT json FROM DestinyClassDefinition',
-                        'SELECT json FROM DestinyDamageTypeDefinition',
-                        'SELECT json FROM DestinyInventoryItemDefinition',
-                        'SELECT json FROM DestinyLoreDefinition',
-                        'SELECT json FROM DestinyVendorDefinition',
-                    ],
-                });
+        try {
+            const pool = /** @type {import('./world.js').ManifestPool} */ (this.pool);
+            const [
+                categoryDefinitions,
+                classDefinitions,
+                damageTypeDefinitions,
+                itemDefinitions,
+                loreDefinitions,
+                vendorDefinitions,
+            ] = await pool.run({
+                databasePath,
+                queries: [
+                    'SELECT json FROM DestinyItemCategoryDefinition',
+                    'SELECT json FROM DestinyClassDefinition',
+                    'SELECT json FROM DestinyDamageTypeDefinition',
+                    'SELECT json FROM DestinyInventoryItemDefinition',
+                    'SELECT json FROM DestinyLoreDefinition',
+                    'SELECT json FROM DestinyVendorDefinition',
+                ],
+            });
 
-                /** @type {ClassDefinition[]} */
-                const classes = classDefinitions.map(({ json: classDefinition }) =>
-                    JSON.parse(classDefinition),
-                );
-                /** @type {DamageTypeDefinition[]} */
-                const damageTypes = damageTypeDefinitions.map(({ json: damageType }) =>
-                    JSON.parse(damageType),
-                );
-                /** @type {LoreDefinition[]} */
-                const lores = loreDefinitions.map(({ json: lore }) => JSON.parse(lore));
-                /** @type {VendorDefinition[]} */
-                const vendors = vendorDefinitions.map(({ json: vendor }) => JSON.parse(vendor));
+            /** @type {ClassDefinition[]} */
+            const classes = classDefinitions.map(({ json: classDefinition }) =>
+                JSON.parse(classDefinition),
+            );
+            /** @type {DamageTypeDefinition[]} */
+            const damageTypes = damageTypeDefinitions.map(({ json: damageType }) =>
+                JSON.parse(damageType),
+            );
+            /** @type {LoreDefinition[]} */
+            const lores = loreDefinitions.map(({ json: lore }) => JSON.parse(lore));
+            /** @type {VendorDefinition[]} */
+            const vendors = vendorDefinitions.map(({ json: vendor }) => JSON.parse(vendor));
 
-                /** @type {CategoryDefinition[]} */
-                this.categories = categoryDefinitions.map(({ json: category }) =>
-                    JSON.parse(category),
-                );
-                /** @type {Map<number, CategoryDefinition>} */
-                this.categoryHashMap = new Map(
-                    this.categories.map(category => [category.hash, category]),
-                );
-                /** @type {Map<number, ClassDefinition>} */
-                this.classHashMap = new Map(
-                    classes.map(characterClass => [characterClass.hash, characterClass]),
-                );
-                /** @type {Map<number, DamageTypeDefinition>} */
-                this.damageTypeHashMap = new Map(
-                    damageTypes.map(damageType => [damageType.hash, damageType]),
-                );
-                /** @type {ItemDefinition[]} */
-                this.items = itemDefinitions.map(({ json: item }) => JSON.parse(item));
-                /** @type {Map<number, ItemDefinition>} */
-                this.itemHashMap = new Map(this.items.map(item => [item.hash, item]));
-                /** @type {Map<number, LoreDefinition>} */
-                this.loreDefinitionHashMap = new Map(lores.map(lore => [lore.hash, lore]));
-                /** @type {Map<number, VendorDefinition>} */
-                this.vendorHashMap = new Map(vendors.map(vendor => [vendor.hash, vendor]));
-            } catch (err) {
-                log.error(
-                    `Error loading the second world: ${err instanceof Error ? err.message : String(err)}`,
-                );
-                throw err;
-            }
+            /** @type {CategoryDefinition[]} */
+            this.categories = categoryDefinitions.map(({ json: category }) => JSON.parse(category));
+            /** @type {Map<number, CategoryDefinition>} */
+            this.categoryHashMap = new Map(
+                this.categories.map(category => [category.hash, category]),
+            );
+            /** @type {Map<number, ClassDefinition>} */
+            this.classHashMap = new Map(
+                classes.map(characterClass => [characterClass.hash, characterClass]),
+            );
+            /** @type {Map<number, DamageTypeDefinition>} */
+            this.damageTypeHashMap = new Map(
+                damageTypes.map(damageType => [damageType.hash, damageType]),
+            );
+            /** @type {ItemDefinition[]} */
+            this.items = itemDefinitions.map(({ json: item }) => JSON.parse(item));
+            /** @type {Map<number, ItemDefinition>} */
+            this.itemHashMap = new Map(this.items.map(item => [item.hash, item]));
+            /** @type {Map<number, LoreDefinition>} */
+            this.loreDefinitionHashMap = new Map(lores.map(lore => [lore.hash, lore]));
+            /** @type {Map<number, VendorDefinition>} */
+            this.vendorHashMap = new Map(vendors.map(vendor => [vendor.hash, vendor]));
+        } catch (err) {
+            log.error({ err }, 'Error loading the second world');
+
+            throw err;
         }
     }
 
