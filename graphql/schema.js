@@ -22,12 +22,19 @@ const destinyGhostSchema = `
         bungieGlobalDisplayNameCode: Int!
     }
 
+    """
+    Bungie's own display values, as they arrive: already rounded and formatted
+    for reading. Declared as strings because that is what they are - typing them
+    as numbers left GraphQL coercing every one on the way out, and a value
+    Bungie chose to format with a separator would fail that coercion rather than
+    be returned.
+    """
     type PvPStatistics {
-        combatRating: Float
-        efficiency: Float
-        highestLightLevel: Int
-        kda: Float
-        kdr: Float
+        combatRating: String
+        efficiency: String
+        highestLightLevel: String
+        kda: String
+        kdr: String
     }
 
     type Statistics {
