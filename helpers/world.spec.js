@@ -8,6 +8,7 @@ import { ZipEntry, ZipFile, createZipArchiveSync } from 'node:zlib';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import World from './world.js';
 import itif from './itif.js';
+import log from './log.js';
 import { postmasterHash } from '../destiny/destiny.constants.js';
 import pool from './pool.js';
 
@@ -18,6 +19,13 @@ vi.mock('node:fs', async importOriginal => {
         existsSync: vi.fn(actual.existsSync),
     };
 });
+vi.mock('./log.js', () => ({
+    default: {
+        error: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+    },
+}));
 
 const directory = process.env.DESTINY_DATABASE_DIR;
 let world;
@@ -29,6 +37,55 @@ beforeAll(async () => {
     });
 
     await world.bootstrapped;
+});
+
+describe('bootstrap', () => {
+    const databaseDirectory = '/app/databases/destiny';
+
+    beforeEach(() => {
+        vi.mocked(log.error).mockClear();
+        vi.mocked(log.info).mockClear();
+        vi.mocked(log.warn).mockClear();
+    });
+
+    it('should skip the load silently when no manifest is on disk', async () => {
+        const run = vi.fn();
+        const w = new World({ pool: { run } });
+
+        w.directory = databaseDirectory;
+
+        await w.bootstrap();
+
+        expect(run).not.toHaveBeenCalled();
+        expect(log.info).not.toHaveBeenCalled();
+        expect(log.warn).not.toHaveBeenCalled();
+    });
+
+    it('should log the path of the manifest it loads', async () => {
+        const run = vi.fn().mockResolvedValue([[], []]);
+        const w = new World({ pool: { run } });
+
+        w.directory = databaseDirectory;
+
+        await w.bootstrap('world.content');
+
+        expect(run).toHaveBeenCalled();
+        expect(log.info).toHaveBeenCalledWith(
+            `Loading the first world from ${join(databaseDirectory, 'world.content')}`,
+        );
+    });
+
+    it('should log the error and rethrow when the manifest cannot be read', async () => {
+        const err = new Error('no such table: DestinyGrimoireCardDefinition');
+        const run = vi.fn().mockRejectedValue(err);
+        const w = new World({ pool: { run } });
+
+        w.directory = databaseDirectory;
+
+        await expect(w.bootstrap('world.content')).rejects.toThrow(err);
+
+        expect(log.error).toHaveBeenCalledWith({ err }, 'Error loading the first world');
+    });
 });
 
 describe('updateManifest path safety', () => {
