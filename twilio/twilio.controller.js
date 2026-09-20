@@ -413,7 +413,12 @@ class TwilioController {
                 'Unable to queue SMS consent change; writing it inline instead.',
             );
 
-            await this.applyConsent(phoneNumber, isSubscribed);
+            /**
+             * Nothing upstream can retry this one - the reply has gone and
+             * there is no job to hand back - so a terminal failure ends here.
+             * `applyConsent` has already logged it with the number.
+             */
+            await this.applyConsent(phoneNumber, isSubscribed).catch(() => {});
         }
     }
 
@@ -423,12 +428,19 @@ class TwilioController {
      * Shared by the queue worker and by `#persistConsent`'s fallback, so both
      * routes to the database behave identically. A dropped write is invisible
      * to the sender: they are told they are unsubscribed while
-     * `getSubscribedUsers` still returns them for the next broadcast. Only an
-     * exhausted budget gives up - loudly, and with the number, since at that
-     * point only an operator can put it right.
+     * `getSubscribedUsers` still returns them for the next broadcast.
+     *
+     * Rejects when the change could not be persisted, having logged it with
+     * the number. That rejection is what lets the worker hand the job back to
+     * BullMQ: swallowing it here would mark every job completed, so the
+     * queue's `attempts` and `removeOnFail` retention would never apply and an
+     * outage lasting longer than the in-process retries would drop the change
+     * with the job quietly removed. The inline fallback, which has no job to
+     * hand back, catches it instead.
      * @param {string} phoneNumber
      * @param {boolean} isSubscribed
      * @returns {Promise<void>}
+     * @throws when the change could not be written
      */
     async applyConsent(phoneNumber, isSubscribed) {
         try {
@@ -461,6 +473,8 @@ class TwilioController {
                 { err, phoneNumber, isSubscribed },
                 'Unable to persist SMS consent change after retrying; the sender was told it applied.',
             );
+
+            throw err;
         }
     }
 

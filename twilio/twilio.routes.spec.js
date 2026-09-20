@@ -450,6 +450,71 @@ describe('TwilioRouter', () => {
             );
         });
 
+        it('rejects from the worker so BullMQ can retry a failed consent write', async () => {
+            const error = new Error('cosmos unavailable');
+            const errorLog = vi.spyOn(log, 'error').mockImplementation(() => {});
+
+            userService.getUserByPhoneNumber.mockRejectedValue(error);
+
+            try {
+                const [handler] = listen.mock.calls.at(-1);
+
+                /**
+                 * Resolving here would mark the job completed, so the queue's
+                 * `attempts` and `removeOnFail` retention would never apply and
+                 * an outage outlasting the in-process retries would drop the
+                 * change with the job quietly removed.
+                 */
+                await expect(
+                    handler({ phoneNumber: signedBody().From, isSubscribed: false }),
+                ).rejects.toBe(error);
+
+                expect(errorLog).toHaveBeenCalledWith(
+                    expect.objectContaining({ err: error, phoneNumber: signedBody().From }),
+                    expect.stringContaining('Unable to persist SMS consent change'),
+                );
+            } finally {
+                errorLog.mockRestore();
+            }
+        }, 20000);
+
+        it('settles the inline fallback even when the write ultimately fails', async () => {
+            const error = new Error('cosmos unavailable');
+            const errorLog = vi.spyOn(log, 'error').mockImplementation(() => {});
+            const warnLog = vi.spyOn(log, 'warn').mockImplementation(() => {});
+            const unhandled = vi.fn();
+
+            userService.getUserByPhoneNumber.mockRejectedValue(error);
+            process.on('unhandledRejection', unhandled);
+
+            try {
+                const response = createResponse({ eventEmitter: EventEmitter });
+
+                await dispatch(
+                    twilioRouter,
+                    signedRequest({ body: signedBody({ Body: 'STOP' }) }),
+                    response,
+                );
+
+                expect(response.statusCode).toBe(StatusCodes.OK);
+                expect(response._getData()).toContain("You're unsubscribed");
+
+                await vi.waitFor(() => expect(errorLog).toHaveBeenCalled(), { timeout: 15000 });
+                await new Promise(resolve => setImmediate(resolve));
+
+                /**
+                 * The fallback has no job to hand back, so its rejection has to
+                 * die here rather than surface as an unhandled rejection - which
+                 * `start.js` turns into a process exit.
+                 */
+                expect(unhandled).not.toHaveBeenCalled();
+            } finally {
+                process.off('unhandledRejection', unhandled);
+                errorLog.mockRestore();
+                warnLog.mockRestore();
+            }
+        }, 25000);
+
         it('recovers a consent write rejected on a superseded etag', async () => {
             const preconditionFailed = Object.assign(new Error('precondition failed'), {
                 code: 412,
