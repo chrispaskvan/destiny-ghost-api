@@ -636,6 +636,32 @@ class UserService {
     }
 
     /**
+     * Replace a stored document and cache what Cosmos hands back.
+     *
+     * Cosmos stamps a fresh `_etag` on every successful replace, and
+     * `updateDocument` sends that etag as an `IfMatch` precondition on the
+     * next write. Caching the copy we sent instead of the one it stored would
+     * therefore leave the cache holding an etag that is already superseded,
+     * and the following write would fail its own precondition for the rest of
+     * the cache's hour - deterministically, not as a race.
+     *
+     * Falls back to the local document only when the driver returns nothing,
+     * which the Cosmos client does not do on a successful replace.
+     * @param {import('../helpers/documents.js').CosmosDocument<User>} document
+     * @param {number} partitionKey
+     * @returns {Promise<void>}
+     */
+    async #replaceAndCache(document, partitionKey) {
+        const updatedDocument = await this.documents.updateDocument(
+            userCollectionId,
+            document,
+            partitionKey,
+        );
+
+        return this.cacheService.setUser(updatedDocument ?? document);
+    }
+
+    /**
      * Update anonymous user.
      * @param {AnonymousUser} anonymousUser
      * @returns {Promise<void>}
@@ -657,9 +683,8 @@ class UserService {
 
         if (user) {
             const mergedUser = { ...user, ...anonymousUser };
-            return await this.documents
-                .updateDocument(userCollectionId, mergedUser, mergedUser.membershipType)
-                .then(() => this.cacheService.setUser(mergedUser));
+
+            return await this.#replaceAndCache(mergedUser, mergedUser.membershipType);
         }
 
         throw new Error(
@@ -691,9 +716,8 @@ class UserService {
         }
 
         Object.assign(userDocument, user);
-        await this.documents.updateDocument(userCollectionId, userDocument, user.membershipType);
 
-        return this.cacheService.setUser(userDocument);
+        return this.#replaceAndCache(userDocument, /** @type {number} */ (user.membershipType));
     }
 
     /**
@@ -711,21 +735,7 @@ class UserService {
     async updateUserSubscription(userDocument, isSubscribed) {
         userDocument.isSubscribed = isSubscribed;
 
-        /**
-         * Cosmos stamps a fresh `_etag` on every replace and hands back the
-         * stored document. Caching the pre-write copy would leave the cache
-         * holding the old etag, so the next consent change would read it and
-         * fail its own `IfMatch` precondition - deterministically, not as a
-         * race. Fall back to the local copy only when the driver returns
-         * nothing.
-         */
-        const updatedDocument = await this.documents.updateDocument(
-            userCollectionId,
-            userDocument,
-            userDocument.membershipType,
-        );
-
-        return this.cacheService.setUser(updatedDocument ?? userDocument);
+        return this.#replaceAndCache(userDocument, userDocument.membershipType);
     }
 
     /**
@@ -743,9 +753,12 @@ class UserService {
 
         userDocument.bungie = bungie;
 
-        return await this.documents
-            .updateDocument(userCollectionId, userDocument, userDocument.membershipType)
-            .then(() => undefined);
+        /**
+         * This used to write to Cosmos without touching the cache, so a reader
+         * could keep picking up the superseded token for the rest of the
+         * cache's hour.
+         */
+        return await this.#replaceAndCache(userDocument, userDocument.membershipType);
     }
 }
 

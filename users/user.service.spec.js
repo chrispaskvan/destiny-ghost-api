@@ -685,13 +685,18 @@ describe('UserService', () => {
             it('should return undefined', () => {
                 documentService.updateDocument.mockImplementation(() => Promise.resolve());
 
-                userService.getUserById = vi.fn().mockResolvedValue(user);
+                /**
+                 * A clone, because `updateUserBungie` assigns onto the document
+                 * it is handed - resolving the shared fixture here left every
+                 * later test parsing a user whose `bungie` had no access token.
+                 */
+                userService.getUserById = vi.fn().mockResolvedValue(structuredClone(user));
 
                 return userService.updateUserBungie(user.id, {}).then(user1 => {
                     expect(user1).toBeUndefined();
                     expect(documentService.updateDocument).toHaveBeenCalledWith(
                         expect.anything(),
-                        user,
+                        expect.objectContaining({ id: user.id, bungie: {} }),
                         user.membershipType,
                     );
                 });
@@ -708,6 +713,94 @@ describe('UserService', () => {
 
                 expect(documentService.updateDocument).not.toHaveBeenCalled();
             });
+        });
+    });
+
+    describe('caching what Cosmos returns', () => {
+        /**
+         * Stands in for Cosmos' IfMatch precondition: a replace succeeds only
+         * when the incoming document carries the etag the previous write
+         * issued, and every success stamps a new one.
+         */
+        function mockCosmosEtags(startingEtag) {
+            let currentEtag = startingEtag;
+
+            documentService.updateDocument.mockImplementation(async (_collection, document) => {
+                if (document._etag !== currentEtag) {
+                    throw Object.assign(new Error('precondition failed'), { code: 412 });
+                }
+
+                currentEtag = `${currentEtag}+1`;
+
+                return { ...document, _etag: currentEtag };
+            });
+        }
+
+        /** Mirrors the real cache closely enough to be read back. */
+        function mockCacheHolding(document) {
+            let cached = document;
+
+            cacheService.setUser.mockImplementation(async stored => {
+                cached = stored;
+            });
+
+            return () => cached;
+        }
+
+        it('lets a second update inside the cache TTL succeed', async () => {
+            mockCosmosEtags('etag-1');
+            const readCache = mockCacheHolding({ ...structuredClone(user), _etag: 'etag-1' });
+            userService.getUserByDisplayName = vi.fn(async () => readCache());
+
+            await userService.updateUser({ ...structuredClone(user), firstName: 'first' });
+
+            /**
+             * Before this fix the cache still held `etag-1` here, so the second
+             * write failed its precondition and surfaced as a 500.
+             */
+            await expect(
+                userService.updateUser({ ...structuredClone(user), firstName: 'second' }),
+            ).resolves.toBeUndefined();
+
+            expect(readCache()._etag).toBe('etag-1+1+1');
+        });
+
+        it('caches the stored document from updateAnonymousUser, not the local merge', async () => {
+            mockCosmosEtags('etag-1');
+            userService.getUserByDisplayName = vi
+                .fn()
+                .mockResolvedValue({ ...structuredClone(user), _etag: 'etag-1' });
+
+            await userService.updateAnonymousUser(structuredClone(anonymousUser));
+
+            expect(cacheService.setUser).toHaveBeenCalledWith(
+                expect.objectContaining({ _etag: 'etag-1+1' }),
+            );
+        });
+
+        it('refreshes the cache from updateUserBungie, which previously never wrote to it', async () => {
+            mockCosmosEtags('etag-1');
+            userService.getUserById = vi
+                .fn()
+                .mockResolvedValue({ ...structuredClone(user), _etag: 'etag-1' });
+            const bungie = { access_token: 'fresh-token' };
+
+            await userService.updateUserBungie(user.id, bungie);
+
+            expect(cacheService.setUser).toHaveBeenCalledExactlyOnceWith(
+                expect.objectContaining({ _etag: 'etag-1+1', bungie }),
+            );
+        });
+
+        it('falls back to the local document when the driver returns nothing', async () => {
+            const userDocument = { ...structuredClone(user), _etag: 'etag-1' };
+
+            documentService.updateDocument.mockResolvedValue(undefined);
+            userService.getUserByDisplayName = vi.fn().mockResolvedValue(userDocument);
+
+            await userService.updateUser(structuredClone(user));
+
+            expect(cacheService.setUser).toHaveBeenCalledWith(userDocument);
         });
     });
 });

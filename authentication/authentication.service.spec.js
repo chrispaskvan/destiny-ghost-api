@@ -227,7 +227,13 @@ describe('AuthenticationService', () => {
                     storedUser.id,
                     expectedToken,
                 );
-                expect(cacheService.setUser).toHaveBeenCalledWith(storedUser);
+                /**
+                 * The cache refresh belongs to `updateUserBungie`, which caches
+                 * the document Cosmos stored. Writing the local copy here as
+                 * well would race that write and could restore an entry
+                 * carrying a pre-write etag.
+                 */
+                expect(cacheService.setUser).not.toHaveBeenCalled();
             });
 
             describe('when the stored record carries no refresh token', () => {

@@ -196,10 +196,14 @@ class AuthenticationService {
         const bungie = { ...token, _ttl: now + token.expires_in * 1000 };
 
         user.bungie = bungie;
-        await Promise.all([
-            this.cacheService.setUser(user),
-            this.userService.updateUserBungie(user.id, bungie),
-        ]);
+
+        /**
+         * `updateUserBungie` now caches the document Cosmos stored. Writing
+         * the local copy alongside it would race that write and could put back
+         * an entry carrying a pre-write `_etag`, which the next update would
+         * then fail its `IfMatch` precondition against.
+         */
+        await this.userService.updateUserBungie(user.id, bungie);
 
         return user;
     }
