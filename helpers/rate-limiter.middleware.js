@@ -99,10 +99,26 @@ const rateLimiterMiddleware = (req, res, next) => {
             /** @type {unknown} */ (req.session)
         ) ?? {};
 
+    /**
+     * A Twilio webhook carries no session now that it no longer bootstraps
+     * one, so the anonymous ten-point charge would cap all inbound SMS near
+     * ten messages a second across every sender combined - and answer the
+     * overflow with a 429, which Twilio reads as error 11200 and turns into no
+     * carrier reply at all. The keyword exemption inside the router cannot
+     * help, because this runs first.
+     *
+     * These requests are separately bounded per sender once their signature is
+     * verified, so they cost a point here rather than ten. That keeps a real
+     * ceiling on unsigned traffic, which is still unidentified at this point,
+     * while putting the limit far out of reach of legitimate volume. Dedicated
+     * ingress budgets outside this bucket replace it entirely.
+     */
+    const isTwilioWebhook = req.method === 'POST' && req.path.startsWith('/twilio/');
+
     return consumePoints(
         rateLimiter,
         /** @type {string} */ (membershipId || req.ip),
-        dateRegistered ? 1 : 10,
+        isTwilioWebhook || dateRegistered ? 1 : 10,
         res,
         next,
     );

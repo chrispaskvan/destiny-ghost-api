@@ -649,6 +649,24 @@ describe('UserService', () => {
             expect(userService.getUserByDisplayName).not.toHaveBeenCalled();
         });
 
+        it('should cache the document Cosmos returns, carrying its new etag', async () => {
+            const userDocument = { ...structuredClone(user), _etag: 'stale-etag' };
+            const replaced = { ...userDocument, isSubscribed: false, _etag: 'fresh-etag' };
+
+            documentService.updateDocument.mockResolvedValue(replaced);
+
+            await userService.updateUserSubscription(userDocument, false);
+
+            /**
+             * Caching the local copy instead would leave the next consent
+             * change reading `stale-etag` and failing its IfMatch precondition.
+             */
+            expect(cacheService.setUser).toHaveBeenCalledWith(replaced);
+            expect(cacheService.setUser).not.toHaveBeenCalledWith(
+                expect.objectContaining({ _etag: 'stale-etag' }),
+            );
+        });
+
         it('should reject when the write fails so the caller can retry', async () => {
             const throttled = Object.assign(new Error('Request rate is large'), { code: 429 });
 

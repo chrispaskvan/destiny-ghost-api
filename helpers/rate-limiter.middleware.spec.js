@@ -59,6 +59,29 @@ describe('rateLimiterMiddleware', () => {
         expect(consume).toHaveBeenCalledExactlyOnceWith(req.ip, 10);
     });
 
+    it.each(['/twilio/destiny/r', '/twilio/destiny/s', '/twilio/destiny/f'])(
+        'charges a sessionless webhook to %s one point, not the anonymous ten',
+        async path => {
+            Object.assign(req, { method: 'POST', path });
+            req.session = undefined;
+            consume.mockResolvedValue({ remainingPoints: 99, msBeforeNext: 1000 });
+
+            await rateLimiterMiddleware(req, res, next);
+
+            expect(consume).toHaveBeenCalledExactlyOnceWith(req.ip, 1);
+            expect(next).toHaveBeenCalled();
+        },
+    );
+
+    it('still charges ten points to an anonymous GET under the twilio prefix', async () => {
+        Object.assign(req, { method: 'GET', path: '/twilio/destiny/r' });
+        consume.mockResolvedValue({ remainingPoints: 90, msBeforeNext: 1000 });
+
+        await rateLimiterMiddleware(req, res, next);
+
+        expect(consume).toHaveBeenCalledExactlyOnceWith(req.ip, 10);
+    });
+
     it('preserves the registered browser membership bucket', async () => {
         req.session = { membershipId: 'member-id', dateRegistered: '2026-09-19' };
         consume.mockResolvedValue({ remainingPoints: 99, msBeforeNext: 1000 });

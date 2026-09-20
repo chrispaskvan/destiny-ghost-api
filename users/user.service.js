@@ -711,13 +711,21 @@ class UserService {
     async updateUserSubscription(userDocument, isSubscribed) {
         userDocument.isSubscribed = isSubscribed;
 
-        await this.documents.updateDocument(
+        /**
+         * Cosmos stamps a fresh `_etag` on every replace and hands back the
+         * stored document. Caching the pre-write copy would leave the cache
+         * holding the old etag, so the next consent change would read it and
+         * fail its own `IfMatch` precondition - deterministically, not as a
+         * race. Fall back to the local copy only when the driver returns
+         * nothing.
+         */
+        const updatedDocument = await this.documents.updateDocument(
             userCollectionId,
             userDocument,
             userDocument.membershipType,
         );
 
-        return this.cacheService.setUser(userDocument);
+        return this.cacheService.setUser(updatedDocument ?? userDocument);
     }
 
     /**
