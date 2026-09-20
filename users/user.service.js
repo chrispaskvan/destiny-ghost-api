@@ -98,6 +98,29 @@ const userSchema = z.object({
 });
 
 /**
+ * Copy the consent watermark from the stored document onto the merged one,
+ * discarding whatever the caller supplied.
+ *
+ * `updateUser` and `updateAnonymousUser` both merge caller-supplied fields
+ * over a stored document, and their callers hand them a raw request body -
+ * `users/user.routes.js` signs a user up with `const { body: user } = req`.
+ * A planted far-future stamp would make `applyConsent` treat every real
+ * STOP as superseded: acknowledged to the sender, never written, and the
+ * number left in the next broadcast. Only `updateUserSubscription` moves it.
+ * @param {Record<string, *>} merged
+ * @param {Record<string, *> | undefined} stored
+ */
+function preserveConsentWatermark(merged, stored) {
+    if (stored?.consentUpdatedAt === undefined) {
+        delete merged.consentUpdatedAt;
+
+        return;
+    }
+
+    merged.consentUpdatedAt = stored.consentUpdatedAt;
+}
+
+/**
  * An anonymous user as validated by `anonymousUserSchema`.
  * @typedef {ReturnType<typeof anonymousUserSchema.parse>} AnonymousUser
  */
@@ -730,6 +753,8 @@ class UserService {
         if (user) {
             const mergedUser = { ...user, ...anonymousUser };
 
+            preserveConsentWatermark(mergedUser, user);
+
             return await this.#replaceAndCache(mergedUser, mergedUser.membershipType);
         }
 
@@ -761,7 +786,10 @@ class UserService {
             );
         }
 
+        const { consentUpdatedAt } = userDocument;
+
         Object.assign(userDocument, user);
+        preserveConsentWatermark(userDocument, { consentUpdatedAt });
 
         return this.#replaceAndCache(userDocument, /** @type {number} */ (user.membershipType));
     }

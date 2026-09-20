@@ -650,6 +650,69 @@ describe('UserService', () => {
         });
     });
 
+    describe('protecting the consent watermark from caller input', () => {
+        /**
+         * The sign-up route hands `updateUser` a raw request body. A planted
+         * far-future stamp would make `applyConsent` treat every real STOP as
+         * already superseded - acknowledged to the sender, never written, and
+         * the number left in the next broadcast.
+         */
+        const PLANTED = 9_999_999_999_999;
+
+        it('should discard a caller-supplied watermark on updateUser', async () => {
+            const stored = { ...structuredClone(user), consentUpdatedAt: 1_000 };
+
+            documentService.updateDocument.mockResolvedValue(undefined);
+            userService.getUserByDisplayName = vi.fn().mockResolvedValue(stored);
+
+            await userService.updateUser({
+                ...structuredClone(user),
+                consentUpdatedAt: PLANTED,
+            });
+
+            expect(documentService.updateDocument).toHaveBeenCalledWith(
+                expect.anything(),
+                expect.objectContaining({ consentUpdatedAt: 1_000 }),
+                expect.anything(),
+            );
+        });
+
+        it('should not let a caller introduce a watermark where none was stored', async () => {
+            const stored = structuredClone(user);
+
+            delete stored.consentUpdatedAt;
+            documentService.updateDocument.mockResolvedValue(undefined);
+            userService.getUserByDisplayName = vi.fn().mockResolvedValue(stored);
+
+            await userService.updateUser({
+                ...structuredClone(user),
+                consentUpdatedAt: PLANTED,
+            });
+
+            const [, written] = documentService.updateDocument.mock.calls[0];
+
+            expect(written.consentUpdatedAt).toBeUndefined();
+        });
+
+        it('should discard a caller-supplied watermark on updateAnonymousUser', async () => {
+            const stored = { ...structuredClone(user), consentUpdatedAt: 1_000 };
+
+            documentService.updateDocument.mockResolvedValue(undefined);
+            userService.getUserByDisplayName = vi.fn().mockResolvedValue(stored);
+
+            await userService.updateAnonymousUser({
+                ...structuredClone(anonymousUser),
+                consentUpdatedAt: PLANTED,
+            });
+
+            expect(documentService.updateDocument).toHaveBeenCalledWith(
+                expect.anything(),
+                expect.objectContaining({ consentUpdatedAt: 1_000 }),
+                expect.anything(),
+            );
+        });
+    });
+
     describe('updateUserSubscription', () => {
         it('should write the document in hand without a second lookup', async () => {
             const userDocument = structuredClone(user);
