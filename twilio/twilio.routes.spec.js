@@ -7,6 +7,7 @@ import twilio from 'twilio';
 import MmsService from './mms.service.js';
 import TwilioRouter from './twilio.routes.js';
 import TwilioController from './twilio.controller.js';
+import UserService from '../users/user.service.js';
 import configuration from '../helpers/config.js';
 import log from '../helpers/log.js';
 import rateLimiterMiddleware, {
@@ -370,6 +371,131 @@ describe('TwilioRouter', () => {
             } finally {
                 errorLog.mockRestore();
                 warnLog.mockRestore();
+            }
+        }, 20000);
+
+        it('recovers a consent write rejected on a superseded etag', async () => {
+            const preconditionFailed = Object.assign(new Error('precondition failed'), {
+                code: 412,
+            });
+            const errorLog = vi.spyOn(log, 'error').mockImplementation(() => {});
+            const warnLog = vi.spyOn(log, 'warn').mockImplementation(() => {});
+
+            userService.updateUserSubscription
+                .mockRejectedValueOnce(preconditionFailed)
+                .mockResolvedValueOnce(undefined);
+
+            try {
+                const response = createResponse({ eventEmitter: EventEmitter });
+
+                await dispatch(
+                    twilioRouter,
+                    signedRequest({ body: signedBody({ Body: 'STOP' }) }),
+                    response,
+                );
+
+                expect(response.statusCode).toBe(StatusCodes.OK);
+                expect(response._getData()).toContain("You're unsubscribed");
+
+                await vi.waitFor(
+                    () => expect(userService.updateUserSubscription).toHaveBeenCalledTimes(2),
+                    { timeout: 15000 },
+                );
+
+                /**
+                 * Every attempt must bypass the cache. Re-reading the cached
+                 * copy would replay the same superseded etag and fail
+                 * identically until the entry expired.
+                 */
+                expect(userService.getUserByPhoneNumber).toHaveBeenCalledTimes(2);
+                for (const call of userService.getUserByPhoneNumber.mock.calls) {
+                    expect(call).toEqual([signedBody().From, true]);
+                }
+                expect(errorLog).not.toHaveBeenCalled();
+            } finally {
+                errorLog.mockRestore();
+                warnLog.mockRestore();
+            }
+        }, 20000);
+
+        it('recovers through the real UserService when Cosmos rejects the etag', async () => {
+            /**
+             * The other consent tests stub `userService`, so the 412 they
+             * produce never travels the code that actually has to survive it.
+             * This one wires a real `UserService` over a stubbed Cosmos and
+             * cache, so the rejection originates in `updateDocument` and flows
+             * back through `#replaceAndCache` - which is what leaves the stale
+             * entry behind when a write fails.
+             */
+            const storedUser = {
+                id: 'user-1',
+                displayName: 'test-user',
+                membershipType: 2,
+                phoneNumber: signedBody().From,
+                isSubscribed: true,
+            };
+            const cacheStub = { getUser: vi.fn(), setUser: vi.fn().mockResolvedValue(undefined) };
+            const documentStub = {
+                getDocuments: vi
+                    .fn()
+                    .mockResolvedValueOnce([{ ...storedUser, _etag: 'etag-1' }])
+                    .mockResolvedValueOnce([{ ...storedUser, _etag: 'etag-2' }]),
+                updateDocument: vi.fn(async (_collection, document) => {
+                    if (document._etag !== 'etag-2') {
+                        throw Object.assign(new Error('precondition failed'), { code: 412 });
+                    }
+
+                    return { ...document, _etag: 'etag-3' };
+                }),
+            };
+            const warnLog = vi.spyOn(log, 'warn').mockImplementation(() => {});
+            const errorLog = vi.spyOn(log, 'error').mockImplementation(() => {});
+
+            try {
+                const router = TwilioRouter({
+                    authenticationService,
+                    destinyService,
+                    mmsService,
+                    userService: new UserService({
+                        cacheService: cacheStub,
+                        client: {},
+                        documentService: documentStub,
+                    }),
+                    worldRepository,
+                });
+                const response = createResponse({ eventEmitter: EventEmitter });
+
+                await dispatch(
+                    router,
+                    signedRequest({ body: signedBody({ Body: 'STOP' }) }),
+                    response,
+                );
+
+                expect(response.statusCode).toBe(StatusCodes.OK);
+                expect(response._getData()).toContain("You're unsubscribed");
+
+                await vi.waitFor(
+                    () => expect(documentStub.updateDocument).toHaveBeenCalledTimes(2),
+                    { timeout: 15000 },
+                );
+
+                // The first attempt carried the superseded etag, the retry the current one.
+                expect(documentStub.updateDocument.mock.calls[0][1]._etag).toBe('etag-1');
+                expect(documentStub.updateDocument.mock.calls[1][1]._etag).toBe('etag-2');
+                expect(documentStub.updateDocument.mock.calls[1][1].isSubscribed).toBe(false);
+
+                // Both reads went to Cosmos; a cache hit would have replayed etag-1.
+                expect(cacheStub.getUser).not.toHaveBeenCalled();
+                expect(documentStub.getDocuments).toHaveBeenCalledTimes(2);
+
+                // Only the successful write publishes fresh cache state.
+                expect(cacheStub.setUser).toHaveBeenLastCalledWith(
+                    expect.objectContaining({ _etag: 'etag-3', isSubscribed: false }),
+                );
+                expect(errorLog).not.toHaveBeenCalled();
+            } finally {
+                warnLog.mockRestore();
+                errorLog.mockRestore();
             }
         }, 20000);
 

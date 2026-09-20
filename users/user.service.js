@@ -599,21 +599,33 @@ class UserService {
 
     /**
      * Get user from phone number.
+     *
+     * `skipCache` bypasses the read only: the Cosmos result is still written
+     * back below, refreshing both the full document and the phone-number
+     * pointer. A caller that is about to write needs it, because the cached
+     * copy can hold an `_etag` that Cosmos has already superseded, and
+     * `updateDocument` sends that etag as an `IfMatch` precondition.
      * @param {string} phoneNumber
+     * @param {boolean} [skipCache=false]
      * @returns {Promise<import('../helpers/documents.js').CosmosDocument<User> | undefined>}
      */
-    async getUserByPhoneNumber(phoneNumber) {
+    async getUserByPhoneNumber(phoneNumber, skipCache = false) {
         if (typeof phoneNumber !== 'string' || !phoneNumber) {
             return Promise.reject(Error('phoneNumber string is required'));
         }
 
-        let user =
-            /** @type {import('../helpers/documents.js').CosmosDocument<User> | undefined} */ (
-                await this.cacheService.getUser(phoneNumber)
-            );
+        /** @type {import('../helpers/documents.js').CosmosDocument<User> | undefined} */
+        let user;
 
-        if (user) {
-            return user;
+        if (!skipCache) {
+            user =
+                /** @type {import('../helpers/documents.js').CosmosDocument<User> | undefined} */ (
+                    await this.cacheService.getUser(phoneNumber)
+                );
+
+            if (user) {
+                return user;
+            }
         }
 
         const qb = new QueryBuilder();
