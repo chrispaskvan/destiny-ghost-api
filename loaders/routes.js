@@ -37,6 +37,7 @@ import schema from '../graphql/schema.js';
 import root from '../graphql/root.js';
 import pool from '../helpers/pool.js';
 import McpRouter from '../mcp/mcp.routes.js';
+import rateLimiterMiddleware from '../helpers/rate-limiter.middleware.js';
 
 const {
     documents: { authenticationKey, host },
@@ -45,17 +46,6 @@ const {
 
 export default () => {
     const routes = Router();
-
-    /**
-     * Swagger
-     */
-    routes.use('/docs', serve);
-    routes.get(
-        '/docs',
-        setup(JSON.parse(readFileSync('./openapi.json')), {
-            explorer: false,
-        }),
-    );
 
     /**
      * Dependencies
@@ -99,6 +89,24 @@ export default () => {
     });
     const mmsService = new MmsService({ aiService: ai, destiny2Service, notificationService });
 
+    const twilioRouter = TwilioRouter({
+        authenticationService,
+        destinyService: destiny2Service,
+        mmsService,
+        userService,
+        worldRepository: world2,
+    });
+    routes.use('/twilio', twilioRouter);
+    routes.use(rateLimiterMiddleware);
+
+    routes.use('/docs', serve);
+    routes.get(
+        '/docs',
+        setup(JSON.parse(readFileSync('./openapi.json')), {
+            explorer: false,
+        }),
+    );
+
     /**
      * Routes
      */
@@ -138,15 +146,6 @@ export default () => {
         worldRepository: world2,
     });
     routes.use('/notifications', notificationRouter);
-
-    const twilioRouter = TwilioRouter({
-        authenticationService,
-        destinyService: destiny2Service,
-        mmsService,
-        userService,
-        worldRepository: world2,
-    });
-    routes.use('/twilio', twilioRouter);
 
     const userRouter = UserRouter({
         authenticationController,

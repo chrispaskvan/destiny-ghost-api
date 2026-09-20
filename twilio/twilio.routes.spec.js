@@ -2,12 +2,16 @@ import { EventEmitter } from 'node:events';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { StatusCodes } from 'http-status-codes';
 import { createResponse, createRequest } from 'node-mocks-http';
+import { Router } from 'express';
 import twilio from 'twilio';
 import MmsService from './mms.service.js';
 import TwilioRouter from './twilio.routes.js';
 import TwilioController from './twilio.controller.js';
 import configuration from '../helpers/config.js';
 import log from '../helpers/log.js';
+import rateLimiterMiddleware, {
+    twilioPreflightMiddleware,
+} from '../helpers/rate-limiter.middleware.js';
 import {
     EMOJI_DEFAULT_REPLY,
     EMOJI_INTENT_REPLIES,
@@ -19,9 +23,23 @@ import {
     START_KEYWORDS,
 } from './twilio.constants.js';
 
-const { consume, browserConsume, MockRateLimiterRes } = vi.hoisted(() => ({
+const {
+    consume,
+    ingressConsume,
+    browserConsume,
+    callbackConsume,
+    fallbackConsume,
+    invalidConsume,
+    invalidGet,
+    MockRateLimiterRes,
+} = vi.hoisted(() => ({
     consume: vi.fn(),
+    ingressConsume: vi.fn(),
     browserConsume: vi.fn(),
+    callbackConsume: vi.fn(),
+    fallbackConsume: vi.fn(),
+    invalidConsume: vi.fn(),
+    invalidGet: vi.fn(),
     MockRateLimiterRes: class RateLimiterRes {},
 }));
 
@@ -31,8 +49,13 @@ vi.mock('rate-limiter-flexible', () => ({
             this.points = points;
             this.consume = {
                 austringer: browserConsume,
+                'twilio-ingress': ingressConsume,
                 'twilio-sender': consume,
+                'twilio-callback': callbackConsume,
+                'twilio-fallback': fallbackConsume,
+                'twilio-invalid': invalidConsume,
             }[keyPrefix];
+            this.get = invalidGet;
         }
     },
     RateLimiterRes: MockRateLimiterRes,
@@ -184,6 +207,11 @@ function dispatch(router, req, res) {
 beforeEach(() => {
     vi.clearAllMocks();
     consume.mockReset().mockResolvedValue({ remainingPoints: 19, msBeforeNext: 60000 });
+    ingressConsume.mockReset().mockResolvedValue({ remainingPoints: 999, msBeforeNext: 1000 });
+    callbackConsume.mockReset().mockResolvedValue({ remainingPoints: 999, msBeforeNext: 1000 });
+    fallbackConsume.mockReset().mockResolvedValue({ remainingPoints: 999, msBeforeNext: 1000 });
+    invalidConsume.mockReset().mockResolvedValue({ remainingPoints: 9, msBeforeNext: 1000 });
+    invalidGet.mockReset().mockResolvedValue(null);
     browserConsume.mockReset().mockResolvedValue({ remainingPoints: 90, msBeforeNext: 1000 });
     destinyService.getProfile.mockResolvedValue([]);
     authenticationService.authenticate.mockResolvedValue({
@@ -409,6 +437,9 @@ describe('TwilioRouter', () => {
 
                 expect(authenticationService.authenticate).not.toHaveBeenCalled();
                 expect(consume).not.toHaveBeenCalled();
+                expect(ingressConsume).toHaveBeenCalledTimes(
+                    STOP_KEYWORDS.size + HELP_KEYWORDS.size + START_KEYWORDS.size,
+                );
                 if (user) {
                     expect(userService.updateUserSubscription).toHaveBeenCalledWith(user, false);
                     expect(userService.updateUserSubscription).toHaveBeenCalledWith(user, true);
@@ -458,6 +489,28 @@ describe('TwilioRouter', () => {
                 }
             },
         );
+
+        it('uses webhook limits under a different mount without reaching the browser limiter', async () => {
+            const router = Router();
+            router.use('/messages', twilioRouter);
+            router.use(rateLimiterMiddleware);
+            const body = signedBody();
+            const req = signedRequest({ body });
+            req.url = '/messages/destiny/r';
+            req.originalUrl = req.url;
+            req.headers['x-twilio-signature'] = getExpectedTwilioSignature(
+                authToken,
+                `${process.env.PROTOCOL}://${process.env.DOMAIN}${req.originalUrl}`,
+                body,
+            );
+
+            await dispatch(router, req, res);
+
+            expect(res.statusCode).toBe(StatusCodes.OK);
+            expect(ingressConsume).toHaveBeenCalledExactlyOnceWith(req.ip, 1);
+            expect(consume).toHaveBeenCalledExactlyOnceWith(body.From, 1);
+            expect(browserConsume).not.toHaveBeenCalled();
+        });
 
         it('acknowledges an over-limit signed sender with empty TwiML without handling the message', () =>
             new Promise((done, reject) => {
@@ -538,6 +591,7 @@ describe('TwilioRouter', () => {
                                 userService.getUserByPhoneNumber,
                             ).toHaveBeenCalledExactlyOnceWith(body.From);
                             expect(consume).toHaveBeenCalledExactlyOnceWith(body.From, 1);
+                            expect(ingressConsume).toHaveBeenCalledExactlyOnceWith(req.ip, 1);
                             done();
                         } catch (err) {
                             reject(err);
@@ -568,6 +622,7 @@ describe('TwilioRouter', () => {
                             expect(userService.getUserByPhoneNumber).not.toHaveBeenCalled();
                             expect(authenticationService.authenticate).not.toHaveBeenCalled();
                             expect(consume).not.toHaveBeenCalled();
+                            expect(ingressConsume).toHaveBeenCalledExactlyOnceWith(req.ip, 1);
                             done();
                         } catch (err) {
                             reject(err);
@@ -1027,6 +1082,22 @@ describe('TwilioRouter', () => {
     });
 
     describe('POST /destiny/s', () => {
+        it('persists callbacks even when inbound ingress capacity is exhausted', async () => {
+            ingressConsume.mockRejectedValue(new MockRateLimiterRes());
+            const req = signedStatusRequest({
+                body: signedStatusBody({ MessageStatus: 'delivered' }),
+            });
+
+            await dispatch(twilioRouter, req, res);
+
+            expect(res.statusCode).toBe(StatusCodes.OK);
+            expect(callbackConsume).toHaveBeenCalledExactlyOnceWith(req.ip, 1);
+            expect(ingressConsume).not.toHaveBeenCalled();
+            expect(userService.addUserMessage).toHaveBeenCalledWith(
+                expect.objectContaining({ SmsStatus: 'delivered' }),
+            );
+        });
+
         it('does not acknowledge callbacks when persistence fails', async () => {
             const error = new Error('persistence unavailable');
             userService.addUserMessage.mockRejectedValueOnce(error);
@@ -1037,6 +1108,30 @@ describe('TwilioRouter', () => {
             await expect(dispatch(twilioRouter, req, res)).rejects.toBe(error);
 
             expect(res._isEndCalled()).toBe(false);
+        });
+
+        it('rejects over-limit callbacks without preventing inbound consent', async () => {
+            callbackConsume.mockRejectedValue(
+                Object.assign(new MockRateLimiterRes(), { remainingPoints: 0, msBeforeNext: 1000 }),
+            );
+            const callbackReq = signedStatusRequest({
+                body: signedStatusBody({ MessageStatus: 'delivered' }),
+            });
+
+            await dispatch(twilioRouter, callbackReq, res);
+
+            expect(res.statusCode).toBe(StatusCodes.TOO_MANY_REQUESTS);
+            expect(userService.addUserMessage).not.toHaveBeenCalled();
+            expect(ingressConsume).not.toHaveBeenCalled();
+
+            const inboundRes = createResponse({ eventEmitter: EventEmitter });
+            const inboundReq = signedRequest({ body: signedBody({ Body: 'STOP' }) });
+            await dispatch(twilioRouter, inboundReq, inboundRes);
+
+            expect(inboundRes.statusCode).toBe(StatusCodes.OK);
+            expect(inboundRes._getData()).toContain("You're unsubscribed");
+            expect(ingressConsume).toHaveBeenCalledExactlyOnceWith(inboundReq.ip, 1);
+            expect(callbackConsume).toHaveBeenCalledTimes(1);
         });
 
         describe('when the signature and schema are valid', () => {
@@ -1054,7 +1149,10 @@ describe('TwilioRouter', () => {
                         try {
                             expect(res.statusCode).toEqual(StatusCodes.OK);
                             expect(userService.getUserByPhoneNumber).toHaveBeenCalledWith(body.To);
+                            expect(callbackConsume).toHaveBeenCalledExactlyOnceWith(req.ip, 1);
+                            expect(ingressConsume).not.toHaveBeenCalled();
                             expect(consume).not.toHaveBeenCalled();
+                            expect(browserConsume).not.toHaveBeenCalled();
                             expect(userService.addUserMessage).toHaveBeenCalledWith(
                                 expect.objectContaining({ SmsStatus: 'delivered' }),
                             );
@@ -1110,7 +1208,136 @@ describe('TwilioRouter', () => {
         });
     });
 
+    describe.each(['/destiny/r', '/destiny/s', '/destiny/f'])('webhook protection for %s', path => {
+        const ingress = {
+            '/destiny/r': ingressConsume,
+            '/destiny/s': callbackConsume,
+            '/destiny/f': fallbackConsume,
+        }[path];
+        it.each([undefined, null, 'unparsed text', [], { From: { nested: 'value' } }])(
+            'returns a private 403 and charges malformed parameters %j to the failure budget',
+            async body => {
+                const req = createRequest({ method: 'POST', url: path });
+                req.body = body;
+
+                await dispatch(twilioRouter, req, res);
+
+                expect(res.statusCode).toBe(StatusCodes.FORBIDDEN);
+                expect(ingress).toHaveBeenCalledExactlyOnceWith(req.ip, 1);
+                expect(invalidConsume).toHaveBeenCalledExactlyOnceWith(req.ip, 1);
+                expect(res._getData()).toBe('');
+                for (const header of [
+                    'X-RateLimit-Limit',
+                    'X-RateLimit-Remaining',
+                    'X-RateLimit-Reset',
+                    'Retry-After',
+                ]) {
+                    expect(res.getHeader(header)).toBeUndefined();
+                }
+                expect(consume).not.toHaveBeenCalled();
+                expect(userService.getUserByPhoneNumber).not.toHaveBeenCalled();
+                expect(authenticationService.authenticate).not.toHaveBeenCalled();
+            },
+        );
+
+        it.each([undefined, ['signature'], 'invalid', `${'A'.repeat(27)}=`])(
+            'rejects signature %j without revealing the failure budget',
+            async signature => {
+                invalidConsume.mockRejectedValueOnce(new MockRateLimiterRes());
+                const req = createRequest({
+                    method: 'POST',
+                    url: path,
+                    originalUrl: `/twilio${path}`,
+                    body: signedBody(),
+                    headers: { 'x-twilio-signature': signature },
+                });
+
+                await dispatch(twilioRouter, req, res);
+
+                expect(res.statusCode).toBe(StatusCodes.FORBIDDEN);
+                expect(res._getData()).toBe('');
+                expect(invalidConsume).toHaveBeenCalledExactlyOnceWith(req.ip, 1);
+                expect(res.getHeader('X-RateLimit-Remaining')).toBeUndefined();
+                expect(userService.getUserByPhoneNumber).not.toHaveBeenCalled();
+                expect(userService.addUserMessage).not.toHaveBeenCalled();
+            },
+        );
+
+        it('throttles unsigned traffic before signature validation', async () => {
+            ingress.mockRejectedValueOnce(
+                Object.assign(new MockRateLimiterRes(), {
+                    remainingPoints: 0,
+                    msBeforeNext: 1000,
+                }),
+            );
+            const req = createRequest({ method: 'POST', url: path, body: {} });
+
+            await dispatch(twilioRouter, req, res);
+
+            expect(res.statusCode).toBe(StatusCodes.TOO_MANY_REQUESTS);
+            expect(res.getHeader('X-RateLimit-Limit')).toBe(1000);
+            expect(consume).not.toHaveBeenCalled();
+            expect(userService.getUserByPhoneNumber).not.toHaveBeenCalled();
+        });
+    });
+
+    it.each([
+        ['POST', '/twilio/unknown'],
+        ['GET', '/twilio/destiny/r'],
+        ['GET', '/twilio/destiny/s'],
+    ])(
+        'terminates unmatched %s %s after preflight without charging the browser bucket',
+        async (method, url) => {
+            const router = Router();
+            router.use('/twilio', twilioPreflightMiddleware, twilioRouter);
+            router.use(rateLimiterMiddleware);
+            const req = createRequest({
+                method,
+                url,
+                headers: { 'x-twilio-signature': 'non-empty' },
+            });
+
+            await dispatch(router, req, res);
+
+            expect(res.statusCode).toBe(StatusCodes.NOT_FOUND);
+            expect(ingressConsume).toHaveBeenCalledExactlyOnceWith(req.ip, 1);
+            expect(browserConsume).not.toHaveBeenCalled();
+            expect(callbackConsume).not.toHaveBeenCalled();
+            expect(consume).not.toHaveBeenCalled();
+        },
+    );
+
+    it('rejects an unsigned unmatched path at preflight before the 404 handler', async () => {
+        const router = Router();
+        router.use('/twilio', twilioPreflightMiddleware, twilioRouter);
+        router.use(rateLimiterMiddleware);
+        const req = createRequest({ method: 'POST', url: '/twilio/unknown' });
+
+        await dispatch(router, req, res);
+
+        expect(res.statusCode).toBe(StatusCodes.FORBIDDEN);
+        expect(invalidConsume).toHaveBeenCalledExactlyOnceWith(req.ip, 1);
+        expect(ingressConsume).not.toHaveBeenCalled();
+        expect(browserConsume).not.toHaveBeenCalled();
+    });
+
     describe('POST /destiny/f', () => {
+        it('serves fallback without consuming the exhausted inbound bucket', async () => {
+            ingressConsume.mockRejectedValue(new MockRateLimiterRes());
+            const req = signedRequest({
+                body: signedBody({ ErrorCode: '11200', ErrorUrl: getUrl() }),
+                path: '/destiny/f',
+            });
+
+            await dispatch(twilioRouter, req, res);
+
+            expect(res.statusCode).toBe(StatusCodes.OK);
+            expect(res._getData()).toContain('Destiny-Ghost: ');
+            expect(fallbackConsume).toHaveBeenCalledExactlyOnceWith(req.ip, 1);
+            expect(ingressConsume).not.toHaveBeenCalled();
+            expect(callbackConsume).not.toHaveBeenCalled();
+        });
+
         it('should reply with a branded fallback message', () =>
             new Promise((done, reject) => {
                 const req = signedRequest({ body: signedBody(), path: '/destiny/f' });
