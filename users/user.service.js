@@ -697,6 +697,38 @@ class UserService {
     }
 
     /**
+     * Flip a user's SMS consent on the document the caller already holds.
+     *
+     * Deliberately skips `updateUser`'s schema re-parse and its second lookup
+     * by displayName: both can reject a legacy record that
+     * `getUserByPhoneNumber` just returned, and neither adds anything when the
+     * document is already in hand. Carrier compliance rides on this write, so
+     * the fewer ways it can fail, the better.
+     * @param {import('../helpers/documents.js').CosmosDocument<User>} userDocument
+     * @param {boolean} isSubscribed
+     * @returns {Promise<void>}
+     */
+    async updateUserSubscription(userDocument, isSubscribed) {
+        userDocument.isSubscribed = isSubscribed;
+
+        /**
+         * Cosmos stamps a fresh `_etag` on every replace and hands back the
+         * stored document. Caching the pre-write copy would leave the cache
+         * holding the old etag, so the next consent change would read it and
+         * fail its own `IfMatch` precondition - deterministically, not as a
+         * race. Fall back to the local copy only when the driver returns
+         * nothing.
+         */
+        const updatedDocument = await this.documents.updateDocument(
+            userCollectionId,
+            userDocument,
+            userDocument.membershipType,
+        );
+
+        return this.cacheService.setUser(updatedDocument ?? userDocument);
+    }
+
+    /**
      * Replace the Bungie authentication information.
      * @param {string} userId
      * @param {BungieToken} bungie - Bungie OAuth token response

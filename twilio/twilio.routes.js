@@ -11,10 +11,17 @@ import { StatusCodes } from 'http-status-codes';
 import twilio from 'twilio';
 import { z } from 'zod';
 
-import AuthenticationMiddleWare from '../authentication/authentication.middleware.js';
 import TwilioController from './twilio.controller.js';
 import configuration from '../helpers/config.js';
-import { BRAND_PREFIX, MAX_SMS_MESSAGE_LENGTH } from './twilio.constants.js';
+import { twilioRateLimiterMiddleware } from '../helpers/rate-limiter.middleware.js';
+import { stripEmoji } from '../helpers/emoji.js';
+import {
+    BRAND_PREFIX,
+    MAX_SMS_MESSAGE_LENGTH,
+    STOP_KEYWORDS,
+    HELP_KEYWORDS,
+    START_KEYWORDS,
+} from './twilio.constants.js';
 
 const {
     twiml: { MessagingResponse },
@@ -24,11 +31,8 @@ const {
     twilio: { attributes, authToken },
 } = configuration;
 
-/** @typedef {import('../authentication/authentication.controller.js').default} AuthenticationController */
-
 /**
  * @typedef {Object} TwilioRoutesOptions
- * @property {AuthenticationController} authenticationController
  * @property {import('../authentication/authentication.service.js').default} authenticationService
  * @property {import('../destiny2/destiny2.service.js').default} destinyService
  * @property {import('./mms.service.js').default} mmsService
@@ -40,14 +44,12 @@ const {
  * @param {TwilioRoutesOptions} options
  */
 const routes = ({
-    authenticationController,
     authenticationService,
     destinyService,
     mmsService,
     userService,
     worldRepository,
 }) => {
-    const middleware = new AuthenticationMiddleWare({ authenticationController });
     const twilioRouter = Router();
     const twilioController = new TwilioController({
         authenticationService,
@@ -119,7 +121,32 @@ const routes = ({
                 return res.status(StatusCodes.BAD_REQUEST).json({ error: message });
             }
         },
-        (req, res, next) => middleware.authenticateUser(req, res, next),
+        /**
+         * STOP/HELP/START must always reach the controller: carriers require a
+         * reply to every one, so they are exempt from the per-sender quota
+         * rather than throttled into the empty-TwiML branch below.
+         */
+        (req, res, next) => {
+            const message = stripEmoji(req.body.Body).trim().toLowerCase();
+
+            if (
+                STOP_KEYWORDS.has(message) ||
+                HELP_KEYWORDS.has(message) ||
+                START_KEYWORDS.has(message)
+            ) {
+                return next();
+            }
+
+            return twilioRateLimiterMiddleware(req, res, next, () => {
+                /**
+                 * Twilio reads any non-2xx on this webhook as error 11200 and
+                 * falls through to the fallback URL, so a throttled sender gets
+                 * an empty 200 rather than a 429 they would never see.
+                 */
+                res.writeHead(StatusCodes.OK, { 'Content-Type': 'text/xml' });
+                res.end(new MessagingResponse().toString());
+            });
+        },
         async (req, res) => {
             const { body, cookies: requestCookies = {} } = req;
             const {

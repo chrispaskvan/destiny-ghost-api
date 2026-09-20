@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { StatusCodes } from 'http-status-codes';
 
-const { consume, MockRateLimiterRes } = vi.hoisted(() => ({
+const { consume, senderConsume, MockRateLimiterRes } = vi.hoisted(() => ({
     consume: vi.fn(),
+    senderConsume: vi.fn(),
     MockRateLimiterRes: class RateLimiterRes {
         constructor(remainingPoints, msBeforeNext) {
             this.remainingPoints = remainingPoints;
@@ -13,7 +14,13 @@ const { consume, MockRateLimiterRes } = vi.hoisted(() => ({
 
 vi.mock('rate-limiter-flexible', () => ({
     RateLimiterRedis: class {
-        consume = consume;
+        constructor({ points, keyPrefix }) {
+            this.points = points;
+            this.consume = {
+                austringer: consume,
+                'twilio-sender': senderConsume,
+            }[keyPrefix];
+        }
     },
     RateLimiterRes: MockRateLimiterRes,
 }));
@@ -22,7 +29,7 @@ vi.mock('./cache.js', () => ({
 }));
 
 import cache from './cache.js';
-import rateLimiterMiddleware from './rate-limiter.middleware.js';
+import rateLimiterMiddleware, { twilioRateLimiterMiddleware } from './rate-limiter.middleware.js';
 
 describe('rateLimiterMiddleware', () => {
     let req, res, next;
@@ -30,9 +37,91 @@ describe('rateLimiterMiddleware', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         cache.isReady = true;
-        req = { ip: '127.0.0.1', session: {} };
-        res = { set: vi.fn(), status: vi.fn().mockReturnThis(), end: vi.fn() };
+        req = { ip: '127.0.0.1', session: {}, headers: {} };
+        res = {
+            set: vi.fn(),
+            removeHeader: vi.fn(),
+            status: vi.fn().mockReturnThis(),
+            end: vi.fn(),
+        };
         next = vi.fn();
+    });
+
+    it.each([
+        ['POST', '/users'],
+        ['GET', '/destiny2'],
+    ])('keeps the global IP limit for %s %s', async (method, path) => {
+        Object.assign(req, { method, path });
+        consume.mockResolvedValue({ remainingPoints: 90, msBeforeNext: 1000 });
+
+        await rateLimiterMiddleware(req, res, next);
+
+        expect(consume).toHaveBeenCalledExactlyOnceWith(req.ip, 10);
+    });
+
+    it.each(['/twilio/destiny/r', '/twilio/destiny/s', '/twilio/destiny/f'])(
+        'charges a sessionless webhook to %s one point, not the anonymous ten',
+        async path => {
+            Object.assign(req, { method: 'POST', path });
+            req.session = undefined;
+            consume.mockResolvedValue({ remainingPoints: 99, msBeforeNext: 1000 });
+
+            await rateLimiterMiddleware(req, res, next);
+
+            expect(consume).toHaveBeenCalledExactlyOnceWith(req.ip, 1);
+            expect(next).toHaveBeenCalled();
+        },
+    );
+
+    it('still charges ten points to an anonymous GET under the twilio prefix', async () => {
+        Object.assign(req, { method: 'GET', path: '/twilio/destiny/r' });
+        consume.mockResolvedValue({ remainingPoints: 90, msBeforeNext: 1000 });
+
+        await rateLimiterMiddleware(req, res, next);
+
+        expect(consume).toHaveBeenCalledExactlyOnceWith(req.ip, 10);
+    });
+
+    it('preserves the registered browser membership bucket', async () => {
+        req.session = { membershipId: 'member-id', dateRegistered: '2026-09-19' };
+        consume.mockResolvedValue({ remainingPoints: 99, msBeforeNext: 1000 });
+
+        await rateLimiterMiddleware(req, res, next);
+
+        expect(consume).toHaveBeenCalledExactlyOnceWith('member-id', 1);
+    });
+
+    it('isolates signed senders sharing an IP and reuses a repeat sender bucket', async () => {
+        senderConsume.mockResolvedValue({ remainingPoints: 19, msBeforeNext: 60000 });
+        req.session = { membershipId: 'browser-member' };
+
+        for (const sender of ['+15005550006', '+15005550007', '+15005550006']) {
+            req.body = { From: sender };
+            await twilioRateLimiterMiddleware(req, res, next);
+        }
+
+        expect(senderConsume.mock.calls).toEqual([
+            ['+15005550006', 1],
+            ['+15005550007', 1],
+            ['+15005550006', 1],
+        ]);
+        expect(res.set).toHaveBeenCalledWith(expect.objectContaining({ 'X-RateLimit-Limit': 20 }));
+        expect(consume).not.toHaveBeenCalled();
+        expect(req.session).toEqual({ membershipId: 'browser-member' });
+    });
+
+    it('delegates an exhausted sender quota to its webhook response policy', async () => {
+        senderConsume.mockRejectedValueOnce(new MockRateLimiterRes(0, 59001));
+        req.body = { From: '+15005550006' };
+        const onLimit = vi.fn();
+
+        await twilioRateLimiterMiddleware(req, res, next, onLimit);
+
+        expect(onLimit).toHaveBeenCalledExactlyOnceWith();
+        expect(res.status).not.toHaveBeenCalled();
+        expect(res.set).not.toHaveBeenCalledWith('Retry-After', expect.anything());
+        expect(res.set).toHaveBeenCalledWith(expect.objectContaining({ 'X-RateLimit-Limit': 20 }));
+        expect(next).not.toHaveBeenCalled();
     });
 
     it('should call next and set rate-limit headers when under the limit', async () => {
@@ -69,6 +158,7 @@ describe('rateLimiterMiddleware', () => {
 
         expect(next).toHaveBeenCalled();
         expect(res.status).not.toHaveBeenCalled();
+        expect(consume).not.toHaveBeenCalled();
     });
 
     it('should fail open and call next when the backend rejects with a plain Error while Redis is ready', async () => {

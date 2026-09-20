@@ -38,22 +38,18 @@ class AuthenticationController {
      */
     async authenticate(req) {
         const { displayName, membershipType } = /** @type {AppSessionData} */ (req.session);
-        const { From: phoneNumber } = /** @type {{ From?: string }} */ (req.body ?? {});
+
+        if (!displayName || !membershipType) {
+            return undefined;
+        }
+
         const user = await this.authentication.authenticate({
             displayName,
             membershipType,
-            phoneNumber,
         });
 
         if (user) {
             const session = /** @type {AppSessionData} */ (req.session);
-
-            if (!displayName) {
-                session.displayName = user.displayName;
-            }
-            if (!membershipType) {
-                session.membershipType = user.membershipType;
-            }
 
             session.dateRegistered = user.dateRegistered;
             session.membershipId = user.bungie?.membership_id;

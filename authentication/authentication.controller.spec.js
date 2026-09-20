@@ -16,6 +16,7 @@ const authenticationService = {
 let authenticationController;
 
 beforeEach(() => {
+    vi.clearAllMocks();
     authenticationController = new AuthenticationController({
         authenticationService,
     });
@@ -23,18 +24,39 @@ beforeEach(() => {
 
 describe('AuthenticationController', () => {
     describe('authenticate', () => {
-        describe('when user is not defined', () => {
-            it('should return user profile', async () => {
-                const phoneNumber = chance.phone();
-                const req = {
-                    body: { From: phoneNumber },
-                    session: {},
-                };
+        it.each([{}, { displayName: 'Guardian' }, { membershipType: 2 }])(
+            'does not authenticate a phone number when session identity is incomplete: %j',
+            async session => {
+                const originalSession = { ...session };
+                const req = { body: { From: chance.phone() }, session };
+
                 const user = await authenticationController.authenticate(req);
 
-                expect(user).toEqual(mockUser);
-                expect(req.session.displayName).toEqual(mockUser.displayName);
-                expect(req.session.membershipType).toEqual(mockUser.membershipType);
+                expect(user).toBeUndefined();
+                expect(authenticationService.authenticate).not.toHaveBeenCalled();
+                expect(session).toEqual(originalSession);
+            },
+        );
+
+        it('authenticates only the session identity even when the body names another sender', async () => {
+            const { displayName, membershipType } = mockUser;
+            const req = {
+                body: { From: chance.phone() },
+                session: { displayName, membershipType },
+            };
+
+            const user = await authenticationController.authenticate(req);
+
+            expect(user).toEqual(mockUser);
+            expect(authenticationService.authenticate).toHaveBeenCalledExactlyOnceWith({
+                displayName,
+                membershipType,
+            });
+            expect(req.session).toEqual({
+                displayName,
+                membershipType,
+                dateRegistered: mockUser.dateRegistered,
+                membershipId: mockUser.bungie?.membership_id,
             });
         });
     });

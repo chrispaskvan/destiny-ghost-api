@@ -10,6 +10,7 @@ import getShortUrl from '../helpers/bitly.js';
 import log from '../helpers/log.js';
 import DestinyError from '../destiny/destiny.error.js';
 import { extractEmoji, normalizeEmoji, stripEmoji } from '../helpers/emoji.js';
+import { withRetry, isTransientError } from '../helpers/retry.js';
 import {
     EMOJI_DEFAULT_REPLY,
     EMOJI_INTENT_REPLIES,
@@ -26,6 +27,46 @@ import {
 
 /** @typedef {import('../authentication/authentication.service.js').UserDocument} UserDocument */
 /** @typedef {import('../helpers/world2.js').ItemDefinition} ItemDefinition */
+
+/**
+ * A consent write is retried more patiently than an ordinary request. The
+ * sender has already been told the change applied, so the alternative to
+ * retrying is leaving them subscribed against their wishes - and unlike a
+ * failed lookup, nobody is waiting on the answer.
+ */
+const CONSENT_WRITE_RETRIES = 5;
+const CONSENT_WRITE_BASE_DELAY_MS = 500;
+
+/**
+ * Whether a failed consent write is worth another attempt.
+ *
+ * `isTransientError` reads `status`, which is what the HTTP and AI SDKs set.
+ * Cosmos reports throttling and outages on `code`/`statusCode` instead, and a
+ * throttle is exactly the case this retry exists for - so the numeric forms
+ * are checked here rather than widening what every other caller of the shared
+ * helper treats as transient. A permanent fault (a schema rejection, a missing
+ * record) still fails on the first attempt, because repeating it cannot help.
+ * @param {Error} err
+ * @returns {boolean}
+ */
+function isRetryableConsentError(err) {
+    const { code, statusCode, retryAfterInMs } =
+        /** @type {{ code?: unknown, statusCode?: unknown, retryAfterInMs?: unknown }} */ (
+            /** @type {unknown} */ (err)
+        );
+
+    if (typeof retryAfterInMs === 'number') {
+        return true;
+    }
+
+    const status = [statusCode, code].find(value => typeof value === 'number');
+
+    if (typeof status === 'number') {
+        return status === 408 || status === 429 || status >= 500;
+    }
+
+    return isTransientError(err);
+}
 
 /**
  * The reply this controller returns for one inbound SMS/MMS webhook. Route
@@ -222,9 +263,15 @@ class TwilioController {
     async getXur(user, cookies) {
         try {
             const authenticatedUser = await this.authentication.authenticate(user);
-            const { bungie, membershipId, membershipType } = /** @type {UserDocument} */ (
-                authenticatedUser
-            );
+
+            if (!authenticatedUser) {
+                return {
+                    cookies,
+                    message: `Reconnect your Bungie account at ${process.env.WEBSITE}/register`,
+                };
+            }
+
+            const { bungie, membershipId, membershipType } = authenticatedUser;
             const { access_token: accessToken } =
                 /** @type {NonNullable<UserDocument['bungie']>} */ (bungie);
             const characters = await this.destiny.getProfile(membershipId, membershipType);
@@ -319,12 +366,51 @@ class TwilioController {
     }
 
     /**
+     * Persist consent independently of the webhook reply.
+     *
+     * The reply is sent before this runs, because carriers require STOP to be
+     * answered whatever the database is doing. That also means a dropped write
+     * is invisible to the sender: they are told they are unsubscribed while
+     * `getSubscribedUsers` still returns them for the next broadcast. So a
+     * transient failure is retried rather than logged once and forgotten, and
+     * only an exhausted budget gives up - loudly, and with the number, since
+     * at that point only an operator can put it right.
+     * @param {string} phoneNumber
+     * @param {boolean} isSubscribed
+     * @returns {Promise<void>}
+     */
+    async #persistConsent(phoneNumber, isSubscribed) {
+        try {
+            await withRetry(
+                async () => {
+                    const user = await this.users.getUserByPhoneNumber(phoneNumber);
+
+                    if (!user || user.isSubscribed === isSubscribed) {
+                        return;
+                    }
+
+                    await this.users.updateUserSubscription(user, isSubscribed);
+                },
+                {
+                    maxRetries: CONSENT_WRITE_RETRIES,
+                    baseDelay: CONSENT_WRITE_BASE_DELAY_MS,
+                    shouldRetry: isRetryableConsentError,
+                },
+            );
+        } catch (err) {
+            log.error(
+                { err, phoneNumber, isSubscribed },
+                'Unable to persist SMS consent change after retrying; the sender was told it applied.',
+            );
+        }
+    }
+
+    /**
      * @param {{ body: TwilioWebhookBody, cookies: Record<string, string | undefined> }} param0
      * @returns {Promise<TwilioReply>}
      */
     async request({ body, cookies }) {
         let responseCookies = {};
-        const user = await this.users.getUserByPhoneNumber(body.From);
         /**
          * `bodySchema` in twilio.routes.js requires `Body` for this route
          * (POST /destiny/r); it's optional on `TwilioWebhookBody` only
@@ -347,14 +433,10 @@ class TwilioController {
 
         /**
          * Carrier compliance requires STOP/HELP/START to work for any inbound
-         * number, not just ones with an existing user record - persistence is
-         * the only part conditional on `user`.
+         * number. Replies must not wait for user lookup or best-effort persistence.
          */
         if (STOP_KEYWORDS.has(message)) {
-            if (user) {
-                await this.users.updateUser({ ...user, isSubscribed: false });
-            }
-
+            void this.#persistConsent(body.From, false);
             return { message: STOP_REPLY };
         }
 
@@ -363,12 +445,11 @@ class TwilioController {
         }
 
         if (START_KEYWORDS.has(message)) {
-            if (user) {
-                await this.users.updateUser({ ...user, isSubscribed: true });
-            }
-
+            void this.#persistConsent(body.From, true);
             return { message: START_REPLY };
         }
+
+        const user = await this.users.getUserByPhoneNumber(body.From);
 
         if (user?.isSubscribed === false) {
             return {};
