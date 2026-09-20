@@ -472,10 +472,26 @@ class TwilioController {
                      * sidesteps the worker altogether. Comparing against the
                      * stamp already stored settles both, and survives a
                      * restart because it lives on the document.
+                     *
+                     * Strictly older loses; a tie is applied. Two messages
+                     * sharing a millisecond cannot be ordered by arrival at
+                     * all, so the one processed later wins rather than the
+                     * earlier one keeping the field by virtue of getting there
+                     * first. A redelivered job carries the intent it already
+                     * wrote, so reapplying it changes nothing.
+                     *
+                     * The stamp is wall clock, taken where the message
+                     * arrives. That orders anything a single process handles;
+                     * across several, it is only as good as their clocks. A
+                     * monotonic per-number sequence would not have that limit,
+                     * but assigning one means a counter read before the reply,
+                     * which is the dependency this path exists to avoid - and
+                     * it would be unavailable in exactly the outage the inline
+                     * fallback covers.
                      */
                     if (
                         typeof user.consentUpdatedAt === 'number' &&
-                        user.consentUpdatedAt >= receivedAt
+                        user.consentUpdatedAt > receivedAt
                     ) {
                         return;
                     }

@@ -483,6 +483,33 @@ describe('TwilioRouter', () => {
             expect(userService.updateUserSubscription).not.toHaveBeenCalled();
         });
 
+        it('applies a change that ties the stored watermark', async () => {
+            /**
+             * Two messages sharing a millisecond cannot be ordered by arrival,
+             * so the one processed later wins rather than the earlier keeping
+             * the field by virtue of getting there first.
+             */
+            const [handler] = listen.mock.calls.at(-1);
+
+            userService.getUserByPhoneNumber.mockResolvedValue({
+                id: 'subscriber',
+                isSubscribed: false,
+                consentUpdatedAt: 2_000,
+            });
+
+            await handler({
+                phoneNumber: signedBody().From,
+                isSubscribed: true,
+                receivedAt: 2_000,
+            });
+
+            expect(userService.updateUserSubscription).toHaveBeenCalledExactlyOnceWith(
+                expect.anything(),
+                true,
+                2_000,
+            );
+        });
+
         it('applies a change whose intent is newer than the stored watermark', async () => {
             const [handler] = listen.mock.calls.at(-1);
 

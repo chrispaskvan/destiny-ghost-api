@@ -656,7 +656,7 @@ describe('UserService', () => {
             documentService.updateDocument.mockResolvedValue(undefined);
             userService.getUserByDisplayName = vi.fn();
 
-            await userService.updateUserSubscription(userDocument, false);
+            await userService.updateUserSubscription(userDocument, false, 1_700_000_000_000);
 
             expect(userDocument.isSubscribed).toBe(false);
             expect(documentService.updateDocument).toHaveBeenCalledWith(
@@ -674,7 +674,7 @@ describe('UserService', () => {
 
             documentService.updateDocument.mockResolvedValue(replaced);
 
-            await userService.updateUserSubscription(userDocument, false);
+            await userService.updateUserSubscription(userDocument, false, 1_700_000_000_000);
 
             /**
              * Caching the local copy instead would leave the next consent
@@ -686,13 +686,38 @@ describe('UserService', () => {
             );
         });
 
+        it('should stamp the supplied arrival time on the document it writes', async () => {
+            const userDocument = { ...structuredClone(user), _etag: 'etag-1' };
+            const replaced = { ...userDocument, isSubscribed: false, _etag: 'etag-2' };
+
+            documentService.updateDocument.mockResolvedValue(replaced);
+
+            await userService.updateUserSubscription(userDocument, false, 1_700_000_000_000);
+
+            /**
+             * This stamp is what lets a later write tell a newer intent from a
+             * stale job resuming after its backoff. If it stops being
+             * persisted, stale consent silently starts winning again.
+             */
+            expect(userDocument.consentUpdatedAt).toBe(1_700_000_000_000);
+            expect(documentService.updateDocument).toHaveBeenCalledWith(
+                expect.anything(),
+                expect.objectContaining({
+                    isSubscribed: false,
+                    consentUpdatedAt: 1_700_000_000_000,
+                }),
+                userDocument.membershipType,
+            );
+            expect(cacheService.setUser).toHaveBeenCalledWith(replaced);
+        });
+
         it('should reject when the write fails so the caller can retry', async () => {
             const throttled = Object.assign(new Error('Request rate is large'), { code: 429 });
 
             documentService.updateDocument.mockRejectedValue(throttled);
 
             await expect(
-                userService.updateUserSubscription(structuredClone(user), false),
+                userService.updateUserSubscription(structuredClone(user), false, 1_700_000_000_000),
             ).rejects.toBe(throttled);
 
             expect(cacheService.setUser).not.toHaveBeenCalled();
