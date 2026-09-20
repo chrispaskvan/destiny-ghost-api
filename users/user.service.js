@@ -474,7 +474,7 @@ class UserService {
                 );
             }
 
-            await this.cacheService.setUser(documents[0]);
+            await this.#cache(documents[0]);
 
             [user] = documents;
         }
@@ -512,7 +512,7 @@ class UserService {
             if (documents.length > 1) {
                 throw new Error(`more than 1 document found for emailAddress ${emailAddress}`);
             }
-            await this.cacheService.setUser(documents[0]);
+            await this.#cache(documents[0]);
 
             [user] = documents;
         }
@@ -645,7 +645,7 @@ class UserService {
             if (documents.length > 1) {
                 throw new Error(`more than 1 document found for phoneNumber ${phoneNumber}`);
             }
-            await this.cacheService.setUser(documents[0]);
+            await this.#cache(documents[0]);
 
             [user] = documents;
         }
@@ -676,7 +676,35 @@ class UserService {
             partitionKey,
         );
 
-        return this.cacheService.setUser(updatedDocument ?? document);
+        return this.#cache(updatedDocument ?? document);
+    }
+
+    /**
+     * Refresh the cache without letting its failure undo a successful read or
+     * write.
+     *
+     * Cosmos is the source of truth, so a cache that cannot be reached should
+     * cost a repeat lookup, not the operation. It matters most to SMS consent:
+     * the inline fallback runs precisely because Redis was unavailable, and
+     * rejecting here would fail the very write that exists to survive that.
+     * Reporting a completed write as failed is worse still, because the caller
+     * then retries something that already landed.
+     *
+     * The cost is a superseded entry left behind until its hour is up. Callers
+     * about to write read with `skipCache`, and a precondition failure is
+     * retried, so that resolves itself.
+     * @param {import('../helpers/documents.js').CosmosDocument<User>} document
+     * @returns {Promise<void>}
+     */
+    async #cache(document) {
+        try {
+            await this.cacheService.setUser(document);
+        } catch (err) {
+            log.warn(
+                { err, userId: document.id },
+                'Failed to cache the user; continuing without it.',
+            );
+        }
     }
 
     /**

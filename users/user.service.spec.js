@@ -4,6 +4,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Chance from 'chance';
 import UserService from './user.service.js';
+import log from '../helpers/log.js';
 
 const cacheService = {
     getUser: vi.fn(),
@@ -709,6 +710,50 @@ describe('UserService', () => {
                 userDocument.membershipType,
             );
             expect(cacheService.setUser).toHaveBeenCalledWith(replaced);
+        });
+
+        it('should persist to Cosmos even when the cache is unreachable', async () => {
+            const userDocument = { ...structuredClone(user), _etag: 'etag-1' };
+            const warnLog = vi.spyOn(log, 'warn').mockImplementation(() => {});
+
+            documentService.updateDocument.mockResolvedValue({ ...userDocument, _etag: 'etag-2' });
+            cacheService.setUser.mockRejectedValue(new Error('ECONNREFUSED'));
+
+            try {
+                /**
+                 * The SMS consent fallback runs *because* Redis is down, so a
+                 * rejection here would fail the write that exists to survive
+                 * exactly that. Cosmos is the source of truth; a cache that
+                 * cannot be reached costs a repeat lookup, not the operation.
+                 */
+                await expect(
+                    userService.updateUserSubscription(userDocument, false, 1_700_000_000_000),
+                ).resolves.toBeUndefined();
+
+                expect(documentService.updateDocument).toHaveBeenCalled();
+                expect(warnLog).toHaveBeenCalledWith(
+                    expect.objectContaining({ userId: userDocument.id }),
+                    expect.stringContaining('Failed to cache the user'),
+                );
+            } finally {
+                warnLog.mockRestore();
+            }
+        });
+
+        it('should return a looked-up user when the cache write fails', async () => {
+            const stored = { ...structuredClone(user), _etag: 'etag-9' };
+            const warnLog = vi.spyOn(log, 'warn').mockImplementation(() => {});
+
+            documentService.getDocuments.mockResolvedValueOnce([stored]);
+            cacheService.setUser.mockRejectedValue(new Error('ECONNREFUSED'));
+
+            try {
+                await expect(
+                    userService.getUserByPhoneNumber(user.phoneNumber, true),
+                ).resolves.toEqual(stored);
+            } finally {
+                warnLog.mockRestore();
+            }
         });
 
         it('should reject when the write fails so the caller can retry', async () => {
