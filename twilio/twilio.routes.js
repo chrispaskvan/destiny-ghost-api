@@ -13,7 +13,13 @@ import { z } from 'zod';
 
 import TwilioController from './twilio.controller.js';
 import configuration from '../helpers/config.js';
-import { twilioRateLimiterMiddleware } from '../helpers/rate-limiter.middleware.js';
+import {
+    twilioRateLimiterMiddleware,
+    twilioIngressRateLimiterMiddleware,
+    twilioCallbackRateLimiterMiddleware,
+    twilioFallbackRateLimiterMiddleware,
+    rejectTwilioRequest,
+} from '../helpers/rate-limiter.middleware.js';
 import { stripEmoji } from '../helpers/emoji.js';
 import {
     BRAND_PREFIX,
@@ -30,6 +36,32 @@ const {
 const {
     twilio: { attributes, authToken },
 } = configuration;
+
+const webhookParameters = z.record(z.string(), z.union([z.string(), z.array(z.string())]));
+
+/**
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ */
+const verifyWebhook = (req, res, next) => {
+    if (!webhookParameters.safeParse(req.body).success) {
+        return rejectTwilioRequest(req, res);
+    }
+
+    const signature = req.headers['x-twilio-signature'];
+    const reconstructedUrl = `${process.env.PROTOCOL}://${process.env.DOMAIN}${req.originalUrl}`;
+
+    if (
+        typeof signature !== 'string' ||
+        !signature.trim() ||
+        !validateRequest(authToken, signature, reconstructedUrl, req.body)
+    ) {
+        return rejectTwilioRequest(req, res);
+    }
+
+    return next();
+};
 
 /**
  * @typedef {Object} TwilioRoutesOptions
@@ -51,6 +83,7 @@ const routes = ({
     worldRepository,
 }) => {
     const twilioRouter = Router();
+
     const twilioController = new TwilioController({
         authenticationService,
         destinyService,
@@ -89,19 +122,8 @@ const routes = ({
     });
 
     twilioRouter.route('/destiny/r').post(
-        (req, res, next) => {
-            const rawHeader = req.headers['x-twilio-signature'];
-            const header = Array.isArray(rawHeader) ? (rawHeader[0] ?? '') : (rawHeader ?? '');
-            const reconstructedUrl = `${process.env.PROTOCOL}://${process.env.DOMAIN}/twilio/destiny/r`;
-
-            if (!validateRequest(authToken, header, reconstructedUrl, req.body)) {
-                res.writeHead(StatusCodes.FORBIDDEN);
-
-                return res.end();
-            }
-
-            return next();
-        },
+        twilioIngressRateLimiterMiddleware,
+        verifyWebhook,
         /**
          * Twilio echoes this cookie back on subsequent SMS/MMS webhook requests
          * from the same phone number, used below to carry conversation state
@@ -121,11 +143,6 @@ const routes = ({
                 return res.status(StatusCodes.BAD_REQUEST).json({ error: message });
             }
         },
-        /**
-         * STOP/HELP/START must always reach the controller: carriers require a
-         * reply to every one, so they are exempt from the per-sender quota
-         * rather than throttled into the empty-TwiML branch below.
-         */
         (req, res, next) => {
             const message = stripEmoji(req.body.Body).trim().toLowerCase();
 
@@ -138,11 +155,6 @@ const routes = ({
             }
 
             return twilioRateLimiterMiddleware(req, res, next, () => {
-                /**
-                 * Twilio reads any non-2xx on this webhook as error 11200 and
-                 * falls through to the fallback URL, so a throttled sender gets
-                 * an empty 200 rather than a 429 they would never see.
-                 */
                 res.writeHead(StatusCodes.OK, { 'Content-Type': 'text/xml' });
                 res.end(new MessagingResponse().toString());
             });
@@ -196,57 +208,53 @@ const routes = ({
         },
     );
 
-    twilioRouter.route('/destiny/s').post(async (req, res) => {
-        const rawHeader = req.headers['x-twilio-signature'];
-        const header = Array.isArray(rawHeader) ? (rawHeader[0] ?? '') : (rawHeader ?? '');
-        const { body, query = {}, originalUrl } = req;
-        const claimCheck = query['claim-check-number'];
-        const notificationType = query['notification-type'];
+    twilioRouter
+        .route('/destiny/s')
+        .post(twilioCallbackRateLimiterMiddleware, verifyWebhook, async (req, res) => {
+            const { body, query = {} } = req;
+            const claimCheck = query['claim-check-number'];
+            const notificationType = query['notification-type'];
 
-        if (
-            !validateRequest(
-                authToken,
-                header,
-                `${process.env.PROTOCOL}://${process.env.DOMAIN}${originalUrl}`,
-                body,
-            )
-        ) {
-            res.writeHead(StatusCodes.FORBIDDEN);
+            try {
+                statusCallbackBodySchema.parse(body);
+            } catch (err) {
+                const message = err instanceof z.ZodError ? err.issues[0].message : 'Bad Request';
 
-            return res.end();
-        }
+                return res.status(StatusCodes.BAD_REQUEST).json({ error: message });
+            }
 
-        try {
-            statusCallbackBodySchema.parse(body);
-        } catch (err) {
-            const message = err instanceof z.ZodError ? err.issues[0].message : 'Bad Request';
+            await twilioController.statusCallback({
+                ...body,
+                ...(claimCheck && { ClaimCheck: claimCheck }),
+                ...(notificationType && { NotificationType: notificationType }),
+            });
 
-            return res.status(StatusCodes.BAD_REQUEST).json({ error: message });
-        }
+            const twiml = new MessagingResponse();
 
-        await twilioController.statusCallback({
-            ...body,
-            ...(claimCheck && { ClaimCheck: claimCheck }),
-            ...(notificationType && { NotificationType: notificationType }),
+            res.writeHead(StatusCodes.OK, {
+                'Content-Type': 'text/xml',
+            });
+            res.end(twiml.toString());
         });
 
-        const twiml = new MessagingResponse();
+    twilioRouter
+        .route('/destiny/f')
+        .post(twilioFallbackRateLimiterMiddleware, verifyWebhook, (_req, res) => {
+            const message = TwilioController.fallback();
+            const twiml = new MessagingResponse();
 
-        res.writeHead(StatusCodes.OK, {
-            'Content-Type': 'text/xml',
+            twiml.message(
+                attributes,
+                `${BRAND_PREFIX}${message}`.substring(0, MAX_SMS_MESSAGE_LENGTH),
+            );
+            res.writeHead(StatusCodes.OK, {
+                'Content-Type': 'text/xml',
+            });
+            res.end(twiml.toString());
         });
-        res.end(twiml.toString());
-    });
 
-    twilioRouter.route('/destiny/f').post((_req, res) => {
-        const message = TwilioController.fallback();
-        const twiml = new MessagingResponse();
-
-        twiml.message(attributes, `${BRAND_PREFIX}${message}`.substring(0, MAX_SMS_MESSAGE_LENGTH));
-        res.writeHead(StatusCodes.OK, {
-            'Content-Type': 'text/xml',
-        });
-        res.end(twiml.toString());
+    twilioRouter.use(twilioIngressRateLimiterMiddleware, (_req, res) => {
+        res.status(StatusCodes.NOT_FOUND).end();
     });
 
     return twilioRouter;

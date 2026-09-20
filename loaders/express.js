@@ -8,11 +8,28 @@ import { StatusCodes } from 'http-status-codes';
 import configuration from '../helpers/config.js';
 import httpLog from '../helpers/httpLog.js';
 import { contextMiddleware } from '../helpers/log.js';
-import rateLimiterMiddleware from '../helpers/rate-limiter.middleware.js';
 import safeReviver from '../helpers/safe-reviver.js';
 import store from '../helpers/store.js';
+import { twilioPreflightMiddleware } from '../helpers/rate-limiter.middleware.js';
 
 export default app => {
+    if (process.env.NODE_ENV === 'production') {
+        app.set('trust proxy', 1);
+    }
+
+    app.use(contextMiddleware);
+    app.use(httpLog);
+
+    app.use(
+        '/twilio',
+        (_req, res, next) => {
+            res.locals.isTwilioWebhook = true;
+            next();
+        },
+        twilioPreflightMiddleware,
+        express.json({ limit: '32kb', reviver: safeReviver }),
+        express.urlencoded({ limit: '32kb', extended: true, parameterLimit: 51 }),
+    );
     app.use(
         express.json({
             limit: '1mb',
@@ -53,20 +70,8 @@ export default app => {
     );
 
     /**
-     * Attach Context
-     *
-     * Runs before the session middleware so that errors raised there, e.g.
-     * when the session store is unavailable, are logged with a traceId.
-     */
-    app.use(contextMiddleware);
-
-    /**
      * Attach Session
      */
-    if (process.env.NODE_ENV === 'production') {
-        app.set('trust proxy', 1);
-    }
-
     const domain = `.${process.env.DOMAIN.split('.').slice(-2).join('.')}`;
     const ghostSession = session({
         cookie: {
@@ -83,24 +88,23 @@ export default app => {
         store,
     });
 
-    app.use(ghostSession);
+    app.use((req, res, next) => {
+        if (res.locals.isTwilioWebhook) {
+            return next();
+        }
 
-    /**
-     * Request/Response and Error Loggers
-     *
-     * Runs before the session guard so requests still get correlation
-     * headers and structured logs during a session store outage.
-     */
-    app.use(httpLog);
+        return ghostSession(req, res, next);
+    });
 
     /**
      * If the Redis store is disconnected, express-session calls next() without
      * setting req.session. Fail fast with an explicit error rather than letting
-     * the request proceed sessionless. Liveness and health endpoints are exempt
-     * so they can still report diagnostics during a session store outage.
+     * the request proceed sessionless. Twilio skips session loading entirely;
+     * liveness and health endpoints can report diagnostics during a store outage.
      */
-    app.use((req, _res, next) => {
-        const isSessionless = /^\/(?:ping|health)(?:\/|$)/.test(req.path);
+    app.use((req, res, next) => {
+        const isSessionless =
+            res.locals.isTwilioWebhook || /^\/(?:ping|health)(?:\/|$)/.test(req.path);
 
         if (!isSessionless && !req.session) {
             const error = new Error('Session store unavailable.');
@@ -112,11 +116,6 @@ export default app => {
 
         return next();
     });
-
-    /**
-     * Rate Limiter
-     */
-    app.use(rateLimiterMiddleware);
 
     /**
      * Request/Response Timeouts

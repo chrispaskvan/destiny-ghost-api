@@ -10,16 +10,35 @@ const options = {
     duration: 1, // per 1 second
 };
 const rateLimiter = new RateLimiterRedis(options);
-/**
- * Inbound SMS used to ride the browser bucket by way of a session the Twilio
- * webhook bootstrapped for itself. Now that webhooks never touch the session,
- * senders get their own bucket keyed on the phone number Twilio signed for.
- */
+const twilioIngressLimiter = new RateLimiterRedis({
+    storeClient: client,
+    keyPrefix: 'twilio-ingress',
+    points: 1000,
+    duration: 1,
+});
 const twilioSenderLimiter = new RateLimiterRedis({
     storeClient: client,
     keyPrefix: 'twilio-sender',
     points: 20,
     duration: 60,
+});
+const twilioCallbackLimiter = new RateLimiterRedis({
+    storeClient: client,
+    keyPrefix: 'twilio-callback',
+    points: 1000,
+    duration: 1,
+});
+const twilioFallbackLimiter = new RateLimiterRedis({
+    storeClient: client,
+    keyPrefix: 'twilio-fallback',
+    points: 1000,
+    duration: 1,
+});
+const twilioInvalidLimiter = new RateLimiterRedis({
+    storeClient: client,
+    keyPrefix: 'twilio-invalid',
+    points: 10,
+    duration: 1,
 });
 
 /**
@@ -100,25 +119,16 @@ const rateLimiterMiddleware = (req, res, next) => {
         ) ?? {};
 
     /**
-     * A Twilio webhook carries no session now that it no longer bootstraps
-     * one, so the anonymous ten-point charge would cap all inbound SMS near
-     * ten messages a second across every sender combined - and answer the
-     * overflow with a 429, which Twilio reads as error 11200 and turns into no
-     * carrier reply at all. The keyword exemption inside the router cannot
-     * help, because this runs first.
-     *
-     * These requests are separately bounded per sender once their signature is
-     * verified, so they cost a point here rather than ten. That keeps a real
-     * ceiling on unsigned traffic, which is still unidentified at this point,
-     * while putting the limit far out of reach of legitimate volume. Dedicated
-     * ingress budgets outside this bucket replace it entirely.
+     * Twilio traffic never reaches this bucket: `/twilio` mounts ahead of it
+     * in loaders/routes.js and terminates in the router's own 404, so inbound
+     * webhooks are charged to the dedicated ingress, callback and fallback
+     * budgets instead. The point discount this bucket carried for them is
+     * gone with it.
      */
-    const isTwilioWebhook = req.method === 'POST' && req.path.startsWith('/twilio/');
-
     return consumePoints(
         rateLimiter,
         /** @type {string} */ (membershipId || req.ip),
-        isTwilioWebhook || dateRegistered ? 1 : 10,
+        dateRegistered ? 1 : 10,
         res,
         next,
     );
@@ -134,5 +144,98 @@ const rateLimiterMiddleware = (req, res, next) => {
 const twilioRateLimiterMiddleware = (req, res, next, onLimit) =>
     consumePoints(twilioSenderLimiter, req.body.From, 1, res, next, onLimit);
 
+/**
+ * Protect inbound and unmatched Twilio requests.
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ */
+const twilioIngressRateLimiterMiddleware = (req, res, next) =>
+    consumePoints(twilioIngressLimiter, /** @type {string} */ (req.ip), 1, res, next);
+
+/**
+ * Protect delivery callbacks independently of inbound message capacity.
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ */
+const twilioCallbackRateLimiterMiddleware = (req, res, next) =>
+    consumePoints(twilioCallbackLimiter, /** @type {string} */ (req.ip), 1, res, next);
+
+/**
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ */
+const twilioFallbackRateLimiterMiddleware = (req, res, next) =>
+    consumePoints(twilioFallbackLimiter, /** @type {string} */ (req.ip), 1, res, next);
+
+/**
+ * @param {import('express').Response} res
+ */
+const forbiddenTwilioResponse = res => {
+    for (const header of [
+        'X-RateLimit-Limit',
+        'X-RateLimit-Remaining',
+        'X-RateLimit-Reset',
+        'Retry-After',
+    ]) {
+        res.removeHeader(header);
+    }
+    return res.status(StatusCodes.FORBIDDEN).end();
+};
+
+/**
+ * Record failed verification without charging legitimate webhook traffic.
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ */
+const rejectTwilioRequest = async (req, res) => {
+    if (client.isReady) {
+        await twilioInvalidLimiter
+            .consume(/** @type {string} */ (req.ip), 1)
+            .catch(() => undefined);
+    }
+    return forbiddenTwilioResponse(res);
+};
+
+/**
+ * Reject repeat failed verification and missing signatures before parsing bodies.
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ */
+const twilioPreflightMiddleware = async (req, res, next) => {
+    const signature = req.headers['x-twilio-signature'];
+
+    if (typeof signature !== 'string' || !signature.trim()) {
+        return rejectTwilioRequest(req, res);
+    }
+
+    if (!client.isReady) {
+        return next();
+    }
+
+    let result;
+    try {
+        result = await twilioInvalidLimiter.get(/** @type {string} */ (req.ip));
+    } catch {
+        return next();
+    }
+
+    if (result && result.consumedPoints >= twilioInvalidLimiter.points && client.isReady) {
+        return forbiddenTwilioResponse(res);
+    }
+
+    return next();
+};
+
 export default rateLimiterMiddleware;
-export { twilioRateLimiterMiddleware };
+export {
+    twilioRateLimiterMiddleware,
+    twilioIngressRateLimiterMiddleware,
+    twilioCallbackRateLimiterMiddleware,
+    twilioFallbackRateLimiterMiddleware,
+    twilioPreflightMiddleware,
+    rejectTwilioRequest,
+};
