@@ -630,6 +630,38 @@ describe('UserService', () => {
         });
     });
 
+    describe('updateUserSubscription', () => {
+        it('should write the document in hand without a second lookup', async () => {
+            const userDocument = structuredClone(user);
+
+            documentService.updateDocument.mockResolvedValue(undefined);
+            userService.getUserByDisplayName = vi.fn();
+
+            await userService.updateUserSubscription(userDocument, false);
+
+            expect(userDocument.isSubscribed).toBe(false);
+            expect(documentService.updateDocument).toHaveBeenCalledWith(
+                expect.anything(),
+                userDocument,
+                userDocument.membershipType,
+            );
+            expect(cacheService.setUser).toHaveBeenCalledWith(userDocument);
+            expect(userService.getUserByDisplayName).not.toHaveBeenCalled();
+        });
+
+        it('should reject when the write fails so the caller can retry', async () => {
+            const throttled = Object.assign(new Error('Request rate is large'), { code: 429 });
+
+            documentService.updateDocument.mockRejectedValue(throttled);
+
+            await expect(
+                userService.updateUserSubscription(structuredClone(user), false),
+            ).rejects.toBe(throttled);
+
+            expect(cacheService.setUser).not.toHaveBeenCalled();
+        });
+    });
+
     describe('updateUserBungie', () => {
         describe('when user id exists', () => {
             it('should return undefined', () => {

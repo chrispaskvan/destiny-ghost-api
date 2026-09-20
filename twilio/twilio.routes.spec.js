@@ -168,6 +168,7 @@ const userService = {
     addUserMessage: vi.fn(),
     getUserByPhoneNumber: vi.fn(),
     updateUser: vi.fn(),
+    updateUserSubscription: vi.fn(),
 };
 const worldRepository = { getItemByName: vi.fn() };
 
@@ -200,6 +201,7 @@ beforeEach(() => {
         type: 'mobile',
     });
     userService.updateUser.mockReset().mockResolvedValue(undefined);
+    userService.updateUserSubscription.mockReset().mockResolvedValue(undefined);
     worldRepository.getItemByName.mockResolvedValue([]);
 
     twilioRouter = TwilioRouter({
@@ -230,7 +232,7 @@ describe('TwilioRouter', () => {
                 const dependency =
                     operation === 'lookup'
                         ? userService.getUserByPhoneNumber
-                        : userService.updateUser;
+                        : userService.updateUserSubscription;
                 dependency.mockRejectedValue(error);
 
                 try {
@@ -255,8 +257,8 @@ describe('TwilioRouter', () => {
                         STOP_KEYWORDS.size + START_KEYWORDS.size,
                     );
                     expect(errorLog).toHaveBeenCalledWith(
-                        expect.objectContaining({ err: error }),
-                        'Unable to persist SMS consent change.',
+                        expect.objectContaining({ err: error, phoneNumber: signedBody().From }),
+                        'Unable to persist SMS consent change after retrying; the sender was told it applied.',
                     );
                     expect(consume).not.toHaveBeenCalled();
                     expect(authenticationService.authenticate).not.toHaveBeenCalled();
@@ -274,7 +276,7 @@ describe('TwilioRouter', () => {
                 const dependency =
                     operation === 'lookup'
                         ? userService.getUserByPhoneNumber
-                        : userService.updateUser;
+                        : userService.updateUserSubscription;
                 dependency.mockReturnValue(pending.promise);
 
                 try {
@@ -302,6 +304,47 @@ describe('TwilioRouter', () => {
             },
         );
 
+        it('retries a throttled consent write rather than losing the opt-out', async () => {
+            const throttled = Object.assign(new Error('Request rate is large'), { code: 429 });
+            const errorLog = vi.spyOn(log, 'error').mockImplementation(() => {});
+            const warnLog = vi.spyOn(log, 'warn').mockImplementation(() => {});
+
+            userService.updateUserSubscription
+                .mockRejectedValueOnce(throttled)
+                .mockRejectedValueOnce(throttled)
+                .mockResolvedValueOnce(undefined);
+
+            try {
+                const response = createResponse({ eventEmitter: EventEmitter });
+
+                await dispatch(
+                    twilioRouter,
+                    signedRequest({ body: signedBody({ Body: 'STOP' }) }),
+                    response,
+                );
+
+                /**
+                 * The reply must not wait for the write, so it is already out
+                 * while the first attempt is still failing.
+                 */
+                expect(response.statusCode).toBe(StatusCodes.OK);
+                expect(response._getData()).toContain("You're unsubscribed");
+
+                await vi.waitFor(
+                    () => expect(userService.updateUserSubscription).toHaveBeenCalledTimes(3),
+                    { timeout: 15000 },
+                );
+                expect(userService.updateUserSubscription).toHaveBeenLastCalledWith(
+                    expect.anything(),
+                    false,
+                );
+                expect(errorLog).not.toHaveBeenCalled();
+            } finally {
+                errorLog.mockRestore();
+                warnLog.mockRestore();
+            }
+        }, 20000);
+
         it.each([
             ['STOP', false, "You're unsubscribed"],
             ['START', true, "You're re-subscribed"],
@@ -326,7 +369,7 @@ describe('TwilioRouter', () => {
                     expect(response._getData()).toContain(reply);
                 }
 
-                expect(userService.updateUser).not.toHaveBeenCalled();
+                expect(userService.updateUserSubscription).not.toHaveBeenCalled();
                 expect(consume).not.toHaveBeenCalled();
             },
         );
@@ -367,19 +410,13 @@ describe('TwilioRouter', () => {
                 expect(authenticationService.authenticate).not.toHaveBeenCalled();
                 expect(consume).not.toHaveBeenCalled();
                 if (user) {
-                    expect(userService.updateUser).toHaveBeenCalledWith({
-                        ...user,
-                        isSubscribed: false,
-                    });
-                    expect(userService.updateUser).toHaveBeenCalledWith({
-                        ...user,
-                        isSubscribed: true,
-                    });
-                    expect(userService.updateUser).toHaveBeenCalledTimes(
+                    expect(userService.updateUserSubscription).toHaveBeenCalledWith(user, false);
+                    expect(userService.updateUserSubscription).toHaveBeenCalledWith(user, true);
+                    expect(userService.updateUserSubscription).toHaveBeenCalledTimes(
                         STOP_KEYWORDS.size + START_KEYWORDS.size,
                     );
                 } else {
-                    expect(userService.updateUser).not.toHaveBeenCalled();
+                    expect(userService.updateUserSubscription).not.toHaveBeenCalled();
                 }
             },
         );
@@ -594,8 +631,9 @@ describe('TwilioRouter', () => {
                             expect(res.statusCode).toEqual(StatusCodes.OK);
                             expect(res._getData()).toContain("You're unsubscribed");
                             expect(res._getData()).toContain('Destiny-Ghost: ');
-                            expect(userService.updateUser).toHaveBeenCalledWith(
-                                expect.objectContaining({ isSubscribed: false }),
+                            expect(userService.updateUserSubscription).toHaveBeenCalledWith(
+                                expect.anything(),
+                                false,
                             );
                             done();
                         } catch (err) {
@@ -619,7 +657,7 @@ describe('TwilioRouter', () => {
                             expect(res._getData()).toContain('banshee-44@destiny-ghost.com');
                             expect(res._getData()).toContain('Destiny-Ghost: ');
                             expect(userService.getUserByPhoneNumber).not.toHaveBeenCalled();
-                            expect(userService.updateUser).not.toHaveBeenCalled();
+                            expect(userService.updateUserSubscription).not.toHaveBeenCalled();
                             done();
                         } catch (err) {
                             reject(err);
@@ -641,8 +679,9 @@ describe('TwilioRouter', () => {
                             expect(res.statusCode).toEqual(StatusCodes.OK);
                             expect(res._getData()).toContain("You're re-subscribed");
                             expect(res._getData()).toContain('Destiny-Ghost: ');
-                            expect(userService.updateUser).toHaveBeenCalledWith(
-                                expect.objectContaining({ isSubscribed: true }),
+                            expect(userService.updateUserSubscription).toHaveBeenCalledWith(
+                                expect.anything(),
+                                true,
                             );
                             done();
                         } catch (err) {
@@ -823,7 +862,7 @@ describe('TwilioRouter', () => {
                             expect(res._getData()).toContain("You're unsubscribed");
                             expect(authenticationService.authenticate).not.toHaveBeenCalled();
                             expect(consume).not.toHaveBeenCalled();
-                            expect(userService.updateUser).not.toHaveBeenCalled();
+                            expect(userService.updateUserSubscription).not.toHaveBeenCalled();
                             done();
                         } catch (err) {
                             reject(err);
@@ -971,8 +1010,9 @@ describe('TwilioRouter', () => {
                         try {
                             expect(res.statusCode).toEqual(StatusCodes.OK);
                             expect(res._getData()).toContain("You're unsubscribed");
-                            expect(userService.updateUser).toHaveBeenCalledWith(
-                                expect.objectContaining({ isSubscribed: false }),
+                            expect(userService.updateUserSubscription).toHaveBeenCalledWith(
+                                expect.anything(),
+                                false,
                             );
                             expect(consume).not.toHaveBeenCalled();
                             done();
