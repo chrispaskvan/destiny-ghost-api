@@ -80,6 +80,12 @@ const userSchema = z.object({
     firstName: z.string(),
     displayName: z.string(),
     isSubscribed: z.boolean().default(true),
+    /**
+     * When the consent change that produced `isSubscribed` was received, in
+     * epoch milliseconds. A watermark, not an audit field: a consent write
+     * carrying an older stamp is a superseded intent and is discarded.
+     */
+    consentUpdatedAt: z.number().int().optional(),
     membershipId: z.string(),
     membershipType: z.number().int(),
     lastName: z.string(),
@@ -735,6 +741,9 @@ class UserService {
     /**
      * Flip a user's SMS consent on the document the caller already holds.
      *
+     * `receivedAt` is stamped alongside it so a later write can tell whether
+     * it is applying a newer intent or replaying a superseded one.
+     *
      * Deliberately skips `updateUser`'s schema re-parse and its second lookup
      * by displayName: both can reject a legacy record that
      * `getUserByPhoneNumber` just returned, and neither adds anything when the
@@ -742,10 +751,12 @@ class UserService {
      * the fewer ways it can fail, the better.
      * @param {import('../helpers/documents.js').CosmosDocument<User>} userDocument
      * @param {boolean} isSubscribed
+     * @param {number} receivedAt - Epoch milliseconds the change was received.
      * @returns {Promise<void>}
      */
-    async updateUserSubscription(userDocument, isSubscribed) {
+    async updateUserSubscription(userDocument, isSubscribed, receivedAt) {
         userDocument.isSubscribed = isSubscribed;
+        userDocument.consentUpdatedAt = receivedAt;
 
         return this.#replaceAndCache(userDocument, userDocument.membershipType);
     }

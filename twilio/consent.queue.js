@@ -43,14 +43,17 @@ const queue = new Queue(QUEUE_NAME, {
  * intents from the same number, and collapsing them would silently discard the
  * one the guardian meant. The envelope matches `helpers/publisher.js` because
  * `helpers/subscriber.js` destructures `applicationProperties` on every job.
- * @param {{ phoneNumber: string, isSubscribed: boolean }} consent
+ * `receivedAt` travels with the job because a retry can resume long after a
+ * later message has been written; the worker compares it against what is
+ * stored rather than trusting the order jobs happen to run in.
+ * @param {{ phoneNumber: string, isSubscribed: boolean, receivedAt: number }} consent
  * @returns {Promise<import('bullmq').Job>}
  */
-const enqueueConsentChange = async ({ phoneNumber, isSubscribed }) => {
+const enqueueConsentChange = async ({ phoneNumber, isSubscribed, receivedAt }) => {
     const { traceId } = context.getStore()?.get('logger')?.bindings() || {};
 
     return await queue.add('consent', {
-        body: JSON.stringify({ phoneNumber, isSubscribed }),
+        body: JSON.stringify({ phoneNumber, isSubscribed, receivedAt }),
         applicationProperties: { traceId },
     });
 };

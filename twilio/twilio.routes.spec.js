@@ -391,6 +391,7 @@ describe('TwilioRouter', () => {
                 expect(userService.updateUserSubscription).toHaveBeenLastCalledWith(
                     expect.anything(),
                     false,
+                    expect.any(Number),
                 );
                 expect(errorLog).not.toHaveBeenCalled();
             } finally {
@@ -415,6 +416,7 @@ describe('TwilioRouter', () => {
             expect(enqueueConsentChange).toHaveBeenCalledExactlyOnceWith({
                 phoneNumber: signedBody().From,
                 isSubscribed: false,
+                receivedAt: expect.any(Number),
             });
             /**
              * The worker owns the write now, so nothing should touch Cosmos on
@@ -438,7 +440,11 @@ describe('TwilioRouter', () => {
         it('applies a queued consent change when the worker runs it', async () => {
             const [handler] = listen.mock.calls.at(-1);
 
-            await handler({ phoneNumber: signedBody().From, isSubscribed: false });
+            await handler({
+                phoneNumber: signedBody().From,
+                isSubscribed: false,
+                receivedAt: Date.now(),
+            });
 
             expect(userService.getUserByPhoneNumber).toHaveBeenCalledExactlyOnceWith(
                 signedBody().From,
@@ -447,6 +453,76 @@ describe('TwilioRouter', () => {
             expect(userService.updateUserSubscription).toHaveBeenCalledExactlyOnceWith(
                 expect.anything(),
                 false,
+                expect.any(Number),
+            );
+        });
+
+        it('discards a retry that resumes after a later intent has been written', async () => {
+            /**
+             * Exactly the sequence worker concurrency cannot prevent: a STOP
+             * fails, waits out its backoff in the delayed set while a later
+             * START runs, then wakes up. Without the watermark the stale STOP
+             * would win and the guardian would stay unsubscribed.
+             */
+            const stopAt = 1_000;
+            const startAt = 2_000;
+            const [handler] = listen.mock.calls.at(-1);
+
+            userService.getUserByPhoneNumber.mockResolvedValue({
+                id: 'subscriber',
+                isSubscribed: true,
+                consentUpdatedAt: startAt,
+            });
+
+            await handler({
+                phoneNumber: signedBody().From,
+                isSubscribed: false,
+                receivedAt: stopAt,
+            });
+
+            expect(userService.updateUserSubscription).not.toHaveBeenCalled();
+        });
+
+        it('applies a change whose intent is newer than the stored watermark', async () => {
+            const [handler] = listen.mock.calls.at(-1);
+
+            userService.getUserByPhoneNumber.mockResolvedValue({
+                id: 'subscriber',
+                isSubscribed: true,
+                consentUpdatedAt: 1_000,
+            });
+
+            await handler({
+                phoneNumber: signedBody().From,
+                isSubscribed: false,
+                receivedAt: 2_000,
+            });
+
+            expect(userService.updateUserSubscription).toHaveBeenCalledExactlyOnceWith(
+                expect.anything(),
+                false,
+                2_000,
+            );
+        });
+
+        it('applies a change to a record that has never carried a watermark', async () => {
+            const [handler] = listen.mock.calls.at(-1);
+
+            userService.getUserByPhoneNumber.mockResolvedValue({
+                id: 'subscriber',
+                isSubscribed: true,
+            });
+
+            await handler({
+                phoneNumber: signedBody().From,
+                isSubscribed: false,
+                receivedAt: 2_000,
+            });
+
+            expect(userService.updateUserSubscription).toHaveBeenCalledExactlyOnceWith(
+                expect.anything(),
+                false,
+                2_000,
             );
         });
 
@@ -466,7 +542,11 @@ describe('TwilioRouter', () => {
                  * change with the job quietly removed.
                  */
                 await expect(
-                    handler({ phoneNumber: signedBody().From, isSubscribed: false }),
+                    handler({
+                        phoneNumber: signedBody().From,
+                        isSubscribed: false,
+                        receivedAt: Date.now(),
+                    }),
                 ).rejects.toBe(error);
 
                 expect(errorLog).toHaveBeenCalledWith(
@@ -645,7 +725,7 @@ describe('TwilioRouter', () => {
             ['START', true, "You're re-subscribed"],
             ['yes', true, "You're re-subscribed"],
         ])(
-            'replies to repeated %s without rewriting unchanged consent',
+            'answers repeated %s and carries its watermark forward',
             async (keyword, isSubscribed, reply) => {
                 userService.getUserByPhoneNumber.mockResolvedValue({
                     id: 'subscriber',
@@ -664,7 +744,17 @@ describe('TwilioRouter', () => {
                     expect(response._getData()).toContain(reply);
                 }
 
-                expect(userService.updateUserSubscription).not.toHaveBeenCalled();
+                /**
+                 * The state is unchanged but the write still happens, because
+                 * the stamp has to move forward: leaving it behind would let an
+                 * older intent still in backoff overwrite this one afterwards.
+                 */
+                await vi.waitFor(() =>
+                    expect(userService.updateUserSubscription).toHaveBeenCalledTimes(2),
+                );
+                for (const call of userService.updateUserSubscription.mock.calls) {
+                    expect(call).toEqual([expect.anything(), isSubscribed, expect.any(Number)]);
+                }
                 expect(consume).not.toHaveBeenCalled();
             },
         );
@@ -708,8 +798,16 @@ describe('TwilioRouter', () => {
                     STOP_KEYWORDS.size + HELP_KEYWORDS.size + START_KEYWORDS.size,
                 );
                 if (user) {
-                    expect(userService.updateUserSubscription).toHaveBeenCalledWith(user, false);
-                    expect(userService.updateUserSubscription).toHaveBeenCalledWith(user, true);
+                    expect(userService.updateUserSubscription).toHaveBeenCalledWith(
+                        user,
+                        false,
+                        expect.any(Number),
+                    );
+                    expect(userService.updateUserSubscription).toHaveBeenCalledWith(
+                        user,
+                        true,
+                        expect.any(Number),
+                    );
                     expect(userService.updateUserSubscription).toHaveBeenCalledTimes(
                         STOP_KEYWORDS.size + START_KEYWORDS.size,
                     );
@@ -957,6 +1055,7 @@ describe('TwilioRouter', () => {
                                 expect(userService.updateUserSubscription).toHaveBeenCalledWith(
                                     expect.anything(),
                                     false,
+                                    expect.any(Number),
                                 ),
                             );
                             done();
@@ -1007,6 +1106,7 @@ describe('TwilioRouter', () => {
                                 expect(userService.updateUserSubscription).toHaveBeenCalledWith(
                                     expect.anything(),
                                     true,
+                                    expect.any(Number),
                                 ),
                             );
                             done();
@@ -1340,6 +1440,7 @@ describe('TwilioRouter', () => {
                                 expect(userService.updateUserSubscription).toHaveBeenCalledWith(
                                     expect.anything(),
                                     false,
+                                    expect.any(Number),
                                 ),
                             );
                             expect(consume).not.toHaveBeenCalled();
