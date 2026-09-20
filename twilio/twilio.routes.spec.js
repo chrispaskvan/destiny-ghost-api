@@ -24,6 +24,25 @@ import {
     START_KEYWORDS,
 } from './twilio.constants.js';
 
+const { enqueueConsentChange, listen } = vi.hoisted(() => ({
+    enqueueConsentChange: vi.fn(),
+    listen: vi.fn(),
+}));
+
+vi.mock('./consent.queue.js', () => ({
+    default: {},
+    enqueueConsentChange,
+    QUEUE_NAME: 'consent',
+}));
+
+/**
+ * The controller registers a BullMQ worker on construction; without this the
+ * spec would open a real connection for every router it builds.
+ */
+vi.mock('../helpers/subscriber.js', () => ({
+    default: { listen, close: vi.fn() },
+}));
+
 const {
     consume,
     ingressConsume,
@@ -231,6 +250,12 @@ beforeEach(() => {
     });
     userService.updateUser.mockReset().mockResolvedValue(undefined);
     userService.updateUserSubscription.mockReset().mockResolvedValue(undefined);
+    /**
+     * Default the queue to unavailable so every consent test below exercises
+     * the inline fallback - the path that has to keep working when Redis is
+     * down. The queue path has its own tests, which opt back in.
+     */
+    enqueueConsentChange.mockReset().mockRejectedValue(new Error('queue unavailable'));
     worldRepository.getItemByName.mockResolvedValue([]);
 
     twilioRouter = TwilioRouter({
@@ -366,6 +391,7 @@ describe('TwilioRouter', () => {
                 expect(userService.updateUserSubscription).toHaveBeenLastCalledWith(
                     expect.anything(),
                     false,
+                    expect.any(Number),
                 );
                 expect(errorLog).not.toHaveBeenCalled();
             } finally {
@@ -373,6 +399,228 @@ describe('TwilioRouter', () => {
                 warnLog.mockRestore();
             }
         }, 20000);
+
+        it('queues a consent change rather than writing it inline', async () => {
+            enqueueConsentChange.mockResolvedValue({ id: 'job-1' });
+            const response = createResponse({ eventEmitter: EventEmitter });
+
+            await dispatch(
+                twilioRouter,
+                signedRequest({ body: signedBody({ Body: 'STOP' }) }),
+                response,
+            );
+            await new Promise(resolve => setImmediate(resolve));
+
+            expect(response.statusCode).toBe(StatusCodes.OK);
+            expect(response._getData()).toContain("You're unsubscribed");
+            expect(enqueueConsentChange).toHaveBeenCalledExactlyOnceWith({
+                phoneNumber: signedBody().From,
+                isSubscribed: false,
+                receivedAt: expect.any(Number),
+            });
+            /**
+             * The worker owns the write now, so nothing should touch Cosmos on
+             * the request path.
+             */
+            expect(userService.updateUserSubscription).not.toHaveBeenCalled();
+            expect(userService.getUserByPhoneNumber).not.toHaveBeenCalled();
+        });
+
+        it('registers the consent worker one job at a time', () => {
+            /**
+             * BullMQ hands a single worker its jobs in enqueue order, so a
+             * STOP followed by a START settles on the later intent. Any higher
+             * concurrency reintroduces the race this queue exists to remove.
+             */
+            expect(listen).toHaveBeenCalledWith(expect.any(Function), 'consent', {
+                concurrency: 1,
+            });
+        });
+
+        it('applies a queued consent change when the worker runs it', async () => {
+            const [handler] = listen.mock.calls.at(-1);
+
+            await handler({
+                phoneNumber: signedBody().From,
+                isSubscribed: false,
+                receivedAt: Date.now(),
+            });
+
+            expect(userService.getUserByPhoneNumber).toHaveBeenCalledExactlyOnceWith(
+                signedBody().From,
+                true,
+            );
+            expect(userService.updateUserSubscription).toHaveBeenCalledExactlyOnceWith(
+                expect.anything(),
+                false,
+                expect.any(Number),
+            );
+        });
+
+        it('discards a retry that resumes after a later intent has been written', async () => {
+            /**
+             * Exactly the sequence worker concurrency cannot prevent: a STOP
+             * fails, waits out its backoff in the delayed set while a later
+             * START runs, then wakes up. Without the watermark the stale STOP
+             * would win and the guardian would stay unsubscribed.
+             */
+            const stopAt = 1_000;
+            const startAt = 2_000;
+            const [handler] = listen.mock.calls.at(-1);
+
+            userService.getUserByPhoneNumber.mockResolvedValue({
+                id: 'subscriber',
+                isSubscribed: true,
+                consentUpdatedAt: startAt,
+            });
+
+            await handler({
+                phoneNumber: signedBody().From,
+                isSubscribed: false,
+                receivedAt: stopAt,
+            });
+
+            expect(userService.updateUserSubscription).not.toHaveBeenCalled();
+        });
+
+        it('applies a change that ties the stored watermark', async () => {
+            /**
+             * Two messages sharing a millisecond cannot be ordered by arrival,
+             * so the one processed later wins rather than the earlier keeping
+             * the field by virtue of getting there first.
+             */
+            const [handler] = listen.mock.calls.at(-1);
+
+            userService.getUserByPhoneNumber.mockResolvedValue({
+                id: 'subscriber',
+                isSubscribed: false,
+                consentUpdatedAt: 2_000,
+            });
+
+            await handler({
+                phoneNumber: signedBody().From,
+                isSubscribed: true,
+                receivedAt: 2_000,
+            });
+
+            expect(userService.updateUserSubscription).toHaveBeenCalledExactlyOnceWith(
+                expect.anything(),
+                true,
+                2_000,
+            );
+        });
+
+        it('applies a change whose intent is newer than the stored watermark', async () => {
+            const [handler] = listen.mock.calls.at(-1);
+
+            userService.getUserByPhoneNumber.mockResolvedValue({
+                id: 'subscriber',
+                isSubscribed: true,
+                consentUpdatedAt: 1_000,
+            });
+
+            await handler({
+                phoneNumber: signedBody().From,
+                isSubscribed: false,
+                receivedAt: 2_000,
+            });
+
+            expect(userService.updateUserSubscription).toHaveBeenCalledExactlyOnceWith(
+                expect.anything(),
+                false,
+                2_000,
+            );
+        });
+
+        it('applies a change to a record that has never carried a watermark', async () => {
+            const [handler] = listen.mock.calls.at(-1);
+
+            userService.getUserByPhoneNumber.mockResolvedValue({
+                id: 'subscriber',
+                isSubscribed: true,
+            });
+
+            await handler({
+                phoneNumber: signedBody().From,
+                isSubscribed: false,
+                receivedAt: 2_000,
+            });
+
+            expect(userService.updateUserSubscription).toHaveBeenCalledExactlyOnceWith(
+                expect.anything(),
+                false,
+                2_000,
+            );
+        });
+
+        it('rejects from the worker so BullMQ can retry a failed consent write', async () => {
+            const error = new Error('cosmos unavailable');
+            const errorLog = vi.spyOn(log, 'error').mockImplementation(() => {});
+
+            userService.getUserByPhoneNumber.mockRejectedValue(error);
+
+            try {
+                const [handler] = listen.mock.calls.at(-1);
+
+                /**
+                 * Resolving here would mark the job completed, so the queue's
+                 * `attempts` and `removeOnFail` retention would never apply and
+                 * an outage outlasting the in-process retries would drop the
+                 * change with the job quietly removed.
+                 */
+                await expect(
+                    handler({
+                        phoneNumber: signedBody().From,
+                        isSubscribed: false,
+                        receivedAt: Date.now(),
+                    }),
+                ).rejects.toBe(error);
+
+                expect(errorLog).toHaveBeenCalledWith(
+                    expect.objectContaining({ err: error, phoneNumber: signedBody().From }),
+                    expect.stringContaining('Unable to persist SMS consent change'),
+                );
+            } finally {
+                errorLog.mockRestore();
+            }
+        }, 20000);
+
+        it('settles the inline fallback even when the write ultimately fails', async () => {
+            const error = new Error('cosmos unavailable');
+            const errorLog = vi.spyOn(log, 'error').mockImplementation(() => {});
+            const warnLog = vi.spyOn(log, 'warn').mockImplementation(() => {});
+            const unhandled = vi.fn();
+
+            userService.getUserByPhoneNumber.mockRejectedValue(error);
+            process.on('unhandledRejection', unhandled);
+
+            try {
+                const response = createResponse({ eventEmitter: EventEmitter });
+
+                await dispatch(
+                    twilioRouter,
+                    signedRequest({ body: signedBody({ Body: 'STOP' }) }),
+                    response,
+                );
+
+                expect(response.statusCode).toBe(StatusCodes.OK);
+                expect(response._getData()).toContain("You're unsubscribed");
+
+                await vi.waitFor(() => expect(errorLog).toHaveBeenCalled(), { timeout: 15000 });
+                await new Promise(resolve => setImmediate(resolve));
+
+                /**
+                 * The fallback has no job to hand back, so its rejection has to
+                 * die here rather than surface as an unhandled rejection - which
+                 * `start.js` turns into a process exit.
+                 */
+                expect(unhandled).not.toHaveBeenCalled();
+            } finally {
+                process.off('unhandledRejection', unhandled);
+                errorLog.mockRestore();
+                warnLog.mockRestore();
+            }
+        }, 25000);
 
         it('recovers a consent write rejected on a superseded etag', async () => {
             const preconditionFailed = Object.assign(new Error('precondition failed'), {
@@ -504,7 +752,7 @@ describe('TwilioRouter', () => {
             ['START', true, "You're re-subscribed"],
             ['yes', true, "You're re-subscribed"],
         ])(
-            'replies to repeated %s without rewriting unchanged consent',
+            'answers repeated %s and carries its watermark forward',
             async (keyword, isSubscribed, reply) => {
                 userService.getUserByPhoneNumber.mockResolvedValue({
                     id: 'subscriber',
@@ -523,7 +771,17 @@ describe('TwilioRouter', () => {
                     expect(response._getData()).toContain(reply);
                 }
 
-                expect(userService.updateUserSubscription).not.toHaveBeenCalled();
+                /**
+                 * The state is unchanged but the write still happens, because
+                 * the stamp has to move forward: leaving it behind would let an
+                 * older intent still in backoff overwrite this one afterwards.
+                 */
+                await vi.waitFor(() =>
+                    expect(userService.updateUserSubscription).toHaveBeenCalledTimes(2),
+                );
+                for (const call of userService.updateUserSubscription.mock.calls) {
+                    expect(call).toEqual([expect.anything(), isSubscribed, expect.any(Number)]);
+                }
                 expect(consume).not.toHaveBeenCalled();
             },
         );
@@ -567,8 +825,16 @@ describe('TwilioRouter', () => {
                     STOP_KEYWORDS.size + HELP_KEYWORDS.size + START_KEYWORDS.size,
                 );
                 if (user) {
-                    expect(userService.updateUserSubscription).toHaveBeenCalledWith(user, false);
-                    expect(userService.updateUserSubscription).toHaveBeenCalledWith(user, true);
+                    expect(userService.updateUserSubscription).toHaveBeenCalledWith(
+                        user,
+                        false,
+                        expect.any(Number),
+                    );
+                    expect(userService.updateUserSubscription).toHaveBeenCalledWith(
+                        user,
+                        true,
+                        expect.any(Number),
+                    );
                     expect(userService.updateUserSubscription).toHaveBeenCalledTimes(
                         STOP_KEYWORDS.size + START_KEYWORDS.size,
                     );
@@ -807,14 +1073,17 @@ describe('TwilioRouter', () => {
                     const body = signedBody({ Body: 'STOP' });
                     const req = signedRequest({ body });
 
-                    res.on('end', () => {
+                    res.on('end', async () => {
                         try {
                             expect(res.statusCode).toEqual(StatusCodes.OK);
                             expect(res._getData()).toContain("You're unsubscribed");
                             expect(res._getData()).toContain('Destiny-Ghost: ');
-                            expect(userService.updateUserSubscription).toHaveBeenCalledWith(
-                                expect.anything(),
-                                false,
+                            await vi.waitFor(() =>
+                                expect(userService.updateUserSubscription).toHaveBeenCalledWith(
+                                    expect.anything(),
+                                    false,
+                                    expect.any(Number),
+                                ),
                             );
                             done();
                         } catch (err) {
@@ -855,14 +1124,17 @@ describe('TwilioRouter', () => {
                     const body = signedBody({ Body: 'START' });
                     const req = signedRequest({ body });
 
-                    res.on('end', () => {
+                    res.on('end', async () => {
                         try {
                             expect(res.statusCode).toEqual(StatusCodes.OK);
                             expect(res._getData()).toContain("You're re-subscribed");
                             expect(res._getData()).toContain('Destiny-Ghost: ');
-                            expect(userService.updateUserSubscription).toHaveBeenCalledWith(
-                                expect.anything(),
-                                true,
+                            await vi.waitFor(() =>
+                                expect(userService.updateUserSubscription).toHaveBeenCalledWith(
+                                    expect.anything(),
+                                    true,
+                                    expect.any(Number),
+                                ),
                             );
                             done();
                         } catch (err) {
@@ -1037,7 +1309,7 @@ describe('TwilioRouter', () => {
                     const body = signedBody({ Body: 'STOP' });
                     const req = signedRequest({ body });
 
-                    res.on('end', () => {
+                    res.on('end', async () => {
                         try {
                             expect(res.statusCode).toEqual(StatusCodes.OK);
                             expect(res._getData()).toContain("You're unsubscribed");
@@ -1187,13 +1459,16 @@ describe('TwilioRouter', () => {
                     const body = signedBody({ Body: 'STOP 🛑' });
                     const req = signedRequest({ body });
 
-                    res.on('end', () => {
+                    res.on('end', async () => {
                         try {
                             expect(res.statusCode).toEqual(StatusCodes.OK);
                             expect(res._getData()).toContain("You're unsubscribed");
-                            expect(userService.updateUserSubscription).toHaveBeenCalledWith(
-                                expect.anything(),
-                                false,
+                            await vi.waitFor(() =>
+                                expect(userService.updateUserSubscription).toHaveBeenCalledWith(
+                                    expect.anything(),
+                                    false,
+                                    expect.any(Number),
+                                ),
                             );
                             expect(consume).not.toHaveBeenCalled();
                             done();

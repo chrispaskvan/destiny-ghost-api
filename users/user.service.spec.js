@@ -4,6 +4,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Chance from 'chance';
 import UserService from './user.service.js';
+import log from '../helpers/log.js';
 
 const cacheService = {
     getUser: vi.fn(),
@@ -649,6 +650,69 @@ describe('UserService', () => {
         });
     });
 
+    describe('protecting the consent watermark from caller input', () => {
+        /**
+         * The sign-up route hands `updateUser` a raw request body. A planted
+         * far-future stamp would make `applyConsent` treat every real STOP as
+         * already superseded - acknowledged to the sender, never written, and
+         * the number left in the next broadcast.
+         */
+        const PLANTED = 9_999_999_999_999;
+
+        it('should discard a caller-supplied watermark on updateUser', async () => {
+            const stored = { ...structuredClone(user), consentUpdatedAt: 1_000 };
+
+            documentService.updateDocument.mockResolvedValue(undefined);
+            userService.getUserByDisplayName = vi.fn().mockResolvedValue(stored);
+
+            await userService.updateUser({
+                ...structuredClone(user),
+                consentUpdatedAt: PLANTED,
+            });
+
+            expect(documentService.updateDocument).toHaveBeenCalledWith(
+                expect.anything(),
+                expect.objectContaining({ consentUpdatedAt: 1_000 }),
+                expect.anything(),
+            );
+        });
+
+        it('should not let a caller introduce a watermark where none was stored', async () => {
+            const stored = structuredClone(user);
+
+            delete stored.consentUpdatedAt;
+            documentService.updateDocument.mockResolvedValue(undefined);
+            userService.getUserByDisplayName = vi.fn().mockResolvedValue(stored);
+
+            await userService.updateUser({
+                ...structuredClone(user),
+                consentUpdatedAt: PLANTED,
+            });
+
+            const [, written] = documentService.updateDocument.mock.calls[0];
+
+            expect(written.consentUpdatedAt).toBeUndefined();
+        });
+
+        it('should discard a caller-supplied watermark on updateAnonymousUser', async () => {
+            const stored = { ...structuredClone(user), consentUpdatedAt: 1_000 };
+
+            documentService.updateDocument.mockResolvedValue(undefined);
+            userService.getUserByDisplayName = vi.fn().mockResolvedValue(stored);
+
+            await userService.updateAnonymousUser({
+                ...structuredClone(anonymousUser),
+                consentUpdatedAt: PLANTED,
+            });
+
+            expect(documentService.updateDocument).toHaveBeenCalledWith(
+                expect.anything(),
+                expect.objectContaining({ consentUpdatedAt: 1_000 }),
+                expect.anything(),
+            );
+        });
+    });
+
     describe('updateUserSubscription', () => {
         it('should write the document in hand without a second lookup', async () => {
             const userDocument = structuredClone(user);
@@ -656,7 +720,7 @@ describe('UserService', () => {
             documentService.updateDocument.mockResolvedValue(undefined);
             userService.getUserByDisplayName = vi.fn();
 
-            await userService.updateUserSubscription(userDocument, false);
+            await userService.updateUserSubscription(userDocument, false, 1_700_000_000_000);
 
             expect(userDocument.isSubscribed).toBe(false);
             expect(documentService.updateDocument).toHaveBeenCalledWith(
@@ -674,7 +738,7 @@ describe('UserService', () => {
 
             documentService.updateDocument.mockResolvedValue(replaced);
 
-            await userService.updateUserSubscription(userDocument, false);
+            await userService.updateUserSubscription(userDocument, false, 1_700_000_000_000);
 
             /**
              * Caching the local copy instead would leave the next consent
@@ -686,13 +750,82 @@ describe('UserService', () => {
             );
         });
 
+        it('should stamp the supplied arrival time on the document it writes', async () => {
+            const userDocument = { ...structuredClone(user), _etag: 'etag-1' };
+            const replaced = { ...userDocument, isSubscribed: false, _etag: 'etag-2' };
+
+            documentService.updateDocument.mockResolvedValue(replaced);
+
+            await userService.updateUserSubscription(userDocument, false, 1_700_000_000_000);
+
+            /**
+             * This stamp is what lets a later write tell a newer intent from a
+             * stale job resuming after its backoff. If it stops being
+             * persisted, stale consent silently starts winning again.
+             */
+            expect(userDocument.consentUpdatedAt).toBe(1_700_000_000_000);
+            expect(documentService.updateDocument).toHaveBeenCalledWith(
+                expect.anything(),
+                expect.objectContaining({
+                    isSubscribed: false,
+                    consentUpdatedAt: 1_700_000_000_000,
+                }),
+                userDocument.membershipType,
+            );
+            expect(cacheService.setUser).toHaveBeenCalledWith(replaced);
+        });
+
+        it('should persist to Cosmos even when the cache is unreachable', async () => {
+            const userDocument = { ...structuredClone(user), _etag: 'etag-1' };
+            const warnLog = vi.spyOn(log, 'warn').mockImplementation(() => {});
+
+            documentService.updateDocument.mockResolvedValue({ ...userDocument, _etag: 'etag-2' });
+            cacheService.setUser.mockRejectedValue(new Error('ECONNREFUSED'));
+
+            try {
+                /**
+                 * The SMS consent fallback runs *because* Redis is down, so a
+                 * rejection here would fail the write that exists to survive
+                 * exactly that. Cosmos is the source of truth; a cache that
+                 * cannot be reached costs a repeat lookup, not the operation.
+                 */
+                await expect(
+                    userService.updateUserSubscription(userDocument, false, 1_700_000_000_000),
+                ).resolves.toBeUndefined();
+
+                expect(documentService.updateDocument).toHaveBeenCalled();
+                expect(warnLog).toHaveBeenCalledWith(
+                    expect.objectContaining({ userId: userDocument.id }),
+                    expect.stringContaining('Failed to cache the user'),
+                );
+            } finally {
+                warnLog.mockRestore();
+            }
+        });
+
+        it('should return a looked-up user when the cache write fails', async () => {
+            const stored = { ...structuredClone(user), _etag: 'etag-9' };
+            const warnLog = vi.spyOn(log, 'warn').mockImplementation(() => {});
+
+            documentService.getDocuments.mockResolvedValueOnce([stored]);
+            cacheService.setUser.mockRejectedValue(new Error('ECONNREFUSED'));
+
+            try {
+                await expect(
+                    userService.getUserByPhoneNumber(user.phoneNumber, true),
+                ).resolves.toEqual(stored);
+            } finally {
+                warnLog.mockRestore();
+            }
+        });
+
         it('should reject when the write fails so the caller can retry', async () => {
             const throttled = Object.assign(new Error('Request rate is large'), { code: 429 });
 
             documentService.updateDocument.mockRejectedValue(throttled);
 
             await expect(
-                userService.updateUserSubscription(structuredClone(user), false),
+                userService.updateUserSubscription(structuredClone(user), false, 1_700_000_000_000),
             ).rejects.toBe(throttled);
 
             expect(cacheService.setUser).not.toHaveBeenCalled();

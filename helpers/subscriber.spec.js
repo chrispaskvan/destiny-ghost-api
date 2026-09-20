@@ -81,6 +81,22 @@ describe('Subscriber', () => {
             );
         });
 
+        it('should create worker with a caller-supplied concurrency', () => {
+            const callback = vi.fn();
+
+            /**
+             * A queue whose jobs must be applied in the order they were
+             * enqueued - consent changes, where a later STOP must not be
+             * overtaken by an earlier START - needs exactly one worker.
+             */
+            subscriber.listen(callback, 'consent', { concurrency: 1 });
+
+            expect(MockWorkerConstructor).toHaveBeenCalledWith('consent', expect.any(Function), {
+                connection: { host: 'localhost', port: 6379 },
+                concurrency: 1,
+            });
+        });
+
         it('should set up event listeners', () => {
             const callback = vi.fn();
 

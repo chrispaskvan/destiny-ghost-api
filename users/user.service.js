@@ -80,6 +80,12 @@ const userSchema = z.object({
     firstName: z.string(),
     displayName: z.string(),
     isSubscribed: z.boolean().default(true),
+    /**
+     * When the consent change that produced `isSubscribed` was received, in
+     * epoch milliseconds. A watermark, not an audit field: a consent write
+     * carrying an older stamp is a superseded intent and is discarded.
+     */
+    consentUpdatedAt: z.number().int().optional(),
     membershipId: z.string(),
     membershipType: z.number().int(),
     lastName: z.string(),
@@ -90,6 +96,29 @@ const userSchema = z.object({
     type: z.string().optional(),
     bungie: storedBungieTokenSchema.optional(),
 });
+
+/**
+ * Copy the consent watermark from the stored document onto the merged one,
+ * discarding whatever the caller supplied.
+ *
+ * `updateUser` and `updateAnonymousUser` both merge caller-supplied fields
+ * over a stored document, and their callers hand them a raw request body -
+ * `users/user.routes.js` signs a user up with `const { body: user } = req`.
+ * A planted far-future stamp would make `applyConsent` treat every real
+ * STOP as superseded: acknowledged to the sender, never written, and the
+ * number left in the next broadcast. Only `updateUserSubscription` moves it.
+ * @param {Record<string, *>} merged
+ * @param {Record<string, *> | undefined} stored
+ */
+function preserveConsentWatermark(merged, stored) {
+    if (stored?.consentUpdatedAt === undefined) {
+        delete merged.consentUpdatedAt;
+
+        return;
+    }
+
+    merged.consentUpdatedAt = stored.consentUpdatedAt;
+}
 
 /**
  * An anonymous user as validated by `anonymousUserSchema`.
@@ -468,7 +497,7 @@ class UserService {
                 );
             }
 
-            await this.cacheService.setUser(documents[0]);
+            await this.#cache(documents[0]);
 
             [user] = documents;
         }
@@ -506,7 +535,7 @@ class UserService {
             if (documents.length > 1) {
                 throw new Error(`more than 1 document found for emailAddress ${emailAddress}`);
             }
-            await this.cacheService.setUser(documents[0]);
+            await this.#cache(documents[0]);
 
             [user] = documents;
         }
@@ -639,7 +668,7 @@ class UserService {
             if (documents.length > 1) {
                 throw new Error(`more than 1 document found for phoneNumber ${phoneNumber}`);
             }
-            await this.cacheService.setUser(documents[0]);
+            await this.#cache(documents[0]);
 
             [user] = documents;
         }
@@ -670,7 +699,35 @@ class UserService {
             partitionKey,
         );
 
-        return this.cacheService.setUser(updatedDocument ?? document);
+        return this.#cache(updatedDocument ?? document);
+    }
+
+    /**
+     * Refresh the cache without letting its failure undo a successful read or
+     * write.
+     *
+     * Cosmos is the source of truth, so a cache that cannot be reached should
+     * cost a repeat lookup, not the operation. It matters most to SMS consent:
+     * the inline fallback runs precisely because Redis was unavailable, and
+     * rejecting here would fail the very write that exists to survive that.
+     * Reporting a completed write as failed is worse still, because the caller
+     * then retries something that already landed.
+     *
+     * The cost is a superseded entry left behind until its hour is up. Callers
+     * about to write read with `skipCache`, and a precondition failure is
+     * retried, so that resolves itself.
+     * @param {import('../helpers/documents.js').CosmosDocument<User>} document
+     * @returns {Promise<void>}
+     */
+    async #cache(document) {
+        try {
+            await this.cacheService.setUser(document);
+        } catch (err) {
+            log.warn(
+                { err, userId: document.id },
+                'Failed to cache the user; continuing without it.',
+            );
+        }
     }
 
     /**
@@ -695,6 +752,8 @@ class UserService {
 
         if (user) {
             const mergedUser = { ...user, ...anonymousUser };
+
+            preserveConsentWatermark(mergedUser, user);
 
             return await this.#replaceAndCache(mergedUser, mergedUser.membershipType);
         }
@@ -727,13 +786,19 @@ class UserService {
             );
         }
 
+        const { consentUpdatedAt } = userDocument;
+
         Object.assign(userDocument, user);
+        preserveConsentWatermark(userDocument, { consentUpdatedAt });
 
         return this.#replaceAndCache(userDocument, /** @type {number} */ (user.membershipType));
     }
 
     /**
      * Flip a user's SMS consent on the document the caller already holds.
+     *
+     * `receivedAt` is stamped alongside it so a later write can tell whether
+     * it is applying a newer intent or replaying a superseded one.
      *
      * Deliberately skips `updateUser`'s schema re-parse and its second lookup
      * by displayName: both can reject a legacy record that
@@ -742,10 +807,12 @@ class UserService {
      * the fewer ways it can fail, the better.
      * @param {import('../helpers/documents.js').CosmosDocument<User>} userDocument
      * @param {boolean} isSubscribed
+     * @param {number} receivedAt - Epoch milliseconds the change was received.
      * @returns {Promise<void>}
      */
-    async updateUserSubscription(userDocument, isSubscribed) {
+    async updateUserSubscription(userDocument, isSubscribed, receivedAt) {
         userDocument.isSubscribed = isSubscribed;
+        userDocument.consentUpdatedAt = receivedAt;
 
         return this.#replaceAndCache(userDocument, userDocument.membershipType);
     }

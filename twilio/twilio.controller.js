@@ -11,6 +11,8 @@ import log from '../helpers/log.js';
 import DestinyError from '../destiny/destiny.error.js';
 import { extractEmoji, normalizeEmoji, stripEmoji } from '../helpers/emoji.js';
 import { withRetry, isTransientError } from '../helpers/retry.js';
+import subscriber from '../helpers/subscriber.js';
+import { enqueueConsentChange, QUEUE_NAME as CONSENT_QUEUE } from './consent.queue.js';
 import {
     EMOJI_DEFAULT_REPLY,
     EMOJI_INTENT_REPLIES,
@@ -153,6 +155,20 @@ class TwilioController {
          * @type {Map<string, ItemKeywordHandler>}
          */
         this.itemKeywords = new Map([['more', TwilioController.getMore]]);
+
+        /**
+         * Concurrency of one keeps consent writes off each other's toes in the
+         * common case, but it does not order them: a job that fails moves to
+         * the delayed set and can resume after a later one has already run.
+         * The `receivedAt` watermark in `applyConsent` is what actually
+         * decides which intent wins.
+         */
+        subscriber.listen(
+            ({ phoneNumber, isSubscribed, receivedAt }) =>
+                this.applyConsent(phoneNumber, isSubscribed, receivedAt),
+            CONSENT_QUEUE,
+            { concurrency: 1 },
+        );
     }
 
     /**
@@ -375,20 +391,62 @@ class TwilioController {
     }
 
     /**
-     * Persist consent independently of the webhook reply.
+     * Hand a consent change to the durable queue, falling back to writing it
+     * here when the queue cannot take it.
      *
-     * The reply is sent before this runs, because carriers require STOP to be
-     * answered whatever the database is doing. That also means a dropped write
-     * is invisible to the sender: they are told they are unsubscribed while
-     * `getSubscribedUsers` still returns them for the next broadcast. So a
-     * transient failure is retried rather than logged once and forgotten, and
-     * only an exhausted budget gives up - loudly, and with the number, since
-     * at that point only an operator can put it right.
+     * The reply has already gone out - carriers require STOP to be answered
+     * whatever the database is doing - so a change that only lives in this
+     * process is lost to any restart inside the retry window. Queueing it
+     * moves that state into Redis, where a restarted worker picks it up.
+     *
+     * If the queue itself is unreachable, writing inline is strictly better
+     * than dropping the change, so the fallback keeps the previous behaviour
+     * rather than depending on Redis being up.
      * @param {string} phoneNumber
      * @param {boolean} isSubscribed
+     * @param {number} receivedAt - Epoch milliseconds the message arrived.
      * @returns {Promise<void>}
      */
-    async #persistConsent(phoneNumber, isSubscribed) {
+    async #persistConsent(phoneNumber, isSubscribed, receivedAt) {
+        try {
+            await enqueueConsentChange({ phoneNumber, isSubscribed, receivedAt });
+        } catch (err) {
+            log.warn(
+                { err, phoneNumber, isSubscribed },
+                'Unable to queue SMS consent change; writing it inline instead.',
+            );
+
+            /**
+             * Nothing upstream can retry this one - the reply has gone and
+             * there is no job to hand back - so a terminal failure ends here.
+             * `applyConsent` has already logged it with the number.
+             */
+            await this.applyConsent(phoneNumber, isSubscribed, receivedAt).catch(() => {});
+        }
+    }
+
+    /**
+     * Write a consent change, retrying what is worth retrying.
+     *
+     * Shared by the queue worker and by `#persistConsent`'s fallback, so both
+     * routes to the database behave identically. A dropped write is invisible
+     * to the sender: they are told they are unsubscribed while
+     * `getSubscribedUsers` still returns them for the next broadcast.
+     *
+     * Rejects when the change could not be persisted, having logged it with
+     * the number. That rejection is what lets the worker hand the job back to
+     * BullMQ: swallowing it here would mark every job completed, so the
+     * queue's `attempts` and `removeOnFail` retention would never apply and an
+     * outage lasting longer than the in-process retries would drop the change
+     * with the job quietly removed. The inline fallback, which has no job to
+     * hand back, catches it instead.
+     * @param {string} phoneNumber
+     * @param {boolean} isSubscribed
+     * @param {number} receivedAt - Epoch milliseconds the message arrived.
+     * @returns {Promise<void>}
+     * @throws when the change could not be written
+     */
+    async applyConsent(phoneNumber, isSubscribed, receivedAt) {
         try {
             await withRetry(
                 async () => {
@@ -402,11 +460,48 @@ class TwilioController {
                      */
                     const user = await this.users.getUserByPhoneNumber(phoneNumber, true);
 
-                    if (!user || user.isSubscribed === isSubscribed) {
+                    if (!user) {
                         return;
                     }
 
-                    await this.users.updateUserSubscription(user, isSubscribed);
+                    /**
+                     * Worker concurrency orders jobs only while they are
+                     * active: a failed STOP waits out its backoff in the
+                     * delayed set while a later START runs, then wakes and
+                     * would otherwise overwrite it. The inline fallback
+                     * sidesteps the worker altogether. Comparing against the
+                     * stamp already stored settles both, and survives a
+                     * restart because it lives on the document.
+                     *
+                     * Strictly older loses; a tie is applied. Two messages
+                     * sharing a millisecond cannot be ordered by arrival at
+                     * all, so the one processed later wins rather than the
+                     * earlier one keeping the field by virtue of getting there
+                     * first. A redelivered job carries the intent it already
+                     * wrote, so reapplying it changes nothing.
+                     *
+                     * The stamp is wall clock, taken where the message
+                     * arrives. That orders anything a single process handles;
+                     * across several, it is only as good as their clocks. A
+                     * monotonic per-number sequence would not have that limit,
+                     * but assigning one means a counter read before the reply,
+                     * which is the dependency this path exists to avoid - and
+                     * it would be unavailable in exactly the outage the inline
+                     * fallback covers.
+                     */
+                    if (
+                        typeof user.consentUpdatedAt === 'number' &&
+                        user.consentUpdatedAt > receivedAt
+                    ) {
+                        return;
+                    }
+
+                    /**
+                     * Written even when `isSubscribed` is unchanged, because
+                     * the stamp has to move forward: leaving it behind would
+                     * let an older intent still in backoff win afterwards.
+                     */
+                    await this.users.updateUserSubscription(user, isSubscribed, receivedAt);
                 },
                 {
                     maxRetries: CONSENT_WRITE_RETRIES,
@@ -419,6 +514,8 @@ class TwilioController {
                 { err, phoneNumber, isSubscribed },
                 'Unable to persist SMS consent change after retrying; the sender was told it applied.',
             );
+
+            throw err;
         }
     }
 
@@ -450,10 +547,15 @@ class TwilioController {
 
         /**
          * Carrier compliance requires STOP/HELP/START to work for any inbound
-         * number. Replies must not wait for user lookup or best-effort persistence.
+         * number. Replies must not wait for user lookup or best-effort
+         * persistence. The arrival time is taken here, before any of it, so
+         * two messages from one number are ordered by when they reached us
+         * rather than by which write happened to finish first.
          */
+        const receivedAt = Temporal.Now.instant().epochMilliseconds;
+
         if (STOP_KEYWORDS.has(message)) {
-            void this.#persistConsent(body.From, false);
+            void this.#persistConsent(body.From, false, receivedAt);
             return { message: STOP_REPLY };
         }
 
@@ -462,7 +564,7 @@ class TwilioController {
         }
 
         if (START_KEYWORDS.has(message)) {
-            void this.#persistConsent(body.From, true);
+            void this.#persistConsent(body.From, true, receivedAt);
             return { message: START_REPLY };
         }
 
