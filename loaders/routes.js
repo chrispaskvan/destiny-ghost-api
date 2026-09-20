@@ -140,7 +140,6 @@ export default () => {
     routes.use('/notifications', notificationRouter);
 
     const twilioRouter = TwilioRouter({
-        authenticationController,
         authenticationService,
         destinyService: destiny2Service,
         mmsService,

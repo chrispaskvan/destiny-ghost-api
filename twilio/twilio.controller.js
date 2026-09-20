@@ -222,9 +222,15 @@ class TwilioController {
     async getXur(user, cookies) {
         try {
             const authenticatedUser = await this.authentication.authenticate(user);
-            const { bungie, membershipId, membershipType } = /** @type {UserDocument} */ (
-                authenticatedUser
-            );
+
+            if (!authenticatedUser) {
+                return {
+                    cookies,
+                    message: `Reconnect your Bungie account at ${process.env.WEBSITE}/register`,
+                };
+            }
+
+            const { bungie, membershipId, membershipType } = authenticatedUser;
             const { access_token: accessToken } =
                 /** @type {NonNullable<UserDocument['bungie']>} */ (bungie);
             const characters = await this.destiny.getProfile(membershipId, membershipType);
@@ -319,12 +325,29 @@ class TwilioController {
     }
 
     /**
+     * Persist consent independently of the webhook reply.
+     * @param {string} phoneNumber
+     * @param {boolean} isSubscribed
+     * @returns {Promise<void>}
+     */
+    async #persistConsent(phoneNumber, isSubscribed) {
+        try {
+            const user = await this.users.getUserByPhoneNumber(phoneNumber);
+
+            if (user && user.isSubscribed !== isSubscribed) {
+                await this.users.updateUser({ ...user, isSubscribed });
+            }
+        } catch (err) {
+            log.error({ err, isSubscribed }, 'Unable to persist SMS consent change.');
+        }
+    }
+
+    /**
      * @param {{ body: TwilioWebhookBody, cookies: Record<string, string | undefined> }} param0
      * @returns {Promise<TwilioReply>}
      */
     async request({ body, cookies }) {
         let responseCookies = {};
-        const user = await this.users.getUserByPhoneNumber(body.From);
         /**
          * `bodySchema` in twilio.routes.js requires `Body` for this route
          * (POST /destiny/r); it's optional on `TwilioWebhookBody` only
@@ -347,14 +370,10 @@ class TwilioController {
 
         /**
          * Carrier compliance requires STOP/HELP/START to work for any inbound
-         * number, not just ones with an existing user record - persistence is
-         * the only part conditional on `user`.
+         * number. Replies must not wait for user lookup or best-effort persistence.
          */
         if (STOP_KEYWORDS.has(message)) {
-            if (user) {
-                await this.users.updateUser({ ...user, isSubscribed: false });
-            }
-
+            void this.#persistConsent(body.From, false);
             return { message: STOP_REPLY };
         }
 
@@ -363,12 +382,11 @@ class TwilioController {
         }
 
         if (START_KEYWORDS.has(message)) {
-            if (user) {
-                await this.users.updateUser({ ...user, isSubscribed: true });
-            }
-
+            void this.#persistConsent(body.From, true);
             return { message: START_REPLY };
         }
+
+        const user = await this.users.getUserByPhoneNumber(body.From);
 
         if (user?.isSubscribed === false) {
             return {};

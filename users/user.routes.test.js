@@ -1,6 +1,7 @@
 import nock from 'nock';
 import { StatusCodes } from 'http-status-codes';
 import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from 'vitest';
+import AuthenticationService from '../authentication/authentication.service.js';
 import { startServer, stopServer } from '../server.js';
 
 vi.mock('../helpers/subscriber.js');
@@ -29,6 +30,31 @@ beforeAll(async () => {
  * authentication, so anonymous requests exercise the contract end to end.
  */
 describe('/users', () => {
+    test.each(['/users/signUp', '/director'])(
+        'POST %s rejects an anonymous From field before authentication or downstream handling',
+        async path => {
+            const authenticate = vi
+                .spyOn(AuthenticationService.prototype, 'authenticate')
+                .mockResolvedValue({ displayName: 'other-user', membershipType: 2 });
+
+            try {
+                const response = await fetch(`${baseUrl}${path}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        From: '+15005550006',
+                        query: '{ __typename }',
+                    }),
+                });
+
+                expect(response.status).toBe(StatusCodes.UNAUTHORIZED);
+                expect(authenticate).not.toHaveBeenCalled();
+            } finally {
+                authenticate.mockRestore();
+            }
+        },
+    );
+
     describe('GET /users/current', () => {
         describe('when an anonymous cross-origin client requests the current user', () => {
             test('should expose the ETag header required for If-Match updates', async () => {
