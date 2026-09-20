@@ -11,6 +11,8 @@ import log from '../helpers/log.js';
 import DestinyError from '../destiny/destiny.error.js';
 import { extractEmoji, normalizeEmoji, stripEmoji } from '../helpers/emoji.js';
 import { withRetry, isTransientError } from '../helpers/retry.js';
+import subscriber from '../helpers/subscriber.js';
+import { enqueueConsentChange, QUEUE_NAME as CONSENT_QUEUE } from './consent.queue.js';
 import {
     EMOJI_DEFAULT_REPLY,
     EMOJI_INTENT_REPLIES,
@@ -153,6 +155,18 @@ class TwilioController {
          * @type {Map<string, ItemKeywordHandler>}
          */
         this.itemKeywords = new Map([['more', TwilioController.getMore]]);
+
+        /**
+         * Concurrency of one, deliberately. BullMQ hands a single worker its
+         * jobs in the order they were queued, so a STOP followed by a START
+         * from the same number settles on the later intent instead of on
+         * whichever read happened to finish first.
+         */
+        subscriber.listen(
+            ({ phoneNumber, isSubscribed }) => this.applyConsent(phoneNumber, isSubscribed),
+            CONSENT_QUEUE,
+            { concurrency: 1 },
+        );
     }
 
     /**
@@ -375,20 +389,48 @@ class TwilioController {
     }
 
     /**
-     * Persist consent independently of the webhook reply.
+     * Hand a consent change to the durable queue, falling back to writing it
+     * here when the queue cannot take it.
      *
-     * The reply is sent before this runs, because carriers require STOP to be
-     * answered whatever the database is doing. That also means a dropped write
-     * is invisible to the sender: they are told they are unsubscribed while
-     * `getSubscribedUsers` still returns them for the next broadcast. So a
-     * transient failure is retried rather than logged once and forgotten, and
-     * only an exhausted budget gives up - loudly, and with the number, since
-     * at that point only an operator can put it right.
+     * The reply has already gone out - carriers require STOP to be answered
+     * whatever the database is doing - so a change that only lives in this
+     * process is lost to any restart inside the retry window. Queueing it
+     * moves that state into Redis, where a restarted worker picks it up.
+     *
+     * If the queue itself is unreachable, writing inline is strictly better
+     * than dropping the change, so the fallback keeps the previous behaviour
+     * rather than depending on Redis being up.
      * @param {string} phoneNumber
      * @param {boolean} isSubscribed
      * @returns {Promise<void>}
      */
     async #persistConsent(phoneNumber, isSubscribed) {
+        try {
+            await enqueueConsentChange({ phoneNumber, isSubscribed });
+        } catch (err) {
+            log.warn(
+                { err, phoneNumber, isSubscribed },
+                'Unable to queue SMS consent change; writing it inline instead.',
+            );
+
+            await this.applyConsent(phoneNumber, isSubscribed);
+        }
+    }
+
+    /**
+     * Write a consent change, retrying what is worth retrying.
+     *
+     * Shared by the queue worker and by `#persistConsent`'s fallback, so both
+     * routes to the database behave identically. A dropped write is invisible
+     * to the sender: they are told they are unsubscribed while
+     * `getSubscribedUsers` still returns them for the next broadcast. Only an
+     * exhausted budget gives up - loudly, and with the number, since at that
+     * point only an operator can put it right.
+     * @param {string} phoneNumber
+     * @param {boolean} isSubscribed
+     * @returns {Promise<void>}
+     */
+    async applyConsent(phoneNumber, isSubscribed) {
         try {
             await withRetry(
                 async () => {

@@ -24,6 +24,25 @@ import {
     START_KEYWORDS,
 } from './twilio.constants.js';
 
+const { enqueueConsentChange, listen } = vi.hoisted(() => ({
+    enqueueConsentChange: vi.fn(),
+    listen: vi.fn(),
+}));
+
+vi.mock('./consent.queue.js', () => ({
+    default: {},
+    enqueueConsentChange,
+    QUEUE_NAME: 'consent',
+}));
+
+/**
+ * The controller registers a BullMQ worker on construction; without this the
+ * spec would open a real connection for every router it builds.
+ */
+vi.mock('../helpers/subscriber.js', () => ({
+    default: { listen, close: vi.fn() },
+}));
+
 const {
     consume,
     ingressConsume,
@@ -231,6 +250,12 @@ beforeEach(() => {
     });
     userService.updateUser.mockReset().mockResolvedValue(undefined);
     userService.updateUserSubscription.mockReset().mockResolvedValue(undefined);
+    /**
+     * Default the queue to unavailable so every consent test below exercises
+     * the inline fallback - the path that has to keep working when Redis is
+     * down. The queue path has its own tests, which opt back in.
+     */
+    enqueueConsentChange.mockReset().mockRejectedValue(new Error('queue unavailable'));
     worldRepository.getItemByName.mockResolvedValue([]);
 
     twilioRouter = TwilioRouter({
@@ -373,6 +398,57 @@ describe('TwilioRouter', () => {
                 warnLog.mockRestore();
             }
         }, 20000);
+
+        it('queues a consent change rather than writing it inline', async () => {
+            enqueueConsentChange.mockResolvedValue({ id: 'job-1' });
+            const response = createResponse({ eventEmitter: EventEmitter });
+
+            await dispatch(
+                twilioRouter,
+                signedRequest({ body: signedBody({ Body: 'STOP' }) }),
+                response,
+            );
+            await new Promise(resolve => setImmediate(resolve));
+
+            expect(response.statusCode).toBe(StatusCodes.OK);
+            expect(response._getData()).toContain("You're unsubscribed");
+            expect(enqueueConsentChange).toHaveBeenCalledExactlyOnceWith({
+                phoneNumber: signedBody().From,
+                isSubscribed: false,
+            });
+            /**
+             * The worker owns the write now, so nothing should touch Cosmos on
+             * the request path.
+             */
+            expect(userService.updateUserSubscription).not.toHaveBeenCalled();
+            expect(userService.getUserByPhoneNumber).not.toHaveBeenCalled();
+        });
+
+        it('registers the consent worker one job at a time', () => {
+            /**
+             * BullMQ hands a single worker its jobs in enqueue order, so a
+             * STOP followed by a START settles on the later intent. Any higher
+             * concurrency reintroduces the race this queue exists to remove.
+             */
+            expect(listen).toHaveBeenCalledWith(expect.any(Function), 'consent', {
+                concurrency: 1,
+            });
+        });
+
+        it('applies a queued consent change when the worker runs it', async () => {
+            const [handler] = listen.mock.calls.at(-1);
+
+            await handler({ phoneNumber: signedBody().From, isSubscribed: false });
+
+            expect(userService.getUserByPhoneNumber).toHaveBeenCalledExactlyOnceWith(
+                signedBody().From,
+                true,
+            );
+            expect(userService.updateUserSubscription).toHaveBeenCalledExactlyOnceWith(
+                expect.anything(),
+                false,
+            );
+        });
 
         it('recovers a consent write rejected on a superseded etag', async () => {
             const preconditionFailed = Object.assign(new Error('precondition failed'), {
@@ -807,14 +883,16 @@ describe('TwilioRouter', () => {
                     const body = signedBody({ Body: 'STOP' });
                     const req = signedRequest({ body });
 
-                    res.on('end', () => {
+                    res.on('end', async () => {
                         try {
                             expect(res.statusCode).toEqual(StatusCodes.OK);
                             expect(res._getData()).toContain("You're unsubscribed");
                             expect(res._getData()).toContain('Destiny-Ghost: ');
-                            expect(userService.updateUserSubscription).toHaveBeenCalledWith(
-                                expect.anything(),
-                                false,
+                            await vi.waitFor(() =>
+                                expect(userService.updateUserSubscription).toHaveBeenCalledWith(
+                                    expect.anything(),
+                                    false,
+                                ),
                             );
                             done();
                         } catch (err) {
@@ -855,14 +933,16 @@ describe('TwilioRouter', () => {
                     const body = signedBody({ Body: 'START' });
                     const req = signedRequest({ body });
 
-                    res.on('end', () => {
+                    res.on('end', async () => {
                         try {
                             expect(res.statusCode).toEqual(StatusCodes.OK);
                             expect(res._getData()).toContain("You're re-subscribed");
                             expect(res._getData()).toContain('Destiny-Ghost: ');
-                            expect(userService.updateUserSubscription).toHaveBeenCalledWith(
-                                expect.anything(),
-                                true,
+                            await vi.waitFor(() =>
+                                expect(userService.updateUserSubscription).toHaveBeenCalledWith(
+                                    expect.anything(),
+                                    true,
+                                ),
                             );
                             done();
                         } catch (err) {
@@ -1037,7 +1117,7 @@ describe('TwilioRouter', () => {
                     const body = signedBody({ Body: 'STOP' });
                     const req = signedRequest({ body });
 
-                    res.on('end', () => {
+                    res.on('end', async () => {
                         try {
                             expect(res.statusCode).toEqual(StatusCodes.OK);
                             expect(res._getData()).toContain("You're unsubscribed");
@@ -1187,13 +1267,15 @@ describe('TwilioRouter', () => {
                     const body = signedBody({ Body: 'STOP 🛑' });
                     const req = signedRequest({ body });
 
-                    res.on('end', () => {
+                    res.on('end', async () => {
                         try {
                             expect(res.statusCode).toEqual(StatusCodes.OK);
                             expect(res._getData()).toContain("You're unsubscribed");
-                            expect(userService.updateUserSubscription).toHaveBeenCalledWith(
-                                expect.anything(),
-                                false,
+                            await vi.waitFor(() =>
+                                expect(userService.updateUserSubscription).toHaveBeenCalledWith(
+                                    expect.anything(),
+                                    false,
+                                ),
                             );
                             expect(consume).not.toHaveBeenCalled();
                             done();

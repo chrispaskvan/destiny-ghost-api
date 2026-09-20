@@ -22,8 +22,11 @@ class Subscriber {
      * @constructor
      * @param {(user: *, options: { claimCheckNumber: string, notificationType: string }) => Promise<void>} callback
      * @param {string} [queueName] - The queue name to subscribe to.
+     * @param {{ concurrency?: number }} [options] - Concurrency defaults to 5,
+     * which suits independent notification sends. A queue whose jobs must be
+     * applied in the order they were enqueued needs 1.
      */
-    listen(callback, queueName = 'notifications') {
+    listen(callback, queueName = 'notifications', { concurrency = 5 } = {}) {
         const worker = new Worker(
             queueName,
             async job => {
@@ -38,12 +41,13 @@ class Subscriber {
                     log.info(
                         {
                             jobId: job.id,
+                            queueName,
                             claimCheckNumber,
                             notificationType,
                             traceId,
                             ...user,
                         },
-                        'Sending message',
+                        'Processing job',
                     );
 
                     await callback(user, {
@@ -54,10 +58,11 @@ class Subscriber {
                     log.info(
                         {
                             jobId: job.id,
+                            queueName,
                             claimCheckNumber,
                             notificationType,
                         },
-                        'Message processed successfully',
+                        'Job processed successfully',
                     );
                 } catch (err) {
                     log.error(
@@ -66,14 +71,14 @@ class Subscriber {
                             error: err instanceof Error ? err.message : String(err),
                             stack: err instanceof Error ? err.stack : undefined,
                         },
-                        'Failed to process message',
+                        'Failed to process job',
                     );
                     throw err; // Re-throw to let BullMQ handle retries
                 }
             },
             {
                 connection: client,
-                concurrency: 5, // Process up to 5 jobs concurrently
+                concurrency,
             },
         );
 
