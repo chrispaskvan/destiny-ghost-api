@@ -461,6 +461,25 @@ describe('UserService', () => {
             });
         });
 
+        describe('when the cache is bypassed', () => {
+            it('should read through to Cosmos and refresh the cached document', async () => {
+                const stored = { ...structuredClone(user), _etag: 'fresh-etag' };
+
+                documentService.getDocuments.mockResolvedValueOnce([stored]);
+
+                const result = await userService.getUserByPhoneNumber(user.phoneNumber, true);
+
+                expect(cacheService.getUser).not.toHaveBeenCalled();
+                expect(documentService.getDocuments).toHaveBeenCalled();
+                expect(result._etag).toBe('fresh-etag');
+                /**
+                 * The bypassing read still writes back, so the stale entry
+                 * heals itself rather than needing an explicit invalidation.
+                 */
+                expect(cacheService.setUser).toHaveBeenCalledWith(stored);
+            });
+        });
+
         describe('when phone number is found', () => {
             it('should return an existing user', () => {
                 documentService.getDocuments.mockImplementation(() => Promise.resolve([user]));

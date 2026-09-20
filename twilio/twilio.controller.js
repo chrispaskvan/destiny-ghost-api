@@ -38,14 +38,23 @@ const CONSENT_WRITE_RETRIES = 5;
 const CONSENT_WRITE_BASE_DELAY_MS = 500;
 
 /**
+ * Cosmos rejects a write whose `IfMatch` etag has been superseded with a 412.
+ * Retrying only helps because `#persistConsent` re-reads with the cache
+ * bypassed: each attempt fetches the current document and its current etag,
+ * rather than replaying the stale one a cache hit would return.
+ */
+const PRECONDITION_FAILED = 412;
+
+/**
  * Whether a failed consent write is worth another attempt.
  *
  * `isTransientError` reads `status`, which is what the HTTP and AI SDKs set.
- * Cosmos reports throttling and outages on `code`/`statusCode` instead, and a
- * throttle is exactly the case this retry exists for - so the numeric forms
- * are checked here rather than widening what every other caller of the shared
- * helper treats as transient. A permanent fault (a schema rejection, a missing
- * record) still fails on the first attempt, because repeating it cannot help.
+ * Cosmos reports throttling, outages and precondition failures on
+ * `code`/`statusCode` instead - and those are exactly the cases this retry
+ * exists for - so the numeric forms are checked here rather than widening what
+ * every other caller of the shared helper treats as transient. A permanent
+ * fault (a schema rejection, a missing record) still fails on the first
+ * attempt, because repeating it cannot help.
  * @param {Error} err
  * @returns {boolean}
  */
@@ -62,7 +71,7 @@ function isRetryableConsentError(err) {
     const status = [statusCode, code].find(value => typeof value === 'number');
 
     if (typeof status === 'number') {
-        return status === 408 || status === 429 || status >= 500;
+        return status === PRECONDITION_FAILED || status === 408 || status === 429 || status >= 500;
     }
 
     return isTransientError(err);
@@ -383,7 +392,15 @@ class TwilioController {
         try {
             await withRetry(
                 async () => {
-                    const user = await this.users.getUserByPhoneNumber(phoneNumber);
+                    /**
+                     * Read through to Cosmos rather than the cache. A cached
+                     * document can carry an etag Cosmos has already replaced,
+                     * which fails the write's precondition - and would fail
+                     * identically on every retry for the rest of the cache's
+                     * hour. Consent changes arrive only on STOP/START, so the
+                     * extra read costs nothing worth counting.
+                     */
+                    const user = await this.users.getUserByPhoneNumber(phoneNumber, true);
 
                     if (!user || user.isSubscribed === isSubscribed) {
                         return;

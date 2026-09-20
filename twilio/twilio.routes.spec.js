@@ -373,6 +373,50 @@ describe('TwilioRouter', () => {
             }
         }, 20000);
 
+        it('recovers a consent write rejected on a superseded etag', async () => {
+            const preconditionFailed = Object.assign(new Error('precondition failed'), {
+                code: 412,
+            });
+            const errorLog = vi.spyOn(log, 'error').mockImplementation(() => {});
+            const warnLog = vi.spyOn(log, 'warn').mockImplementation(() => {});
+
+            userService.updateUserSubscription
+                .mockRejectedValueOnce(preconditionFailed)
+                .mockResolvedValueOnce(undefined);
+
+            try {
+                const response = createResponse({ eventEmitter: EventEmitter });
+
+                await dispatch(
+                    twilioRouter,
+                    signedRequest({ body: signedBody({ Body: 'STOP' }) }),
+                    response,
+                );
+
+                expect(response.statusCode).toBe(StatusCodes.OK);
+                expect(response._getData()).toContain("You're unsubscribed");
+
+                await vi.waitFor(
+                    () => expect(userService.updateUserSubscription).toHaveBeenCalledTimes(2),
+                    { timeout: 15000 },
+                );
+
+                /**
+                 * Every attempt must bypass the cache. Re-reading the cached
+                 * copy would replay the same superseded etag and fail
+                 * identically until the entry expired.
+                 */
+                expect(userService.getUserByPhoneNumber).toHaveBeenCalledTimes(2);
+                for (const call of userService.getUserByPhoneNumber.mock.calls) {
+                    expect(call).toEqual([signedBody().From, true]);
+                }
+                expect(errorLog).not.toHaveBeenCalled();
+            } finally {
+                errorLog.mockRestore();
+                warnLog.mockRestore();
+            }
+        }, 20000);
+
         it.each([
             ['STOP', false, "You're unsubscribed"],
             ['START', true, "You're re-subscribed"],
