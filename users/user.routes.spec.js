@@ -8,6 +8,7 @@ import UserRouter from './user.routes.js';
 vi.mock('../helpers/postmaster.js', () => ({
     default: class {
         confirm = vi.fn().mockResolvedValue({ messageId: 'test-email-id' });
+        register = vi.fn().mockResolvedValue({ messageId: 'test-register-id' });
     },
 }));
 vi.mock('../helpers/tokens.js', () => ({
@@ -41,7 +42,9 @@ const notificationService = {
 const userService = {
     createAnonymousUser: vi.fn(),
     getUserByDisplayName: vi.fn(),
+    getUserByEmailAddress: vi.fn(),
     getUserByMembershipId: vi.fn(),
+    getUserByPhoneNumber: vi.fn(),
     updateUser: vi.fn(),
 };
 const worldRepository = {
@@ -307,6 +310,146 @@ describe('UserRouter', () => {
                     }));
             });
         });
+    });
+
+    describe('POST /users/signUp', () => {
+        const validBody = {
+            firstName: 'Ada',
+            lastName: 'Lovelace',
+            emailAddress: 'ada@example.com',
+            phoneNumber: '+12085550123',
+        };
+
+        function signUpRequest(body) {
+            return createRequest({
+                method: 'POST',
+                url: '/signUp',
+                headers: { 'x-csrf-token': csrfToken },
+                session: { csrfToken, displayName: 'test-user', membershipType: 2 },
+                body,
+            });
+        }
+
+        beforeEach(() => {
+            userService.getUserByDisplayName.mockResolvedValue(undefined);
+            userService.getUserByEmailAddress.mockResolvedValue(undefined);
+            userService.getUserByPhoneNumber.mockResolvedValue(undefined);
+            userService.updateUser.mockResolvedValue(undefined);
+        });
+
+        it.each([
+            ['notifications', [{ enabled: true, type: 'Xur', messages: [] }]],
+            ['dateRegistered', '2020-01-01T00:00:00.000Z'],
+            ['isSubscribed', true],
+            ['roles', ['Admin']],
+        ])(
+            'should reject a sign-up carrying %s',
+            (field, value) =>
+                new Promise((done, reject) => {
+                    const req = signUpRequest({ ...validBody, [field]: value });
+
+                    res.on('end', () => {
+                        try {
+                            expect(res.statusCode).toEqual(StatusCodes.UNPROCESSABLE_ENTITY);
+                            /**
+                             * Rejected before anything leaves the process: no
+                             * document written, no verification SMS, no email. An
+                             * enabled notification on an unverified number would
+                             * otherwise put it in the next broadcast.
+                             */
+                            expect(userService.updateUser).not.toHaveBeenCalled();
+                            expect(notificationService.sendMessage).not.toHaveBeenCalled();
+                            done();
+                        } catch (err) {
+                            reject(err);
+                        }
+                    });
+
+                    userRouter(req, res, next);
+                }),
+        );
+
+        it.each(['firstName', 'lastName', 'emailAddress', 'phoneNumber'])(
+            'should reject a sign-up missing %s',
+            field =>
+                new Promise((done, reject) => {
+                    const body = { ...validBody };
+
+                    delete body[field];
+
+                    res.on('end', () => {
+                        try {
+                            expect(res.statusCode).toEqual(StatusCodes.UNPROCESSABLE_ENTITY);
+                            expect(userService.updateUser).not.toHaveBeenCalled();
+                            done();
+                        } catch (err) {
+                            reject(err);
+                        }
+                    });
+
+                    userRouter(signUpRequest(body), res, next);
+                }),
+        );
+
+        it('should answer an unusable phone number without a server error', () =>
+            new Promise((done, reject) => {
+                const req = signUpRequest({ ...validBody, phoneNumber: '+86 10 1234 5678' });
+
+                res.on('end', () => {
+                    try {
+                        /**
+                         * A barred region used to escape `#cleanPhoneNumber` as
+                         * a 500 through the global handler.
+                         */
+                        expect(res.statusCode).toEqual(StatusCodes.UNPROCESSABLE_ENTITY);
+                        expect(userService.updateUser).not.toHaveBeenCalled();
+                        done();
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
+
+                userRouter(req, res, next);
+            }));
+
+        it('should accept a sign-up carrying only the allowlisted fields', () =>
+            new Promise((done, reject) => {
+                res.on('end', () => {
+                    try {
+                        expect(res.statusCode).toEqual(StatusCodes.NO_CONTENT);
+                        expect(userService.updateUser).toHaveBeenCalled();
+                        done();
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
+
+                userRouter(signUpRequest({ ...validBody }), res, next);
+            }));
+
+        it('should not disclose that an address is already registered', () =>
+            new Promise((done, reject) => {
+                userService.getUserByEmailAddress.mockResolvedValue({
+                    dateRegistered: '2020-01-01T00:00:00.000Z',
+                });
+
+                res.on('end', () => {
+                    try {
+                        /**
+                         * Same 204 as a successful sign-up, and nothing sent -
+                         * the conflict must stay invisible to the caller.
+                         */
+                        expect(res.statusCode).toEqual(StatusCodes.NO_CONTENT);
+                        expect(userService.updateUser).not.toHaveBeenCalled();
+                        expect(notificationService.sendMessage).not.toHaveBeenCalled();
+                        done();
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
+
+                userRouter(signUpRequest({ ...validBody }), res, next);
+            }));
     });
 
     describe('PATCH /users', () => {

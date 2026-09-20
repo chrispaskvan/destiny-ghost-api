@@ -537,18 +537,33 @@ class UserController {
      * @param {Object} param0
      * @param {string} param0.displayName
      * @param {number} param0.membershipType
-     * @param {MutableUser} param0.user
+     * @param {{ firstName: string, lastName: string, phoneNumber: string, emailAddress: string }} param0.contact
      * @returns {Promise<MutableUser | undefined>}
      */
-    async signUp({ displayName, membershipType, user }) {
+    async signUp({ displayName, membershipType, contact }) {
         const bungieUser = /** @type {MutableUser | undefined} */ (
             await this.users.getUserByDisplayName(displayName, membershipType)
         );
 
-        user.phoneNumber = UserController.#cleanPhoneNumber(
-            /** @type {string} */ (user.phoneNumber),
-        );
-        Object.assign(user, bungieUser, {
+        /**
+         * Assembled from three trusted sources rather than merged onto the
+         * request body: the contact fields the route allowlisted, the stored
+         * record this session already owns, and a token pair minted here. The
+         * body never reaches the document, so a field the stored record
+         * happens to lack - `dateRegistered`, `notifications`, `isSubscribed` -
+         * cannot ride in on it.
+         *
+         * Phone normalization stays ahead of the lookup below: its E.164
+         * output is what a stored number is matched against, and it carries
+         * the barred-region check.
+         */
+        const phoneNumber = UserController.#cleanPhoneNumber(contact.phoneNumber);
+        const user = /** @type {MutableUser} */ ({
+            ...bungieUser,
+            emailAddress: contact.emailAddress,
+            firstName: contact.firstName,
+            lastName: contact.lastName,
+            phoneNumber,
             membership: {
                 tokens: {
                     blob: getBlob(),
@@ -559,8 +574,8 @@ class UserController {
         });
 
         const userPromises = [
-            this.users.getUserByEmailAddress(/** @type {string} */ (user.emailAddress)),
-            this.users.getUserByPhoneNumber(user.phoneNumber),
+            this.users.getUserByEmailAddress(contact.emailAddress),
+            this.users.getUserByPhoneNumber(phoneNumber),
         ];
         const users = await Promise.all(userPromises);
         const registeredUsers = users.filter(user1 => user1?.dateRegistered);
@@ -576,7 +591,7 @@ class UserController {
                 UserController.#buildVerificationMessage(
                     /** @type {string} */ (membership.tokens?.code),
                 ),
-                user.phoneNumber,
+                phoneNumber,
                 user.type === 'mobile' ? iconUrl : '',
             ),
             this.postmaster.register(
