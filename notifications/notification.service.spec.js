@@ -46,6 +46,63 @@ describe('Notifications', () => {
         expect(result).toBe('deferred');
     });
 
+    describe('the consent guard', () => {
+        /**
+         * The guard exists because of the wait for a limiter slot, so what
+         * matters is that it is consulted *inside* the slot and not before it.
+         * A limiter that defers forever must never reach the guard.
+         */
+        it('checks the guard only once the limiter slot is granted', async () => {
+            const guard = vi.fn().mockResolvedValue(true);
+
+            limiter.schedule.mockImplementation(() => Promise.resolve('deferred'));
+
+            await notificationService.sendMessage('Aegis of the Reef', '+11111111111', undefined, {
+                guard,
+            });
+
+            expect(guard).not.toHaveBeenCalled();
+            expect(client.messages.create).not.toHaveBeenCalled();
+        });
+
+        it('does not call Twilio when the guard withholds the send', async () => {
+            const guard = vi.fn().mockResolvedValue(false);
+
+            const result = await notificationService.sendMessage(
+                'Aegis of the Reef',
+                '+11111111111',
+                undefined,
+                { guard },
+            );
+
+            expect(limiter.schedule).toHaveBeenCalledTimes(1);
+            expect(guard).toHaveBeenCalledTimes(1);
+            expect(client.messages.create).not.toHaveBeenCalled();
+            expect(result).toBeUndefined();
+        });
+
+        it('calls Twilio when the guard permits the send', async () => {
+            const guard = vi.fn().mockResolvedValue(true);
+
+            const result = await notificationService.sendMessage(
+                'Aegis of the Reef',
+                '+11111111111',
+                undefined,
+                { guard },
+            );
+
+            expect(guard).toHaveBeenCalledTimes(1);
+            expect(client.messages.create).toHaveBeenCalledTimes(1);
+            expect(result).toBe(mockTwilioCreateMessageResponse);
+        });
+
+        it('leaves a send with no guard ungated', async () => {
+            await notificationService.sendMessage('Your code is 1234', '+11111111111');
+
+            expect(client.messages.create).toHaveBeenCalledTimes(1);
+        });
+    });
+
     it('wraps sendMessage with retry using isTransientError', async () => {
         await notificationService.sendMessage('Aegis of the Reef', '+11111111111');
 
