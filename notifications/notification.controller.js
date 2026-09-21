@@ -8,7 +8,8 @@ import NotificationError from './notification.error.js';
 import notificationTypes from './notification.types.js';
 import DestinyError from '../destiny/destiny.error.js';
 import XurUnavailableError from './xur-unavailable.error.js';
-import ClaimCheck from '../helpers/claim-check.js';
+import ClaimCheck, { SKIPPED } from '../helpers/claim-check.js';
+import mayDeliver from '../helpers/consent.js';
 import log from '../helpers/log.js';
 
 /**
@@ -56,6 +57,24 @@ class NotificationController {
      */
     async #send(user, { claimCheckNumber, notificationType }) {
         const { membershipId, membershipType, phoneNumber } = user;
+
+        /**
+         * `create` filtered consent when this job was queued, but that was
+         * however long ago the queue is behind - long enough for a STOP to
+         * have landed in between. Checked before the branch below rather than
+         * inside it so the types that are not implemented yet (#722) inherit
+         * the gate, and before `authenticate` so an opted-out user costs
+         * neither a token refresh nor a call to Bungie on their behalf.
+         *
+         * Returns rather than throws: this runs under BullMQ, and a throw
+         * would hand the job back to be retried against someone who has
+         * already asked not to hear from us.
+         */
+        if (!(await mayDeliver({ users: this.users, phoneNumber, notificationType }))) {
+            await ClaimCheck.updatePhoneNumber(claimCheckNumber, phoneNumber, SKIPPED);
+
+            return;
+        }
 
         if (notificationType === notificationTypes.Xur) {
             try {

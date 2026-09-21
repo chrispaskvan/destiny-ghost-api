@@ -5,7 +5,7 @@ import subscriber from '../helpers/subscriber.js';
 import NotificationController from './notification.controller.js';
 import NotificationError from './notification.error.js';
 import notificationTypes from './notification.types.js';
-import ClaimCheck from '../helpers/claim-check.js';
+import ClaimCheck, { SKIPPED } from '../helpers/claim-check.js';
 import log from '../helpers/log.js';
 
 vi.mock('bullmq', () => ({
@@ -112,6 +112,9 @@ beforeEach(() => {
 
     // Default: errors are not transient
     isTransientError.mockReturnValue(false);
+    // Default: consent still permits delivery. `#send` rechecks it before
+    // every send, so without this each test would exercise suppression.
+    userService.getUserByPhoneNumber.mockResolvedValue(mockUser);
     notificationController = new NotificationController({
         authenticationService,
         destinyService,
@@ -255,6 +258,120 @@ describe('NotificationController', () => {
         beforeEach(() => {
             // Extract the bound send method from the subscriber.listen call
             sendMethod = subscriber.listen.mock.calls[0][0];
+        });
+
+        describe('when consent changed between enqueue and execution', () => {
+            it('should not send to a user who opted out after the job was queued', async () => {
+                userService.getUserByPhoneNumber.mockResolvedValue({
+                    ...mockUser,
+                    isSubscribed: false,
+                });
+
+                await sendMethod(mockUser, {
+                    claimCheckNumber,
+                    notificationType: notificationTypes.Xur,
+                });
+
+                expect(notificationService.sendMessage).not.toHaveBeenCalled();
+                expect(ClaimCheck.updatePhoneNumber).toHaveBeenCalledWith(
+                    claimCheckNumber,
+                    phoneNumber,
+                    SKIPPED,
+                );
+            });
+
+            it('should not authenticate or call Bungie for a suppressed send', async () => {
+                userService.getUserByPhoneNumber.mockResolvedValue({
+                    ...mockUser,
+                    isSubscribed: false,
+                });
+
+                await sendMethod(mockUser, {
+                    claimCheckNumber,
+                    notificationType: notificationTypes.Xur,
+                });
+
+                expect(authenticationService.authenticate).not.toHaveBeenCalled();
+                expect(destinyService.getProfile).not.toHaveBeenCalled();
+            });
+
+            it('should read consent through to Cosmos rather than the cache', async () => {
+                authenticationService.authenticate.mockResolvedValue({
+                    bungie: { access_token: accessToken },
+                });
+                destinyService.getProfile.mockResolvedValue([]);
+
+                await sendMethod(mockUser, {
+                    claimCheckNumber,
+                    notificationType: notificationTypes.Xur,
+                });
+
+                expect(userService.getUserByPhoneNumber).toHaveBeenCalledWith(phoneNumber, true);
+            });
+
+            it('should suppress when the user disabled that vendor after queueing', async () => {
+                userService.getUserByPhoneNumber.mockResolvedValue({
+                    ...mockUser,
+                    notifications: [{ type: notificationTypes.Xur, enabled: false }],
+                });
+
+                await sendMethod(mockUser, {
+                    claimCheckNumber,
+                    notificationType: notificationTypes.Xur,
+                });
+
+                expect(notificationService.sendMessage).not.toHaveBeenCalled();
+                expect(ClaimCheck.updatePhoneNumber).toHaveBeenCalledWith(
+                    claimCheckNumber,
+                    phoneNumber,
+                    SKIPPED,
+                );
+            });
+
+            it('should still send when a different vendor is the disabled one', async () => {
+                const weaponCategoryHash = 1;
+
+                userService.getUserByPhoneNumber.mockResolvedValue({
+                    ...mockUser,
+                    notifications: [
+                        { type: notificationTypes.IronBanner, enabled: false },
+                        { type: notificationTypes.Xur, enabled: true },
+                    ],
+                });
+                authenticationService.authenticate.mockResolvedValue({
+                    bungie: { access_token: accessToken },
+                });
+                destinyService.getProfile.mockResolvedValue([mockCharacter]);
+                destinyService.getXur.mockResolvedValue([123456]);
+                worldRepository.getWeaponCategory.mockResolvedValue(weaponCategoryHash);
+                worldRepository.getItemByHash.mockResolvedValue(mockItem);
+                notificationService.sendMessage.mockResolvedValue({ status: 'sent' });
+
+                await sendMethod(mockUser, {
+                    claimCheckNumber,
+                    notificationType: notificationTypes.Xur,
+                });
+
+                expect(notificationService.sendMessage).toHaveBeenCalled();
+            });
+
+            it('should suppress rather than throw when consent storage is unavailable', async () => {
+                userService.getUserByPhoneNumber.mockRejectedValue(new Error('Cosmos is down'));
+
+                await expect(
+                    sendMethod(mockUser, {
+                        claimCheckNumber,
+                        notificationType: notificationTypes.Xur,
+                    }),
+                ).resolves.toBeUndefined();
+
+                expect(notificationService.sendMessage).not.toHaveBeenCalled();
+                expect(ClaimCheck.updatePhoneNumber).toHaveBeenCalledWith(
+                    claimCheckNumber,
+                    phoneNumber,
+                    SKIPPED,
+                );
+            });
         });
 
         describe('when notification type is Xur', () => {

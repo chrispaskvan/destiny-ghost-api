@@ -15,6 +15,7 @@ import { pipeline } from 'node:stream/promises';
 import pLimit from 'p-limit';
 
 import configuration from '../helpers/config.js';
+import mayDeliver from '../helpers/consent.js';
 import log from '../helpers/log.js';
 import { isTransientError, withRetry } from '../helpers/retry.js';
 import {
@@ -75,11 +76,13 @@ class MmsService {
      * @param {import('../helpers/ai.js').AI} options.aiService
      * @param {Destiny2Service} options.destiny2Service
      * @param {import('../notifications/notification.service.js').default} options.notificationService
+     * @param {import('../users/user.service.js').default} options.userService
      */
     constructor(options) {
         this.ai = options.aiService;
         this.destiny2 = options.destiny2Service;
         this.notifications = options.notificationService;
+        this.users = options.userService;
     }
 
     /**
@@ -303,6 +306,18 @@ class MmsService {
                 const roster = players.length ? await this.#getRoster(players) : [];
 
                 /**
+                 * `request()` checked consent before handing the image over,
+                 * but a download and an AI call ago - the widest gap between
+                 * an inbound message and its reply anywhere in the app, and
+                 * wide enough for a STOP to have arrived inside it. No claim
+                 * check here: this reply belongs to no notification run, so
+                 * the suppression is recorded in the log alone.
+                 */
+                if (!(await mayDeliver({ users: this.users, phoneNumber: from }))) {
+                    return;
+                }
+
+                /**
                  * The leading break pair puts the roster on its own lines: the
                  * brand prefix is added centrally when the message is sent, and
                  * a column reads badly when the first row starts after it.
@@ -316,7 +331,14 @@ class MmsService {
             log.error({ err, from }, 'Failed to process MMS media');
 
             try {
-                await this.notifications.sendMessage(MEDIA_ERROR_REPLY, from);
+                /**
+                 * Gated too. An apology is still an outbound message to a
+                 * number that may have opted out while the work was running,
+                 * and it carries no information the sender asked for.
+                 */
+                if (await mayDeliver({ users: this.users, phoneNumber: from })) {
+                    await this.notifications.sendMessage(MEDIA_ERROR_REPLY, from);
+                }
             } catch (sendErr) {
                 log.error({ err: sendErr, from }, 'Failed to send the media failure reply');
             }

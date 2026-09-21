@@ -4,6 +4,14 @@ import cache from './cache.js';
 
 const claimCheckExpiration = 86400; // 1 day in seconds
 
+/**
+ * The outcome recorded when a send was abandoned because consent no longer
+ * permitted it. Every other status this hash holds comes from Twilio, so
+ * without one of our own a suppressed send is indistinguishable from one that
+ * was never attempted.
+ */
+const SKIPPED = 'skipped';
+
 class ClaimCheck {
     /**
      * Claim Check Number
@@ -42,4 +50,4 @@ class ClaimCheck {
     }
 }
 
-export { ClaimCheck as default, claimCheckExpiration };
+export { ClaimCheck as default, claimCheckExpiration, SKIPPED };

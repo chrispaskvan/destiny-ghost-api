@@ -87,7 +87,12 @@ export default () => {
     const notificationService = new NotificationService({
         client: messageClient,
     });
-    const mmsService = new MmsService({ aiService: ai, destiny2Service, notificationService });
+    const mmsService = new MmsService({
+        aiService: ai,
+        destiny2Service,
+        notificationService,
+        userService,
+    });
 
     const twilioRouter = TwilioRouter({
         authenticationService,

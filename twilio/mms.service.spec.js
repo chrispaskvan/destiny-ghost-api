@@ -26,6 +26,7 @@ class FakeDestiny2Service {
 
 const destiny2Service = new FakeDestiny2Service();
 const notificationService = { sendMessage: vi.fn() };
+const userService = { getUserByPhoneNumber: vi.fn() };
 const playerMatching = (bungieGlobalDisplayName, overrides = {}) => ({
     bungieGlobalDisplayName,
     bungieGlobalDisplayNameCode: 1234,
@@ -48,7 +49,8 @@ beforeEach(() => {
     FakeDestiny2Service.findPlayers.mockImplementation(async name => [playerMatching(name)]);
     destiny2Service.getPlayerStatistics.mockResolvedValue({ pvp: { kdr: '1.42' } });
     notificationService.sendMessage.mockResolvedValue(undefined);
-    mmsService = new MmsService({ aiService, destiny2Service, notificationService });
+    userService.getUserByPhoneNumber.mockResolvedValue({ phoneNumber: from, isSubscribed: true });
+    mmsService = new MmsService({ aiService, destiny2Service, notificationService, userService });
 });
 
 afterEach(() => {
@@ -107,6 +109,71 @@ describe('MmsService', () => {
                     '\n\n1.42 Player1\n0.87 Player2',
                     from,
                 );
+            });
+        });
+
+        describe('when consent is withdrawn while the image is being processed', () => {
+            beforeEach(() => {
+                vi.stubGlobal(
+                    'fetch',
+                    vi.fn().mockResolvedValue(new Response('image-bytes', { status: 200 })),
+                );
+            });
+
+            it('should not reply with the roster', async () => {
+                userService.getUserByPhoneNumber.mockResolvedValue({
+                    phoneNumber: from,
+                    isSubscribed: false,
+                });
+
+                await mmsService.process({ from, media: [{ contentType: 'image/jpeg', url }] });
+
+                expect(aiService.getPlayersFromFile).toHaveBeenCalled();
+                expect(notificationService.sendMessage).not.toHaveBeenCalled();
+            });
+
+            it('should read consent through to Cosmos rather than the cache', async () => {
+                await mmsService.process({ from, media: [{ contentType: 'image/jpeg', url }] });
+
+                expect(userService.getUserByPhoneNumber).toHaveBeenCalledWith(from, true);
+            });
+
+            it('should not send the failure reply either', async () => {
+                userService.getUserByPhoneNumber.mockResolvedValue({
+                    phoneNumber: from,
+                    isSubscribed: false,
+                });
+                aiService.getPlayersFromFile.mockRejectedValue(new Error('analysis failed'));
+
+                await mmsService.process({ from, media: [{ contentType: 'image/jpeg', url }] });
+
+                expect(notificationService.sendMessage).not.toHaveBeenCalled();
+            });
+
+            it('should stop before processing any remaining attachments', async () => {
+                userService.getUserByPhoneNumber.mockResolvedValue({
+                    phoneNumber: from,
+                    isSubscribed: false,
+                });
+
+                await mmsService.process({
+                    from,
+                    media: [
+                        { contentType: 'image/jpeg', url },
+                        { contentType: 'image/jpeg', url },
+                    ],
+                });
+
+                expect(aiService.getPlayersFromFile).toHaveBeenCalledTimes(1);
+                expect(notificationService.sendMessage).not.toHaveBeenCalled();
+            });
+
+            it('should suppress when consent storage is unavailable', async () => {
+                userService.getUserByPhoneNumber.mockRejectedValue(new Error('Cosmos is down'));
+
+                await mmsService.process({ from, media: [{ contentType: 'image/jpeg', url }] });
+
+                expect(notificationService.sendMessage).not.toHaveBeenCalled();
             });
         });
 
