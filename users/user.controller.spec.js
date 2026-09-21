@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Chance from 'chance';
 import getEpoch from '../helpers/get-epoch.js';
 import UserController from './user.controller.js';
+import InvalidPhoneNumberError from './invalid-phone-number.error.js';
 
 vi.mock('../helpers/postmaster.js', () => ({
     default: class {
@@ -560,7 +561,10 @@ describe('UserController', () => {
                     const user = await userController.signUp({
                         displayName,
                         membershipType,
-                        user: {
+                        contact: {
+                            firstName: 'Ada',
+                            lastName: 'Lovelace',
+                            emailAddress: 'ada@example.com',
                             phoneNumber,
                         },
                     });
@@ -572,6 +576,57 @@ describe('UserController', () => {
                         `+1${phoneNumber}`,
                         '',
                     );
+
+                    const [persisted] = userService.updateUser.mock.calls[0];
+
+                    /**
+                     * Registration state belongs to `join`, which runs only
+                     * once the emailed blob and the SMS code check out. Sign-up
+                     * assembles the document itself, so neither field can
+                     * arrive on it.
+                     */
+                    expect(persisted.dateRegistered).toBeUndefined();
+                    expect(persisted.notifications).toBeUndefined();
+                    expect(persisted.isSubscribed).toBeUndefined();
+                    expect(persisted.roles).toBeUndefined();
+                    expect(persisted.phoneNumber).toBe(`+1${phoneNumber}`);
+                    expect(persisted.membership.tokens).toEqual(
+                        expect.objectContaining({
+                            blob: expect.any(String),
+                            code: expect.any(String),
+                        }),
+                    );
+                });
+
+                it('should ignore server-owned fields a caller slips past the route', async () => {
+                    userService.getUserByDisplayName.mockImplementation(() => Promise.resolve());
+                    userService.getUserByEmailAddress.mockImplementation(() => Promise.resolve());
+                    userService.getUserByPhoneNumber.mockImplementation(() => Promise.resolve());
+
+                    /**
+                     * The route rejects these outright; this pins the second
+                     * line of defence, so a future caller reaching the
+                     * controller directly cannot reintroduce the hole.
+                     */
+                    await userController.signUp({
+                        displayName,
+                        membershipType,
+                        contact: {
+                            firstName: 'Ada',
+                            lastName: 'Lovelace',
+                            emailAddress: 'ada@example.com',
+                            phoneNumber,
+                            dateRegistered: '2020-01-01T00:00:00.000Z',
+                            notifications: [{ enabled: true, type: 'Xur', messages: [] }],
+                            roles: ['Admin'],
+                        },
+                    });
+
+                    const [persisted] = userService.updateUser.mock.calls[0];
+
+                    expect(persisted.dateRegistered).toBeUndefined();
+                    expect(persisted.notifications).toBeUndefined();
+                    expect(persisted.roles).toBeUndefined();
                 });
             });
             describe('when phone number is invalid', () => {
@@ -580,15 +635,23 @@ describe('UserController', () => {
                     userService.getUserByEmailAddress.mockImplementation(() => Promise.resolve());
                     userService.getUserByPhoneNumber.mockImplementation(() => Promise.resolve());
 
+                    /**
+                     * The route decides the status code from the type, so a
+                     * bare `Error` here would send an unusable number back as
+                     * a 500.
+                     */
                     await expect(
                         userController.signUp({
                             displayName,
                             membershipType,
-                            user: {
+                            contact: {
+                                firstName: 'Ada',
+                                lastName: 'Lovelace',
+                                emailAddress: 'ada@example.com',
                                 phoneNumber: '+86 10 1234 5678',
                             },
                         }),
-                    ).rejects.toThrow(Error);
+                    ).rejects.toBeInstanceOf(InvalidPhoneNumberError);
                 });
             });
         });
@@ -610,7 +673,12 @@ describe('UserController', () => {
                 const user = await userController.signUp({
                     displayName,
                     membershipType,
-                    user: { phoneNumber, ...mockUser },
+                    contact: {
+                        firstName: 'Ada',
+                        lastName: 'Lovelace',
+                        emailAddress: 'ada@example.com',
+                        phoneNumber,
+                    },
                 });
 
                 expect(user).toBeUndefined();

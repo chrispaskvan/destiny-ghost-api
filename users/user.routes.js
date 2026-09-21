@@ -1,8 +1,10 @@
 // @ts-check
 import { StatusCodes } from 'http-status-codes';
 import { Router } from 'express';
+import { z } from 'zod';
 import AuthenticationMiddleWare from '../authentication/authentication.middleware.js';
 import UserController from './user.controller.js';
+import InvalidPhoneNumberError from './invalid-phone-number.error.js';
 import csrfProtection, { generateToken } from '../helpers/csrf.middleware.js';
 import log from '../helpers/log.js';
 
@@ -146,6 +148,28 @@ const routes = ({
         worldRepository,
     });
     const userRouter = Router();
+
+    /**
+     * The only four fields a client may supply when signing up.
+     *
+     * `.strict()` rather than the default strip: every other field on a user
+     * document is the server's to set, and several are load-bearing. A
+     * `notifications` array with `enabled: true` would put the supplied phone
+     * number into the next broadcast without either proof of ownership being
+     * checked, and `dateRegistered` - the sole marker separating a pending
+     * account from a registered one - would make the conflict check treat the
+     * record as claimed, silently blocking whoever actually owns the address.
+     * `join()` is where both are assigned, once the emailed blob and the SMS
+     * code have been validated.
+     */
+    const signUpSchema = z
+        .object({
+            firstName: z.string().min(1),
+            lastName: z.string().min(1),
+            phoneNumber: z.string().min(1),
+            emailAddress: z.string().email(),
+        })
+        .strict();
 
     /**
      * @openapi
@@ -535,6 +559,12 @@ const routes = ({
      *          application/json:
      *            schema:
      *              type: object
+     *              additionalProperties: false
+     *              required:
+     *                - firstName
+     *                - lastName
+     *                - phoneNumber
+     *                - emailAddress
      *              properties:
      *                firstName:
      *                  type: string
@@ -546,29 +576,71 @@ const routes = ({
      *                emailAddress:
      *                  type: string
      *                  format: email
-     *      description: Sign up for the service with a first name, last name, phone number, and email address.
+     *      description: >
+     *        Sign up for the service with a first name, last name, phone number, and email
+     *        address. These are the only accepted fields; every other property of an account
+     *        is server-owned and assigned during verification, so a request carrying one is
+     *        rejected rather than ignored.
      *      responses:
      *        204:
-     *          description: No Content
+     *          description: >
+     *            No Content. Returned whether or not the address was already registered, so a
+     *            conflict is not disclosed.
      *        403:
      *          description: Forbidden. Missing or invalid CSRF token.
+     *        422:
+     *          description: >
+     *            Unprocessable Entity. A field is missing, malformed, unexpected, or the phone
+     *            number cannot be used.
      */
     userRouter.route('/signUp').post(
         (req, res, next) => middleware.authenticateUser(req, res, next),
         csrfProtection,
         async (req, res) => {
-            const { body: user } = req;
             const { displayName, membershipType } = /** @type {AuthenticatedSessionData} */ (
                 /** @type {unknown} */ (req.session)
             );
 
-            if (!(user.firstName && user.lastName && user.phoneNumber && user.emailAddress)) {
-                return res.status(StatusCodes.UNPROCESSABLE_ENTITY).end();
+            /**
+             * Everything else about the account - who it belongs to, whether
+             * it is registered, what it is subscribed to - is the server's to
+             * decide. Rejecting rather than stripping unexpected fields means
+             * an attempt to set one is visible instead of silently ignored.
+             */
+            let contact;
+
+            try {
+                contact = signUpSchema.parse(req.body);
+            } catch (err) {
+                const message =
+                    err instanceof z.ZodError ? err.issues[0].message : 'Unprocessable Entity';
+
+                return res.status(StatusCodes.UNPROCESSABLE_ENTITY).json({ error: message });
             }
 
-            const newUser = await userController.signUp({ displayName, membershipType, user });
+            let newUser;
 
-            log.info(user, newUser ? 'User signed up' : 'User sign up failed due to conflicts');
+            try {
+                newUser = await userController.signUp({ displayName, membershipType, contact });
+            } catch (err) {
+                /**
+                 * `#cleanPhoneNumber` throws on an unparseable number or a
+                 * barred region. It ran before any send or write, so this is a
+                 * rejected request rather than a failure.
+                 */
+                if (err instanceof InvalidPhoneNumberError) {
+                    return res
+                        .status(StatusCodes.UNPROCESSABLE_ENTITY)
+                        .json({ error: err.message });
+                }
+
+                throw err;
+            }
+
+            log.info(
+                { displayName, membershipType },
+                newUser ? 'User signed up' : 'User sign up failed due to conflicts',
+            );
 
             return res.status(StatusCodes.NO_CONTENT).end();
         },

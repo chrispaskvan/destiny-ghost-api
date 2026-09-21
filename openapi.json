@@ -799,6 +799,13 @@
             "application/json": {
               "schema": {
                 "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "firstName",
+                  "lastName",
+                  "phoneNumber",
+                  "emailAddress"
+                ],
                 "properties": {
                   "firstName": {
                     "type": "string"
@@ -819,13 +826,16 @@
             }
           }
         },
-        "description": "Sign up for the service with a first name, last name, phone number, and email address.",
+        "description": "Sign up for the service with a first name, last name, phone number, and email address. These are the only accepted fields; every other property of an account is server-owned and assigned during verification, so a request carrying one is rejected rather than ignored.\n",
         "responses": {
           "204": {
-            "description": "No Content"
+            "description": "No Content. Returned whether or not the address was already registered, so a conflict is not disclosed.\n"
           },
           "403": {
             "description": "Forbidden. Missing or invalid CSRF token."
+          },
+          "422": {
+            "description": "Unprocessable Entity. A field is missing, malformed, unexpected, or the phone number cannot be used.\n"
           }
         }
       }
