@@ -45,10 +45,14 @@ class Notifications {
      * @param {string} body - Message body, prefixed and truncated before sending.
      * @param {string} to - Recipient phone number in E.164 format.
      * @param {string} [mediaUrl] - Attachment URL; makes this an MMS.
-     * @param {{ claimCheckNumber?: string, notificationType?: string }} [options] - Correlates the delivery callback.
-     * @returns {Promise<SentMessage>}
+     * @param {{ claimCheckNumber?: string, notificationType?: string, guard?: () => Promise<boolean> }} [options]
+     * `claimCheckNumber` and `notificationType` correlate the delivery
+     * callback. `guard` is checked inside the rate limiter's slot, immediately
+     * before the provider call - see below.
+     * @returns {Promise<SentMessage | undefined>} The sent message, or
+     * `undefined` when `guard` withheld it.
      */
-    async sendMessage(body, to, mediaUrl, { claimCheckNumber, notificationType } = {}) {
+    async sendMessage(body, to, mediaUrl, { claimCheckNumber, notificationType, guard } = {}) {
         const query =
             claimCheckNumber && notificationType
                 ? `?claim-check-number=${claimCheckNumber}&notification-type=${notificationType}`
@@ -71,7 +75,24 @@ class Notifications {
         }
 
         return await withRetry(
-            () => this.limiter.schedule(() => this.client.messages.create(message)),
+            () =>
+                this.limiter.schedule(async () => {
+                    /**
+                     * Checked here rather than by the caller, because the wait
+                     * for this slot is the gap that matters. The limiter is
+                     * cluster-wide at one message per 250ms, so on a broadcast
+                     * a recipient can sit in this queue for minutes after the
+                     * caller decided to send - long enough for a STOP to
+                     * arrive. Callers with nothing to withhold on - the welcome
+                     * message, a verification code, a keyword acknowledgement -
+                     * pass no guard and are never gated.
+                     */
+                    if (guard && !(await guard())) {
+                        return undefined;
+                    }
+
+                    return await this.client.messages.create(message);
+                }),
             {
                 shouldRetry: isTransientError,
                 maxRetries: 0,

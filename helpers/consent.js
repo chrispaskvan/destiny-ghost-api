@@ -48,12 +48,13 @@ const mayDeliver = async ({ users, phoneNumber, notificationType }) => {
 
     try {
         /**
-         * Read through to Cosmos rather than the cache, for the same reason
-         * `applyConsent` does: a cached document can be an hour old, which is
-         * longer than the window this check exists to close - it would happily
-         * report the consent the STOP just replaced.
+         * Read from Cosmos rather than the cache: a cached document can be an
+         * hour old, which is longer than the window this check exists to close
+         * - it would happily report the consent the STOP just replaced. The
+         * projection keeps that read to the two fields decided on below, since
+         * a broadcast runs it once per message.
          */
-        user = await users.getUserByPhoneNumber(phoneNumber, true);
+        user = await users.getConsentByPhoneNumber(phoneNumber);
     } catch (err) {
         log.warn(
             { err, phoneNumber, notificationType },

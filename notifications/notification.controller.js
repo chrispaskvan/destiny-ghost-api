@@ -79,15 +79,26 @@ class NotificationController {
     }
 
     /**
-     * Whether the send may still go ahead, recording the suppression when it
-     * may not.
+     * Whether consent still permits this send. Handed to `sendMessage` as its
+     * guard, so it runs inside the rate limiter's slot.
+     * @param {string} phoneNumber
+     * @param {string} notificationType
+     * @returns {Promise<boolean>}
+     */
+    async #stillConsents(phoneNumber, notificationType) {
+        return await mayDeliver({ users: this.users, phoneNumber, notificationType });
+    }
+
+    /**
+     * The early gate: whether this job is worth starting at all, recording the
+     * suppression when it is not.
      * @param {string} phoneNumber
      * @param {string} notificationType
      * @param {string} claimCheckNumber
      * @returns {Promise<boolean>}
      */
-    async #mayStillSend(phoneNumber, notificationType, claimCheckNumber) {
-        if (await mayDeliver({ users: this.users, phoneNumber, notificationType })) {
+    async #worthStarting(phoneNumber, notificationType, claimCheckNumber) {
+        if (await this.#stillConsents(phoneNumber, notificationType)) {
             return true;
         }
 
@@ -122,7 +133,7 @@ class NotificationController {
          * would hand the job back to be retried against someone who has
          * already asked not to hear from us.
          */
-        if (!(await this.#mayStillSend(phoneNumber, notificationType, claimCheckNumber))) {
+        if (!(await this.#worthStarting(phoneNumber, notificationType, claimCheckNumber))) {
             return;
         }
 
@@ -184,60 +195,54 @@ class NotificationController {
                         .map(({ displayProperties: { name } = {} }) => name)
                         .join('\n');
                     /**
-                     * The authoritative check. Everything between here and the
-                     * gate at the top of this method is network - a token
-                     * refresh, a profile fetch, Xur's inventory, the manifest
-                     * reads - and a STOP can land in any of it.
+                     * The authoritative check, handed to `sendMessage` rather
+                     * than run here. Everything between the gate at the top of
+                     * this method and the provider call is time a STOP can
+                     * land in: a token refresh, a profile fetch, Xur's
+                     * inventory, the manifest reads - and then the wait for a
+                     * rate limiter slot, which on a broadcast is the longest
+                     * part of all. Running it inside that slot is the only
+                     * placement with nothing left after it.
                      */
-                    if (
-                        !(await this.#mayStillSend(phoneNumber, notificationType, claimCheckNumber))
-                    ) {
-                        return;
-                    }
-
-                    const { status } = await this.notifications.sendMessage(
+                    const sent = await this.notifications.sendMessage(
                         message,
                         phoneNumber,
                         undefined,
                         {
                             claimCheckNumber,
                             notificationType,
+                            guard: () => this.#stillConsents(phoneNumber, notificationType),
                         },
                     );
 
                     await NotificationController.#recordOutcome(
                         claimCheckNumber,
                         phoneNumber,
-                        status,
+                        sent ? sent.status : SKIPPED,
                     );
                 }
             } catch (err) {
                 if (err instanceof XurUnavailableError) {
                     /**
-                     * Reached only after the Bungie calls above have already
-                     * run, so it needs the same fresh read as the main path.
+                     * Reached only after the Bungie calls above have run, so
+                     * it needs the same guard as the main path.
                      */
-                    if (
-                        !(await this.#mayStillSend(phoneNumber, notificationType, claimCheckNumber))
-                    ) {
-                        return;
-                    }
-
-                    const { status } = await this.notifications.sendMessage(
+                    const sent = await this.notifications.sendMessage(
                         "Xur has closed shop. He'll return Friday.",
                         phoneNumber,
                         undefined,
                         {
                             claimCheckNumber,
                             notificationType,
+                            guard: () => this.#stillConsents(phoneNumber, notificationType),
                         },
                     );
 
-                    log.info(JSON.stringify(status));
+                    log.info(JSON.stringify(sent?.status));
                     await NotificationController.#recordOutcome(
                         claimCheckNumber,
                         phoneNumber,
-                        status,
+                        sent ? sent.status : SKIPPED,
                     );
 
                     return;

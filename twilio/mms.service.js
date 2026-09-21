@@ -307,25 +307,31 @@ class MmsService {
 
                 /**
                  * `request()` checked consent before handing the image over,
-                 * but a download and an AI call ago - the widest gap between
-                 * an inbound message and its reply anywhere in the app, and
-                 * wide enough for a STOP to have arrived inside it. No claim
-                 * check here: this reply belongs to no notification run, so
-                 * the suppression is recorded in the log alone.
-                 */
-                if (!(await mayDeliver({ users: this.users, phoneNumber: from }))) {
-                    return;
-                }
-
-                /**
+                 * but a download, an AI call and a wait for a rate limiter slot
+                 * ago - the widest gap between an inbound message and its reply
+                 * anywhere in the app, and wide enough for a STOP to have
+                 * arrived inside it. Passed as a guard rather than checked
+                 * here so it runs inside that slot, with nothing left after it.
+                 *
+                 * No claim check: this reply belongs to no notification run, so
+                 * a withheld send is recorded in the log alone.
+                 *
                  * The leading break pair puts the roster on its own lines: the
                  * brand prefix is added centrally when the message is sent, and
                  * a column reads badly when the first row starts after it.
                  */
-                await this.notifications.sendMessage(
+                const sent = await this.notifications.sendMessage(
                     roster.length ? `\n\n${formatRoster(roster)}` : MEDIA_NO_PLAYERS_REPLY,
                     from,
+                    undefined,
+                    { guard: () => mayDeliver({ users: this.users, phoneNumber: from }) },
                 );
+
+                if (!sent) {
+                    log.info({ from }, 'Suppressing the MMS reply: consent was withdrawn.');
+
+                    return;
+                }
             }
         } catch (err) {
             log.error({ err, from }, 'Failed to process MMS media');
@@ -336,9 +342,9 @@ class MmsService {
                  * number that may have opted out while the work was running,
                  * and it carries no information the sender asked for.
                  */
-                if (await mayDeliver({ users: this.users, phoneNumber: from })) {
-                    await this.notifications.sendMessage(MEDIA_ERROR_REPLY, from);
-                }
+                await this.notifications.sendMessage(MEDIA_ERROR_REPLY, from, undefined, {
+                    guard: () => mayDeliver({ users: this.users, phoneNumber: from }),
+                });
             } catch (sendErr) {
                 log.error({ err: sendErr, from }, 'Failed to send the media failure reply');
             }

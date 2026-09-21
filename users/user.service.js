@@ -168,6 +168,14 @@ function preserveConsentWatermark(merged, stored) {
  */
 
 /**
+ * The consent projection returned by `getConsentByPhoneNumber`: the two
+ * fields the delivery gate decides on, and nothing else.
+ * @typedef {Object} UserConsent
+ * @property {boolean} [isSubscribed]
+ * @property {{ enabled: boolean, type: string }[]} [notifications]
+ */
+
+/**
  * Minimal Twilio client interface for carrier lookup.
  * @typedef {Object} TwilioClient
  * @property {(phoneNumber: string) => { get: (options: { countryCode: string, type: string }, callback: (err: unknown, number: { carrier: CarrierInfo }) => void) => void }} phoneNumbers
@@ -624,6 +632,46 @@ class UserService {
         }
 
         return user;
+    }
+
+    /**
+     * Read only the consent fields for a number, always from Cosmos.
+     *
+     * `getUserByPhoneNumber` would answer the same question, but it selects
+     * the whole document - Bungie tokens, message history, the lot - to decide
+     * on two fields, and the delivery gate calls it on every message in a
+     * broadcast. Projecting cuts what crosses the wire without changing the
+     * fan-out: `phoneNumber` is not the partition key (`membershipType` is),
+     * so this stays a cross-partition query either way.
+     *
+     * Never cached, in either direction. The gate's whole purpose is to see a
+     * STOP the cache could still be an hour behind on, and a two-field
+     * projection must not be written back over the full cached document.
+     * @param {string} phoneNumber
+     * @returns {Promise<UserConsent | undefined>}
+     */
+    async getConsentByPhoneNumber(phoneNumber) {
+        if (typeof phoneNumber !== 'string' || !phoneNumber) {
+            return Promise.reject(Error('phoneNumber string is required'));
+        }
+
+        const qb = new QueryBuilder();
+        const documents = /** @type {UserConsent[]} */ (
+            await this.documents.getDocuments(
+                userCollectionId,
+                qb
+                    .select('isSubscribed')
+                    .select('notifications')
+                    .where('phoneNumber', phoneNumber)
+                    .getQuery(),
+            )
+        );
+
+        if (documents.length > 1) {
+            throw new Error(`more than 1 document found for phoneNumber ${phoneNumber}`);
+        }
+
+        return documents[0];
     }
 
     /**

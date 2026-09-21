@@ -26,7 +26,8 @@ class FakeDestiny2Service {
 
 const destiny2Service = new FakeDestiny2Service();
 const notificationService = { sendMessage: vi.fn() };
-const userService = { getUserByPhoneNumber: vi.fn() };
+const sentMessage = { sid: 'SM1', status: 'sent' };
+const userService = { getConsentByPhoneNumber: vi.fn() };
 const playerMatching = (bungieGlobalDisplayName, overrides = {}) => ({
     bungieGlobalDisplayName,
     bungieGlobalDisplayNameCode: 1234,
@@ -48,8 +49,16 @@ beforeEach(() => {
     aiService.getPlayersFromFile.mockResolvedValue(['Player1', 'Player2']);
     FakeDestiny2Service.findPlayers.mockImplementation(async name => [playerMatching(name)]);
     destiny2Service.getPlayerStatistics.mockResolvedValue({ pvp: { kdr: '1.42' } });
-    notificationService.sendMessage.mockResolvedValue(undefined);
-    userService.getUserByPhoneNumber.mockResolvedValue({ phoneNumber: from, isSubscribed: true });
+    /**
+     * The real service checks `guard` inside the rate limiter's slot; a double
+     * that ignored it would let a suppression test pass on a send that would
+     * really have gone out.
+     */
+    notificationService.sendMessage.mockImplementation(
+        async (_body, _to, _mediaUrl, { guard } = {}) =>
+            guard && !(await guard()) ? undefined : sentMessage,
+    );
+    userService.getConsentByPhoneNumber.mockResolvedValue({ isSubscribed: true });
     mmsService = new MmsService({ aiService, destiny2Service, notificationService, userService });
 });
 
@@ -108,54 +117,67 @@ describe('MmsService', () => {
                 expect(notificationService.sendMessage).toHaveBeenCalledWith(
                     '\n\n1.42 Player1\n0.87 Player2',
                     from,
+                    undefined,
+                    expect.objectContaining({ guard: expect.any(Function) }),
                 );
             });
         });
 
         describe('when consent is withdrawn while the image is being processed', () => {
+            /**
+             * Suppression is not "sendMessage was never called" any more - the
+             * check moved inside it, so that the wait for a rate limiter slot
+             * falls before the check rather than after it. What this layer can
+             * assert is that a guard was handed over and that it withholds;
+             * that no provider call follows is notification.service.spec.js's.
+             */
+            const guardFromLastSend = () => {
+                const calls = notificationService.sendMessage.mock.calls;
+
+                expect(calls).toHaveLength(1);
+
+                return calls[0][3].guard;
+            };
+
             beforeEach(() => {
                 vi.stubGlobal(
                     'fetch',
                     vi.fn().mockResolvedValue(new Response('image-bytes', { status: 200 })),
                 );
+                userService.getConsentByPhoneNumber.mockResolvedValue({ isSubscribed: false });
             });
 
-            it('should not reply with the roster', async () => {
-                userService.getUserByPhoneNumber.mockResolvedValue({
-                    phoneNumber: from,
-                    isSubscribed: false,
-                });
-
+            it('should withhold the roster reply', async () => {
                 await mmsService.process({ from, media: [{ contentType: 'image/jpeg', url }] });
 
                 expect(aiService.getPlayersFromFile).toHaveBeenCalled();
-                expect(notificationService.sendMessage).not.toHaveBeenCalled();
+                await expect(guardFromLastSend()()).resolves.toBe(false);
             });
 
-            it('should read consent through to Cosmos rather than the cache', async () => {
+            it('should read the consent projection rather than the whole user', async () => {
+                userService.getConsentByPhoneNumber.mockResolvedValue({ isSubscribed: true });
+
                 await mmsService.process({ from, media: [{ contentType: 'image/jpeg', url }] });
+                await guardFromLastSend()();
 
-                expect(userService.getUserByPhoneNumber).toHaveBeenCalledWith(from, true);
+                expect(userService.getConsentByPhoneNumber).toHaveBeenCalledWith(from);
             });
 
-            it('should not send the failure reply either', async () => {
-                userService.getUserByPhoneNumber.mockResolvedValue({
-                    phoneNumber: from,
-                    isSubscribed: false,
-                });
+            it('should withhold the failure reply too', async () => {
                 aiService.getPlayersFromFile.mockRejectedValue(new Error('analysis failed'));
 
                 await mmsService.process({ from, media: [{ contentType: 'image/jpeg', url }] });
 
-                expect(notificationService.sendMessage).not.toHaveBeenCalled();
+                expect(notificationService.sendMessage).toHaveBeenCalledWith(
+                    MEDIA_ERROR_REPLY,
+                    from,
+                    undefined,
+                    expect.objectContaining({ guard: expect.any(Function) }),
+                );
+                await expect(guardFromLastSend()()).resolves.toBe(false);
             });
 
             it('should stop before processing any remaining attachments', async () => {
-                userService.getUserByPhoneNumber.mockResolvedValue({
-                    phoneNumber: from,
-                    isSubscribed: false,
-                });
-
                 await mmsService.process({
                     from,
                     media: [
@@ -165,15 +187,14 @@ describe('MmsService', () => {
                 });
 
                 expect(aiService.getPlayersFromFile).toHaveBeenCalledTimes(1);
-                expect(notificationService.sendMessage).not.toHaveBeenCalled();
             });
 
-            it('should suppress when consent storage is unavailable', async () => {
-                userService.getUserByPhoneNumber.mockRejectedValue(new Error('Cosmos is down'));
+            it('should withhold when consent storage is unavailable', async () => {
+                userService.getConsentByPhoneNumber.mockRejectedValue(new Error('Cosmos is down'));
 
                 await mmsService.process({ from, media: [{ contentType: 'image/jpeg', url }] });
 
-                expect(notificationService.sendMessage).not.toHaveBeenCalled();
+                await expect(guardFromLastSend()()).resolves.toBe(false);
             });
         });
 
@@ -190,6 +211,8 @@ describe('MmsService', () => {
                 expect(notificationService.sendMessage).toHaveBeenCalledWith(
                     MEDIA_ERROR_REPLY,
                     from,
+                    undefined,
+                    expect.objectContaining({ guard: expect.any(Function) }),
                 );
             });
         });
@@ -211,6 +234,8 @@ describe('MmsService', () => {
                 expect(notificationService.sendMessage).toHaveBeenCalledWith(
                     MEDIA_ERROR_REPLY,
                     from,
+                    undefined,
+                    expect.objectContaining({ guard: expect.any(Function) }),
                 );
             });
         });
@@ -230,6 +255,8 @@ describe('MmsService', () => {
                 expect(notificationService.sendMessage).toHaveBeenCalledWith(
                     MEDIA_ERROR_REPLY,
                     from,
+                    undefined,
+                    expect.objectContaining({ guard: expect.any(Function) }),
                 );
             });
         });
@@ -249,6 +276,8 @@ describe('MmsService', () => {
                 expect(notificationService.sendMessage).toHaveBeenCalledWith(
                     MEDIA_ERROR_REPLY,
                     from,
+                    undefined,
+                    expect.objectContaining({ guard: expect.any(Function) }),
                 );
             });
         });
@@ -274,6 +303,8 @@ describe('MmsService', () => {
                 expect(notificationService.sendMessage).toHaveBeenCalledWith(
                     MEDIA_ERROR_REPLY,
                     from,
+                    undefined,
+                    expect.objectContaining({ guard: expect.any(Function) }),
                 );
             });
         });
@@ -305,6 +336,8 @@ describe('MmsService', () => {
                         ` ${UNKNOWN_STATISTIC} lady_helz8`,
                     ].join('\n'),
                     from,
+                    undefined,
+                    expect.objectContaining({ guard: expect.any(Function) }),
                 );
             });
         });
@@ -340,6 +373,8 @@ describe('MmsService', () => {
                 expect(notificationService.sendMessage).toHaveBeenCalledWith(
                     `\n\n${UNKNOWN_STATISTIC} Player1`,
                     from,
+                    undefined,
+                    expect.objectContaining({ guard: expect.any(Function) }),
                 );
             });
 
@@ -372,6 +407,8 @@ describe('MmsService', () => {
                     expect(notificationService.sendMessage).toHaveBeenCalledWith(
                         `\n\n1.42 ${extractedName}`,
                         from,
+                        undefined,
+                        expect.objectContaining({ guard: expect.any(Function) }),
                     );
                 },
             );
@@ -387,6 +424,8 @@ describe('MmsService', () => {
                 expect(notificationService.sendMessage).toHaveBeenCalledWith(
                     '\n\n1.42 Player1#0420',
                     from,
+                    undefined,
+                    expect.objectContaining({ guard: expect.any(Function) }),
                 );
             });
 
@@ -399,6 +438,8 @@ describe('MmsService', () => {
                 expect(notificationService.sendMessage).toHaveBeenCalledWith(
                     '\n\n1.42 Player1#????',
                     from,
+                    undefined,
+                    expect.objectContaining({ guard: expect.any(Function) }),
                 );
             });
         });
@@ -421,6 +462,8 @@ describe('MmsService', () => {
                 expect(notificationService.sendMessage).toHaveBeenCalledWith(
                     `\n\n${UNKNOWN_STATISTIC} Player1\n1.42 Player2`,
                     from,
+                    undefined,
+                    expect.objectContaining({ guard: expect.any(Function) }),
                 );
             });
         });
@@ -441,6 +484,8 @@ describe('MmsService', () => {
                 expect(notificationService.sendMessage).toHaveBeenCalledWith(
                     MEDIA_NO_PLAYERS_REPLY,
                     from,
+                    undefined,
+                    expect.objectContaining({ guard: expect.any(Function) }),
                 );
             });
         });
@@ -458,6 +503,8 @@ describe('MmsService', () => {
                 expect(notificationService.sendMessage).toHaveBeenLastCalledWith(
                     MEDIA_ERROR_REPLY,
                     from,
+                    undefined,
+                    expect.objectContaining({ guard: expect.any(Function) }),
                 );
             });
         });

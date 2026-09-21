@@ -88,7 +88,19 @@ const notificationService = {
 const userService = {
     getSubscribedUsers: vi.fn(),
     getUserByPhoneNumber: vi.fn(),
+    getConsentByPhoneNumber: vi.fn(),
 };
+
+/**
+ * `sendMessage` checks its `guard` inside the rate limiter's slot, so a double
+ * that ignores it would let every suppression test pass on a send that the
+ * real service would have withheld.
+ * @param {{ status?: string }} [response]
+ */
+const sendMessageHonouringGuard =
+    (response = { status: 'sent' }) =>
+    async (_body, _to, _mediaUrl, { guard } = {}) =>
+        guard && !(await guard()) ? undefined : response;
 const worldRepository = {
     getWeaponCategory: vi.fn(),
     getItemByHash: vi.fn(),
@@ -112,9 +124,11 @@ beforeEach(() => {
 
     // Default: errors are not transient
     isTransientError.mockReturnValue(false);
-    // Default: consent still permits delivery. `#send` rechecks it before
-    // every send, so without this each test would exercise suppression.
-    userService.getUserByPhoneNumber.mockResolvedValue(mockUser);
+    // Default: consent still permits delivery. The gate runs before the job
+    // starts and again inside the limiter slot, so without this each test
+    // would exercise suppression.
+    userService.getConsentByPhoneNumber.mockResolvedValue({ isSubscribed: true });
+    notificationService.sendMessage.mockImplementation(sendMessageHonouringGuard());
     notificationController = new NotificationController({
         authenticationService,
         destinyService,
@@ -262,10 +276,7 @@ describe('NotificationController', () => {
 
         describe('when consent changed between enqueue and execution', () => {
             it('should not send to a user who opted out after the job was queued', async () => {
-                userService.getUserByPhoneNumber.mockResolvedValue({
-                    ...mockUser,
-                    isSubscribed: false,
-                });
+                userService.getConsentByPhoneNumber.mockResolvedValue({ isSubscribed: false });
 
                 await sendMethod(mockUser, {
                     claimCheckNumber,
@@ -281,10 +292,7 @@ describe('NotificationController', () => {
             });
 
             it('should not authenticate or call Bungie for a suppressed send', async () => {
-                userService.getUserByPhoneNumber.mockResolvedValue({
-                    ...mockUser,
-                    isSubscribed: false,
-                });
+                userService.getConsentByPhoneNumber.mockResolvedValue({ isSubscribed: false });
 
                 await sendMethod(mockUser, {
                     claimCheckNumber,
@@ -295,7 +303,7 @@ describe('NotificationController', () => {
                 expect(destinyService.getProfile).not.toHaveBeenCalled();
             });
 
-            it('should read consent through to Cosmos rather than the cache', async () => {
+            it('should read the consent projection rather than the whole user', async () => {
                 authenticationService.authenticate.mockResolvedValue({
                     bungie: { access_token: accessToken },
                 });
@@ -306,12 +314,13 @@ describe('NotificationController', () => {
                     notificationType: notificationTypes.Xur,
                 });
 
-                expect(userService.getUserByPhoneNumber).toHaveBeenCalledWith(phoneNumber, true);
+                expect(userService.getConsentByPhoneNumber).toHaveBeenCalledWith(phoneNumber);
+                expect(userService.getUserByPhoneNumber).not.toHaveBeenCalled();
             });
 
             it('should suppress when the user disabled that vendor after queueing', async () => {
-                userService.getUserByPhoneNumber.mockResolvedValue({
-                    ...mockUser,
+                userService.getConsentByPhoneNumber.mockResolvedValue({
+                    isSubscribed: true,
                     notifications: [{ type: notificationTypes.Xur, enabled: false }],
                 });
 
@@ -331,8 +340,8 @@ describe('NotificationController', () => {
             it('should still send when a different vendor is the disabled one', async () => {
                 const weaponCategoryHash = 1;
 
-                userService.getUserByPhoneNumber.mockResolvedValue({
-                    ...mockUser,
+                userService.getConsentByPhoneNumber.mockResolvedValue({
+                    isSubscribed: true,
                     notifications: [
                         { type: notificationTypes.IronBanner, enabled: false },
                         { type: notificationTypes.Xur, enabled: true },
@@ -345,7 +354,7 @@ describe('NotificationController', () => {
                 destinyService.getXur.mockResolvedValue([123456]);
                 worldRepository.getWeaponCategory.mockResolvedValue(weaponCategoryHash);
                 worldRepository.getItemByHash.mockResolvedValue(mockItem);
-                notificationService.sendMessage.mockResolvedValue({ status: 'sent' });
+                notificationService.sendMessage.mockImplementation(sendMessageHonouringGuard());
 
                 await sendMethod(mockUser, {
                     claimCheckNumber,
@@ -356,7 +365,7 @@ describe('NotificationController', () => {
             });
 
             it('should suppress rather than throw when consent storage is unavailable', async () => {
-                userService.getUserByPhoneNumber.mockRejectedValue(new Error('Cosmos is down'));
+                userService.getConsentByPhoneNumber.mockRejectedValue(new Error('Cosmos is down'));
 
                 await expect(
                     sendMethod(mockUser, {
@@ -377,9 +386,9 @@ describe('NotificationController', () => {
         describe('when consent is withdrawn after the Bungie calls', () => {
             /** Subscribed at the early gate, opted out by the time we send. */
             const optOutOnSecondCheck = () => {
-                userService.getUserByPhoneNumber
-                    .mockResolvedValueOnce(mockUser)
-                    .mockResolvedValue({ ...mockUser, isSubscribed: false });
+                userService.getConsentByPhoneNumber
+                    .mockResolvedValueOnce({ isSubscribed: true })
+                    .mockResolvedValue({ isSubscribed: false });
             };
 
             it('should not send the Xur inventory', async () => {
@@ -401,8 +410,13 @@ describe('NotificationController', () => {
 
                 // The early gate let it through, so the work was done...
                 expect(destinyService.getXur).toHaveBeenCalled();
-                // ...but the send itself was suppressed.
-                expect(notificationService.sendMessage).not.toHaveBeenCalled();
+                // ...and the guard handed to sendMessage withheld the send.
+                expect(notificationService.sendMessage).toHaveBeenCalledWith(
+                    expect.any(String),
+                    phoneNumber,
+                    undefined,
+                    expect.objectContaining({ guard: expect.any(Function) }),
+                );
                 expect(ClaimCheck.updatePhoneNumber).toHaveBeenCalledWith(
                     claimCheckNumber,
                     phoneNumber,
@@ -425,7 +439,12 @@ describe('NotificationController', () => {
                     notificationType: notificationTypes.Xur,
                 });
 
-                expect(notificationService.sendMessage).not.toHaveBeenCalled();
+                expect(notificationService.sendMessage).toHaveBeenCalledWith(
+                    expect.stringContaining('Xur has closed shop'),
+                    phoneNumber,
+                    undefined,
+                    expect.objectContaining({ guard: expect.any(Function) }),
+                );
                 expect(ClaimCheck.updatePhoneNumber).toHaveBeenCalledWith(
                     claimCheckNumber,
                     phoneNumber,
@@ -436,10 +455,7 @@ describe('NotificationController', () => {
 
         describe('when the claim check cannot be written', () => {
             it('should not fail a suppressed job, which would retry it', async () => {
-                userService.getUserByPhoneNumber.mockResolvedValue({
-                    ...mockUser,
-                    isSubscribed: false,
-                });
+                userService.getConsentByPhoneNumber.mockResolvedValue({ isSubscribed: false });
                 ClaimCheck.updatePhoneNumber.mockRejectedValue(new Error('Redis is down'));
 
                 await expect(
@@ -462,7 +478,7 @@ describe('NotificationController', () => {
                 destinyService.getXur.mockResolvedValue([123456]);
                 worldRepository.getWeaponCategory.mockResolvedValue(weaponCategoryHash);
                 worldRepository.getItemByHash.mockResolvedValue(mockItem);
-                notificationService.sendMessage.mockResolvedValue({ status: 'sent' });
+                notificationService.sendMessage.mockImplementation(sendMessageHonouringGuard());
                 ClaimCheck.updatePhoneNumber.mockRejectedValue(new Error('Redis is down'));
 
                 await expect(
@@ -483,7 +499,7 @@ describe('NotificationController', () => {
                 destinyService.getXur.mockRejectedValue(
                     new DestinyError(1627, 'Xur is not around.', 'DestinyVendorNotFound'),
                 );
-                notificationService.sendMessage.mockResolvedValue({ status: 'sent' });
+                notificationService.sendMessage.mockImplementation(sendMessageHonouringGuard());
                 ClaimCheck.updatePhoneNumber.mockRejectedValue(new Error('Redis is down'));
 
                 await expect(
@@ -509,7 +525,7 @@ describe('NotificationController', () => {
                 destinyService.getXur.mockResolvedValue(itemHashes);
                 worldRepository.getWeaponCategory.mockResolvedValue(weaponCategoryHash);
                 worldRepository.getItemByHash.mockResolvedValue(mockItem);
-                notificationService.sendMessage.mockResolvedValue({ status: 'sent' });
+                notificationService.sendMessage.mockImplementation(sendMessageHonouringGuard());
                 ClaimCheck.updatePhoneNumber.mockResolvedValue();
 
                 await sendMethod(mockUser, {
@@ -534,7 +550,11 @@ describe('NotificationController', () => {
                     'Test Weapon\nTest Weapon',
                     phoneNumber,
                     undefined,
-                    { claimCheckNumber, notificationType: notificationTypes.Xur },
+                    {
+                        claimCheckNumber,
+                        notificationType: notificationTypes.Xur,
+                        guard: expect.any(Function),
+                    },
                 );
                 expect(ClaimCheck.updatePhoneNumber).toHaveBeenCalledWith(
                     claimCheckNumber,
@@ -559,7 +579,7 @@ describe('NotificationController', () => {
                 destinyService.getXur.mockResolvedValue(itemHashes);
                 worldRepository.getWeaponCategory.mockResolvedValue(weaponCategoryHash);
                 worldRepository.getItemByHash.mockResolvedValue(nonWeaponItem);
-                notificationService.sendMessage.mockResolvedValue({ status: 'sent' });
+                notificationService.sendMessage.mockImplementation(sendMessageHonouringGuard());
 
                 await sendMethod(mockUser, {
                     claimCheckNumber,
@@ -570,7 +590,11 @@ describe('NotificationController', () => {
                     '', // Empty message since no weapons found
                     phoneNumber,
                     undefined,
-                    { claimCheckNumber, notificationType: notificationTypes.Xur },
+                    {
+                        claimCheckNumber,
+                        notificationType: notificationTypes.Xur,
+                        guard: expect.any(Function),
+                    },
                 );
             });
 
@@ -588,7 +612,7 @@ describe('NotificationController', () => {
                 worldRepository.getItemByHash.mockImplementation(itemHash =>
                     Promise.resolve(itemHash === missingItemHash ? undefined : mockItem),
                 );
-                notificationService.sendMessage.mockResolvedValue({ status: 'sent' });
+                notificationService.sendMessage.mockImplementation(sendMessageHonouringGuard());
                 ClaimCheck.updatePhoneNumber.mockResolvedValue();
 
                 await sendMethod(mockUser, {
@@ -600,7 +624,11 @@ describe('NotificationController', () => {
                     'Test Weapon',
                     phoneNumber,
                     undefined,
-                    { claimCheckNumber, notificationType: notificationTypes.Xur },
+                    {
+                        claimCheckNumber,
+                        notificationType: notificationTypes.Xur,
+                        guard: expect.any(Function),
+                    },
                 );
             });
 
@@ -678,7 +706,7 @@ describe('NotificationController', () => {
                 });
                 destinyService.getProfile.mockResolvedValue([mockCharacter]);
                 destinyService.getXur.mockRejectedValue(xurNotFoundErr);
-                notificationService.sendMessage.mockResolvedValue({ status: 'sent' });
+                notificationService.sendMessage.mockImplementation(sendMessageHonouringGuard());
                 ClaimCheck.updatePhoneNumber.mockResolvedValue();
 
                 await sendMethod(mockUser, {
@@ -690,7 +718,11 @@ describe('NotificationController', () => {
                     "Xur has closed shop. He'll return Friday.",
                     phoneNumber,
                     undefined,
-                    { claimCheckNumber, notificationType: notificationTypes.Xur },
+                    {
+                        claimCheckNumber,
+                        notificationType: notificationTypes.Xur,
+                        guard: expect.any(Function),
+                    },
                 );
                 expect(log.info).toHaveBeenCalledWith(JSON.stringify('sent'));
                 expect(ClaimCheck.updatePhoneNumber).toHaveBeenCalledWith(
