@@ -11,7 +11,13 @@
  * This asks whether consent has been *withdrawn* since the work was queued,
  * not whether the user was eligible for it in the first place. Eligibility is
  * settled at enqueue; repeating it here would duplicate rules that can then
- * drift apart. See `#hasWithdrawn` for what that distinction buys.
+ * drift apart. That is why only an explicit `enabled: false` suppresses below
+ * and a missing vendor entry does not - see the comment on that check.
+ *
+ * The read is of Cosmos, which is where consent is durable but not where it
+ * arrives first: a STOP is acknowledged before its write is applied, so a job
+ * executing inside that queue latency can still read stale permission. See
+ * #739.
  *
  * @module consent
  */
