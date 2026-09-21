@@ -6,6 +6,7 @@
  * @author Chris Paskvan
  */
 import { applyPatch, createPatch } from 'rfc6902';
+import InvalidPhoneNumberError from './invalid-phone-number.error.js';
 import { parsePhoneNumber } from 'awesome-phonenumber';
 import Postmaster from '../helpers/postmaster.js';
 import getEpoch from '../helpers/get-epoch.js';
@@ -118,7 +119,7 @@ class UserController {
         const cleaned = parsePhoneNumber(phoneNumber[0] === '+' ? phoneNumber : `+1${phoneNumber}`);
 
         if (!cleaned.valid || ['CN', 'KP', 'RU'].includes(cleaned.regionCode)) {
-            throw new Error('phone number is invalid', {
+            throw new InvalidPhoneNumberError('phone number is invalid', {
                 cause: 'error' in cleaned ? cleaned.error : undefined,
             });
         }

@@ -4,6 +4,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import AuthenticationMiddleWare from '../authentication/authentication.middleware.js';
 import UserController from './user.controller.js';
+import InvalidPhoneNumberError from './invalid-phone-number.error.js';
 import csrfProtection, { generateToken } from '../helpers/csrf.middleware.js';
 import log from '../helpers/log.js';
 
@@ -627,7 +628,7 @@ const routes = ({
                  * barred region. It ran before any send or write, so this is a
                  * rejected request rather than a failure.
                  */
-                if (err instanceof Error && err.message === 'phone number is invalid') {
+                if (err instanceof InvalidPhoneNumberError) {
                     return res
                         .status(StatusCodes.UNPROCESSABLE_ENTITY)
                         .json({ error: err.message });

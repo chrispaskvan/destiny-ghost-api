@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Chance from 'chance';
 import getEpoch from '../helpers/get-epoch.js';
 import UserController from './user.controller.js';
+import InvalidPhoneNumberError from './invalid-phone-number.error.js';
 
 vi.mock('../helpers/postmaster.js', () => ({
     default: class {
@@ -634,6 +635,11 @@ describe('UserController', () => {
                     userService.getUserByEmailAddress.mockImplementation(() => Promise.resolve());
                     userService.getUserByPhoneNumber.mockImplementation(() => Promise.resolve());
 
+                    /**
+                     * The route decides the status code from the type, so a
+                     * bare `Error` here would send an unusable number back as
+                     * a 500.
+                     */
                     await expect(
                         userController.signUp({
                             displayName,
@@ -645,7 +651,7 @@ describe('UserController', () => {
                                 phoneNumber: '+86 10 1234 5678',
                             },
                         }),
-                    ).rejects.toThrow(Error);
+                    ).rejects.toBeInstanceOf(InvalidPhoneNumberError);
                 });
             });
         });
