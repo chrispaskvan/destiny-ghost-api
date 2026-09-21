@@ -5,10 +5,20 @@ import Chance from 'chance';
 import { createResponse, createRequest } from 'node-mocks-http';
 import UserRouter from './user.routes.js';
 
+/**
+ * Hoisted rather than instance fields so the sign-up tests have a stable
+ * handle on them. "Nothing was sent" is half of what rejecting a request
+ * means here, and without this there is no way to assert the email side of it.
+ */
+const { postmasterConfirm, postmasterRegister } = vi.hoisted(() => ({
+    postmasterConfirm: vi.fn().mockResolvedValue({ messageId: 'test-email-id' }),
+    postmasterRegister: vi.fn().mockResolvedValue({ messageId: 'test-register-id' }),
+}));
+
 vi.mock('../helpers/postmaster.js', () => ({
     default: class {
-        confirm = vi.fn().mockResolvedValue({ messageId: 'test-email-id' });
-        register = vi.fn().mockResolvedValue({ messageId: 'test-register-id' });
+        confirm = postmasterConfirm;
+        register = postmasterRegister;
     },
 }));
 vi.mock('../helpers/tokens.js', () => ({
@@ -359,6 +369,7 @@ describe('UserRouter', () => {
                              */
                             expect(userService.updateUser).not.toHaveBeenCalled();
                             expect(notificationService.sendMessage).not.toHaveBeenCalled();
+                            expect(postmasterRegister).not.toHaveBeenCalled();
                             done();
                         } catch (err) {
                             reject(err);
@@ -418,6 +429,7 @@ describe('UserRouter', () => {
                     try {
                         expect(res.statusCode).toEqual(StatusCodes.NO_CONTENT);
                         expect(userService.updateUser).toHaveBeenCalled();
+                        expect(postmasterRegister).toHaveBeenCalled();
                         done();
                     } catch (err) {
                         reject(err);
@@ -442,6 +454,7 @@ describe('UserRouter', () => {
                         expect(res.statusCode).toEqual(StatusCodes.NO_CONTENT);
                         expect(userService.updateUser).not.toHaveBeenCalled();
                         expect(notificationService.sendMessage).not.toHaveBeenCalled();
+                        expect(postmasterRegister).not.toHaveBeenCalled();
                         done();
                     } catch (err) {
                         reject(err);
