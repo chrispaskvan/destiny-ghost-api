@@ -23,6 +23,34 @@ import log from './log.js';
 import processExternalPromisesWithTimeout from './process-external-promises-with-timeout.js';
 
 /**
+ * Apply a consent change only if nothing newer is already recorded.
+ *
+ * Two messages from one number can be in flight at once, and nothing orders
+ * the Redis calls they make: an older START delayed behind a newer STOP would,
+ * with a plain `SET`, land second and leave the marker saying the opposite of
+ * what the sender last asked for. `applyConsent` guards the durable copy
+ * against exactly this with its stored stamp; this is the same rule, made
+ * atomic because Redis has no document to compare against in-process.
+ *
+ * Strictly older loses and a tie is applied, matching `applyConsent`: two
+ * messages sharing a millisecond cannot be ordered by arrival at all, so the
+ * one that gets here later wins rather than the earlier one keeping the field
+ * by virtue of arriving first.
+ */
+const RECORD_CONSENT = `
+local current = redis.call('HGET', KEYS[1], 'receivedAt')
+
+if current and tonumber(current) > tonumber(ARGV[2]) then
+    return 0
+end
+
+redis.call('HSET', KEYS[1], 'isSubscribed', ARGV[1], 'receivedAt', ARGV[2])
+redis.call('EXPIRE', KEYS[1], ARGV[3])
+
+return 1
+`;
+
+/**
  * Long, because the marker is already inert in the normal case: the moment the
  * durable write lands, `consentUpdatedAt` catches up and Cosmos decides
  * instead. The expiry only matters in the case this exists for - the durable
@@ -63,8 +91,13 @@ const keyFor = phoneNumber => `consent:${phoneNumber}`;
 const recordConsent = async (phoneNumber, isSubscribed, receivedAt) => {
     const [result] = await processExternalPromisesWithTimeout(
         [
-            cache.set(keyFor(phoneNumber), JSON.stringify({ isSubscribed, receivedAt }), {
-                EX: CONSENT_MARKER_TTL_SECONDS,
+            cache.eval(RECORD_CONSENT, {
+                keys: [keyFor(phoneNumber)],
+                arguments: [
+                    isSubscribed ? '1' : '0',
+                    String(receivedAt),
+                    String(CONSENT_MARKER_TTL_SECONDS),
+                ],
             }),
         ],
         CONSENT_MARKER_WRITE_TIMEOUT_MS,
@@ -96,9 +129,16 @@ const recordConsent = async (phoneNumber, isSubscribed, receivedAt) => {
  */
 const readConsent = async phoneNumber => {
     try {
-        const marker = await cache.get(keyFor(phoneNumber));
+        const marker = await cache.hGetAll(keyFor(phoneNumber));
 
-        return marker ? JSON.parse(marker) : undefined;
+        if (!marker?.receivedAt) {
+            return undefined;
+        }
+
+        return {
+            isSubscribed: marker.isSubscribed === '1',
+            receivedAt: Number(marker.receivedAt),
+        };
     } catch (err) {
         log.warn({ err, phoneNumber }, 'Unable to read the consent acknowledgement.');
 
@@ -106,4 +146,4 @@ const readConsent = async phoneNumber => {
     }
 };
 
-export { recordConsent, readConsent, CONSENT_MARKER_TTL_SECONDS };
+export { recordConsent, readConsent, CONSENT_MARKER_TTL_SECONDS, RECORD_CONSENT };

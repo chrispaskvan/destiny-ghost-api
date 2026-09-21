@@ -101,9 +101,8 @@ vi.mock('../helpers/cache.js', () => ({
         hGetAll: vi.fn(),
         expire: vi.fn(),
         // The consent marker a STOP/START acknowledgement leaves behind
-        // (helpers/consent-marker.js).
-        set: vi.fn().mockResolvedValue('OK'),
-        get: vi.fn().mockResolvedValue(null),
+        // (helpers/consent-marker.js), written by a compare-and-set script.
+        eval: vi.fn().mockResolvedValue(1),
     },
 }));
 
@@ -261,8 +260,7 @@ beforeEach(() => {
      * down. The queue path has its own tests, which opt back in.
      */
     enqueueConsentChange.mockReset().mockRejectedValue(new Error('queue unavailable'));
-    cache.set.mockReset().mockResolvedValue('OK');
-    cache.get.mockReset().mockResolvedValue(null);
+    cache.eval.mockReset().mockResolvedValue(1);
     worldRepository.getItemByName.mockResolvedValue([]);
 
     twilioRouter = TwilioRouter({
@@ -377,7 +375,7 @@ describe('TwilioRouter', () => {
             const pending = Promise.withResolvers();
             const response = createResponse({ eventEmitter: EventEmitter });
 
-            cache.set.mockReturnValue(pending.promise);
+            cache.eval.mockReturnValue(pending.promise);
 
             const dispatched = dispatch(
                 twilioRouter,
@@ -387,14 +385,16 @@ describe('TwilioRouter', () => {
 
             await new Promise(resolve => setImmediate(resolve));
 
-            expect(cache.set).toHaveBeenCalledWith(
-                `consent:${signedBody().From}`,
-                expect.stringContaining('"isSubscribed":false'),
-                expect.objectContaining({ EX: expect.any(Number) }),
+            expect(cache.eval).toHaveBeenCalledWith(
+                expect.stringContaining('HGET'),
+                expect.objectContaining({
+                    keys: [`consent:${signedBody().From}`],
+                    arguments: ['0', expect.any(String), expect.any(String)],
+                }),
             );
             expect(response._getData()).toBe('');
 
-            pending.resolve('OK');
+            pending.resolve(1);
             await dispatched;
 
             expect(response._getData()).toContain("You're unsubscribed");
@@ -403,7 +403,7 @@ describe('TwilioRouter', () => {
         it('still answers a STOP when the acknowledgement cannot be recorded', async () => {
             const warnLog = vi.spyOn(log, 'warn').mockImplementation(() => {});
 
-            cache.set.mockRejectedValueOnce(new Error('Redis is down'));
+            cache.eval.mockRejectedValueOnce(new Error('Redis is down'));
 
             try {
                 const response = createResponse({ eventEmitter: EventEmitter });
@@ -432,10 +432,12 @@ describe('TwilioRouter', () => {
                 response,
             );
 
-            expect(cache.set).toHaveBeenCalledWith(
-                `consent:${signedBody().From}`,
-                expect.stringContaining('"isSubscribed":true'),
-                expect.objectContaining({ EX: expect.any(Number) }),
+            expect(cache.eval).toHaveBeenCalledWith(
+                expect.any(String),
+                expect.objectContaining({
+                    keys: [`consent:${signedBody().From}`],
+                    arguments: ['1', expect.any(String), expect.any(String)],
+                }),
             );
         });
 
@@ -449,7 +451,7 @@ describe('TwilioRouter', () => {
             );
 
             expect(response._getData()).toContain('banshee-44@destiny-ghost.com');
-            expect(cache.set).not.toHaveBeenCalled();
+            expect(cache.eval).not.toHaveBeenCalled();
         });
 
         it('retries a throttled consent write rather than losing the opt-out', async () => {
