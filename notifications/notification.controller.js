@@ -51,6 +51,52 @@ class NotificationController {
     }
 
     /**
+     * Record a claim-check outcome without letting the receipt fail the job.
+     *
+     * The hash lives in Redis, so these writes reject when Redis does. Letting
+     * that propagate would hand the job back to BullMQ *after* Twilio had
+     * already accepted the message, and the retry would send it a second time
+     * - trading a lost receipt for a duplicate SMS, which is much the worse of
+     * the two. The suppression path has the same problem in a quieter form: a
+     * failed receipt would retry a job that is only going to suppress again.
+     *
+     * Ordering and terminal-state semantics for this hash are #717's; this
+     * only stops a receipt failure from causing a send.
+     * @param {string} claimCheckNumber
+     * @param {string} phoneNumber
+     * @param {string} status
+     * @returns {Promise<void>}
+     */
+    static async #recordOutcome(claimCheckNumber, phoneNumber, status) {
+        try {
+            await ClaimCheck.updatePhoneNumber(claimCheckNumber, phoneNumber, status);
+        } catch (err) {
+            log.warn(
+                { err, claimCheckNumber, phoneNumber, status },
+                'Unable to record the claim-check outcome.',
+            );
+        }
+    }
+
+    /**
+     * Whether the send may still go ahead, recording the suppression when it
+     * may not.
+     * @param {string} phoneNumber
+     * @param {string} notificationType
+     * @param {string} claimCheckNumber
+     * @returns {Promise<boolean>}
+     */
+    async #mayStillSend(phoneNumber, notificationType, claimCheckNumber) {
+        if (await mayDeliver({ users: this.users, phoneNumber, notificationType })) {
+            return true;
+        }
+
+        await NotificationController.#recordOutcome(claimCheckNumber, phoneNumber, SKIPPED);
+
+        return false;
+    }
+
+    /**
      * @param {QueuedUser} user
      * @param {{ claimCheckNumber: string, notificationType: string }} param1
      * @returns {Promise<void>}
@@ -61,18 +107,22 @@ class NotificationController {
         /**
          * `create` filtered consent when this job was queued, but that was
          * however long ago the queue is behind - long enough for a STOP to
-         * have landed in between. Checked before the branch below rather than
-         * inside it so the types that are not implemented yet (#722) inherit
-         * the gate, and before `authenticate` so an opted-out user costs
-         * neither a token refresh nor a call to Bungie on their behalf.
+         * have landed in between.
+         *
+         * This early check is the cheap one: it sits before the branch below
+         * so the types that are not implemented yet (#722) inherit it, and
+         * before `authenticate` so an opted-out user costs neither a token
+         * refresh nor a call to Bungie on their behalf. It is not the
+         * authoritative one - several network round trips separate it from the
+         * send - so consent is read again immediately before each outbound
+         * message. Paying for two reads on a delivered notification is the
+         * price of closing a window that is seconds wide on a slow day.
          *
          * Returns rather than throws: this runs under BullMQ, and a throw
          * would hand the job back to be retried against someone who has
          * already asked not to hear from us.
          */
-        if (!(await mayDeliver({ users: this.users, phoneNumber, notificationType }))) {
-            await ClaimCheck.updatePhoneNumber(claimCheckNumber, phoneNumber, SKIPPED);
-
+        if (!(await this.#mayStillSend(phoneNumber, notificationType, claimCheckNumber))) {
             return;
         }
 
@@ -133,6 +183,18 @@ class NotificationController {
                         )
                         .map(({ displayProperties: { name } = {} }) => name)
                         .join('\n');
+                    /**
+                     * The authoritative check. Everything between here and the
+                     * gate at the top of this method is network - a token
+                     * refresh, a profile fetch, Xur's inventory, the manifest
+                     * reads - and a STOP can land in any of it.
+                     */
+                    if (
+                        !(await this.#mayStillSend(phoneNumber, notificationType, claimCheckNumber))
+                    ) {
+                        return;
+                    }
+
                     const { status } = await this.notifications.sendMessage(
                         message,
                         phoneNumber,
@@ -143,10 +205,24 @@ class NotificationController {
                         },
                     );
 
-                    await ClaimCheck.updatePhoneNumber(claimCheckNumber, phoneNumber, status);
+                    await NotificationController.#recordOutcome(
+                        claimCheckNumber,
+                        phoneNumber,
+                        status,
+                    );
                 }
             } catch (err) {
                 if (err instanceof XurUnavailableError) {
+                    /**
+                     * Reached only after the Bungie calls above have already
+                     * run, so it needs the same fresh read as the main path.
+                     */
+                    if (
+                        !(await this.#mayStillSend(phoneNumber, notificationType, claimCheckNumber))
+                    ) {
+                        return;
+                    }
+
                     const { status } = await this.notifications.sendMessage(
                         "Xur has closed shop. He'll return Friday.",
                         phoneNumber,
@@ -158,7 +234,11 @@ class NotificationController {
                     );
 
                     log.info(JSON.stringify(status));
-                    await ClaimCheck.updatePhoneNumber(claimCheckNumber, phoneNumber, status);
+                    await NotificationController.#recordOutcome(
+                        claimCheckNumber,
+                        phoneNumber,
+                        status,
+                    );
 
                     return;
                 }

@@ -374,6 +374,129 @@ describe('NotificationController', () => {
             });
         });
 
+        describe('when consent is withdrawn after the Bungie calls', () => {
+            /** Subscribed at the early gate, opted out by the time we send. */
+            const optOutOnSecondCheck = () => {
+                userService.getUserByPhoneNumber
+                    .mockResolvedValueOnce(mockUser)
+                    .mockResolvedValue({ ...mockUser, isSubscribed: false });
+            };
+
+            it('should not send the Xur inventory', async () => {
+                const weaponCategoryHash = 1;
+
+                optOutOnSecondCheck();
+                authenticationService.authenticate.mockResolvedValue({
+                    bungie: { access_token: accessToken },
+                });
+                destinyService.getProfile.mockResolvedValue([mockCharacter]);
+                destinyService.getXur.mockResolvedValue([123456]);
+                worldRepository.getWeaponCategory.mockResolvedValue(weaponCategoryHash);
+                worldRepository.getItemByHash.mockResolvedValue(mockItem);
+
+                await sendMethod(mockUser, {
+                    claimCheckNumber,
+                    notificationType: notificationTypes.Xur,
+                });
+
+                // The early gate let it through, so the work was done...
+                expect(destinyService.getXur).toHaveBeenCalled();
+                // ...but the send itself was suppressed.
+                expect(notificationService.sendMessage).not.toHaveBeenCalled();
+                expect(ClaimCheck.updatePhoneNumber).toHaveBeenCalledWith(
+                    claimCheckNumber,
+                    phoneNumber,
+                    SKIPPED,
+                );
+            });
+
+            it('should not send the Xur-unavailable fallback', async () => {
+                optOutOnSecondCheck();
+                authenticationService.authenticate.mockResolvedValue({
+                    bungie: { access_token: accessToken },
+                });
+                destinyService.getProfile.mockResolvedValue([mockCharacter]);
+                destinyService.getXur.mockRejectedValue(
+                    new DestinyError(1627, 'Xur is not around.', 'DestinyVendorNotFound'),
+                );
+
+                await sendMethod(mockUser, {
+                    claimCheckNumber,
+                    notificationType: notificationTypes.Xur,
+                });
+
+                expect(notificationService.sendMessage).not.toHaveBeenCalled();
+                expect(ClaimCheck.updatePhoneNumber).toHaveBeenCalledWith(
+                    claimCheckNumber,
+                    phoneNumber,
+                    SKIPPED,
+                );
+            });
+        });
+
+        describe('when the claim check cannot be written', () => {
+            it('should not fail a suppressed job, which would retry it', async () => {
+                userService.getUserByPhoneNumber.mockResolvedValue({
+                    ...mockUser,
+                    isSubscribed: false,
+                });
+                ClaimCheck.updatePhoneNumber.mockRejectedValue(new Error('Redis is down'));
+
+                await expect(
+                    sendMethod(mockUser, {
+                        claimCheckNumber,
+                        notificationType: notificationTypes.Xur,
+                    }),
+                ).resolves.toBeUndefined();
+
+                expect(notificationService.sendMessage).not.toHaveBeenCalled();
+            });
+
+            it('should not fail a delivered job, which would send it twice', async () => {
+                const weaponCategoryHash = 1;
+
+                authenticationService.authenticate.mockResolvedValue({
+                    bungie: { access_token: accessToken },
+                });
+                destinyService.getProfile.mockResolvedValue([mockCharacter]);
+                destinyService.getXur.mockResolvedValue([123456]);
+                worldRepository.getWeaponCategory.mockResolvedValue(weaponCategoryHash);
+                worldRepository.getItemByHash.mockResolvedValue(mockItem);
+                notificationService.sendMessage.mockResolvedValue({ status: 'sent' });
+                ClaimCheck.updatePhoneNumber.mockRejectedValue(new Error('Redis is down'));
+
+                await expect(
+                    sendMethod(mockUser, {
+                        claimCheckNumber,
+                        notificationType: notificationTypes.Xur,
+                    }),
+                ).resolves.toBeUndefined();
+
+                expect(notificationService.sendMessage).toHaveBeenCalledTimes(1);
+            });
+
+            it('should not fail the Xur-unavailable fallback either', async () => {
+                authenticationService.authenticate.mockResolvedValue({
+                    bungie: { access_token: accessToken },
+                });
+                destinyService.getProfile.mockResolvedValue([mockCharacter]);
+                destinyService.getXur.mockRejectedValue(
+                    new DestinyError(1627, 'Xur is not around.', 'DestinyVendorNotFound'),
+                );
+                notificationService.sendMessage.mockResolvedValue({ status: 'sent' });
+                ClaimCheck.updatePhoneNumber.mockRejectedValue(new Error('Redis is down'));
+
+                await expect(
+                    sendMethod(mockUser, {
+                        claimCheckNumber,
+                        notificationType: notificationTypes.Xur,
+                    }),
+                ).resolves.toBeUndefined();
+
+                expect(notificationService.sendMessage).toHaveBeenCalledTimes(1);
+            });
+        });
+
         describe('when notification type is Xur', () => {
             it('should send Xur inventory notification successfully', async () => {
                 const weaponCategoryHash = 1;
