@@ -103,6 +103,21 @@ describe('recordConsent', () => {
         await expect(recordConsent(phoneNumber, false, receivedAt)).resolves.toBeUndefined();
     });
 
+    /**
+     * Not a path node-redis takes today - a closed client rejects rather than
+     * throwing, and its synchronous throw is in the MULTI code. But
+     * `request()` awaits this before answering a STOP, so the contract has to
+     * hold because of how this is written, not because of how a dependency
+     * behaves this release.
+     */
+    it('should not reject when the client raises synchronously', async () => {
+        cache.eval.mockImplementation(() => {
+            throw new Error('the client is closed');
+        });
+
+        await expect(recordConsent(phoneNumber, false, receivedAt)).resolves.toBeUndefined();
+    });
+
     it('should not wait indefinitely on a client that never settles', async () => {
         cache.eval.mockReturnValue(new Promise(() => {}));
 

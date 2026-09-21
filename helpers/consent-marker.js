@@ -96,28 +96,46 @@ const keyFor = phoneNumber => `consent:${phoneNumber}`;
  * @returns {Promise<void>}
  */
 const recordConsent = async (phoneNumber, isSubscribed, receivedAt) => {
-    const [result] = await processExternalPromisesWithTimeout(
-        [
-            cache.eval(RECORD_CONSENT, {
-                keys: [keyFor(phoneNumber)],
-                arguments: [
-                    isSubscribed ? '1' : '0',
-                    String(receivedAt),
-                    String(CONSENT_MARKER_TTL_SECONDS),
-                ],
-            }),
-        ],
-        CONSENT_MARKER_TIMEOUT_MS,
-    );
+    try {
+        const [result] = await processExternalPromisesWithTimeout(
+            [
+                cache.eval(RECORD_CONSENT, {
+                    keys: [keyFor(phoneNumber)],
+                    arguments: [
+                        isSubscribed ? '1' : '0',
+                        String(receivedAt),
+                        String(CONSENT_MARKER_TTL_SECONDS),
+                    ],
+                }),
+            ],
+            CONSENT_MARKER_TIMEOUT_MS,
+        );
 
-    if (result.status !== 'fulfilled') {
+        if (result.status !== 'fulfilled') {
+            log.warn(
+                {
+                    phoneNumber,
+                    isSubscribed,
+                    ...(result.status === 'rejected' && { err: result.reason }),
+                    timedOut: result.status === 'timed-out',
+                },
+                'Unable to record the consent acknowledgement; the durable write still stands.',
+            );
+        }
+    } catch (err) {
+        /**
+         * The command is built before the timeout wrapper receives it, so
+         * anything the client raises synchronously would escape the settled
+         * handling above and reject this function. node-redis does not do that
+         * today on this path - a closed client rejects the promise rather than
+         * throwing, and the synchronous throw lives in `_executeMulti` - but
+         * `request()` awaits this before answering a STOP, so "never rejects"
+         * has to hold because of how this is written rather than because of
+         * how a dependency currently behaves. A bad release would otherwise
+         * turn a Redis fault into an unanswered compliance keyword.
+         */
         log.warn(
-            {
-                phoneNumber,
-                isSubscribed,
-                ...(result.status === 'rejected' && { err: result.reason }),
-                timedOut: result.status === 'timed-out',
-            },
+            { err, phoneNumber, isSubscribed },
             'Unable to record the consent acknowledgement; the durable write still stands.',
         );
     }
