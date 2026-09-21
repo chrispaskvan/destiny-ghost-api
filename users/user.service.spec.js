@@ -449,6 +449,68 @@ describe('UserService', () => {
         });
     });
 
+    describe('getConsentByPhoneNumber', () => {
+        const consent = { isSubscribed: false, notifications: user.notifications };
+
+        it('should project to the consent fields rather than selecting the document', async () => {
+            documentService.getDocuments.mockResolvedValueOnce([consent]);
+
+            await userService.getConsentByPhoneNumber(user.phoneNumber);
+
+            const [collectionId, query] = documentService.getDocuments.mock.calls[0];
+
+            expect(collectionId).toBe('Users');
+            expect(query.query).toBe(
+                'SELECT r.isSubscribed, r.notifications FROM root r WHERE r.phoneNumber = @phoneNumber',
+            );
+            expect(query.parameters).toEqual([{ name: '@phoneNumber', value: user.phoneNumber }]);
+        });
+
+        it('should return the projection', async () => {
+            documentService.getDocuments.mockResolvedValueOnce([consent]);
+
+            await expect(userService.getConsentByPhoneNumber(user.phoneNumber)).resolves.toEqual(
+                consent,
+            );
+        });
+
+        /**
+         * The gate exists to see a STOP the cache could still be an hour behind
+         * on, and a two-field projection must never be written back over the
+         * full cached document.
+         */
+        it('should neither read nor write the cache', async () => {
+            documentService.getDocuments.mockResolvedValueOnce([consent]);
+
+            await userService.getConsentByPhoneNumber(user.phoneNumber);
+
+            expect(cacheService.getUser).not.toHaveBeenCalled();
+            expect(cacheService.setUser).not.toHaveBeenCalled();
+        });
+
+        it('should return undefined when the number matches no account', async () => {
+            documentService.getDocuments.mockResolvedValueOnce([]);
+
+            await expect(
+                userService.getConsentByPhoneNumber(user.phoneNumber),
+            ).resolves.toBeUndefined();
+        });
+
+        it('should reject when more than one document matches', async () => {
+            documentService.getDocuments.mockResolvedValueOnce([consent, consent]);
+
+            await expect(userService.getConsentByPhoneNumber(user.phoneNumber)).rejects.toThrow(
+                /more than 1 document/,
+            );
+        });
+
+        it('should reject an empty phone number without querying', async () => {
+            await expect(userService.getConsentByPhoneNumber()).rejects.toThrow();
+
+            expect(documentService.getDocuments).not.toHaveBeenCalled();
+        });
+    });
+
     describe('getUserByPhoneNumber', () => {
         describe('when user is cached', () => {
             it('should return cached user', () => {
