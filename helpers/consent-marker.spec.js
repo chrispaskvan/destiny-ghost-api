@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Chance from 'chance';
 import cache from './cache.js';
+import mayDeliver from './consent.js';
 import {
     recordConsent,
     readConsent,
@@ -127,6 +128,72 @@ describe('readConsent', () => {
         cache.hGetAll.mockRejectedValue(new Error('Redis is down'));
 
         await expect(readConsent(phoneNumber)).resolves.toBeUndefined();
+    });
+
+    /**
+     * This read is the delivery gate's guard, which runs inside a rate limiter
+     * slot that is `maxConcurrent: 1` cluster-wide. A read that never settles
+     * would not stall one send; it would hold the only slot and stall every
+     * outbound message. node-redis queues commands while it reconnects, so
+     * that is a dropped connection away rather than hypothetical.
+     */
+    it('should give up rather than hold the limiter slot when the client never settles', async () => {
+        cache.hGetAll.mockReturnValue(new Promise(() => {}));
+
+        await expect(readConsent(phoneNumber)).resolves.toBeUndefined();
+    });
+});
+
+/**
+ * The seam the other specs cannot see: `consent.spec.js` mocks this module and
+ * this file's own tests stop at its boundary, so nothing otherwise exercises a
+ * marker being written by one function and acted on by the gate. Real marker,
+ * real gate, fake Redis, stubbed documents.
+ */
+describe('with the delivery gate', () => {
+    /** @type {ReturnType<typeof fakeRedis>} */
+    let redis;
+    const users = { getConsentByPhoneNumber: vi.fn() };
+
+    beforeEach(() => {
+        redis = fakeRedis();
+        cache.eval.mockImplementation(redis.eval);
+        cache.hGetAll.mockImplementation(redis.hGetAll);
+    });
+
+    it('should suppress a send once a STOP has been acknowledged', async () => {
+        users.getConsentByPhoneNumber.mockResolvedValue({ isSubscribed: true });
+
+        await expect(mayDeliver({ users, phoneNumber })).resolves.toBe(true);
+
+        await recordConsent(phoneNumber, false, receivedAt);
+
+        await expect(mayDeliver({ users, phoneNumber })).resolves.toBe(false);
+    });
+
+    it('should hand back to the stored document once the write has landed', async () => {
+        await recordConsent(phoneNumber, false, receivedAt);
+        // The durable write catches up, carrying the same stamp.
+        users.getConsentByPhoneNumber.mockResolvedValue({
+            isSubscribed: false,
+            consentUpdatedAt: receivedAt,
+        });
+
+        await expect(mayDeliver({ users, phoneNumber })).resolves.toBe(false);
+
+        // ...and a later START, still only acknowledged, outranks it again.
+        await recordConsent(phoneNumber, true, receivedAt + 1000);
+
+        await expect(mayDeliver({ users, phoneNumber })).resolves.toBe(true);
+    });
+
+    it('should not let an acknowledged STOP be undone by an older delayed START', async () => {
+        users.getConsentByPhoneNumber.mockResolvedValue({ isSubscribed: true });
+
+        await recordConsent(phoneNumber, false, receivedAt + 1000);
+        await recordConsent(phoneNumber, true, receivedAt);
+
+        await expect(mayDeliver({ users, phoneNumber })).resolves.toBe(false);
     });
 });
 

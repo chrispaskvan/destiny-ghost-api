@@ -60,11 +60,18 @@ return 1
 const CONSENT_MARKER_TTL_SECONDS = 86_400;
 
 /**
- * Bounds how long an acknowledgement can wait on Redis. node-redis queues
- * commands while it reconnects, so without this a reconnecting client would
- * hold the webhook open rather than failing fast.
+ * Bounds how long either side of this module can wait on Redis. node-redis
+ * queues commands while it reconnects, so an unbounded call does not fail on a
+ * dropped connection - it waits for one that may not come back.
+ *
+ * Both directions need it, for different reasons. An unbounded write holds the
+ * webhook open instead of answering a STOP. An unbounded read is worse: it
+ * runs as the delivery gate's guard, which `NotificationService` invokes
+ * *inside* the rate limiter's slot, and that limiter is `maxConcurrent: 1`
+ * cluster-wide. A read that never settles there does not stall one send, it
+ * holds the only slot and stalls every outbound message.
  */
-const CONSENT_MARKER_WRITE_TIMEOUT_MS = 250;
+const CONSENT_MARKER_TIMEOUT_MS = 250;
 
 /** @param {string} phoneNumber */
 const keyFor = phoneNumber => `consent:${phoneNumber}`;
@@ -100,7 +107,7 @@ const recordConsent = async (phoneNumber, isSubscribed, receivedAt) => {
                 ],
             }),
         ],
-        CONSENT_MARKER_WRITE_TIMEOUT_MS,
+        CONSENT_MARKER_TIMEOUT_MS,
     );
 
     if (result.status !== 'fulfilled') {
@@ -119,8 +126,8 @@ const recordConsent = async (phoneNumber, isSubscribed, receivedAt) => {
 /**
  * The consent recorded at acknowledgement, if any is still held.
  *
- * Never rejects. A marker that cannot be read is reported as absent, leaving
- * the caller on the stored state - the position it was in before this module
+ * Never rejects, and never waits longer than the timeout above. A marker that
+ * cannot be read is reported as absent, leaving the caller on the stored state - the position it was in before this module
  * existed. Suppressing everything whenever Redis blinked would be worse, and
  * pointless besides: the send path's rate limiter is Redis-backed too, so a
  * Redis outage already stops messages going out.
@@ -129,7 +136,25 @@ const recordConsent = async (phoneNumber, isSubscribed, receivedAt) => {
  */
 const readConsent = async phoneNumber => {
     try {
-        const marker = await cache.hGetAll(keyFor(phoneNumber));
+        const [result] = await processExternalPromisesWithTimeout(
+            [cache.hGetAll(keyFor(phoneNumber))],
+            CONSENT_MARKER_TIMEOUT_MS,
+        );
+
+        if (result.status !== 'fulfilled') {
+            log.warn(
+                {
+                    phoneNumber,
+                    ...(result.status === 'rejected' && { err: result.reason }),
+                    timedOut: result.status === 'timed-out',
+                },
+                'Unable to read the consent acknowledgement.',
+            );
+
+            return undefined;
+        }
+
+        const marker = /** @type {Record<string, string> | undefined} */ (result.value);
 
         if (!marker?.receivedAt) {
             return undefined;
