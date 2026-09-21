@@ -173,6 +173,9 @@ function preserveConsentWatermark(merged, stored) {
  * @typedef {Object} UserConsent
  * @property {boolean} [isSubscribed]
  * @property {{ enabled: boolean, type: string }[]} [notifications]
+ * @property {number} [consentUpdatedAt] - Epoch milliseconds of the change
+ * that produced `isSubscribed`. The gate compares it against the marker an
+ * acknowledgement left behind, to tell a pending change from an applied one.
  */
 
 /**
@@ -662,6 +665,7 @@ class UserService {
                 qb
                     .select('isSubscribed')
                     .select('notifications')
+                    .select('consentUpdatedAt')
                     .where('phoneNumber', phoneNumber)
                     .getQuery(),
             )
