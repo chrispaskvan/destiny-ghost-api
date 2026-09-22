@@ -103,24 +103,24 @@ const stopServer = () =>
 
         const currentServer = server;
         let completed = false;
-        const finish = (err, timedOut = false) => {
+        const finish = (timedOut = false) => {
             if (completed) return;
             completed = true;
             clearTimeout(timeout);
 
-            if (err) {
-                log.error({ err }, 'GRPC graceful shutdown failed; forcing shutdown');
-            } else if (timedOut) {
+            if (timedOut) {
                 log.warn('GRPC graceful shutdown timed out; forcing shutdown');
+                currentServer.forceShutdown();
+            } else {
+                log.info('GRPC server shut down');
             }
 
-            if (err || timedOut) currentServer.forceShutdown();
             if (server === currentServer) server = undefined;
             resolve();
         };
-        const timeout = setTimeout(() => finish(null, true), 3000);
+        const timeout = setTimeout(() => finish(true), 3000);
 
-        currentServer.tryShutdown(finish);
+        currentServer.tryShutdown(() => finish());
     });
 
 export { createGetAllHandler, startServer, stopServer };

@@ -16,9 +16,11 @@ vi.mock('./helpers/log.js', () => ({
 
 describe('stopServer', () => {
     let grpcServer;
+    let started;
 
     beforeEach(() => {
         vi.useFakeTimers();
+        started = false;
         grpcServer = {
             addService: vi.fn(),
             bindAsync: vi.fn(),
@@ -35,9 +37,11 @@ describe('stopServer', () => {
     });
 
     afterEach(async () => {
-        const shutdown = stopServer();
-        await vi.runAllTimersAsync();
-        await shutdown;
+        if (started) {
+            const shutdown = stopServer();
+            await vi.runAllTimersAsync();
+            await shutdown;
+        }
         vi.useRealTimers();
         vi.restoreAllMocks();
     });
@@ -48,6 +52,7 @@ describe('stopServer', () => {
     });
 
     it('waits for graceful completion and clears the fallback timer', async () => {
+        started = true;
         startServer();
         const completed = vi.fn();
         const shutdown = stopServer().then(completed);
@@ -60,6 +65,7 @@ describe('stopServer', () => {
         await shutdown;
 
         expect(completed).toHaveBeenCalledOnce();
+        expect(log.info).toHaveBeenCalledWith('GRPC server shut down');
         expect(vi.getTimerCount()).toBe(0);
         await vi.advanceTimersByTimeAsync(3000);
         expect(grpcServer.forceShutdown).not.toHaveBeenCalled();
@@ -68,6 +74,7 @@ describe('stopServer', () => {
     });
 
     it('forces shutdown after three seconds and ignores a late callback', async () => {
+        started = true;
         startServer();
         const completed = vi.fn();
         const shutdown = stopServer().then(completed);
@@ -81,23 +88,10 @@ describe('stopServer', () => {
         expect(grpcServer.forceShutdown).toHaveBeenCalledOnce();
         expect(log.warn).toHaveBeenCalled();
 
-        grpcServer.tryShutdown.mock.calls[0][0](new Error('Late callback'));
+        grpcServer.tryShutdown.mock.calls[0][0]();
         expect(grpcServer.forceShutdown).toHaveBeenCalledOnce();
-        expect(log.error).not.toHaveBeenCalled();
+        expect(log.info).not.toHaveBeenCalled();
         expect(completed).toHaveBeenCalledOnce();
-        expect(vi.getTimerCount()).toBe(0);
-    });
-
-    it('forces shutdown on a callback error and permits cleanup to continue', async () => {
-        startServer();
-        const shutdown = stopServer();
-        const err = new Error('Shutdown failed');
-
-        grpcServer.tryShutdown.mock.calls[0][0](err);
-
-        await expect(shutdown).resolves.toBeUndefined();
-        expect(grpcServer.forceShutdown).toHaveBeenCalledOnce();
-        expect(log.error).toHaveBeenCalledWith({ err }, expect.any(String));
         expect(vi.getTimerCount()).toBe(0);
     });
 });
