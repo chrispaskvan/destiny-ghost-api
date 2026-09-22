@@ -7,6 +7,7 @@ import World2 from './helpers/world2.js';
 import pool from './helpers/pool.js';
 
 let server;
+let stopping = false;
 
 const createGetAllHandler = world => (call, callback) => {
     for (const [key, value1] of Object.entries(configuration.notificationHeaders)) {
@@ -64,31 +65,57 @@ const createGetAllHandler = world => (call, callback) => {
     });
 };
 
-const startServer = () => {
-    const packageDefinition = protoLoader.loadSync('./items.proto', {
-        keepCase: true,
-        longs: String,
-        enums: String,
-        arrays: true,
-    });
-    const itemsProto = grpc.loadPackageDefinition(packageDefinition);
-    const directory = process.env.DESTINY2_DATABASE_DIR;
-    const world = new World2({
-        directory,
-        pool,
-    });
-    const port = 1102;
+/**
+ * Resolve once the port is bound, so callers can await a listening server.
+ * @returns {Promise<void>}
+ */
+const startServer = () =>
+    new Promise((resolve, reject) => {
+        const packageDefinition = protoLoader.loadSync('./items.proto', {
+            keepCase: true,
+            longs: String,
+            enums: String,
+            arrays: true,
+        });
+        const itemsProto = grpc.loadPackageDefinition(packageDefinition);
+        const directory = process.env.DESTINY2_DATABASE_DIR;
+        const world = new World2({
+            directory,
+            pool,
+        });
+        const port = 1102;
 
-    server = new grpc.Server();
-    server.addService(itemsProto.ItemService.service, {
-        getAll: createGetAllHandler(world),
-    });
+        stopping = false;
 
-    server.bindAsync(`127.0.0.1:${port}`, grpc.ServerCredentials.createInsecure(), err => {
-        if (err) throw err;
-        log.info({ port }, 'GRPC server is listening');
+        const pending = new grpc.Server();
+        pending.addService(itemsProto.ItemService.service, {
+            getAll: createGetAllHandler(world),
+        });
+
+        pending.bindAsync(`127.0.0.1:${port}`, grpc.ServerCredentials.createInsecure(), err => {
+            if (err) {
+                reject(err);
+                return;
+            }
+
+            /**
+             * grpc-js registers the listening server inside its own bind callback, so a
+             * shutdown that ran while this bind was in flight drained nothing and cleared
+             * the module reference. Close this one here rather than leave it listening
+             * with nothing able to reach it.
+             */
+            if (stopping) {
+                pending.forceShutdown();
+                log.warn('GRPC server bound after shutdown; closing it immediately');
+                resolve();
+                return;
+            }
+
+            server = pending;
+            log.info({ port }, 'GRPC server is listening');
+            resolve();
+        });
     });
-};
 
 /**
  * Drain active RPCs, forcing shutdown if the grace period expires.
@@ -96,6 +123,8 @@ const startServer = () => {
  */
 const stopServer = () =>
     new Promise(resolve => {
+        stopping = true;
+
         if (!server) {
             resolve();
             return;

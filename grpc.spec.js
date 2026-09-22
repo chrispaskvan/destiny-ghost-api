@@ -23,7 +23,7 @@ describe('stopServer', () => {
         started = false;
         grpcServer = {
             addService: vi.fn(),
-            bindAsync: vi.fn(),
+            bindAsync: vi.fn((_address, _credentials, callback) => callback(null, 1102)),
             tryShutdown: vi.fn(),
             forceShutdown: vi.fn(),
         };
@@ -53,7 +53,7 @@ describe('stopServer', () => {
 
     it('waits for graceful completion and clears the fallback timer', async () => {
         started = true;
-        startServer();
+        await startServer();
         const completed = vi.fn();
         const shutdown = stopServer().then(completed);
 
@@ -75,7 +75,7 @@ describe('stopServer', () => {
 
     it('forces shutdown after three seconds and ignores a late callback', async () => {
         started = true;
-        startServer();
+        await startServer();
         const completed = vi.fn();
         const shutdown = stopServer().then(completed);
 
@@ -90,9 +90,66 @@ describe('stopServer', () => {
 
         grpcServer.tryShutdown.mock.calls[0][0]();
         expect(grpcServer.forceShutdown).toHaveBeenCalledOnce();
-        expect(log.info).not.toHaveBeenCalled();
+        expect(log.info).not.toHaveBeenCalledWith('GRPC server shut down');
         expect(completed).toHaveBeenCalledOnce();
         expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('resolves only once the port is bound', async () => {
+        let bound;
+        grpcServer.bindAsync.mockImplementation((_address, _credentials, callback) => {
+            bound = callback;
+        });
+
+        const listening = vi.fn();
+        const start = startServer().then(listening);
+
+        await Promise.resolve();
+        expect(listening).not.toHaveBeenCalled();
+
+        bound(null, 1102);
+        await start;
+
+        expect(listening).toHaveBeenCalledOnce();
+        expect(log.info).toHaveBeenCalledWith({ port: 1102 }, 'GRPC server is listening');
+
+        started = true;
+    });
+
+    it('rejects when the port cannot be bound', async () => {
+        const err = new Error('EADDRINUSE');
+        grpcServer.bindAsync.mockImplementation((_address, _credentials, callback) =>
+            callback(err),
+        );
+
+        await expect(startServer()).rejects.toBe(err);
+
+        await expect(stopServer()).resolves.toBeUndefined();
+        expect(grpcServer.tryShutdown).not.toHaveBeenCalled();
+    });
+
+    it('closes a server that finishes binding after shutdown rather than orphaning it', async () => {
+        let bound;
+        grpcServer.bindAsync.mockImplementation((_address, _credentials, callback) => {
+            bound = callback;
+        });
+
+        const start = startServer();
+
+        await expect(stopServer()).resolves.toBeUndefined();
+        expect(grpcServer.tryShutdown).not.toHaveBeenCalled();
+
+        bound(null, 1102);
+        await start;
+
+        expect(grpcServer.forceShutdown).toHaveBeenCalledOnce();
+        expect(log.warn).toHaveBeenCalledWith(
+            'GRPC server bound after shutdown; closing it immediately',
+        );
+        expect(log.info).not.toHaveBeenCalledWith({ port: 1102 }, 'GRPC server is listening');
+
+        await expect(stopServer()).resolves.toBeUndefined();
+        expect(grpcServer.tryShutdown).not.toHaveBeenCalled();
     });
 });
 
