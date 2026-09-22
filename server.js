@@ -65,7 +65,11 @@ const startServer = async () => {
                 'Interruption or termination signal received. Shutting down the server ...',
             );
 
-            await stopGrpcServer();
+            try {
+                await stopGrpcServer();
+            } catch (err) {
+                log.error({ err }, 'GRPC failed to shut down');
+            }
 
             const shutdownTasks = [
                 ['Cache', cache.quit()],
