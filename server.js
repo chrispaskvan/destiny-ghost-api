@@ -17,6 +17,7 @@ import loaders from './loaders/index.js';
 import subscriber from './helpers/subscriber.js';
 import processExternalPromisesWithTimeout from './helpers/process-external-promises-with-timeout.js';
 import pool from './helpers/pool.js';
+import { stopServer as stopGrpcServer } from './grpc.js';
 
 let insecureConnection;
 let secureConnection;
@@ -63,6 +64,8 @@ const startServer = async () => {
             console.log(
                 'Interruption or termination signal received. Shutting down the server ...',
             );
+
+            await stopGrpcServer();
 
             const shutdownTasks = [
                 ['Cache', cache.quit()],

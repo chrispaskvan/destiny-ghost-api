@@ -90,8 +90,37 @@ const startServer = () => {
     });
 };
 
-const stopServer = () => {
-    server.forceShutdown();
-};
+/**
+ * Drain active RPCs, forcing shutdown if the grace period expires.
+ * @returns {Promise<void>}
+ */
+const stopServer = () =>
+    new Promise(resolve => {
+        if (!server) {
+            resolve();
+            return;
+        }
+
+        const currentServer = server;
+        let completed = false;
+        const finish = (err, timedOut = false) => {
+            if (completed) return;
+            completed = true;
+            clearTimeout(timeout);
+
+            if (err) {
+                log.error({ err }, 'GRPC graceful shutdown failed; forcing shutdown');
+            } else if (timedOut) {
+                log.warn('GRPC graceful shutdown timed out; forcing shutdown');
+            }
+
+            if (err || timedOut) currentServer.forceShutdown();
+            if (server === currentServer) server = undefined;
+            resolve();
+        };
+        const timeout = setTimeout(() => finish(null, true), 3000);
+
+        currentServer.tryShutdown(finish);
+    });
 
 export { createGetAllHandler, startServer, stopServer };
