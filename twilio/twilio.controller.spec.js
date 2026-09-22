@@ -306,7 +306,7 @@ describe('TwilioController', () => {
         });
 
         describe('media', () => {
-            it('should hand images off and acknowledge without waiting', async () => {
+            it('should hand images off for analysis', async () => {
                 const body = inbound('', {
                     NumMedia: '1',
                     MediaContentType0: 'image/jpeg',
@@ -320,6 +320,33 @@ describe('TwilioController', () => {
                     from: phoneNumber,
                     media: [{ contentType: 'image/jpeg', url: 'https://api.twilio.com/media/ME1' }],
                 });
+            });
+
+            /**
+             * Downloading and analysing an image can outlast Twilio's webhook
+             * timeout, so the handoff is deliberately not awaited. Proving
+             * that needs the analysis left outstanding while the reply is
+             * asked for: a test that only checks `process` was called passes
+             * just as well when the source awaits it, because the double
+             * settles immediately.
+             */
+            it('should acknowledge while the analysis is still running', async () => {
+                const analysing = Promise.withResolvers();
+                const body = inbound('', {
+                    NumMedia: '1',
+                    MediaContentType0: 'image/jpeg',
+                    MediaUrl0: 'https://api.twilio.com/media/ME1',
+                });
+
+                mmsService.process.mockReturnValueOnce(analysing.promise);
+
+                try {
+                    const { message } = await twilioController.request({ body, cookies: {} });
+
+                    expect(message).toBe(MEDIA_RECEIVED_REPLY);
+                } finally {
+                    analysing.resolve(undefined);
+                }
             });
 
             it('should refuse an attachment that is not an image', async () => {
