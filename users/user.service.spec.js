@@ -461,7 +461,7 @@ describe('UserService', () => {
 
             expect(collectionId).toBe('Users');
             expect(query.query).toBe(
-                'SELECT r.isSubscribed, r.notifications FROM root r WHERE r.phoneNumber = @phoneNumber',
+                'SELECT r.isSubscribed, r.notifications, r.consentUpdatedAt FROM root r WHERE r.phoneNumber = @phoneNumber',
             );
             expect(query.parameters).toEqual([{ name: '@phoneNumber', value: user.phoneNumber }]);
         });

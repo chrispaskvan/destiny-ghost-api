@@ -11,6 +11,7 @@ import log from '../helpers/log.js';
 import DestinyError from '../destiny/destiny.error.js';
 import { extractEmoji, normalizeEmoji, stripEmoji } from '../helpers/emoji.js';
 import { withRetry, isTransientError } from '../helpers/retry.js';
+import { recordConsent } from '../helpers/consent-marker.js';
 import subscriber from '../helpers/subscriber.js';
 import { enqueueConsentChange, QUEUE_NAME as CONSENT_QUEUE } from './consent.queue.js';
 import {
@@ -551,10 +552,20 @@ class TwilioController {
          * persistence. The arrival time is taken here, before any of it, so
          * two messages from one number are ordered by when they reached us
          * rather than by which write happened to finish first.
+         *
+         * The two writes below are deliberately asymmetric. The durable one
+         * stays fire-and-forget, because answering a STOP cannot depend on
+         * Cosmos. The marker is awaited, because a record of the
+         * acknowledgement is only useful if it is readable by the time the
+         * acknowledgement is out - that is the whole of #739. It is one Redis
+         * write, bounded by a timeout and incapable of throwing, so the worst
+         * it can do is delay the reply by that timeout and leave the window
+         * where it already was.
          */
         const receivedAt = Temporal.Now.instant().epochMilliseconds;
 
         if (STOP_KEYWORDS.has(message)) {
+            await recordConsent(body.From, false, receivedAt);
             void this.#persistConsent(body.From, false, receivedAt);
             return { message: STOP_REPLY };
         }
@@ -564,6 +575,7 @@ class TwilioController {
         }
 
         if (START_KEYWORDS.has(message)) {
+            await recordConsent(body.From, true, receivedAt);
             void this.#persistConsent(body.From, true, receivedAt);
             return { message: START_REPLY };
         }

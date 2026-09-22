@@ -8,6 +8,7 @@ import MmsService from './mms.service.js';
 import TwilioRouter from './twilio.routes.js';
 import TwilioController from './twilio.controller.js';
 import UserService from '../users/user.service.js';
+import cache from '../helpers/cache.js';
 import configuration from '../helpers/config.js';
 import log from '../helpers/log.js';
 import rateLimiterMiddleware, {
@@ -99,6 +100,9 @@ vi.mock('../helpers/cache.js', () => ({
         hGet: vi.fn(),
         hGetAll: vi.fn(),
         expire: vi.fn(),
+        // The consent marker a STOP/START acknowledgement leaves behind
+        // (helpers/consent-marker.js), written by a compare-and-set script.
+        eval: vi.fn().mockResolvedValue(1),
     },
 }));
 
@@ -256,6 +260,7 @@ beforeEach(() => {
      * down. The queue path has its own tests, which opt back in.
      */
     enqueueConsentChange.mockReset().mockRejectedValue(new Error('queue unavailable'));
+    cache.eval.mockReset().mockResolvedValue(1);
     worldRepository.getItemByName.mockResolvedValue([]);
 
     twilioRouter = TwilioRouter({
@@ -357,6 +362,97 @@ describe('TwilioRouter', () => {
                 }
             },
         );
+
+        it('holds the reply until the acknowledgement has been recorded', async () => {
+            /**
+             * The whole of #739: a record of the acknowledgement is only worth
+             * keeping if it is readable by the time the acknowledgement is
+             * out. So the assertion has to be that the reply is *withheld*
+             * while the write is outstanding - checking the call after the
+             * dispatch resolves would pass just as well on a fire-and-forget
+             * write that happened to win the race.
+             */
+            const pending = Promise.withResolvers();
+            const response = createResponse({ eventEmitter: EventEmitter });
+
+            cache.eval.mockReturnValue(pending.promise);
+
+            const dispatched = dispatch(
+                twilioRouter,
+                signedRequest({ body: signedBody({ Body: 'STOP' }) }),
+                response,
+            );
+
+            await new Promise(resolve => setImmediate(resolve));
+
+            expect(cache.eval).toHaveBeenCalledWith(
+                expect.stringContaining('HGET'),
+                expect.objectContaining({
+                    keys: [`consent:${signedBody().From}`],
+                    arguments: ['0', expect.any(String), expect.any(String)],
+                }),
+            );
+            expect(response._getData()).toBe('');
+
+            pending.resolve(1);
+            await dispatched;
+
+            expect(response._getData()).toContain("You're unsubscribed");
+        });
+
+        it('still answers a STOP when the acknowledgement cannot be recorded', async () => {
+            const warnLog = vi.spyOn(log, 'warn').mockImplementation(() => {});
+
+            cache.eval.mockRejectedValueOnce(new Error('Redis is down'));
+
+            try {
+                const response = createResponse({ eventEmitter: EventEmitter });
+
+                await dispatch(
+                    twilioRouter,
+                    signedRequest({ body: signedBody({ Body: 'STOP' }) }),
+                    response,
+                );
+
+                expect(response.statusCode).toBe(StatusCodes.OK);
+                expect(response._getData()).toContain("You're unsubscribed");
+                // The durable write is untouched by the marker failing.
+                expect(enqueueConsentChange).toHaveBeenCalled();
+            } finally {
+                warnLog.mockRestore();
+            }
+        });
+
+        it('records a START as the opposite intent', async () => {
+            const response = createResponse({ eventEmitter: EventEmitter });
+
+            await dispatch(
+                twilioRouter,
+                signedRequest({ body: signedBody({ Body: 'START' }) }),
+                response,
+            );
+
+            expect(cache.eval).toHaveBeenCalledWith(
+                expect.any(String),
+                expect.objectContaining({
+                    keys: [`consent:${signedBody().From}`],
+                    arguments: ['1', expect.any(String), expect.any(String)],
+                }),
+            );
+        });
+
+        it('records nothing for HELP, which changes no consent', async () => {
+            const response = createResponse({ eventEmitter: EventEmitter });
+
+            await dispatch(
+                twilioRouter,
+                signedRequest({ body: signedBody({ Body: 'HELP' }) }),
+                response,
+            );
+
+            expect(response._getData()).toContain('banshee-44@destiny-ghost.com');
+            expect(cache.eval).not.toHaveBeenCalled();
+        });
 
         it('retries a throttled consent write rather than losing the opt-out', async () => {
             const throttled = Object.assign(new Error('Request rate is large'), { code: 429 });
