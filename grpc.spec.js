@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import grpc from '@grpc/grpc-js';
-import { createGetAllHandler } from './grpc.js';
+import { createGetAllHandler, startServer, stopServer } from './grpc.js';
+import log from './helpers/log.js';
 
 vi.mock('./helpers/config.js', () => ({
     default: {
@@ -9,6 +10,91 @@ vi.mock('./helpers/config.js', () => ({
 }));
 vi.mock('./helpers/pool.js', () => ({ default: {} }));
 vi.mock('./helpers/world2.js', () => ({ default: vi.fn() }));
+vi.mock('./helpers/log.js', () => ({
+    default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+
+describe('stopServer', () => {
+    let grpcServer;
+    let started;
+
+    beforeEach(() => {
+        vi.useFakeTimers();
+        started = false;
+        grpcServer = {
+            addService: vi.fn(),
+            bindAsync: vi.fn(),
+            tryShutdown: vi.fn(),
+            forceShutdown: vi.fn(),
+        };
+        vi.spyOn(grpc, 'Server').mockImplementation(
+            class {
+                constructor() {
+                    Object.assign(this, grpcServer);
+                }
+            },
+        );
+    });
+
+    afterEach(async () => {
+        if (started) {
+            const shutdown = stopServer();
+            await vi.runAllTimersAsync();
+            await shutdown;
+        }
+        vi.useRealTimers();
+        vi.restoreAllMocks();
+    });
+
+    it('resolves when the server has not started', async () => {
+        await expect(stopServer()).resolves.toBeUndefined();
+        expect(grpcServer.forceShutdown).not.toHaveBeenCalled();
+    });
+
+    it('waits for graceful completion and clears the fallback timer', async () => {
+        started = true;
+        startServer();
+        const completed = vi.fn();
+        const shutdown = stopServer().then(completed);
+
+        await Promise.resolve();
+        expect(completed).not.toHaveBeenCalled();
+        expect(grpcServer.forceShutdown).not.toHaveBeenCalled();
+
+        grpcServer.tryShutdown.mock.calls[0][0]();
+        await shutdown;
+
+        expect(completed).toHaveBeenCalledOnce();
+        expect(log.info).toHaveBeenCalledWith('GRPC server shut down');
+        expect(vi.getTimerCount()).toBe(0);
+        await vi.advanceTimersByTimeAsync(3000);
+        expect(grpcServer.forceShutdown).not.toHaveBeenCalled();
+        await expect(stopServer()).resolves.toBeUndefined();
+        expect(grpcServer.tryShutdown).toHaveBeenCalledOnce();
+    });
+
+    it('forces shutdown after three seconds and ignores a late callback', async () => {
+        started = true;
+        startServer();
+        const completed = vi.fn();
+        const shutdown = stopServer().then(completed);
+
+        await vi.advanceTimersByTimeAsync(2999);
+        expect(completed).not.toHaveBeenCalled();
+        expect(grpcServer.forceShutdown).not.toHaveBeenCalled();
+
+        await vi.advanceTimersByTimeAsync(1);
+        await shutdown;
+        expect(grpcServer.forceShutdown).toHaveBeenCalledOnce();
+        expect(log.warn).toHaveBeenCalled();
+
+        grpcServer.tryShutdown.mock.calls[0][0]();
+        expect(grpcServer.forceShutdown).toHaveBeenCalledOnce();
+        expect(log.info).not.toHaveBeenCalled();
+        expect(completed).toHaveBeenCalledOnce();
+        expect(vi.getTimerCount()).toBe(0);
+    });
+});
 
 const createCall = ({ headerValue = 'test-value', page = undefined, size = undefined } = {}) => ({
     metadata: {

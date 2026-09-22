@@ -11,7 +11,7 @@ export default defineConfig({
          */
         clearMocks: true,
         coverage: {
-            reporter: ['clover', 'html'],
+            reporter: ['clover', 'html', 'json'],
             thresholds: {
                 autoUpdate: true,
                 statements: 88.63,
