@@ -93,6 +93,18 @@ const startServer = () =>
 
         pending.bindAsync(`127.0.0.1:${port}`, grpc.ServerCredentials.createInsecure(), err => {
             if (err) {
+                /**
+                 * A shutdown already ran, so nothing is waiting on this server. Rejecting
+                 * here would reach start.js's catch and exit the process mid-teardown,
+                 * cutting short the remaining cleanup and turning a normal signal into a
+                 * non-zero exit.
+                 */
+                if (attempt !== generation) {
+                    log.warn({ err }, 'GRPC bind failed after shutdown began; ignoring');
+                    resolve();
+                    return;
+                }
+
                 reject(err);
                 return;
             }

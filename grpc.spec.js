@@ -157,6 +157,26 @@ describe('stopServer', () => {
         started = true;
     });
 
+    it('ignores a bind failure that lands after shutdown began', async () => {
+        let bound;
+        grpcServer.bindAsync.mockImplementation((_address, _credentials, callback) => {
+            bound = callback;
+        });
+
+        const start = startServer();
+
+        await expect(stopServer()).resolves.toBeUndefined();
+
+        bound(new Error('EADDRINUSE'));
+
+        await expect(start).resolves.toBeUndefined();
+        expect(log.warn).toHaveBeenCalledWith(
+            { err: expect.any(Error) },
+            'GRPC bind failed after shutdown began; ignoring',
+        );
+        expect(grpcServer.forceShutdown).not.toHaveBeenCalled();
+    });
+
     it('closes a server that finishes binding after shutdown rather than orphaning it', async () => {
         let bound;
         grpcServer.bindAsync.mockImplementation((_address, _credentials, callback) => {
