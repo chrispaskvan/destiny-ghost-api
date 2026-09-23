@@ -128,6 +128,35 @@ describe('stopServer', () => {
         expect(grpcServer.tryShutdown).not.toHaveBeenCalled();
     });
 
+    it('does not let a later start adopt a server from an attempt that was stopped', async () => {
+        const binds = [];
+        grpcServer.bindAsync.mockImplementation((_address, _credentials, callback) => {
+            binds.push(callback);
+        });
+
+        const first = startServer();
+
+        await expect(stopServer()).resolves.toBeUndefined();
+
+        const second = startServer();
+
+        binds[0](null, 1102);
+        await first;
+
+        expect(grpcServer.forceShutdown).toHaveBeenCalledOnce();
+
+        binds[1](null, 1102);
+        await second;
+
+        expect(grpcServer.forceShutdown).toHaveBeenCalledOnce();
+        expect(log.info).toHaveBeenCalledExactlyOnceWith(
+            { port: 1102 },
+            'GRPC server is listening',
+        );
+
+        started = true;
+    });
+
     it('closes a server that finishes binding after shutdown rather than orphaning it', async () => {
         let bound;
         grpcServer.bindAsync.mockImplementation((_address, _credentials, callback) => {

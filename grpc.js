@@ -7,7 +7,7 @@ import World2 from './helpers/world2.js';
 import pool from './helpers/pool.js';
 
 let server;
-let stopping = false;
+let generation = 0;
 
 const createGetAllHandler = world => (call, callback) => {
     for (const [key, value1] of Object.entries(configuration.notificationHeaders)) {
@@ -85,8 +85,7 @@ const startServer = () =>
         });
         const port = 1102;
 
-        stopping = false;
-
+        const attempt = generation;
         const pending = new grpc.Server();
         pending.addService(itemsProto.ItemService.service, {
             getAll: createGetAllHandler(world),
@@ -99,12 +98,13 @@ const startServer = () =>
             }
 
             /**
-             * grpc-js registers the listening server inside its own bind callback, so a
-             * shutdown that ran while this bind was in flight drained nothing and cleared
-             * the module reference. Close this one here rather than leave it listening
-             * with nothing able to reach it.
+             * grpc-js only registers a listening server inside its own bind callback, so a
+             * shutdown that ran while this bind was in flight found no server to drain.
+             * Close this one here rather than leave it listening with nothing able to
+             * reach it. Comparing against a per-attempt token rather than a shared flag
+             * keeps a later startServer() from adopting an earlier attempt's server.
              */
-            if (stopping) {
+            if (attempt !== generation) {
                 pending.forceShutdown();
                 log.warn('GRPC server bound after shutdown; closing it immediately');
                 resolve();
@@ -123,7 +123,7 @@ const startServer = () =>
  */
 const stopServer = () =>
     new Promise(resolve => {
-        stopping = true;
+        generation += 1;
 
         if (!server) {
             resolve();
