@@ -38,6 +38,15 @@ class Subscriber {
                     } = data;
                     const user = JSON.parse(body, safeReviver);
 
+                    /**
+                     * The payload is deliberately absent. Spreading it here
+                     * put whatever the publisher had queued into the log
+                     * event, which for a single-recipient notification was the
+                     * whole user document. `helpers/publisher.js` now queues
+                     * identifiers only, but a job enqueued before that change
+                     * can still be waiting in Redis, so this stays narrow
+                     * rather than trusting what it is handed.
+                     */
                     log.info(
                         {
                             jobId: job.id,
@@ -45,7 +54,6 @@ class Subscriber {
                             claimCheckNumber,
                             notificationType,
                             traceId,
-                            ...user,
                         },
                         'Processing job',
                     );

@@ -15,6 +15,16 @@ const { postmasterConfirm, postmasterRegister } = vi.hoisted(() => ({
     postmasterRegister: vi.fn().mockResolvedValue({ messageId: 'test-register-id' }),
 }));
 
+/**
+ * The sign-up log line is the one place the whole user object used to be
+ * written out, verification tokens and all, so what it carries is asserted
+ * rather than assumed.
+ */
+const { logInfo } = vi.hoisted(() => ({ logInfo: vi.fn() }));
+
+vi.mock('../helpers/log.js', () => ({
+    default: { error: vi.fn(), info: logInfo, warn: vi.fn() },
+}));
 vi.mock('../helpers/postmaster.js', () => ({
     default: class {
         confirm = postmasterConfirm;
@@ -330,6 +340,9 @@ describe('UserRouter', () => {
             phoneNumber: '+12085550123',
         };
 
+        const signUpEvent = () =>
+            logInfo.mock.calls.find(([, message]) => message?.startsWith('User sign'));
+
         function signUpRequest(body) {
             return createRequest({
                 method: 'POST',
@@ -430,6 +443,60 @@ describe('UserRouter', () => {
                         expect(res.statusCode).toEqual(StatusCodes.NO_CONTENT);
                         expect(userService.updateUser).toHaveBeenCalled();
                         expect(postmasterRegister).toHaveBeenCalled();
+                        done();
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
+
+                userRouter(signUpRequest({ ...validBody }), res, next);
+            }));
+
+        it('should log a successful sign-up without the tokens it just minted', () =>
+            new Promise((done, reject) => {
+                res.on('end', () => {
+                    try {
+                        const [event, message] = signUpEvent();
+
+                        expect(message).toEqual('User signed up');
+                        expect(event).toEqual({
+                            displayName: 'test-user',
+                            membershipType: 2,
+                        });
+                        /**
+                         * `getBlob`/`getCode` are stubbed at the top of this
+                         * file, so these are the exact values `signUp` put on
+                         * the document it returned.
+                         */
+                        expect(JSON.stringify(event)).not.toContain('test-blob-token');
+                        expect(JSON.stringify(event)).not.toContain('123456');
+                        expect(JSON.stringify(event)).not.toContain(validBody.emailAddress);
+                        done();
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
+
+                userRouter(signUpRequest({ ...validBody }), res, next);
+            }));
+
+        it('should log a failed sign-up as an outcome rather than a document', () =>
+            new Promise((done, reject) => {
+                userService.getUserByPhoneNumber.mockResolvedValue({
+                    dateRegistered: '2020-01-01T00:00:00.000Z',
+                    bungie: { access_token: 'sentinel-access-token' },
+                });
+
+                res.on('end', () => {
+                    try {
+                        const [event, message] = signUpEvent();
+
+                        expect(message).toEqual('User sign up failed due to conflicts');
+                        expect(event).toEqual({
+                            displayName: 'test-user',
+                            membershipType: 2,
+                        });
+                        expect(JSON.stringify(event)).not.toContain('sentinel-access-token');
                         done();
                     } catch (err) {
                         reject(err);

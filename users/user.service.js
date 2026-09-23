@@ -386,7 +386,16 @@ class UserService {
             if (dbResults.length > 0) {
                 delivered.add(message.SmsSid);
                 deletes.push(this.#deleteMessage(message.id, message.To));
-                log.warn(message, 'Deleted message.');
+                /**
+                 * The document itself used to be the merge object, which put
+                 * `Body` - the text of the message, and so the verification
+                 * code on a verification SMS - into the log. Which message was
+                 * removed is answerable from its identifiers.
+                 */
+                log.warn(
+                    { smsSid: message.SmsSid, messageId: message.id, phoneNumber: message.To },
+                    'Deleted message.',
+                );
             }
         }
 

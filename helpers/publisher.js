@@ -22,8 +22,11 @@ class PublisherError extends Error {
 }
 
 /**
- * A queued notification's user, as much as this module reads from it.
+ * The identifiers a queued notification travels with - what
+ * `NotificationController.#send` reads, and nothing else.
  * @typedef {Object} QueuedUser
+ * @property {string} membershipId
+ * @property {number} membershipType
  * @property {string} phoneNumber
  */
 
@@ -127,6 +130,14 @@ class Publisher {
     /**
      * Send notification of a specific type to a user.
      *
+     * Narrowing happens here rather than at the call sites because the queue
+     * is the thing being protected: a BullMQ job outlives the request that
+     * created it, sits in Redis for as long as the retry policy allows, and is
+     * read back by a worker. Whatever a caller happens to hold - the single
+     * recipient path holds the whole Cosmos document, Bungie tokens and all -
+     * only the identifiers cross into it, and the worker loads current state
+     * for itself.
+     *
      * @param {QueuedUser} user
      * @param {{ notificationType: string, claimCheckNumber: string }} param1
      * @returns {Promise<*>}
@@ -142,9 +153,10 @@ class Publisher {
             ).throwIfMissingClaimCheckNumber(),
         },
     ) {
+        const { membershipId, membershipType, phoneNumber } = user;
         const { traceId } = context.getStore()?.get('logger')?.bindings() || {};
         const message = {
-            body: JSON.stringify(user),
+            body: JSON.stringify({ membershipId, membershipType, phoneNumber }),
             applicationProperties: {
                 claimCheckNumber,
                 notificationType,
@@ -152,9 +164,10 @@ class Publisher {
             },
         };
 
+        const deduplicationId = `${notificationType}-${phoneNumber}`;
         const result = await this.#queue.add('notification', message, {
             deduplication: {
-                id: `${notificationType}-${user.phoneNumber}`,
+                id: deduplicationId,
                 ttl: 3_600_000,
             },
         });
@@ -163,8 +176,8 @@ class Publisher {
             {
                 jobId: result.id,
                 notificationType,
-                phoneNumber: user.phoneNumber,
-                deduplicationId: `${notificationType}-${user.phoneNumber}`,
+                phoneNumber,
+                deduplicationId,
             },
             'Message published to queue',
         );

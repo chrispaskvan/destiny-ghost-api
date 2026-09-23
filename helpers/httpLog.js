@@ -14,6 +14,7 @@ import { createId } from '@paralleldrive/cuid2';
 import { stdSerializers } from 'pino';
 import context from './async-context.js';
 import log from './log.js';
+import { redactQuery, redactUrl } from './redact.js';
 
 /**
  * `pino-http`'s `.d.ts` has no `export =`, so under this project's module
@@ -24,6 +25,34 @@ import log from './log.js';
  * @type {typeof import('pino-http').default}
  */
 const PinoHttp = createRequire(import.meta.url)('pino-http');
+
+/**
+ * The standard serializer records the request target verbatim, which on the
+ * Bungie OAuth callback is `?code=...&state=...` - the authorization code, on
+ * the request line, before the route has had a chance to exchange it. It then
+ * records Express's parsed `req.query` beside it, which holds the same code
+ * again; censoring one without the other accomplishes nothing.
+ *
+ * Headers need no equivalent pass: `redact` in `log.js` runs after the
+ * serializers, so it reaches into this output and censors `authorization`,
+ * `cookie` and `set-cookie` by key. The URL and the query are beyond its
+ * reach - one because the secret is inside a string rather than at a path,
+ * the other because `code` is a credential only here.
+ *
+ * @param {import('express').Request} req
+ * @returns {ReturnType<typeof stdSerializers.req>}
+ */
+const requestSerializer = req => {
+    const serialized = stdSerializers.req(req);
+    const { query, url } = serialized;
+
+    return {
+        ...serialized,
+        // A request that never reached Express has no parsed query to censor.
+        ...(query && { query: redactQuery(query) }),
+        url: redactUrl(url),
+    };
+};
 
 /** @type {import('pino-http').Options<import('express').Request, import('express').Response>} */
 const options = {
@@ -72,7 +101,7 @@ const options = {
     logger: log,
     serializers: {
         err: stdSerializers.err,
-        req: stdSerializers.req,
+        req: requestSerializer,
         res: stdSerializers.res,
     },
     useLevel: 'info',
@@ -89,3 +118,4 @@ const options = {
  * directly is equivalent and far more legible.
  */
 export default PinoHttp(options);
+export { requestSerializer };
