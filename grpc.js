@@ -7,6 +7,7 @@ import World2 from './helpers/world2.js';
 import pool from './helpers/pool.js';
 
 let server;
+let generation = 0;
 
 const createGetAllHandler = world => (call, callback) => {
     for (const [key, value1] of Object.entries(configuration.notificationHeaders)) {
@@ -64,31 +65,69 @@ const createGetAllHandler = world => (call, callback) => {
     });
 };
 
-const startServer = () => {
-    const packageDefinition = protoLoader.loadSync('./items.proto', {
-        keepCase: true,
-        longs: String,
-        enums: String,
-        arrays: true,
-    });
-    const itemsProto = grpc.loadPackageDefinition(packageDefinition);
-    const directory = process.env.DESTINY2_DATABASE_DIR;
-    const world = new World2({
-        directory,
-        pool,
-    });
-    const port = 1102;
+/**
+ * Resolve once the port is bound, so callers can await a listening server.
+ * @returns {Promise<void>}
+ */
+const startServer = () =>
+    new Promise((resolve, reject) => {
+        const packageDefinition = protoLoader.loadSync('./items.proto', {
+            keepCase: true,
+            longs: String,
+            enums: String,
+            arrays: true,
+        });
+        const itemsProto = grpc.loadPackageDefinition(packageDefinition);
+        const directory = process.env.DESTINY2_DATABASE_DIR;
+        const world = new World2({
+            directory,
+            pool,
+        });
+        const port = 1102;
 
-    server = new grpc.Server();
-    server.addService(itemsProto.ItemService.service, {
-        getAll: createGetAllHandler(world),
-    });
+        const attempt = generation;
+        const pending = new grpc.Server();
+        pending.addService(itemsProto.ItemService.service, {
+            getAll: createGetAllHandler(world),
+        });
 
-    server.bindAsync(`127.0.0.1:${port}`, grpc.ServerCredentials.createInsecure(), err => {
-        if (err) throw err;
-        log.info({ port }, 'GRPC server is listening');
+        pending.bindAsync(`127.0.0.1:${port}`, grpc.ServerCredentials.createInsecure(), err => {
+            if (err) {
+                /**
+                 * A shutdown already ran, so nothing is waiting on this server. Rejecting
+                 * here would reach start.js's catch and exit the process mid-teardown,
+                 * cutting short the remaining cleanup and turning a normal signal into a
+                 * non-zero exit.
+                 */
+                if (attempt !== generation) {
+                    log.warn({ err }, 'GRPC bind failed after shutdown began; ignoring');
+                    resolve();
+                    return;
+                }
+
+                reject(err);
+                return;
+            }
+
+            /**
+             * grpc-js only registers a listening server inside its own bind callback, so a
+             * shutdown that ran while this bind was in flight found no server to drain.
+             * Close this one here rather than leave it listening with nothing able to
+             * reach it. Comparing against a per-attempt token rather than a shared flag
+             * keeps a later startServer() from adopting an earlier attempt's server.
+             */
+            if (attempt !== generation) {
+                pending.forceShutdown();
+                log.warn('GRPC server bound after shutdown; closing it immediately');
+                resolve();
+                return;
+            }
+
+            server = pending;
+            log.info({ port }, 'GRPC server is listening');
+            resolve();
+        });
     });
-};
 
 /**
  * Drain active RPCs, forcing shutdown if the grace period expires.
@@ -96,6 +135,8 @@ const startServer = () => {
  */
 const stopServer = () =>
     new Promise(resolve => {
+        generation += 1;
+
         if (!server) {
             resolve();
             return;
