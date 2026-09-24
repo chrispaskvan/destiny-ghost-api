@@ -10,6 +10,7 @@
 import { createId } from '@paralleldrive/cuid2';
 import pino from 'pino';
 import context from './async-context.js';
+import redact from './redact.js';
 
 const productionOnlyOptions = {
     formatters: {
@@ -41,7 +42,13 @@ if (process.env.NODE_ENV !== 'production') {
     options = productionOnlyOptions;
 }
 
-const logger = pino(options);
+/**
+ * Redaction is applied here rather than on either branch above because it
+ * belongs to the root logger in both: Pino runs it after the serializers and
+ * across every child, making it the one hook that sees both what a call site
+ * passes and what a serializer produces from a raw request.
+ */
+const logger = pino({ ...options, redact });
 const log = new Proxy(logger, {
     get(target, property, receiver) {
         target = context.getStore()?.get('logger') || target;

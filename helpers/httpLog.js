@@ -14,6 +14,7 @@ import { createId } from '@paralleldrive/cuid2';
 import { stdSerializers } from 'pino';
 import context from './async-context.js';
 import log from './log.js';
+import { redactQuery, redactUrl } from './redact.js';
 
 /**
  * `pino-http`'s `.d.ts` has no `export =`, so under this project's module
@@ -24,6 +25,45 @@ import log from './log.js';
  * @type {typeof import('pino-http').default}
  */
 const PinoHttp = createRequire(import.meta.url)('pino-http');
+
+/**
+ * The standard serializer records the request target verbatim, which on the
+ * Bungie OAuth callback is `?code=...&state=...` - the authorization code, on
+ * the request line, before the route has had a chance to exchange it. It then
+ * records Express's parsed `req.query` beside it, which holds the same code
+ * again; censoring one without the other accomplishes nothing.
+ *
+ * Headers need no equivalent pass: `redact` in `log.js` runs after the
+ * serializers, so it reaches into this output and censors `authorization`,
+ * `cookie` and `set-cookie` by key. The URL and the query are beyond its
+ * reach - one because the secret is inside a string rather than at a path,
+ * the other because `code` is a credential only here.
+ *
+ * This takes the *serialized* request, not the raw one: `pino-http` defaults
+ * to `wrapSerializers`, which hands a custom serializer the output of
+ * `stdSerializers.req` rather than the request itself. Calling that serializer
+ * again in here ran it against an object with no `socket`, which silently
+ * dropped `remoteAddress` and `remotePort` from every request log.
+ *
+ * Editing in place keeps the prototype the standard serializer built, whose
+ * non-enumerable `raw` getter other `pino-http` options read through. `query`
+ * is the exception: the serializer assigns Express's own object by reference,
+ * so it is replaced with a censored copy rather than written through to the
+ * live request.
+ *
+ * @param {ReturnType<typeof stdSerializers.req>} serialized
+ * @returns {ReturnType<typeof stdSerializers.req>}
+ */
+const requestSerializer = serialized => {
+    serialized.url = redactUrl(serialized.url);
+
+    // A request that never reached Express has no parsed query to censor.
+    if (serialized.query) {
+        serialized.query = redactQuery(serialized.query);
+    }
+
+    return serialized;
+};
 
 /** @type {import('pino-http').Options<import('express').Request, import('express').Response>} */
 const options = {
@@ -72,7 +112,7 @@ const options = {
     logger: log,
     serializers: {
         err: stdSerializers.err,
-        req: stdSerializers.req,
+        req: requestSerializer,
         res: stdSerializers.res,
     },
     useLevel: 'info',
@@ -89,3 +129,4 @@ const options = {
  * directly is equivalent and far more legible.
  */
 export default PinoHttp(options);
+export { requestSerializer };

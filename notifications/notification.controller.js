@@ -23,9 +23,14 @@ import log from '../helpers/log.js';
  */
 
 /**
- * The queued job payload: the JSON-serialized user this controller
- * published (via helpers/publisher.js) and now receives back (via
- * helpers/subscriber.js) to process a notification for.
+ * The queued job payload: the identifiers this controller published (via
+ * helpers/publisher.js) and now receives back (via helpers/subscriber.js) to
+ * process a notification for. Current state - consent, Bungie tokens - is
+ * read here rather than carried, since the queue can be hours behind.
+ *
+ * A job enqueued before the publisher was narrowed still carries the whole
+ * user document. Destructuring these three fields reads such a payload
+ * correctly, so nothing needs draining.
  * @typedef {Object} QueuedUser
  * @property {string} membershipId
  * @property {number} membershipType

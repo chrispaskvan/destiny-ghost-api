@@ -21,6 +21,7 @@ vi.mock('./log.js', () => ({
 }));
 
 import subscriber from './subscriber.js';
+import log from './log.js';
 
 describe('Subscriber', () => {
     let MockWorkerConstructor;
@@ -137,6 +138,49 @@ describe('Subscriber', () => {
                     notificationType: 'Xur',
                 },
             );
+        });
+
+        /**
+         * A job that predates the publisher's narrowing is still sitting in
+         * Redis with a whole user document in it, and the worker is where
+         * those get read back. Spreading the payload into the event put the
+         * document's credentials into the log; the fields that identify the
+         * job stay.
+         */
+        it('should keep the queued payload out of the processing log', async () => {
+            const accessToken = 'sentinel-access-token';
+            const code = '424242';
+            const callback = vi.fn().mockResolvedValue();
+            const mockJob = {
+                id: 'job-123',
+                data: {
+                    body: JSON.stringify({
+                        phoneNumber: '+1234567890',
+                        bungie: { access_token: accessToken },
+                        membership: { tokens: { code } },
+                    }),
+                    applicationProperties: {
+                        claimCheckNumber: 'claim-456',
+                        notificationType: 'Xur',
+                        traceId: 'trace-789',
+                    },
+                },
+            };
+
+            subscriber.listen(callback);
+            await MockWorkerConstructor.mock.calls[0][1](mockJob);
+
+            const [event] = log.info.mock.calls.find(([, message]) => message === 'Processing job');
+
+            expect(event).toEqual({
+                jobId: 'job-123',
+                queueName: 'notifications',
+                claimCheckNumber: 'claim-456',
+                notificationType: 'Xur',
+                traceId: 'trace-789',
+            });
+            expect(JSON.stringify(event)).not.toContain(accessToken);
+            expect(JSON.stringify(event)).not.toContain(code);
         });
 
         it('should handle job processing errors', async () => {

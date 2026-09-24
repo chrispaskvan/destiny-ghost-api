@@ -79,6 +79,43 @@ describe('Publisher', () => {
 
             expect(result).toBe('some-job');
         });
+
+        /**
+         * The single-recipient path hands this method whatever
+         * `getUserByPhoneNumber` returned, which is the entire Cosmos
+         * document. A BullMQ job outlives the request that made it, so what
+         * does not go in cannot be read back out of Redis a week later.
+         */
+        it('should queue the identifiers alone, not the document it was handed', async () => {
+            const accessToken = chance.hash({ length: 40 });
+            const code = chance.string({ length: 6, pool: '0123456789' });
+            const membershipId = chance.guid();
+            const membershipType = chance.integer({ min: 1, max: 2 });
+            const phoneNumber = '+12085550123';
+
+            await publisher.sendNotification(
+                {
+                    membershipId,
+                    membershipType,
+                    phoneNumber,
+                    emailAddress: chance.email(),
+                    firstName: chance.first(),
+                    bungie: { access_token: accessToken, refresh_token: chance.hash() },
+                    membership: { tokens: { code, blob: chance.hash() } },
+                },
+                { notificationType: 'Xur', claimCheckNumber: '11' },
+            );
+
+            const [, message] = mocks.add.mock.calls.at(-1);
+
+            expect(JSON.parse(message.body)).toEqual({
+                membershipId,
+                membershipType,
+                phoneNumber,
+            });
+            expect(message.body).not.toContain(accessToken);
+            expect(message.body).not.toContain(code);
+        });
     });
 
     describe('failed event handler', () => {
