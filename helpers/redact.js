@@ -23,20 +23,26 @@ const censor = 'REDACTED';
 /**
  * Keys whose value is a credential, censored at the root of a log event.
  *
- * `tokens` is censored whole rather than by member: under `membership` it is
- * the verification pair, and on a join request it is the email blob paired
- * with the SMS code. Both are secret in every field, and censoring the object
- * covers a field added later.
+ * `tokens` and `bungie` are censored whole rather than by member. `tokens` is
+ * the verification pair under `membership` and the email blob paired with the
+ * SMS code on a join request; `bungie` is the stored OAuth grant. Both are
+ * secret in every field, censoring the object covers a field added later, and
+ * naming the container is what lets a user document be caught under whatever
+ * key it was logged under rather than only under `user`.
  *
  * `code` is deliberately absent. Under `tokens` it is a verification code, but
  * everywhere else it is a diagnostic - `err.code`, `DestinyError.code` - and
  * redacting those would cost more than it protects. It is handled by position
  * instead: inside `tokens` above, and as a query parameter below.
  *
- * Both casings of the header names are listed because these paths are matched
- * case-sensitively. Node lower-cases what it parses off the wire, but code
- * that builds a header by hand writes `Authorization` (`helpers/bitly.js`,
- * `twilio/mms.service.js`), and the net should hold if one is ever logged.
+ * Header names are listed in more than one casing because these paths are
+ * matched case-sensitively while header names are not. Node lower-cases what
+ * it parses off the wire, so the lower-case spellings cover anything incoming;
+ * the others cover headers built by hand, which this codebase writes as
+ * `Authorization` (`helpers/bitly.js`, `twilio/mms.service.js`) and, for now,
+ * as lower-case `x-api-key` everywhere. `X-API-Key` is listed anyway because
+ * that is the spelling Bungie's own documentation uses, and a root-tier key
+ * costs nothing.
  * @type {string[]}
  */
 const sensitiveKeys = [
@@ -46,6 +52,7 @@ const sensitiveKeys = [
     'apiKey',
     'Authorization',
     'authorization',
+    'bungie',
     'client_secret',
     'Cookie',
     'cookie',
@@ -56,6 +63,7 @@ const sensitiveKeys = [
     'secret',
     'set-cookie',
     'tokens',
+    'X-API-Key',
     'x-api-key',
     'x-csrf-token',
 ];
@@ -75,6 +83,7 @@ const sensitiveKeys = [
 const nestableKeys = [
     'access_token',
     'accessToken',
+    'bungie',
     'id_token',
     'password',
     'refresh_token',
@@ -84,21 +93,26 @@ const nestableKeys = [
 ];
 
 /**
- * The shapes this codebase actually produces that sit deeper than that,
- * spelled out in full so they cost a direct property read.
+ * The shapes this codebase actually produces that sit deeper than that, named
+ * rather than swept for.
+ *
+ * `membership.tokens` keeps a leading wildcard because the key a user document
+ * gets logged under is not predictable - `user.membership.tokens` would have
+ * left the same document in the clear under any other name. Its `bungie`
+ * counterpart needs no entry here: `bungie` is a censored key in both tiers
+ * above, so the grant is caught wherever the document sits.
  * @type {string[]}
  */
 const knownPaths = [
+    '*.membership.tokens',
     'req.headers.Authorization',
     'req.headers.authorization',
     'req.headers.Cookie',
     'req.headers.cookie',
+    'req.headers["X-API-Key"]',
     'req.headers["x-api-key"]',
     'req.headers["x-csrf-token"]',
     'res.headers["set-cookie"]',
-    'user.bungie.access_token',
-    'user.bungie.refresh_token',
-    'user.membership.tokens',
 ];
 
 /**

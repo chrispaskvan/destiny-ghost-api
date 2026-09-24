@@ -44,23 +44,54 @@ describe('redact', () => {
     });
 
     describe('when a credential is nested inside a user document', () => {
-        it('should censor it one level down', () => {
+        it('should censor the grant one level down', () => {
             const refreshToken = chance.hash({ length: 40 });
 
             logger.info({ bungie: { refresh_token: refreshToken } }, 'Refreshed');
 
-            expect(lastEvent().bungie.refresh_token).toEqual(censor);
+            expect(lastEvent().bungie).toEqual(censor);
             expect(lines.at(-1)).not.toContain(refreshToken);
         });
 
-        it('should censor it two levels down', () => {
+        it('should censor the grant two levels down', () => {
             const accessToken = chance.hash({ length: 40 });
 
             logger.info({ user: { bungie: { access_token: accessToken } } }, 'Authenticated');
 
-            expect(lastEvent().user.bungie.access_token).toEqual(censor);
+            expect(lastEvent().user.bungie).toEqual(censor);
             expect(lines.at(-1)).not.toContain(accessToken);
         });
+
+        /**
+         * The document has to be caught under whatever name the call site gave
+         * it, not only under `user`. Naming the containers - `bungie`,
+         * `tokens` - is what makes that hold without a wildcard per level.
+         */
+        it.each(['user', 'bungieUser', 'registeredUser'])(
+            'should censor a whole user document logged as %s',
+            key => {
+                const accessToken = chance.hash({ length: 40 });
+                const blob = chance.hash({ length: 32 });
+                const code = chance.string({ length: 6, pool: '0123456789' });
+                const document = {
+                    displayName: chance.name(),
+                    bungie: { access_token: accessToken, refresh_token: chance.hash() },
+                    membership: { tokens: { blob, code } },
+                };
+
+                logger.info({ [key]: document }, 'Processing');
+
+                const logged = lastEvent()[key];
+
+                expect(logged.bungie).toEqual(censor);
+                expect(logged.membership.tokens).toEqual(censor);
+                expect(lines.at(-1)).not.toContain(accessToken);
+                expect(lines.at(-1)).not.toContain(blob);
+                expect(lines.at(-1)).not.toContain(code);
+                // The fields that make the line useful are untouched.
+                expect(logged.displayName).toEqual(document.displayName);
+            },
+        );
     });
 
     /**
@@ -159,7 +190,7 @@ describe('redact', () => {
 
             logger.child({ user: { bungie: { access_token: accessToken } } }).info('Processing');
 
-            expect(lastEvent().user.bungie.access_token).toEqual(censor);
+            expect(lastEvent().user.bungie).toEqual(censor);
             expect(lines.at(-1)).not.toContain(accessToken);
         });
     });
