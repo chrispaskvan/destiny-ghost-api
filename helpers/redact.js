@@ -11,77 +11,124 @@
  * What a redacted value is replaced with. Distinct from an absent field on
  * purpose: seeing that a request carried an `authorization` header is useful,
  * and seeing its value is not.
+ *
+ * No reserved characters, so it reads the same wherever it lands. Brackets
+ * were percent-encoded on their way through `URLSearchParams`, which left a
+ * censored query parameter spelled differently from every other censored
+ * value.
  * @type {string}
  */
-const censor = '[Redacted]';
+const censor = 'REDACTED';
 
 /**
- * Credential-bearing keys, each as its path relative to whatever object it
- * turns up on. A bare key is a credential wherever it appears; the two-segment
- * entries are qualified because their last segment is not.
+ * Keys whose value is a credential, censored at the root of a log event.
  *
- * `code` is deliberately absent on its own. It names a verification code under
- * `membership.tokens`, but everywhere else it is a diagnostic - `err.code`,
- * `DestinyError.code`, an HTTP status code - and redacting those would cost
- * more than it protects.
- * @type {string[][]}
+ * `tokens` is censored whole rather than by member: under `membership` it is
+ * the verification pair, and on a join request it is the email blob paired
+ * with the SMS code. Both are secret in every field, and censoring the object
+ * covers a field added later.
+ *
+ * `code` is deliberately absent. Under `tokens` it is a verification code, but
+ * everywhere else it is a diagnostic - `err.code`, `DestinyError.code` - and
+ * redacting those would cost more than it protects. It is handled by position
+ * instead: inside `tokens` above, and as a query parameter below.
+ *
+ * Both casings of the header names are listed because these paths are matched
+ * case-sensitively. Node lower-cases what it parses off the wire, but code
+ * that builds a header by hand writes `Authorization` (`helpers/bitly.js`,
+ * `twilio/mms.service.js`), and the net should hold if one is ever logged.
+ * @type {string[]}
  */
-const sensitivePaths = [
-    ['access_token'],
-    ['accessToken'],
-    ['api_key'],
-    ['apiKey'],
-    ['authorization'],
-    ['client_secret'],
-    ['cookie'],
-    ['id_token'],
-    ['password'],
-    ['refresh_token'],
-    ['refreshToken'],
-    ['secret'],
-    ['set-cookie'],
-    ['tokens', 'blob'],
-    ['tokens', 'code'],
-    ['x-api-key'],
-    ['x-csrf-token'],
+const sensitiveKeys = [
+    'access_token',
+    'accessToken',
+    'api_key',
+    'apiKey',
+    'Authorization',
+    'authorization',
+    'client_secret',
+    'Cookie',
+    'cookie',
+    'id_token',
+    'password',
+    'refresh_token',
+    'refreshToken',
+    'secret',
+    'set-cookie',
+    'tokens',
+    'x-api-key',
+    'x-csrf-token',
 ];
 
 /**
- * How many objects deep a sensitive key is still caught. Three covers the
- * shapes that actually occur - a key at the root of a log event, one level
- * down under `user` or `bungie`, and two down under `req.headers` or
- * `user.membership.tokens`.
+ * The subset of those also censored one level down, for the shape an
+ * accidental `log.info(user)` produces - `bungie.access_token` under a
+ * spread-out document.
  *
- * Pino compiles `redact` into fixed paths, so depth cannot be unbounded. That
- * is a ceiling on the safety net, not on the protection: the guarantee comes
- * from not logging these objects in the first place, and this catches what
- * slips past.
- * @type {number}
+ * It is a subset because a wildcard is what redaction costs: Pino examines
+ * every key at that level for every wildcarded path, about 390ns per path per
+ * line, while a root key or a spelled-out path compiles to a direct read.
+ * Header names are left out because they do not occur one level down - they
+ * live at `req.headers`, which `knownPaths` reaches for free.
+ * @type {string[]}
  */
-const depth = 3;
+const nestableKeys = [
+    'access_token',
+    'accessToken',
+    'id_token',
+    'password',
+    'refresh_token',
+    'refreshToken',
+    'secret',
+    'tokens',
+];
 
 /**
- * Render one path at one depth in the bracket notation Pino's redaction
- * accepts, which - unlike dot notation - tolerates a hyphen in a key.
- *
- * @param {string[]} segments
- * @param {number} level - Objects above the path's own first segment.
- * @returns {string}
+ * The shapes this codebase actually produces that sit deeper than that,
+ * spelled out in full so they cost a direct property read.
+ * @type {string[]}
  */
-const toRedactionPath = (segments, level) =>
-    Array(level).fill('*').join('.') + segments.map(segment => `["${segment}"]`).join('');
+const knownPaths = [
+    'req.headers.Authorization',
+    'req.headers.authorization',
+    'req.headers.Cookie',
+    'req.headers.cookie',
+    'req.headers["x-api-key"]',
+    'req.headers["x-csrf-token"]',
+    'res.headers["set-cookie"]',
+    'user.bungie.access_token',
+    'user.bungie.refresh_token',
+    'user.membership.tokens',
+];
 
 /**
- * Pino's `redact` option. Applied on the root logger, which puts it after the
- * serializers have run and across every child - the only hook that sees both.
- * A `formatters.log` hook sees neither.
+ * Pino's `redact` option: the root tier, the one-level tier, and the shapes
+ * named outright.
+ *
+ * Applied on the root logger, which puts it after the serializers have run and
+ * across every child - the only hook that sees both. A `formatters.log` hook
+ * sees neither.
+ *
+ * This is a safety net with a stated ceiling, not the guarantee. The guarantee
+ * is that these objects are not logged in the first place; this catches what
+ * slips past, and what it catches is bounded in two ways worth knowing:
+ *
+ * - Nothing below the second level, unless `knownPaths` names it.
+ * - Nothing inside an array. An index consumes a level, so a credential in
+ *   `users[0].bungie` is out of reach however the tiers are set - which
+ *   matters here, because the broadcast path works on arrays of users.
+ *
+ * Both are arguments for keeping call sites narrow rather than for widening
+ * this, which is paid on every line the process writes.
  * @type {{ censor: string, paths: string[] }}
  */
 const redact = {
     censor,
-    paths: sensitivePaths.flatMap(segments =>
-        Array.from({ length: depth }, (_, level) => toRedactionPath(segments, level)),
-    ),
+    paths: [
+        ...sensitiveKeys.map(key => `["${key}"]`),
+        ...nestableKeys.map(key => `*["${key}"]`),
+        ...knownPaths,
+    ],
 };
 
 /**
@@ -169,4 +216,12 @@ const redactQuery = query =>
     );
 
 export default redact;
-export { censor, redactQuery, redactUrl, sensitiveParameters, sensitivePaths };
+export {
+    censor,
+    knownPaths,
+    nestableKeys,
+    redactQuery,
+    redactUrl,
+    sensitiveKeys,
+    sensitiveParameters,
+};

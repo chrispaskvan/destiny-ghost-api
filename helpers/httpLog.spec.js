@@ -1,6 +1,6 @@
 import Chance from 'chance';
 import { createRequest } from 'node-mocks-http';
-import pino from 'pino';
+import pino, { stdSerializers } from 'pino';
 import { describe, expect, it, vi } from 'vitest';
 
 /**
@@ -17,72 +17,106 @@ import { censor } from './redact.js';
 
 const chance = new Chance();
 
+/**
+ * Exercised through `wrapRequestSerializer`, which is how `pino-http` installs
+ * it: the wrapper runs `stdSerializers.req` first and passes its output on. A
+ * test that called `requestSerializer` with a raw request instead would be
+ * testing a shape that never reaches it in production - and did, in an earlier
+ * revision, hide the serializer dropping `remoteAddress` and `remotePort`.
+ */
+const serialize = stdSerializers.wrapRequestSerializer(requestSerializer);
+
+/**
+ * @param {object} overrides
+ */
+const requestOf = ({ url, query }) => {
+    const req = createRequest({ method: 'GET', url, query });
+
+    req.socket = { remoteAddress: '203.0.113.7', remotePort: 51_234 };
+
+    return req;
+};
+
 describe('requestSerializer', () => {
     describe('when the request is the Bungie OAuth callback', () => {
-        it('should censor the authorization code and the state on the request line', () => {
+        it('should censor the authorization code and the state in the url', () => {
             const code = chance.hash({ length: 32 });
             const state = chance.guid();
-            const req = createRequest({
-                method: 'GET',
-                url: `/users/signIn/Bungie?code=${code}&state=${state}`,
-            });
+            const serialized = serialize(
+                requestOf({ url: `/users/signIn/Bungie?code=${code}&state=${state}` }),
+            );
 
-            const { url } = requestSerializer(req);
-
-            expect(url).toContain('/users/signIn/Bungie');
-            expect(url).not.toContain(code);
-            expect(url).not.toContain(state);
-            expect(url).toContain(encodeURIComponent(censor));
+            expect(serialized.url).toContain('/users/signIn/Bungie');
+            expect(serialized.url).not.toContain(code);
+            expect(serialized.url).not.toContain(state);
+            expect(serialized.url).toContain(censor);
         });
-    });
 
-    /**
-     * The serializer copies Express's parsed query out alongside the URL, so
-     * the code is in the event twice and both have to go.
-     */
-    describe('when the request has a parsed query', () => {
-        it('should censor the credentials in it too', () => {
+        /**
+         * Express parses the query into an object the serializer copies out
+         * beside the URL, so the code is in the event twice.
+         */
+        it('should censor them in the parsed query as well', () => {
             const code = chance.hash({ length: 32 });
-            const req = createRequest({
-                method: 'GET',
-                url: `/users/signIn/Bungie?code=${code}`,
-                query: { code, redirect: '/home' },
-            });
-
-            const serialized = requestSerializer(req);
+            const serialized = serialize(
+                requestOf({
+                    url: `/users/signIn/Bungie?code=${code}`,
+                    query: { code, redirect: '/home' },
+                }),
+            );
 
             expect(serialized.query).toEqual({ code: censor, redirect: '/home' });
             expect(JSON.stringify(serialized)).not.toContain(code);
         });
-    });
 
-    describe('when the request carries ordinary query parameters', () => {
-        it('should leave the request line legible', () => {
-            const req = createRequest({
-                method: 'GET',
-                url: '/destiny2/inventory?page=2&size=50',
+        /**
+         * The serializer takes Express's own query object by reference. A
+         * censor written in place would reach the route handler.
+         */
+        it('should not censor the query the route is about to read', () => {
+            const code = chance.hash({ length: 32 });
+            const req = requestOf({
+                url: `/users/signIn/Bungie?code=${code}`,
+                query: { code },
             });
 
-            expect(requestSerializer(req).url).toEqual('/destiny2/inventory?page=2&size=50');
+            serialize(req);
+
+            expect(req.query.code).toEqual(code);
         });
     });
 
     /**
-     * The serializer is a wrapper, so the fields correlation depends on have
-     * to survive it.
+     * `pino-http` hands a custom serializer the output of `stdSerializers.req`,
+     * so anything this function rebuilds instead of edits is silently lost.
+     * These are the fields that answer "who made this request".
      */
     describe('when the request is serialized', () => {
-        it('should keep the standard diagnostic fields', () => {
-            const req = createRequest({
-                method: 'POST',
-                url: '/users/signUp',
-                headers: { 'user-agent': 'vitest' },
-            });
+        it('should keep every field the standard serializer produced', () => {
+            const req = requestOf({ url: '/destiny2/inventory?page=2&size=50' });
 
-            const serialized = requestSerializer(req);
+            req.headers['user-agent'] = 'vitest';
 
-            expect(serialized.method).toEqual('POST');
+            const serialized = serialize(req);
+
+            expect(serialized.remoteAddress).toEqual('203.0.113.7');
+            expect(serialized.remotePort).toEqual(51_234);
+            expect(serialized.method).toEqual('GET');
             expect(serialized.headers['user-agent']).toEqual('vitest');
+            expect(serialized.url).toEqual('/destiny2/inventory?page=2&size=50');
+            expect(Object.keys(serialized).sort()).toEqual(
+                Object.keys(stdSerializers.req(requestOf({ url: '/destiny2/inventory' }))).sort(),
+            );
+        });
+
+        /**
+         * `pino-http` reads the original request back off the serialized one
+         * through a non-enumerable getter on its prototype.
+         */
+        it('should keep the raw request reachable', () => {
+            const req = requestOf({ url: '/users/current' });
+
+            expect(serialize(req).raw).toBe(req);
         });
     });
 });

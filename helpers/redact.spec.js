@@ -63,18 +63,45 @@ describe('redact', () => {
         });
     });
 
+    /**
+     * Censored as an object rather than field by field, so a member added to
+     * it later is covered without this list being revisited.
+     */
     describe('when a verification token is nested inside a membership', () => {
-        it('should censor the code and the blob', () => {
+        it('should censor the whole token', () => {
             const blob = chance.hash({ length: 32 });
             const code = chance.string({ length: 6, pool: '0123456789' });
 
             logger.info({ membership: { tokens: { blob, code } } }, 'Signed up');
 
-            const { membership } = lastEvent();
-
-            expect(membership.tokens).toEqual({ blob: censor, code: censor });
+            expect(lastEvent().membership.tokens).toEqual(censor);
             expect(lines.at(-1)).not.toContain(blob);
             expect(lines.at(-1)).not.toContain(code);
+        });
+
+        it('should censor a join request token, whose members are named differently', () => {
+            const emailAddress = chance.hash({ length: 32 });
+
+            logger.info({ tokens: { emailAddress, phoneNumber: '123456' } }, 'Joined');
+
+            expect(lastEvent().tokens).toEqual(censor);
+            expect(lines.at(-1)).not.toContain(emailAddress);
+        });
+    });
+
+    /**
+     * Pino matches these paths case-sensitively. Node lower-cases what it
+     * parses off the wire, but `helpers/bitly.js` and `twilio/mms.service.js`
+     * build an `Authorization` header by hand.
+     */
+    describe('when a header is spelled with its conventional capital', () => {
+        it('should censor it too', () => {
+            const authorization = `Bearer ${chance.hash({ length: 40 })}`;
+
+            logger.info({ Authorization: authorization }, 'Calling out');
+
+            expect(lastEvent().Authorization).toEqual(censor);
+            expect(lines.at(-1)).not.toContain(authorization);
         });
     });
 
@@ -166,9 +193,7 @@ describe('redactUrl', () => {
 
             const result = redactUrl(`/users/signIn/Bungie?code=${code}&state=${state}`);
 
-            expect(result).toEqual(
-                `/users/signIn/Bungie?code=${encodeURIComponent(censor)}&state=${encodeURIComponent(censor)}`,
-            );
+            expect(result).toEqual(`/users/signIn/Bungie?code=${censor}&state=${censor}`);
             expect(result).not.toContain(code);
             expect(result).not.toContain(state);
         });

@@ -39,19 +39,30 @@ const PinoHttp = createRequire(import.meta.url)('pino-http');
  * reach - one because the secret is inside a string rather than at a path,
  * the other because `code` is a credential only here.
  *
- * @param {import('express').Request} req
+ * This takes the *serialized* request, not the raw one: `pino-http` defaults
+ * to `wrapSerializers`, which hands a custom serializer the output of
+ * `stdSerializers.req` rather than the request itself. Calling that serializer
+ * again in here ran it against an object with no `socket`, which silently
+ * dropped `remoteAddress` and `remotePort` from every request log.
+ *
+ * Editing in place keeps the prototype the standard serializer built, whose
+ * non-enumerable `raw` getter other `pino-http` options read through. `query`
+ * is the exception: the serializer assigns Express's own object by reference,
+ * so it is replaced with a censored copy rather than written through to the
+ * live request.
+ *
+ * @param {ReturnType<typeof stdSerializers.req>} serialized
  * @returns {ReturnType<typeof stdSerializers.req>}
  */
-const requestSerializer = req => {
-    const serialized = stdSerializers.req(req);
-    const { query, url } = serialized;
+const requestSerializer = serialized => {
+    serialized.url = redactUrl(serialized.url);
 
-    return {
-        ...serialized,
-        // A request that never reached Express has no parsed query to censor.
-        ...(query && { query: redactQuery(query) }),
-        url: redactUrl(url),
-    };
+    // A request that never reached Express has no parsed query to censor.
+    if (serialized.query) {
+        serialized.query = redactQuery(serialized.query);
+    }
+
+    return serialized;
 };
 
 /** @type {import('pino-http').Options<import('express').Request, import('express').Response>} */
