@@ -397,7 +397,6 @@ class UserService {
      * @param {number} membershipType
      * @returns {Promise<import('@azure/cosmos').ItemResponse<Record<string, unknown>>>}
      */
-    // biome-ignore lint/correctness/noUnusedPrivateClassMembers: future use
     async #deleteUser(documentId, membershipType) {
         return await this.documents.deleteDocumentById(
             userCollectionId,
