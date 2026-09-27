@@ -1,6 +1,7 @@
 // @ts-check
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { Router } from 'express';
+import { StatusCodes } from 'http-status-codes';
 import { createId } from '@paralleldrive/cuid2';
 import { LRUCache as LruCache } from 'lru-cache';
 import authorizeUser from '../authorization/authorization.middleware.js';
@@ -57,6 +58,18 @@ const routes = ({ destinyController }) => {
             administrator.displayName,
             administrator.membershipType,
         );
+
+        if (!user) {
+            log.error(
+                { displayName: administrator.displayName },
+                'The configured administrator has no playable Destiny membership.',
+            );
+
+            return res
+                .status(StatusCodes.SERVICE_UNAVAILABLE)
+                .send('Failed to initialize MCP session');
+        }
+
         const server = createMcpServer({
             destinyController,
             user,

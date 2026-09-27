@@ -12,8 +12,10 @@
  */
 import { stringify } from 'qs';
 import { get, post } from '../helpers/bungie.request.js';
+import supportedMembershipTypes from '../helpers/bungie.membershipTypes.js';
 import DestinyError from './destiny.error.js';
 import configuration from '../helpers/config.js';
+import log from '../helpers/log.js';
 
 const {
     bungie: { apiKey, host, clientId, clientSecret },
@@ -52,8 +54,8 @@ const {
  * @typedef {Object} DestinyMembership
  * @property {string} displayName
  * @property {string} membershipId
- * @property {number} membershipType - Platform: 1 Xbox, 2 PSN, 3 Steam, etc.
- * @property {number} [crossSaveOverride] - The membershipType that owns cross-saved data
+ * @property {number} membershipType - A Bungie platform value; see `helpers/bungie.membershipTypes.js`.
+ * @property {number} [crossSaveOverride] - The membershipType that owns cross-saved data, or 0 when cross save is off
  */
 
 /**
@@ -61,7 +63,7 @@ const {
  * @typedef {Object} CurrentUser
  * @property {string} displayName
  * @property {string} membershipId
- * @property {number} membershipType
+ * @property {SupportedMembershipType} membershipType
  * @property {string} [profilePicturePath]
  */
 
@@ -73,6 +75,7 @@ const {
  * @property {{ membershipId: string, membershipType: number }} [characterBase]
  */
 
+/** @typedef {import('../helpers/bungie.membershipTypes.js').SupportedMembershipType} SupportedMembershipType */
 /** @typedef {import('./destiny.cache.js').DestinyManifest} DestinyManifest */
 /** @typedef {import('./destiny.cache.js').ManifestResult} ManifestResult */
 
@@ -260,8 +263,13 @@ class DestinyService {
     /**
      * Get the current user based on the Bungie access token.
      *
+     * Resolves undefined when the account has nothing this application can sign
+     * in - no Destiny memberships at all, or none on a supported platform. That
+     * is a client outcome, not a failure: `users/user.routes.js` turns it into
+     * the same 404 an unknown user gets, having created nothing.
+     *
      * @param {string} accessToken
-     * @returns {Promise<CurrentUser>}
+     * @returns {Promise<CurrentUser | undefined>}
      */
     async getCurrentUser(accessToken) {
         const options = {
@@ -284,8 +292,13 @@ class DestinyService {
         }
 
         const { destinyMemberships, bungieNetUser: { profilePicturePath } = {} } = user;
-        const { displayName, membershipId, membershipType } =
-            this.#getPreferredMembership(destinyMemberships);
+        const membership = this.#getPreferredMembership(destinyMemberships);
+
+        if (!membership) {
+            return undefined;
+        }
+
+        const { displayName, membershipId, membershipType } = membership;
 
         return {
             displayName,
@@ -314,17 +327,37 @@ class DestinyService {
     }
 
     /**
-     * Pick the membership that owns cross-saved data, falling back to the first.
+     * The membership the player actually plays on: either the one cross save
+     * points at, or an account that never enabled it. Every membership on a
+     * cross-saved account carries the owner's `membershipType`, so the owner is
+     * the one that names itself.
      *
      * @param {DestinyMembership[]} memberships
-     * @returns {DestinyMembership}
+     * @returns {(DestinyMembership & { membershipType: SupportedMembershipType }) | undefined}
+     * undefined when nothing here is playable
      */
     #getPreferredMembership(memberships) {
-        const [{ crossSaveOverride }] = memberships;
+        const membership = memberships.find(
+            ({ crossSaveOverride, membershipType }) =>
+                !crossSaveOverride || crossSaveOverride === membershipType,
+        );
 
-        return (
-            memberships.find(({ membershipType }) => membershipType === crossSaveOverride) ||
-            memberships[0]
+        if (!membership) {
+            log.info({ memberships: memberships.length }, 'No playable Destiny membership');
+
+            return undefined;
+        }
+
+        const membershipType = /** @type {SupportedMembershipType} */ (membership.membershipType);
+
+        if (!supportedMembershipTypes.includes(membershipType)) {
+            log.info({ membershipType }, 'Destiny membership is on an unsupported platform');
+
+            return undefined;
+        }
+
+        return /** @type {DestinyMembership & { membershipType: SupportedMembershipType }} */ (
+            membership
         );
     }
 }

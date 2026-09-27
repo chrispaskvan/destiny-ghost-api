@@ -7,6 +7,7 @@ import UserService from './user.service.js';
 import log from '../helpers/log.js';
 
 const cacheService = {
+    deleteUser: vi.fn(),
     getUser: vi.fn(),
     setUser: vi.fn(),
 };
@@ -112,6 +113,60 @@ describe('UserService', () => {
                 await expect(
                     userService.createAnonymousUser(anonymousUserWithoutMembershipId),
                 ).rejects.toThrow(undefined);
+            });
+        });
+
+        describe.each([
+            ['Xbox', 1],
+            ['PlayStation Network', 2],
+            ['Steam', 3],
+            ['Epic Games Store', 6],
+        ])('when the anonymous user is on %s', (_platform, membershipType) => {
+            it('should create the anonymous user', async () => {
+                userService.getUserByDisplayName = vi.fn().mockResolvedValue();
+
+                await userService.createAnonymousUser({ ...anonymousUser, membershipType });
+
+                expect(documentService.createDocument).toHaveBeenCalledWith(
+                    'Users',
+                    expect.objectContaining({ membershipType }),
+                );
+            });
+        });
+
+        describe.each([
+            ['None', 0],
+            ['Blizzard, migrated to Steam in 2019', 4],
+            ['Stadia, retired in 2023', 5],
+            ['BungieNext, not a playable platform', 254],
+        ])('when the membership type is %s', (_platform, membershipType) => {
+            it('should reject without creating a partial user', async () => {
+                userService.getUserByDisplayName = vi.fn().mockResolvedValue();
+
+                await expect(
+                    userService.createAnonymousUser({ ...anonymousUser, membershipType }),
+                ).rejects.toThrow();
+
+                expect(documentService.createDocument).not.toHaveBeenCalled();
+            });
+        });
+
+        describe('when the display name is a 32 character Steam persona name', () => {
+            it('should create the anonymous user', async () => {
+                userService.getUserByDisplayName = vi.fn().mockResolvedValue();
+
+                const displayName = chance.string({ length: 32, alpha: true });
+
+                await userService.createAnonymousUser({
+                    ...anonymousUser,
+                    displayName,
+                    membershipType: 3,
+                });
+
+                expect(documentService.createDocument).toHaveBeenCalledWith(
+                    'Users',
+                    expect.objectContaining({ displayName }),
+                );
             });
         });
 
@@ -251,7 +306,10 @@ describe('UserService', () => {
 
             it('should fail when more than one existing user is found', async () => {
                 documentService.getDocuments.mockImplementation(() =>
-                    Promise.resolve([user, user]),
+                    Promise.resolve([
+                        { ...user, id: 'user-a' },
+                        { ...user, id: 'user-b' },
+                    ]),
                 );
 
                 await expect(
@@ -307,7 +365,10 @@ describe('UserService', () => {
 
             it('should fail when more than one existing user is found', async () => {
                 documentService.getDocuments.mockImplementation(() =>
-                    Promise.resolve([user, user]),
+                    Promise.resolve([
+                        { ...user, id: 'user-a' },
+                        { ...user, id: 'user-b' },
+                    ]),
                 );
 
                 await expect(
@@ -359,7 +420,10 @@ describe('UserService', () => {
 
             it('should fail when more than one existing user is found', async () => {
                 documentService.getDocuments.mockImplementation(() =>
-                    Promise.resolve([user, user]),
+                    Promise.resolve([
+                        { ...user, id: 'user-a' },
+                        { ...user, id: 'user-b' },
+                    ]),
                 );
 
                 await expect(
@@ -398,6 +462,429 @@ describe('UserService', () => {
         });
     });
 
+    /**
+     * What every other lookup does while a `movePlatform` delete has not
+     * landed. The superseded copy carries `movedTo`, so it is not the live
+     * record however recently it was written to - which matters because an old
+     * session or a move back to the original platform can write to it, and a
+     * timestamp rule would then hand back the consent it never received.
+     */
+    describe('when an unfinished platform move has left a superseded copy', () => {
+        // Deliberately the *newer* of the two, which is what a timestamp rule got wrong.
+        const superseded = { ...user, _ts: 9999, id: 'user-1', membershipType: 1, movedTo: 3 };
+        const live = { ...user, _ts: 1000, id: 'user-1', membershipType: 3 };
+
+        beforeEach(() => {
+            documentService.getDocuments.mockResolvedValue([superseded, live]);
+            cacheService.setUser.mockResolvedValue();
+        });
+
+        it('should keep the phone-number lookup working, which STOP handling runs on', async () => {
+            await expect(userService.getUserByPhoneNumber(user.phoneNumber, true)).resolves.toEqual(
+                live,
+            );
+        });
+
+        it('should give the consent gate the live record, not the superseded one', async () => {
+            await expect(userService.getConsentByPhoneNumber(user.phoneNumber)).resolves.toEqual(
+                live,
+            );
+        });
+
+        it('should keep the id, e-mail and displayName lookups working', async () => {
+            await expect(userService.getUserById('user-1')).resolves.toEqual(live);
+            await expect(userService.getUserByEmailAddress(user.emailAddress)).resolves.toEqual(
+                live,
+            );
+            await expect(userService.getUserByDisplayName(user.displayName, 3)).resolves.toEqual(
+                live,
+            );
+        });
+
+        /**
+         * The write path a session predating the move goes through. It must not
+         * find the superseded copy, or the write lands on a record nothing reads.
+         */
+        it('should hide the superseded copy from a lookup on the old platform', async () => {
+            documentService.getDocuments.mockResolvedValue([superseded]);
+
+            await expect(
+                userService.getUserByDisplayName(user.displayName, 1),
+            ).resolves.toBeUndefined();
+            await expect(userService.getUserByMembershipId('11')).resolves.toBeUndefined();
+        });
+
+        /**
+         * The exception, and the reason `signIn` can recover: a move that never
+         * created its successor would otherwise leave the player invisible.
+         */
+        it('should expose a lone superseded copy to the Bungie-id lookup', async () => {
+            documentService.getDocuments.mockResolvedValue([superseded]);
+
+            await expect(userService.getUserByBungieMembershipId('99')).resolves.toEqual(
+                superseded,
+            );
+        });
+
+        /**
+         * Both copies carry the same Bungie id after a failed delete. Throwing
+         * here made every sign-in fail for a player moving back to their old
+         * platform, because that is the lookup `signIn` falls through to.
+         */
+        it('should prefer the live copy over the superseded one, not throw', async () => {
+            await expect(userService.getUserByBungieMembershipId('99')).resolves.toEqual(live);
+        });
+
+        it('should still throw when two live documents match', async () => {
+            documentService.getDocuments.mockResolvedValue([
+                { ...user, id: 'user-a' },
+                { ...user, id: 'user-b' },
+            ]);
+
+            await expect(userService.getUserById('user-a')).rejects.toThrow(
+                'more than 1 document found',
+            );
+        });
+    });
+
+    describe('clearPlatformMove', () => {
+        it('should take the mark off and cache the restored record', async () => {
+            const marked = { ...user, _etag: 'e', id: 'user-1', membershipType: 3, movedTo: 1 };
+
+            documentService.updateDocument.mockImplementation((_c, document) =>
+                Promise.resolve(document),
+            );
+            cacheService.setUser.mockResolvedValue();
+
+            await userService.clearPlatformMove(marked);
+
+            const [, document, partitionKey] = documentService.updateDocument.mock.calls[0];
+
+            expect(document).not.toHaveProperty('movedTo');
+            expect(partitionKey).toBe(3);
+        });
+    });
+
+    describe('getUserByBungieMembershipId', () => {
+        it('should return the user whose stored token carries that id', async () => {
+            documentService.getDocuments.mockResolvedValue([user]);
+
+            await expect(userService.getUserByBungieMembershipId('99')).resolves.toEqual(user);
+        });
+
+        it('should query on the Bungie membership id, not the platform one', async () => {
+            documentService.getDocuments.mockResolvedValue([user]);
+
+            await userService.getUserByBungieMembershipId('99');
+
+            const [, query] = documentService.getDocuments.mock.calls[0];
+
+            expect(query.query).toContain('bungie.membership_id');
+            expect(query.parameters).toEqual([{ name: '@membership_id', value: '99' }]);
+        });
+
+        it('should return undefined when nothing matches', async () => {
+            documentService.getDocuments.mockResolvedValue([]);
+
+            await expect(userService.getUserByBungieMembershipId('99')).resolves.toBeUndefined();
+        });
+
+        it('should fail when two genuinely different users match', async () => {
+            documentService.getDocuments.mockResolvedValue([
+                { ...user, id: 'user-a' },
+                { ...user, id: 'user-b' },
+            ]);
+
+            await expect(userService.getUserByBungieMembershipId('99')).rejects.toThrow();
+        });
+
+        /**
+         * Unlike its siblings, which reject. This is a fallback behind
+         * `getUserByMembershipId`, so a missing id means "nothing more to try":
+         * rejecting would turn a brand-new user whose token lacked the field
+         * into a failed sign-in.
+         */
+        it('should resolve undefined for a missing id without querying', async () => {
+            await expect(userService.getUserByBungieMembershipId('')).resolves.toBeUndefined();
+            await expect(
+                userService.getUserByBungieMembershipId(undefined),
+            ).resolves.toBeUndefined();
+
+            expect(documentService.getDocuments).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('movePlatform', () => {
+        const storedUser = {
+            ...user,
+            _etag: 'some-etag',
+            _rid: 'some-rid',
+            _self: 'some-self',
+            _attachments: 'attachments/',
+            _ts: 1700000000,
+            dateRegistered: '2026-01-01T00:00:00Z',
+            id: 'user-1',
+            membershipId: '11',
+            membershipType: 1,
+        };
+        const steamMembership = {
+            displayName: 'SteamPersona',
+            membershipId: '4611686018400000000',
+            membershipType: 3,
+            profilePicturePath: '/thing1',
+        };
+
+        beforeEach(() => {
+            documentService.createDocument.mockImplementation((_collection, document) =>
+                Promise.resolve({ ...document, _etag: 'new-etag' }),
+            );
+            documentService.updateDocument.mockImplementation((_collection, document) =>
+                Promise.resolve(document),
+            );
+            documentService.deleteDocumentById.mockResolvedValue();
+            cacheService.deleteUser.mockResolvedValue();
+            cacheService.setUser.mockResolvedValue();
+        });
+
+        it('should mark the old copy before anything is duplicated', async () => {
+            const { promise: markPending, resolve: finishMark } = Promise.withResolvers();
+
+            documentService.updateDocument.mockReturnValue(markPending);
+
+            const moving = userService.movePlatform(storedUser, steamMembership);
+
+            await Promise.resolve();
+
+            expect(documentService.updateDocument).toHaveBeenCalledWith(
+                'Users',
+                expect.objectContaining({ id: 'user-1', movedTo: 3 }),
+                1,
+            );
+            expect(documentService.createDocument).not.toHaveBeenCalled();
+
+            finishMark({});
+            await moving;
+        });
+
+        it('should mark unconditionally, so a concurrent move does not fail its precondition', async () => {
+            await userService.movePlatform(storedUser, steamMembership);
+
+            const [, document] = documentService.updateDocument.mock.calls[0];
+
+            expect(document).not.toHaveProperty('_etag');
+        });
+
+        it('should clear the cache even when the move fails after the mark', async () => {
+            documentService.createDocument.mockRejectedValue(
+                Object.assign(new Error('boom'), { code: 500 }),
+            );
+
+            await expect(userService.movePlatform(storedUser, steamMembership)).rejects.toThrow(
+                'boom',
+            );
+
+            expect(cacheService.deleteUser).toHaveBeenCalledWith(storedUser);
+        });
+
+        it('should abort with nothing duplicated when the mark cannot be written', async () => {
+            documentService.updateDocument.mockRejectedValue(new Error('cosmos unavailable'));
+
+            await expect(userService.movePlatform(storedUser, steamMembership)).rejects.toThrow(
+                'cosmos unavailable',
+            );
+
+            expect(documentService.createDocument).not.toHaveBeenCalled();
+            expect(documentService.deleteDocumentById).not.toHaveBeenCalled();
+        });
+
+        it('should not carry the mark onto the record it creates', async () => {
+            await userService.movePlatform({ ...storedUser, movedTo: 3 }, steamMembership);
+
+            const [, document] = documentService.createDocument.mock.calls[0];
+
+            expect(document).not.toHaveProperty('movedTo');
+        });
+
+        it('should create the record under the new platform, carrying the registration', async () => {
+            await userService.movePlatform(storedUser, steamMembership);
+
+            expect(documentService.createDocument).toHaveBeenCalledWith(
+                'Users',
+                expect.objectContaining({
+                    displayName: 'SteamPersona',
+                    membershipType: 3,
+                    membershipId: '4611686018400000000',
+                    // the whole point of the move: registration survives it
+                    dateRegistered: '2026-01-01T00:00:00Z',
+                    phoneNumber: storedUser.phoneNumber,
+                    emailAddress: storedUser.emailAddress,
+                    id: 'user-1',
+                }),
+            );
+        });
+
+        it('should not carry the old Cosmos system properties onto the new record', async () => {
+            await userService.movePlatform(storedUser, steamMembership);
+
+            const [, document] = documentService.createDocument.mock.calls[0];
+
+            expect(document).not.toHaveProperty('_etag');
+            expect(document).not.toHaveProperty('_rid');
+            expect(document).not.toHaveProperty('_self');
+            expect(document).not.toHaveProperty('_attachments');
+            expect(document).not.toHaveProperty('_ts');
+        });
+
+        it('should delete the old record from its own partition', async () => {
+            await userService.movePlatform(storedUser, steamMembership);
+
+            expect(documentService.deleteDocumentById).toHaveBeenCalledWith('Users', 'user-1', 1);
+        });
+
+        it('should create before deleting, so a failure leaves a duplicate and not a gap', async () => {
+            const { promise: createPending, resolve: finishCreate } = Promise.withResolvers();
+
+            documentService.createDocument.mockReturnValue(createPending);
+
+            const moving = userService.movePlatform(storedUser, steamMembership);
+
+            await Promise.resolve();
+
+            expect(documentService.deleteDocumentById).not.toHaveBeenCalled();
+
+            finishCreate({ ...storedUser, ...steamMembership });
+            await moving;
+
+            expect(documentService.deleteDocumentById).toHaveBeenCalled();
+        });
+
+        it('should still resolve when the old record cannot be removed', async () => {
+            const errorLog = vi.spyOn(log, 'error').mockImplementation(() => {});
+
+            documentService.deleteDocumentById.mockRejectedValue(
+                Object.assign(new Error('cosmos unavailable'), { code: 503 }),
+            );
+
+            vi.useFakeTimers();
+
+            const moving = userService.movePlatform(storedUser, steamMembership);
+
+            await vi.runAllTimersAsync();
+
+            await expect(moving).resolves.toBeDefined();
+            expect(errorLog).toHaveBeenCalled();
+
+            vi.useRealTimers();
+            errorLog.mockRestore();
+        });
+
+        it('should not retry a status that will never succeed', async () => {
+            const errorLog = vi.spyOn(log, 'error').mockImplementation(() => {});
+
+            documentService.deleteDocumentById.mockRejectedValue(
+                Object.assign(new Error('forbidden'), { code: 403 }),
+            );
+
+            await expect(
+                userService.movePlatform(storedUser, steamMembership),
+            ).resolves.toBeDefined();
+
+            expect(documentService.deleteDocumentById).toHaveBeenCalledTimes(1);
+            expect(errorLog).toHaveBeenCalled();
+
+            errorLog.mockRestore();
+        });
+
+        it('should clear the old cache keys before caching the moved record', async () => {
+            await userService.movePlatform(storedUser, steamMembership);
+
+            expect(cacheService.deleteUser).toHaveBeenCalledWith(storedUser);
+            expect(cacheService.deleteUser.mock.invocationCallOrder[0]).toBeLessThan(
+                cacheService.setUser.mock.invocationCallOrder[0],
+            );
+        });
+
+        it('should retry a delete on a status that can clear on its own', async () => {
+            vi.useFakeTimers();
+
+            const errorLog = vi.spyOn(log, 'error').mockImplementation(() => {});
+
+            documentService.deleteDocumentById
+                .mockRejectedValueOnce(Object.assign(new Error('throttled'), { code: 429 }))
+                .mockResolvedValueOnce();
+
+            const moving = userService.movePlatform(storedUser, steamMembership);
+
+            await vi.runAllTimersAsync();
+            await moving;
+
+            expect(documentService.deleteDocumentById).toHaveBeenCalledTimes(2);
+            expect(errorLog).not.toHaveBeenCalled();
+
+            errorLog.mockRestore();
+            vi.useRealTimers();
+        });
+
+        it('should not retry a delete that 404s, because the copy is already gone', async () => {
+            const errorLog = vi.spyOn(log, 'error').mockImplementation(() => {});
+
+            documentService.deleteDocumentById.mockRejectedValue(
+                Object.assign(new Error('not found'), { code: 404 }),
+            );
+
+            await expect(
+                userService.movePlatform(storedUser, steamMembership),
+            ).resolves.toBeDefined();
+
+            expect(documentService.deleteDocumentById).toHaveBeenCalledTimes(1);
+            expect(errorLog).not.toHaveBeenCalled();
+
+            errorLog.mockRestore();
+        });
+
+        /**
+         * Either a concurrent sign-in moved first, or the player is moving back
+         * to a platform they left and the superseded copy is still sitting
+         * there. Replacing brings the target back to life in both cases.
+         */
+        it('should replace the target when the create conflicts, then delete the source', async () => {
+            documentService.createDocument.mockRejectedValue(
+                Object.assign(new Error('conflict'), { code: 409 }),
+            );
+
+            await expect(
+                userService.movePlatform(storedUser, steamMembership),
+            ).resolves.toMatchObject({ membershipType: 3 });
+
+            const replace = documentService.updateDocument.mock.calls.at(-1);
+
+            expect(replace[1]).not.toHaveProperty('movedTo');
+            expect(replace[2]).toBe(3);
+            expect(documentService.deleteDocumentById).toHaveBeenCalledWith('Users', 'user-1', 1);
+        });
+
+        it('should surface a create failure that is not a conflict', async () => {
+            documentService.createDocument.mockRejectedValue(
+                Object.assign(new Error('boom'), { code: 500 }),
+            );
+
+            await expect(userService.movePlatform(storedUser, steamMembership)).rejects.toThrow(
+                'boom',
+            );
+
+            expect(documentService.deleteDocumentById).not.toHaveBeenCalled();
+        });
+
+        it('should reject an unsupported platform without writing anything', async () => {
+            await expect(
+                userService.movePlatform(storedUser, { ...steamMembership, membershipType: 5 }),
+            ).rejects.toThrow();
+
+            expect(documentService.createDocument).not.toHaveBeenCalled();
+            expect(documentService.deleteDocumentById).not.toHaveBeenCalled();
+        });
+    });
+
     describe('getUserByMembershipId', () => {
         describe('when membership Id is defined', () => {
             it('should return an existing user', () => {
@@ -411,7 +898,10 @@ describe('UserService', () => {
 
             it('should fail when more than one existing user is found', async () => {
                 documentService.getDocuments.mockImplementation(() =>
-                    Promise.resolve([user, user]),
+                    Promise.resolve([
+                        { ...user, id: 'user-a' },
+                        { ...user, id: 'user-b' },
+                    ]),
                 );
 
                 await expect(
@@ -461,7 +951,7 @@ describe('UserService', () => {
 
             expect(collectionId).toBe('Users');
             expect(query.query).toBe(
-                'SELECT r.isSubscribed, r.notifications, r.consentUpdatedAt FROM root r WHERE r.phoneNumber = @phoneNumber',
+                'SELECT r.movedTo, r.isSubscribed, r.notifications, r.consentUpdatedAt FROM root r WHERE r.phoneNumber = @phoneNumber',
             );
             expect(query.parameters).toEqual([{ name: '@phoneNumber', value: user.phoneNumber }]);
         });
@@ -555,7 +1045,10 @@ describe('UserService', () => {
 
             it('should fail when more than one existing user is found', async () => {
                 documentService.getDocuments.mockImplementation(() =>
-                    Promise.resolve([user, user]),
+                    Promise.resolve([
+                        { ...user, id: 'user-a' },
+                        { ...user, id: 'user-b' },
+                    ]),
                 );
 
                 await expect(userService.getUserByPhoneNumber(user.phoneNumber)).rejects.toThrow();
@@ -637,7 +1130,10 @@ describe('UserService', () => {
 
             it('should fail when more than one existing user is found', async () => {
                 documentService.getDocuments.mockImplementation(() =>
-                    Promise.resolve([user, user]),
+                    Promise.resolve([
+                        { ...user, id: 'user-a' },
+                        { ...user, id: 'user-b' },
+                    ]),
                 );
 
                 await expect(userService.getUserById(user.id)).rejects.toThrow();

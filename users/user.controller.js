@@ -512,13 +512,62 @@ class UserController {
             membershipType,
             profilePicturePath,
         };
-        const destinyGhostUser = /** @type {MutableUser | undefined} */ (
+        let destinyGhostUser = /** @type {MutableUser | undefined} */ (
             await this.users.getUserByMembershipId(/** @type {string} */ (user.membershipId))
         );
+
+        /**
+         * Moving the membership that owns cross-saved data changes both the
+         * platform membership id and the platform, so the lookup above misses
+         * and the player would sign in as a stranger: a second document, in a
+         * second Cosmos partition, with their registration stranded on the
+         * first. The Bungie.net membership id on the token is the one
+         * identifier that survives the change.
+         */
+        if (!destinyGhostUser) {
+            destinyGhostUser = /** @type {MutableUser | undefined} */ (
+                await this.users.getUserByBungieMembershipId(bungie.membership_id)
+            );
+        }
 
         if (!destinyGhostUser) {
             return await this.users
                 .createAnonymousUser(/** @type {AnonymousUser} */ (user))
+                .then(() => user);
+        }
+
+        /**
+         * A record marked for a move whose successor was never created. The
+         * player is signing in on the platform they were already on, so the
+         * move is moot and the mark has to come off - while it is there, every
+         * lookup but the Bungie-id one skips this record.
+         */
+        if (
+            destinyGhostUser.movedTo !== undefined &&
+            destinyGhostUser.membershipType === user.membershipType
+        ) {
+            await this.users.clearPlatformMove(
+                /** @type {import('../helpers/documents.js').CosmosDocument<User>} */ (
+                    /** @type {unknown} */ (destinyGhostUser)
+                ),
+            );
+
+            delete destinyGhostUser.movedTo;
+        }
+
+        /**
+         * `membershipType` is the partition key, so a changed platform is a
+         * move rather than an update - `updateUser` would look the document up
+         * under the new platform, find nothing, and throw.
+         */
+        if (destinyGhostUser.membershipType !== user.membershipType) {
+            return await this.users
+                .movePlatform(
+                    /** @type {import('../helpers/documents.js').CosmosDocument<User>} */ (
+                        /** @type {unknown} */ (destinyGhostUser)
+                    ),
+                    user,
+                )
                 .then(() => user);
         }
 

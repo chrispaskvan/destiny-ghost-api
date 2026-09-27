@@ -1,7 +1,10 @@
 // @ts-check
+import { StatusCodes } from 'http-status-codes';
 import { z } from 'zod';
+import supportedMembershipTypes from '../helpers/bungie.membershipTypes.js';
 import QueryBuilder from '../helpers/queryBuilder.js';
 import log from '../helpers/log.js';
+import { withRetry } from '../helpers/retry.js';
 import notificationTypes from '../notifications/notification.types.js';
 
 /**
@@ -36,10 +39,28 @@ const storedBungieTokenSchema = bungieTokenSchema.partial().required({
  * @private
  */
 const anonymousUserSchema = z.object({
-    displayName: z.string().min(3).max(16),
+    /**
+     * Bungie supplies this, so the bounds describe the platforms rather than a
+     * form: a Steam persona name runs to 32 characters, well past the 16 an
+     * Xbox gamertag or a PSN online ID stops at.
+     */
+    displayName: z.string().min(3).max(32),
     membershipId: z.string(),
-    membershipType: z.number().int().min(1).max(2),
+    membershipType: z.literal(supportedMembershipTypes),
     profilePicturePath: z.string(),
+});
+
+/**
+ * The identity fields a platform move rewrites. Picked from
+ * `anonymousUserSchema` rather than restated, so the supported platform list
+ * keeps one definition - `membershipType` is the Cosmos partition key, and
+ * `movePlatform` is the only write that chooses a new one.
+ * @private
+ */
+const platformMembershipSchema = anonymousUserSchema.pick({
+    displayName: true,
+    membershipId: true,
+    membershipType: true,
 });
 
 /**
@@ -87,15 +108,48 @@ const userSchema = z.object({
      */
     consentUpdatedAt: z.number().int().optional(),
     membershipId: z.string(),
-    membershipType: z.number().int(),
+    membershipType: z.literal(supportedMembershipTypes),
     lastName: z.string(),
     notifications: z.array(notificationSchema).default([]),
     patches: z.array(z.object({})).default([]),
     phoneNumber: z.string(),
     roles: z.array(z.string()).default(['User']),
     type: z.string().optional(),
+    /**
+     * Set by `movePlatform` on the copy it is superseding, naming the platform
+     * the record moved to. Its presence, not its value, is what matters: a
+     * marked document is not the live record and no lookup returns it.
+     */
+    movedTo: z.number().int().optional(),
     bungie: storedBungieTokenSchema.optional(),
 });
+
+/**
+ * The HTTP status Cosmos attached to a rejection. The driver puts it on `code`
+ * and, in places, on `statusCode`; read both rather than depend on which.
+ * @param {*} err
+ * @returns {number | undefined}
+ */
+function cosmosStatus(err) {
+    return typeof err?.code === 'number' ? err.code : err?.statusCode;
+}
+
+/**
+ * Cosmos statuses worth a second attempt: request timeout, throttling, retry-
+ * with, and anything the service blames on itself. A 400, 401 or 403 will
+ * never succeed on a retry, and this runs inside the OAuth callback.
+ * @param {*} err
+ * @returns {boolean}
+ */
+function isTransientCosmosError(err) {
+    const status = cosmosStatus(err);
+
+    if (typeof status !== 'number') {
+        return false;
+    }
+
+    return status === 408 || status === 429 || status === 449 || status >= 500;
+}
 
 /**
  * Copy the consent watermark from the stored document onto the merged one,
@@ -511,15 +565,14 @@ class UserService {
         );
 
         if (documents.length) {
-            if (documents.length > 1) {
-                throw new Error(
-                    `more than 1 document found for displayName ${displayName} and membershipType ${membershipType}`,
-                );
+            user = UserService.#oneLiveDocument(
+                documents,
+                `displayName ${displayName} and membershipType ${membershipType}`,
+            );
+
+            if (user) {
+                await this.#cache(user);
             }
-
-            await this.#cache(documents[0]);
-
-            [user] = documents;
         }
 
         return user;
@@ -552,12 +605,11 @@ class UserService {
             )
         );
         if (documents.length) {
-            if (documents.length > 1) {
-                throw new Error(`more than 1 document found for emailAddress ${emailAddress}`);
-            }
-            await this.#cache(documents[0]);
+            user = UserService.#oneLiveDocument(documents, `emailAddress ${emailAddress}`);
 
-            [user] = documents;
+            if (user) {
+                await this.#cache(user);
+            }
         }
 
         return user;
@@ -606,11 +658,7 @@ class UserService {
             await this.documents.getDocuments(userCollectionId, qb.where('id', userId).getQuery())
         );
         if (documents) {
-            if (documents.length > 1) {
-                throw new Error(`more than 1 document found for userId ${userId}`);
-            }
-
-            [user] = documents;
+            user = UserService.#oneLiveDocument(documents, `userId ${userId}`);
         }
 
         return user;
@@ -636,14 +684,66 @@ class UserService {
             )
         );
         if (documents) {
-            if (documents.length > 1) {
-                throw new Error(`more than 1 document found for membershipId ${membershipId}`);
-            }
-
-            [user] = documents;
+            user = UserService.#oneLiveDocument(documents, `membershipId ${membershipId}`);
         }
 
         return user;
+    }
+
+    /**
+     * Get user from their Bungie.net membership id.
+     *
+     * The platform `membershipId` changes when a player moves the membership
+     * that owns their cross-saved data; this one does not, which makes it the
+     * only way to recognise such an account as a returning user.
+     *
+     * Documents written before the full token was persisted carry no
+     * `bungie.membership_id` and will not match. They pick one up on their next
+     * ordinary sign-in, so the gap closes itself rather than needing a backfill.
+     * @param {string} bungieMembershipId
+     * @returns {Promise<import('../helpers/documents.js').CosmosDocument<User> | undefined>}
+     */
+    async getUserByBungieMembershipId(bungieMembershipId) {
+        /**
+         * Resolves undefined rather than rejecting, unlike its siblings. This
+         * is a fallback behind `getUserByMembershipId`, so a missing id means
+         * "nothing more to try" - and rejecting would turn a brand-new user
+         * whose token lacked the field into a failed sign-in, where before
+         * this lookup existed they were simply created.
+         */
+        if (typeof bungieMembershipId !== 'string' || !bungieMembershipId) {
+            return undefined;
+        }
+
+        const qb = new QueryBuilder();
+        const documents = /** @type {import('../helpers/documents.js').CosmosDocument<User>[]} */ (
+            await this.documents.getDocuments(
+                userCollectionId,
+                qb.where('bungie.membership_id', bungieMembershipId).getQuery(),
+            )
+        );
+
+        /**
+         * The one lookup that can see a superseded copy, because it is the path
+         * `signIn` recovers through: a move whose successor was never created
+         * would otherwise leave the player invisible.
+         *
+         * Live wins when there is one. A superseded copy is returned only when
+         * nothing live matches, which is exactly the interrupted-move case. The
+         * order matters after a failed delete: both copies carry the same
+         * Bungie id, and preferring the live one is what lets a player moving
+         * back to their old platform reach `movePlatform` instead of a throw.
+         */
+        const live = documents.filter(({ movedTo }) => movedTo === undefined);
+        const candidates = live.length ? live : documents;
+
+        if (candidates.length > 1) {
+            throw new Error(
+                `more than 1 document found for bungie.membership_id ${bungieMembershipId}`,
+            );
+        }
+
+        return candidates[0];
     }
 
     /**
@@ -672,6 +772,7 @@ class UserService {
             await this.documents.getDocuments(
                 userCollectionId,
                 qb
+                    .select('movedTo')
                     .select('isSubscribed')
                     .select('notifications')
                     .select('consentUpdatedAt')
@@ -680,11 +781,9 @@ class UserService {
             )
         );
 
-        if (documents.length > 1) {
-            throw new Error(`more than 1 document found for phoneNumber ${phoneNumber}`);
-        }
-
-        return documents[0];
+        return /** @type {*} */ (
+            UserService.#oneLiveDocument(documents, `phoneNumber ${phoneNumber}`)
+        );
     }
 
     /**
@@ -726,12 +825,11 @@ class UserService {
             )
         );
         if (documents.length) {
-            if (documents.length > 1) {
-                throw new Error(`more than 1 document found for phoneNumber ${phoneNumber}`);
-            }
-            await this.#cache(documents[0]);
+            user = UserService.#oneLiveDocument(documents, `phoneNumber ${phoneNumber}`);
 
-            [user] = documents;
+            if (user) {
+                await this.#cache(user);
+            }
         }
 
         return user;
@@ -789,6 +887,186 @@ class UserService {
                 'Failed to cache the user; continuing without it.',
             );
         }
+    }
+
+    /**
+     * Move a user to the platform that now owns their cross-saved data.
+     *
+     * `membershipType` is the Cosmos partition key, and a partition key is
+     * fixed for the life of a document: no update changes it, and there is no
+     * cross-partition transaction to do it atomically. So the record is
+     * recreated under the new platform and the old copy removed, carrying the
+     * registration - phone number, notifications, consent - across with it.
+     *
+     * Create first, delete second. A failure between the two leaves a
+     * duplicate, which is visible and recoverable; the other order would leave
+     * a registered user with no document at all.
+     *
+     * Deliberately skips `userSchema`, like `updateUserSubscription`: the
+     * stored document is already in hand, and a legacy record that fails the
+     * schema must still be movable. Only the incoming identity is validated,
+     * because it chooses the new partition.
+     * @param {import('../helpers/documents.js').CosmosDocument<User>} storedUser
+     * @param {Record<string, *>} membership - the membership Bungie now reports
+     * @returns {Promise<import('../helpers/documents.js').CosmosDocument<User>>}
+     */
+    async movePlatform(storedUser, membership) {
+        try {
+            platformMembershipSchema.parse(membership);
+        } catch (err) {
+            if (err instanceof z.ZodError) {
+                return Promise.reject(Error(JSON.stringify(err.issues)));
+            }
+            return Promise.reject(err);
+        }
+
+        const { membershipType } = /** @type {{ membershipType: number }} */ (membership);
+
+        const { _etag, _rid, _self, _attachments, _ts, movedTo, ...carried } = storedUser;
+
+        /**
+         * Mark the old copy before anything is duplicated. The write is on its
+         * own partition, so a failure here stops the move with nothing lost -
+         * and once it lands, no lookup will return that copy again however many
+         * times it is written to afterwards.
+         *
+         * Sent without the etag, so it is unconditional. Marking is idempotent,
+         * and two sign-ins arriving together would otherwise have the second
+         * fail its precondition on the mark the first just wrote.
+         */
+        await this.documents.updateDocument(
+            userCollectionId,
+            /** @type {*} */ ({ ...carried, movedTo: membershipType }),
+            storedUser.membershipType,
+        );
+
+        /**
+         * Directly after the mark, not at the end: everything below can throw,
+         * and a cached copy outlives the failure by an hour. It holds the
+         * record unmarked, so display-name lookups on the old identity would
+         * keep resolving to something no query returns any more.
+         */
+        try {
+            await this.cacheService.deleteUser(storedUser);
+        } catch (err) {
+            log.warn(
+                { err, userId: storedUser.id },
+                'Failed to clear the cache while moving the user; continuing without it.',
+            );
+        }
+
+        const moved = { ...carried, ...membership };
+        /** @type {*} */
+        let created;
+
+        try {
+            created = await this.documents.createDocument(userCollectionId, moved);
+        } catch (err) {
+            if (cosmosStatus(err) !== StatusCodes.CONFLICT) {
+                throw err;
+            }
+
+            /**
+             * Something already holds this id on the target partition: a
+             * concurrent sign-in that moved first, or a superseded copy from a
+             * platform the player is moving back to. Replacing suits both -
+             * `moved` is the current record, and it carries no mark, so the
+             * target comes back to life.
+             */
+            log.info(
+                { userId: storedUser.id, membershipType },
+                'The target already holds this record; replacing it.',
+            );
+
+            created = await this.documents.updateDocument(
+                userCollectionId,
+                /** @type {*} */ (moved),
+                membershipType,
+            );
+        }
+
+        try {
+            /**
+             * Retried on the statuses that can clear on their own. The old copy
+             * is marked either way, so a leftover is inert rather than
+             * dangerous - this is about tidiness, which is why it does not get
+             * to spend eight seconds of an OAuth callback failing.
+             */
+            await withRetry(
+                () =>
+                    this.documents.deleteDocumentById(
+                        userCollectionId,
+                        storedUser.id,
+                        storedUser.membershipType,
+                    ),
+                { baseDelay: 100, maxRetries: 3, shouldRetry: isTransientCosmosError },
+            );
+        } catch (err) {
+            if (cosmosStatus(err) !== StatusCodes.NOT_FOUND) {
+                log.error(
+                    { err, userId: storedUser.id, membershipType: storedUser.membershipType },
+                    'Moved the user but could not remove the superseded document.',
+                );
+            }
+        }
+
+        const movedDocument =
+            /** @type {import('../helpers/documents.js').CosmosDocument<User>} */ (
+                created ?? moved
+            );
+
+        await this.#cache(movedDocument);
+
+        return movedDocument;
+    }
+
+    /**
+     * Reduce a lookup result to the one live document, or throw.
+     *
+     * `movePlatform` marks the copy it supersedes before creating the
+     * replacement, so a marked document is never the live record. Filtering on
+     * the mark rather than comparing `_ts` matters because a superseded copy
+     * can still be written to - a session predating the move still carries the
+     * old `displayName` and `membershipType`, and a player moving cross save
+     * back lands on it by `membershipId`. Either write would make the stale
+     * copy the newest, and a timestamp rule would then hand back the consent
+     * it never received.
+     *
+     * Two live documents remain an error: that is a different bug, and quietly
+     * picking a winner would hide it.
+     * @param {import('../helpers/documents.js').CosmosDocument<*>[]} documents
+     * @param {string} description - what was looked up, for the error message
+     * @returns {import('../helpers/documents.js').CosmosDocument<*> | undefined}
+     */
+    static #oneLiveDocument(documents, description) {
+        const live = documents.filter(({ movedTo }) => movedTo === undefined);
+
+        if (live.length > 1) {
+            throw new Error(`more than 1 document found for ${description}`);
+        }
+
+        return live[0];
+    }
+
+    /**
+     * Take the mark off a record whose move never created its successor.
+     *
+     * `movePlatform` marks before it creates, so a failure in between leaves a
+     * marked document with nothing to supersede it - invisible to every lookup
+     * but the Bungie-id one. When the player signs in again on the platform
+     * they were already on, that is the record, and it needs to be live again.
+     * @param {import('../helpers/documents.js').CosmosDocument<User>} storedUser
+     * @returns {Promise<void>}
+     */
+    async clearPlatformMove(storedUser) {
+        const { movedTo: _movedTo, ...live } = storedUser;
+
+        log.info(
+            { userId: storedUser.id, membershipType: storedUser.membershipType },
+            'Restoring a record whose platform move never completed.',
+        );
+
+        return await this.#replaceAndCache(/** @type {*} */ (live), storedUser.membershipType);
     }
 
     /**
