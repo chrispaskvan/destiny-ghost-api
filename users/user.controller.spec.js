@@ -43,6 +43,7 @@ const userService = {
     getUserByBungieMembershipId: vi.fn(),
     getUserByMembershipId: vi.fn(),
     getUserByPhoneNumber: vi.fn(),
+    clearPlatformMove: vi.fn().mockResolvedValue(),
     movePlatform: vi.fn().mockImplementation(user => Promise.resolve(user)),
     updateAnonymousUser: vi.fn().mockImplementation(user => Promise.resolve(user)),
     updateUser: vi.fn().mockImplementation(user => Promise.resolve(user)),
@@ -587,6 +588,23 @@ describe('UserController', () => {
                     });
                 });
 
+                describe('when a previous move was marked but never completed', () => {
+                    it('should restore the record instead of leaving it invisible', async () => {
+                        userService.getUserByMembershipId.mockResolvedValue(undefined);
+                        userService.getUserByBungieMembershipId.mockResolvedValue({
+                            dateRegistered: Temporal.Now.instant().toString(),
+                            ...mockUser,
+                            movedTo: 3,
+                        });
+
+                        await userController.signIn({});
+
+                        expect(userService.clearPlatformMove).toHaveBeenCalled();
+                        expect(userService.movePlatform).not.toHaveBeenCalled();
+                        expect(userService.updateUser).toHaveBeenCalled();
+                    });
+                });
+
                 describe('when the platform is unchanged', () => {
                     it('should update in place without moving partitions', async () => {
                         userService.getUserByMembershipId.mockResolvedValue({
@@ -1007,6 +1025,7 @@ describe('UserController.signIn against the real Destiny and User services', () 
         createDocument: vi.fn(),
         deleteDocumentById: vi.fn(),
         getDocuments: vi.fn(() => []),
+        updateDocument: vi.fn((_collection, document) => Promise.resolve(document)),
     };
 
     let controller;

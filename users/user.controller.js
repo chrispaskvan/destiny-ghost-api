@@ -537,6 +537,25 @@ class UserController {
         }
 
         /**
+         * A record marked for a move whose successor was never created. The
+         * player is signing in on the platform they were already on, so the
+         * move is moot and the mark has to come off - while it is there, every
+         * lookup but the Bungie-id one skips this record.
+         */
+        if (
+            destinyGhostUser.movedTo !== undefined &&
+            destinyGhostUser.membershipType === user.membershipType
+        ) {
+            await this.users.clearPlatformMove(
+                /** @type {import('../helpers/documents.js').CosmosDocument<User>} */ (
+                    /** @type {unknown} */ (destinyGhostUser)
+                ),
+            );
+
+            delete destinyGhostUser.movedTo;
+        }
+
+        /**
          * `membershipType` is the partition key, so a changed platform is a
          * move rather than an update - `updateUser` would look the document up
          * under the new platform, find nothing, and throw.

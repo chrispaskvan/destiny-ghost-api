@@ -115,6 +115,12 @@ const userSchema = z.object({
     phoneNumber: z.string(),
     roles: z.array(z.string()).default(['User']),
     type: z.string().optional(),
+    /**
+     * Set by `movePlatform` on the copy it is superseding, naming the platform
+     * the record moved to. Its presence, not its value, is what matters: a
+     * marked document is not the live record and no lookup returns it.
+     */
+    movedTo: z.number().int().optional(),
     bungie: storedBungieTokenSchema.optional(),
 });
 
@@ -126,6 +132,23 @@ const userSchema = z.object({
  */
 function cosmosStatus(err) {
     return typeof err?.code === 'number' ? err.code : err?.statusCode;
+}
+
+/**
+ * Cosmos statuses worth a second attempt: request timeout, throttling, retry-
+ * with, and anything the service blames on itself. A 400, 401 or 403 will
+ * never succeed on a retry, and this runs inside the OAuth callback.
+ * @param {*} err
+ * @returns {boolean}
+ */
+function isTransientCosmosError(err) {
+    const status = cosmosStatus(err);
+
+    if (typeof status !== 'number') {
+        return false;
+    }
+
+    return status === 408 || status === 429 || status === 449 || status >= 500;
 }
 
 /**
@@ -542,15 +565,14 @@ class UserService {
         );
 
         if (documents.length) {
-            if (documents.length > 1) {
-                throw new Error(
-                    `more than 1 document found for displayName ${displayName} and membershipType ${membershipType}`,
-                );
+            user = UserService.#oneLiveDocument(
+                documents,
+                `displayName ${displayName} and membershipType ${membershipType}`,
+            );
+
+            if (user) {
+                await this.#cache(user);
             }
-
-            await this.#cache(documents[0]);
-
-            [user] = documents;
         }
 
         return user;
@@ -583,9 +605,11 @@ class UserService {
             )
         );
         if (documents.length) {
-            user = UserService.#oneDocument(documents, `emailAddress ${emailAddress}`);
+            user = UserService.#oneLiveDocument(documents, `emailAddress ${emailAddress}`);
 
-            await this.#cache(/** @type {*} */ (user));
+            if (user) {
+                await this.#cache(user);
+            }
         }
 
         return user;
@@ -634,7 +658,7 @@ class UserService {
             await this.documents.getDocuments(userCollectionId, qb.where('id', userId).getQuery())
         );
         if (documents) {
-            user = UserService.#oneDocument(documents, `userId ${userId}`);
+            user = UserService.#oneLiveDocument(documents, `userId ${userId}`);
         }
 
         return user;
@@ -660,7 +684,7 @@ class UserService {
             )
         );
         if (documents) {
-            user = UserService.#oneDocument(documents, `membershipId ${membershipId}`);
+            user = UserService.#oneLiveDocument(documents, `membershipId ${membershipId}`);
         }
 
         return user;
@@ -699,9 +723,19 @@ class UserService {
             )
         );
 
-        return /** @type {*} */ (
-            UserService.#oneDocument(documents, `bungie.membership_id ${bungieMembershipId}`)
-        );
+        /**
+         * Deliberately not filtered on the mark, unlike every other lookup.
+         * This is the path `signIn` recovers through, so it has to be able to
+         * see a copy whose move never finished - that is what lets the next
+         * sign-in complete it instead of leaving the player invisible.
+         */
+        if (documents.length > 1) {
+            throw new Error(
+                `more than 1 document found for bungie.membership_id ${bungieMembershipId}`,
+            );
+        }
+
+        return documents[0];
     }
 
     /**
@@ -730,8 +764,7 @@ class UserService {
             await this.documents.getDocuments(
                 userCollectionId,
                 qb
-                    .select('id')
-                    .select('_ts')
+                    .select('movedTo')
                     .select('isSubscribed')
                     .select('notifications')
                     .select('consentUpdatedAt')
@@ -740,7 +773,9 @@ class UserService {
             )
         );
 
-        return /** @type {*} */ (UserService.#oneDocument(documents, `phoneNumber ${phoneNumber}`));
+        return /** @type {*} */ (
+            UserService.#oneLiveDocument(documents, `phoneNumber ${phoneNumber}`)
+        );
     }
 
     /**
@@ -782,9 +817,11 @@ class UserService {
             )
         );
         if (documents.length) {
-            user = UserService.#oneDocument(documents, `phoneNumber ${phoneNumber}`);
+            user = UserService.#oneLiveDocument(documents, `phoneNumber ${phoneNumber}`);
 
-            await this.#cache(/** @type {*} */ (user));
+            if (user) {
+                await this.#cache(user);
+            }
         }
 
         return user;
@@ -875,7 +912,21 @@ class UserService {
             return Promise.reject(err);
         }
 
-        const { _etag, _rid, _self, _attachments, _ts, ...carried } = storedUser;
+        const { membershipType } = /** @type {{ membershipType: number }} */ (membership);
+
+        /**
+         * Mark the old copy before anything is duplicated. The write is on its
+         * own partition, so a failure here stops the move with nothing lost -
+         * and once it lands, no lookup will return that copy again however many
+         * times it is written to afterwards.
+         */
+        await this.documents.updateDocument(
+            userCollectionId,
+            { ...storedUser, movedTo: membershipType },
+            storedUser.membershipType,
+        );
+
+        const { _etag, _rid, _self, _attachments, _ts, movedTo, ...carried } = storedUser;
         const moved = { ...carried, ...membership };
         /** @type {*} */
         let created;
@@ -883,29 +934,35 @@ class UserService {
         try {
             created = await this.documents.createDocument(userCollectionId, moved);
         } catch (err) {
-            /**
-             * Two OAuth callbacks arriving together - a double-click, a retry -
-             * both miss the lookup and both move. The second create conflicts
-             * on the id it is recreating, which means the first one already
-             * did this; carry on to the delete so the old copy still goes.
-             */
             if (cosmosStatus(err) !== StatusCodes.CONFLICT) {
                 throw err;
             }
 
+            /**
+             * Something already holds this id on the target partition: a
+             * concurrent sign-in that moved first, or a superseded copy from a
+             * platform the player is moving back to. Replacing suits both -
+             * `moved` is the current record, and it carries no mark, so the
+             * target comes back to life.
+             */
             log.info(
-                { userId: storedUser.id },
-                'The platform move was already completed by a concurrent sign-in.',
+                { userId: storedUser.id, membershipType },
+                'The target already holds this record; replacing it.',
+            );
+
+            created = await this.documents.updateDocument(
+                userCollectionId,
+                /** @type {*} */ (moved),
+                membershipType,
             );
         }
 
         try {
             /**
-             * Retried, because the alternative is a stale copy that nothing
-             * bounded: until it goes, every lookup sharing its phone number or
-             * id sees two documents. `#oneDocument` keeps those reads correct
-             * meanwhile, but correct-despite-a-duplicate is a fallback, not the
-             * resting state. A 404 means it is already gone.
+             * Retried on the statuses that can clear on their own. The old copy
+             * is marked either way, so a leftover is inert rather than
+             * dangerous - this is about tidiness, which is why it does not get
+             * to spend eight seconds of an OAuth callback failing.
              */
             await withRetry(
                 () =>
@@ -914,25 +971,13 @@ class UserService {
                         storedUser.id,
                         storedUser.membershipType,
                     ),
-                {
-                    maxRetries: 3,
-                    shouldRetry: (/** @type {*} */ err) =>
-                        cosmosStatus(err) !== StatusCodes.NOT_FOUND,
-                },
+                { baseDelay: 100, maxRetries: 3, shouldRetry: isTransientCosmosError },
             );
         } catch (err) {
             if (cosmosStatus(err) !== StatusCodes.NOT_FOUND) {
-                /**
-                 * The move itself already succeeded. Rejecting here would
-                 * report a completed sign-in as failed and still leave the
-                 * stale copy, so the only useful thing left is to say so
-                 * loudly - reads stay correct through `#oneDocument`, and the
-                 * next sign-in moves nothing because the record is already on
-                 * the right platform, so this one needs removing by hand.
-                 */
                 log.error(
                     { err, userId: storedUser.id, membershipType: storedUser.membershipType },
-                    'Moved the user but could not remove the old document; a stale copy remains.',
+                    'Moved the user but could not remove the superseded document.',
                 );
             }
         }
@@ -962,53 +1007,52 @@ class UserService {
     }
 
     /**
-     * Reduce a multi-document result to the one the caller meant, or throw.
+     * Reduce a lookup result to the one live document, or throw.
      *
-     * `movePlatform` recreates a record under a new partition with the same
-     * `id` before removing the old copy, so a failure between the two leaves
-     * two documents that share an id and differ in `membershipType`. Every
-     * cross-partition lookup then sees both, and the throw below used to take
-     * out the phone-number lookup that inbound STOP handling runs on
-     * (`twilio.controller.js`), the consent gate, and SMS sign-in - for the
-     * whole time the stale copy survived, which nothing bounded.
+     * `movePlatform` marks the copy it supersedes before creating the
+     * replacement, so a marked document is never the live record. Filtering on
+     * the mark rather than comparing `_ts` matters because a superseded copy
+     * can still be written to - a session predating the move still carries the
+     * old `displayName` and `membershipType`, and a player moving cross save
+     * back lands on it by `membershipId`. Either write would make the stale
+     * copy the newest, and a timestamp rule would then hand back the consent
+     * it never received.
      *
-     * A shared `id` is the signal: two genuinely distinct users never have
-     * one. The newest `_ts` is the record the move intended to leave behind.
-     * Anything else is a real duplicate and still throws, because that is a
-     * different bug and silently picking a winner would hide it.
-     *
-     * The stale copy is left in place: a getter is the wrong place to delete
-     * from, and `movePlatform` retries its own delete. This keeps reads
-     * correct meanwhile.
+     * Two live documents remain an error: that is a different bug, and quietly
+     * picking a winner would hide it.
      * @param {import('../helpers/documents.js').CosmosDocument<*>[]} documents
      * @param {string} description - what was looked up, for the error message
      * @returns {import('../helpers/documents.js').CosmosDocument<*> | undefined}
      */
-    static #oneDocument(documents, description) {
-        if (documents.length <= 1) {
-            return documents[0];
-        }
+    static #oneLiveDocument(documents, description) {
+        const live = documents.filter(({ movedTo }) => movedTo === undefined);
 
-        const [first] = documents;
-        const sharesAnId = first.id && documents.every(({ id }) => id === first.id);
-
-        if (!sharesAnId) {
+        if (live.length > 1) {
             throw new Error(`more than 1 document found for ${description}`);
         }
 
-        const newest = documents.reduce((winner, document) =>
-            (document._ts ?? 0) > (winner._ts ?? 0) ? document : winner,
+        return live[0];
+    }
+
+    /**
+     * Take the mark off a record whose move never created its successor.
+     *
+     * `movePlatform` marks before it creates, so a failure in between leaves a
+     * marked document with nothing to supersede it - invisible to every lookup
+     * but the Bungie-id one. When the player signs in again on the platform
+     * they were already on, that is the record, and it needs to be live again.
+     * @param {import('../helpers/documents.js').CosmosDocument<User>} storedUser
+     * @returns {Promise<void>}
+     */
+    async clearPlatformMove(storedUser) {
+        const { movedTo: _movedTo, ...live } = storedUser;
+
+        log.info(
+            { userId: storedUser.id, membershipType: storedUser.membershipType },
+            'Restoring a record whose platform move never completed.',
         );
 
-        log.error(
-            {
-                userId: newest.id,
-                membershipTypes: documents.map(({ membershipType }) => membershipType),
-            },
-            'An unfinished platform move left a stale copy; reading the newest until it is removed.',
-        );
-
-        return newest;
+        return await this.#replaceAndCache(/** @type {*} */ (live), storedUser.membershipType);
     }
 
     /**
