@@ -1,8 +1,10 @@
 // @ts-check
+import { StatusCodes } from 'http-status-codes';
 import { z } from 'zod';
 import supportedMembershipTypes from '../helpers/bungie.membershipTypes.js';
 import QueryBuilder from '../helpers/queryBuilder.js';
 import log from '../helpers/log.js';
+import { withRetry } from '../helpers/retry.js';
 import notificationTypes from '../notifications/notification.types.js';
 
 /**
@@ -115,6 +117,16 @@ const userSchema = z.object({
     type: z.string().optional(),
     bungie: storedBungieTokenSchema.optional(),
 });
+
+/**
+ * The HTTP status Cosmos attached to a rejection. The driver puts it on `code`
+ * and, in places, on `statusCode`; read both rather than depend on which.
+ * @param {*} err
+ * @returns {number | undefined}
+ */
+function cosmosStatus(err) {
+    return typeof err?.code === 'number' ? err.code : err?.statusCode;
+}
 
 /**
  * Copy the consent watermark from the stored document onto the merged one,
@@ -571,12 +583,9 @@ class UserService {
             )
         );
         if (documents.length) {
-            if (documents.length > 1) {
-                throw new Error(`more than 1 document found for emailAddress ${emailAddress}`);
-            }
-            await this.#cache(documents[0]);
+            user = UserService.#oneDocument(documents, `emailAddress ${emailAddress}`);
 
-            [user] = documents;
+            await this.#cache(/** @type {*} */ (user));
         }
 
         return user;
@@ -625,11 +634,7 @@ class UserService {
             await this.documents.getDocuments(userCollectionId, qb.where('id', userId).getQuery())
         );
         if (documents) {
-            if (documents.length > 1) {
-                throw new Error(`more than 1 document found for userId ${userId}`);
-            }
-
-            [user] = documents;
+            user = UserService.#oneDocument(documents, `userId ${userId}`);
         }
 
         return user;
@@ -655,11 +660,7 @@ class UserService {
             )
         );
         if (documents) {
-            if (documents.length > 1) {
-                throw new Error(`more than 1 document found for membershipId ${membershipId}`);
-            }
-
-            [user] = documents;
+            user = UserService.#oneDocument(documents, `membershipId ${membershipId}`);
         }
 
         return user;
@@ -679,8 +680,15 @@ class UserService {
      * @returns {Promise<import('../helpers/documents.js').CosmosDocument<User> | undefined>}
      */
     async getUserByBungieMembershipId(bungieMembershipId) {
+        /**
+         * Resolves undefined rather than rejecting, unlike its siblings. This
+         * is a fallback behind `getUserByMembershipId`, so a missing id means
+         * "nothing more to try" - and rejecting would turn a brand-new user
+         * whose token lacked the field into a failed sign-in, where before
+         * this lookup existed they were simply created.
+         */
         if (typeof bungieMembershipId !== 'string' || !bungieMembershipId) {
-            return Promise.reject(new Error('bungieMembershipId string is required'));
+            return undefined;
         }
 
         const qb = new QueryBuilder();
@@ -691,13 +699,9 @@ class UserService {
             )
         );
 
-        if (documents.length > 1) {
-            throw new Error(
-                `more than 1 document found for bungie.membership_id ${bungieMembershipId}`,
-            );
-        }
-
-        return documents[0];
+        return /** @type {*} */ (
+            UserService.#oneDocument(documents, `bungie.membership_id ${bungieMembershipId}`)
+        );
     }
 
     /**
@@ -726,6 +730,8 @@ class UserService {
             await this.documents.getDocuments(
                 userCollectionId,
                 qb
+                    .select('id')
+                    .select('_ts')
                     .select('isSubscribed')
                     .select('notifications')
                     .select('consentUpdatedAt')
@@ -734,11 +740,7 @@ class UserService {
             )
         );
 
-        if (documents.length > 1) {
-            throw new Error(`more than 1 document found for phoneNumber ${phoneNumber}`);
-        }
-
-        return documents[0];
+        return /** @type {*} */ (UserService.#oneDocument(documents, `phoneNumber ${phoneNumber}`));
     }
 
     /**
@@ -780,12 +782,9 @@ class UserService {
             )
         );
         if (documents.length) {
-            if (documents.length > 1) {
-                throw new Error(`more than 1 document found for phoneNumber ${phoneNumber}`);
-            }
-            await this.#cache(documents[0]);
+            user = UserService.#oneDocument(documents, `phoneNumber ${phoneNumber}`);
 
-            [user] = documents;
+            await this.#cache(/** @type {*} */ (user));
         }
 
         return user;
@@ -878,24 +877,64 @@ class UserService {
 
         const { _etag, _rid, _self, _attachments, _ts, ...carried } = storedUser;
         const moved = { ...carried, ...membership };
-        const created = await this.documents.createDocument(userCollectionId, moved);
+        /** @type {*} */
+        let created;
 
         try {
-            await this.documents.deleteDocumentById(
-                userCollectionId,
-                storedUser.id,
-                storedUser.membershipType,
-            );
+            created = await this.documents.createDocument(userCollectionId, moved);
         } catch (err) {
             /**
-             * The move itself already succeeded. Rejecting here would report a
-             * completed sign-in as failed and still leave the duplicate, so the
-             * only useful thing left to do is say so loudly.
+             * Two OAuth callbacks arriving together - a double-click, a retry -
+             * both miss the lookup and both move. The second create conflicts
+             * on the id it is recreating, which means the first one already
+             * did this; carry on to the delete so the old copy still goes.
              */
-            log.error(
-                { err, userId: storedUser.id, membershipType: storedUser.membershipType },
-                'Moved the user but could not remove the old document; a duplicate remains.',
+            if (cosmosStatus(err) !== StatusCodes.CONFLICT) {
+                throw err;
+            }
+
+            log.info(
+                { userId: storedUser.id },
+                'The platform move was already completed by a concurrent sign-in.',
             );
+        }
+
+        try {
+            /**
+             * Retried, because the alternative is a stale copy that nothing
+             * bounded: until it goes, every lookup sharing its phone number or
+             * id sees two documents. `#oneDocument` keeps those reads correct
+             * meanwhile, but correct-despite-a-duplicate is a fallback, not the
+             * resting state. A 404 means it is already gone.
+             */
+            await withRetry(
+                () =>
+                    this.documents.deleteDocumentById(
+                        userCollectionId,
+                        storedUser.id,
+                        storedUser.membershipType,
+                    ),
+                {
+                    maxRetries: 3,
+                    shouldRetry: (/** @type {*} */ err) =>
+                        cosmosStatus(err) !== StatusCodes.NOT_FOUND,
+                },
+            );
+        } catch (err) {
+            if (cosmosStatus(err) !== StatusCodes.NOT_FOUND) {
+                /**
+                 * The move itself already succeeded. Rejecting here would
+                 * report a completed sign-in as failed and still leave the
+                 * stale copy, so the only useful thing left is to say so
+                 * loudly - reads stay correct through `#oneDocument`, and the
+                 * next sign-in moves nothing because the record is already on
+                 * the right platform, so this one needs removing by hand.
+                 */
+                log.error(
+                    { err, userId: storedUser.id, membershipType: storedUser.membershipType },
+                    'Moved the user but could not remove the old document; a stale copy remains.',
+                );
+            }
         }
 
         /**
@@ -920,6 +959,56 @@ class UserService {
         await this.#cache(movedDocument);
 
         return movedDocument;
+    }
+
+    /**
+     * Reduce a multi-document result to the one the caller meant, or throw.
+     *
+     * `movePlatform` recreates a record under a new partition with the same
+     * `id` before removing the old copy, so a failure between the two leaves
+     * two documents that share an id and differ in `membershipType`. Every
+     * cross-partition lookup then sees both, and the throw below used to take
+     * out the phone-number lookup that inbound STOP handling runs on
+     * (`twilio.controller.js`), the consent gate, and SMS sign-in - for the
+     * whole time the stale copy survived, which nothing bounded.
+     *
+     * A shared `id` is the signal: two genuinely distinct users never have
+     * one. The newest `_ts` is the record the move intended to leave behind.
+     * Anything else is a real duplicate and still throws, because that is a
+     * different bug and silently picking a winner would hide it.
+     *
+     * The stale copy is left in place: a getter is the wrong place to delete
+     * from, and `movePlatform` retries its own delete. This keeps reads
+     * correct meanwhile.
+     * @param {import('../helpers/documents.js').CosmosDocument<*>[]} documents
+     * @param {string} description - what was looked up, for the error message
+     * @returns {import('../helpers/documents.js').CosmosDocument<*> | undefined}
+     */
+    static #oneDocument(documents, description) {
+        if (documents.length <= 1) {
+            return documents[0];
+        }
+
+        const [first] = documents;
+        const sharesAnId = first.id && documents.every(({ id }) => id === first.id);
+
+        if (!sharesAnId) {
+            throw new Error(`more than 1 document found for ${description}`);
+        }
+
+        const newest = documents.reduce((winner, document) =>
+            (document._ts ?? 0) > (winner._ts ?? 0) ? document : winner,
+        );
+
+        log.error(
+            {
+                userId: newest.id,
+                membershipTypes: documents.map(({ membershipType }) => membershipType),
+            },
+            'An unfinished platform move left a stale copy; reading the newest until it is removed.',
+        );
+
+        return newest;
     }
 
     /**

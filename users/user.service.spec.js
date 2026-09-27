@@ -306,7 +306,10 @@ describe('UserService', () => {
 
             it('should fail when more than one existing user is found', async () => {
                 documentService.getDocuments.mockImplementation(() =>
-                    Promise.resolve([user, user]),
+                    Promise.resolve([
+                        { ...user, id: 'user-a' },
+                        { ...user, id: 'user-b' },
+                    ]),
                 );
 
                 await expect(
@@ -362,7 +365,10 @@ describe('UserService', () => {
 
             it('should fail when more than one existing user is found', async () => {
                 documentService.getDocuments.mockImplementation(() =>
-                    Promise.resolve([user, user]),
+                    Promise.resolve([
+                        { ...user, id: 'user-a' },
+                        { ...user, id: 'user-b' },
+                    ]),
                 );
 
                 await expect(
@@ -414,7 +420,10 @@ describe('UserService', () => {
 
             it('should fail when more than one existing user is found', async () => {
                 documentService.getDocuments.mockImplementation(() =>
-                    Promise.resolve([user, user]),
+                    Promise.resolve([
+                        { ...user, id: 'user-a' },
+                        { ...user, id: 'user-b' },
+                    ]),
                 );
 
                 await expect(
@@ -453,6 +462,61 @@ describe('UserService', () => {
         });
     });
 
+    /**
+     * What every other lookup does while a `movePlatform` delete has not landed.
+     * The two documents share an id and differ only in partition, and before
+     * this they took out inbound STOP handling, the consent gate and SMS
+     * sign-in for as long as the stale copy survived.
+     */
+    describe('when an unfinished platform move has left a stale copy', () => {
+        const stale = { ...user, _ts: 1000, id: 'user-1', membershipType: 1 };
+        const moved = { ...user, _ts: 2000, id: 'user-1', membershipType: 3 };
+
+        beforeEach(() => {
+            // Cosmos returns them in no particular order; the oldest is first here.
+            documentService.getDocuments.mockResolvedValue([stale, moved]);
+            cacheService.setUser.mockResolvedValue();
+        });
+
+        it('should keep the phone-number lookup working, which STOP handling runs on', async () => {
+            await expect(userService.getUserByPhoneNumber(user.phoneNumber, true)).resolves.toEqual(
+                moved,
+            );
+        });
+
+        it('should keep the consent gate working rather than suppressing notifications', async () => {
+            await expect(userService.getConsentByPhoneNumber(user.phoneNumber)).resolves.toEqual(
+                moved,
+            );
+        });
+
+        it('should keep the id and Bungie-id lookups working', async () => {
+            await expect(userService.getUserById('user-1')).resolves.toEqual(moved);
+            await expect(userService.getUserByBungieMembershipId('99')).resolves.toEqual(moved);
+        });
+
+        it('should say so loudly, because the stale copy still needs removing', async () => {
+            const errorLog = vi.spyOn(log, 'error').mockImplementation(() => {});
+
+            await userService.getUserById('user-1');
+
+            expect(errorLog).toHaveBeenCalled();
+
+            errorLog.mockRestore();
+        });
+
+        it('should still throw when the documents are two different users', async () => {
+            documentService.getDocuments.mockResolvedValue([
+                { ...user, id: 'user-a' },
+                { ...user, id: 'user-b' },
+            ]);
+
+            await expect(userService.getUserById('user-a')).rejects.toThrow(
+                'more than 1 document found',
+            );
+        });
+    });
+
     describe('getUserByBungieMembershipId', () => {
         it('should return the user whose stored token carries that id', async () => {
             documentService.getDocuments.mockResolvedValue([user]);
@@ -477,14 +541,26 @@ describe('UserService', () => {
             await expect(userService.getUserByBungieMembershipId('99')).resolves.toBeUndefined();
         });
 
-        it('should fail when more than one document matches', async () => {
-            documentService.getDocuments.mockResolvedValue([user, user]);
+        it('should fail when two genuinely different users match', async () => {
+            documentService.getDocuments.mockResolvedValue([
+                { ...user, id: 'user-a' },
+                { ...user, id: 'user-b' },
+            ]);
 
             await expect(userService.getUserByBungieMembershipId('99')).rejects.toThrow();
         });
 
-        it('should reject an empty id without querying', async () => {
-            await expect(userService.getUserByBungieMembershipId('')).rejects.toThrow();
+        /**
+         * Unlike its siblings, which reject. This is a fallback behind
+         * `getUserByMembershipId`, so a missing id means "nothing more to try":
+         * rejecting would turn a brand-new user whose token lacked the field
+         * into a failed sign-in.
+         */
+        it('should resolve undefined for a missing id without querying', async () => {
+            await expect(userService.getUserByBungieMembershipId('')).resolves.toBeUndefined();
+            await expect(
+                userService.getUserByBungieMembershipId(undefined),
+            ).resolves.toBeUndefined();
 
             expect(documentService.getDocuments).not.toHaveBeenCalled();
         });
@@ -598,6 +674,68 @@ describe('UserService', () => {
             );
         });
 
+        it('should retry a failed delete rather than leave the stale copy', async () => {
+            vi.useFakeTimers();
+
+            const errorLog = vi.spyOn(log, 'error').mockImplementation(() => {});
+
+            documentService.deleteDocumentById
+                .mockRejectedValueOnce(Object.assign(new Error('throttled'), { code: 429 }))
+                .mockResolvedValueOnce();
+
+            const moving = userService.movePlatform(storedUser, steamMembership);
+
+            await vi.runAllTimersAsync();
+            await moving;
+
+            expect(documentService.deleteDocumentById).toHaveBeenCalledTimes(2);
+            expect(errorLog).not.toHaveBeenCalled();
+
+            errorLog.mockRestore();
+            vi.useRealTimers();
+        });
+
+        it('should not retry a delete that 404s, because the copy is already gone', async () => {
+            const errorLog = vi.spyOn(log, 'error').mockImplementation(() => {});
+
+            documentService.deleteDocumentById.mockRejectedValue(
+                Object.assign(new Error('not found'), { code: 404 }),
+            );
+
+            await expect(
+                userService.movePlatform(storedUser, steamMembership),
+            ).resolves.toBeDefined();
+
+            expect(documentService.deleteDocumentById).toHaveBeenCalledTimes(1);
+            expect(errorLog).not.toHaveBeenCalled();
+
+            errorLog.mockRestore();
+        });
+
+        it('should treat a conflicting create as a concurrent move and still delete', async () => {
+            documentService.createDocument.mockRejectedValue(
+                Object.assign(new Error('conflict'), { code: 409 }),
+            );
+
+            await expect(
+                userService.movePlatform(storedUser, steamMembership),
+            ).resolves.toMatchObject({ membershipType: 3 });
+
+            expect(documentService.deleteDocumentById).toHaveBeenCalledWith('Users', 'user-1', 1);
+        });
+
+        it('should surface a create failure that is not a conflict', async () => {
+            documentService.createDocument.mockRejectedValue(
+                Object.assign(new Error('boom'), { code: 500 }),
+            );
+
+            await expect(userService.movePlatform(storedUser, steamMembership)).rejects.toThrow(
+                'boom',
+            );
+
+            expect(documentService.deleteDocumentById).not.toHaveBeenCalled();
+        });
+
         it('should reject an unsupported platform without writing anything', async () => {
             await expect(
                 userService.movePlatform(storedUser, { ...steamMembership, membershipType: 5 }),
@@ -621,7 +759,10 @@ describe('UserService', () => {
 
             it('should fail when more than one existing user is found', async () => {
                 documentService.getDocuments.mockImplementation(() =>
-                    Promise.resolve([user, user]),
+                    Promise.resolve([
+                        { ...user, id: 'user-a' },
+                        { ...user, id: 'user-b' },
+                    ]),
                 );
 
                 await expect(
@@ -671,7 +812,7 @@ describe('UserService', () => {
 
             expect(collectionId).toBe('Users');
             expect(query.query).toBe(
-                'SELECT r.isSubscribed, r.notifications, r.consentUpdatedAt FROM root r WHERE r.phoneNumber = @phoneNumber',
+                'SELECT r.id, r._ts, r.isSubscribed, r.notifications, r.consentUpdatedAt FROM root r WHERE r.phoneNumber = @phoneNumber',
             );
             expect(query.parameters).toEqual([{ name: '@phoneNumber', value: user.phoneNumber }]);
         });
@@ -765,7 +906,10 @@ describe('UserService', () => {
 
             it('should fail when more than one existing user is found', async () => {
                 documentService.getDocuments.mockImplementation(() =>
-                    Promise.resolve([user, user]),
+                    Promise.resolve([
+                        { ...user, id: 'user-a' },
+                        { ...user, id: 'user-b' },
+                    ]),
                 );
 
                 await expect(userService.getUserByPhoneNumber(user.phoneNumber)).rejects.toThrow();
@@ -847,7 +991,10 @@ describe('UserService', () => {
 
             it('should fail when more than one existing user is found', async () => {
                 documentService.getDocuments.mockImplementation(() =>
-                    Promise.resolve([user, user]),
+                    Promise.resolve([
+                        { ...user, id: 'user-a' },
+                        { ...user, id: 'user-b' },
+                    ]),
                 );
 
                 await expect(userService.getUserById(user.id)).rejects.toThrow();
