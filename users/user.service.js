@@ -724,18 +724,26 @@ class UserService {
         );
 
         /**
-         * Deliberately not filtered on the mark, unlike every other lookup.
-         * This is the path `signIn` recovers through, so it has to be able to
-         * see a copy whose move never finished - that is what lets the next
-         * sign-in complete it instead of leaving the player invisible.
+         * The one lookup that can see a superseded copy, because it is the path
+         * `signIn` recovers through: a move whose successor was never created
+         * would otherwise leave the player invisible.
+         *
+         * Live wins when there is one. A superseded copy is returned only when
+         * nothing live matches, which is exactly the interrupted-move case. The
+         * order matters after a failed delete: both copies carry the same
+         * Bungie id, and preferring the live one is what lets a player moving
+         * back to their old platform reach `movePlatform` instead of a throw.
          */
-        if (documents.length > 1) {
+        const live = documents.filter(({ movedTo }) => movedTo === undefined);
+        const candidates = live.length ? live : documents;
+
+        if (candidates.length > 1) {
             throw new Error(
                 `more than 1 document found for bungie.membership_id ${bungieMembershipId}`,
             );
         }
 
-        return documents[0];
+        return candidates[0];
     }
 
     /**
@@ -914,19 +922,39 @@ class UserService {
 
         const { membershipType } = /** @type {{ membershipType: number }} */ (membership);
 
+        const { _etag, _rid, _self, _attachments, _ts, movedTo, ...carried } = storedUser;
+
         /**
          * Mark the old copy before anything is duplicated. The write is on its
          * own partition, so a failure here stops the move with nothing lost -
          * and once it lands, no lookup will return that copy again however many
          * times it is written to afterwards.
+         *
+         * Sent without the etag, so it is unconditional. Marking is idempotent,
+         * and two sign-ins arriving together would otherwise have the second
+         * fail its precondition on the mark the first just wrote.
          */
         await this.documents.updateDocument(
             userCollectionId,
-            { ...storedUser, movedTo: membershipType },
+            /** @type {*} */ ({ ...carried, movedTo: membershipType }),
             storedUser.membershipType,
         );
 
-        const { _etag, _rid, _self, _attachments, _ts, movedTo, ...carried } = storedUser;
+        /**
+         * Directly after the mark, not at the end: everything below can throw,
+         * and a cached copy outlives the failure by an hour. It holds the
+         * record unmarked, so display-name lookups on the old identity would
+         * keep resolving to something no query returns any more.
+         */
+        try {
+            await this.cacheService.deleteUser(storedUser);
+        } catch (err) {
+            log.warn(
+                { err, userId: storedUser.id },
+                'Failed to clear the cache while moving the user; continuing without it.',
+            );
+        }
+
         const moved = { ...carried, ...membership };
         /** @type {*} */
         let created;
@@ -980,20 +1008,6 @@ class UserService {
                     'Moved the user but could not remove the superseded document.',
                 );
             }
-        }
-
-        /**
-         * Ahead of caching the new document, not after: the phone-number and
-         * email-address keys are shared by both records and hold a
-         * displayName+membershipType pointer that no longer resolves.
-         */
-        try {
-            await this.cacheService.deleteUser(storedUser);
-        } catch (err) {
-            log.warn(
-                { err, userId: storedUser.id },
-                'Failed to clear the cache after moving the user; continuing without it.',
-            );
         }
 
         const movedDocument =

@@ -518,12 +518,21 @@ describe('UserService', () => {
          * The exception, and the reason `signIn` can recover: a move that never
          * created its successor would otherwise leave the player invisible.
          */
-        it('should still expose it to the Bungie-id lookup, which recovery runs on', async () => {
+        it('should expose a lone superseded copy to the Bungie-id lookup', async () => {
             documentService.getDocuments.mockResolvedValue([superseded]);
 
             await expect(userService.getUserByBungieMembershipId('99')).resolves.toEqual(
                 superseded,
             );
+        });
+
+        /**
+         * Both copies carry the same Bungie id after a failed delete. Throwing
+         * here made every sign-in fail for a player moving back to their old
+         * platform, because that is the lookup `signIn` falls through to.
+         */
+        it('should prefer the live copy over the superseded one, not throw', async () => {
+            await expect(userService.getUserByBungieMembershipId('99')).resolves.toEqual(live);
         });
 
         it('should still throw when two live documents match', async () => {
@@ -655,6 +664,26 @@ describe('UserService', () => {
 
             finishMark({});
             await moving;
+        });
+
+        it('should mark unconditionally, so a concurrent move does not fail its precondition', async () => {
+            await userService.movePlatform(storedUser, steamMembership);
+
+            const [, document] = documentService.updateDocument.mock.calls[0];
+
+            expect(document).not.toHaveProperty('_etag');
+        });
+
+        it('should clear the cache even when the move fails after the mark', async () => {
+            documentService.createDocument.mockRejectedValue(
+                Object.assign(new Error('boom'), { code: 500 }),
+            );
+
+            await expect(userService.movePlatform(storedUser, steamMembership)).rejects.toThrow(
+                'boom',
+            );
+
+            expect(cacheService.deleteUser).toHaveBeenCalledWith(storedUser);
         });
 
         it('should abort with nothing duplicated when the mark cannot be written', async () => {

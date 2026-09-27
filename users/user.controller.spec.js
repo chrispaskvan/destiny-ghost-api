@@ -1171,6 +1171,82 @@ describe('UserController.signIn against the real Destiny and User services', () 
         });
     });
 
+    /**
+     * The case a `movePlatform` unit test could not reach. After a failed
+     * delete both copies carry the same Bungie id, so the lookup `signIn` falls
+     * through to used to throw - and the player could never sign in again.
+     */
+    describe('when a player moves back to a platform whose superseded copy survived', () => {
+        const supersededXbox = {
+            _etag: 'a-etag',
+            bungie: { access_token: 'old', membership_id: 'bungie-net-99' },
+            dateRegistered: '2026-01-01T00:00:00Z',
+            displayName: 'XboxGamertag',
+            id: 'user-1',
+            membershipId: 'xbox-membership',
+            membershipType: 1,
+            movedTo: 3,
+            phoneNumber: '+12085551234',
+        };
+        const liveSteam = {
+            ...supersededXbox,
+            _etag: 'b-etag',
+            displayName: 'SteamPersona',
+            membershipId: 'steam-membership',
+            membershipType: 3,
+            movedTo: undefined,
+        };
+
+        beforeEach(() => {
+            post.mockResolvedValue({
+                access_token: 'some-access-token',
+                expires_in: 3600,
+                membership_id: 'bungie-net-99',
+                refresh_token: 'some-refresh-token',
+            });
+            // Bungie now reports Xbox as the owner again.
+            get.mockResolvedValueOnce({
+                ErrorCode: 1,
+                Response: {
+                    destinyMemberships: [
+                        {
+                            crossSaveOverride: 1,
+                            displayName: 'XboxGamertag',
+                            membershipId: 'xbox-membership',
+                            membershipType: 1,
+                        },
+                    ],
+                },
+            });
+            documentService.getDocuments.mockImplementation((_collection, query) =>
+                Promise.resolve(
+                    query.query.includes('bungie.membership_id') ? [supersededXbox, liveSteam] : [],
+                ),
+            );
+            documentService.createDocument.mockRejectedValue(
+                Object.assign(new Error('conflict'), { code: 409 }),
+            );
+        });
+
+        it('should sign them in rather than throwing', async () => {
+            await expect(controller.signIn({ code: 'some-code' })).resolves.toMatchObject({
+                displayName: 'XboxGamertag',
+                membershipType: 1,
+            });
+        });
+
+        it('should bring the Xbox record back to life and retire the Steam one', async () => {
+            await controller.signIn({ code: 'some-code' });
+
+            const replace = documentService.updateDocument.mock.calls.at(-1);
+
+            expect(replace[1]).toMatchObject({ membershipType: 1, id: 'user-1' });
+            expect(replace[1]).not.toHaveProperty('movedTo');
+            expect(replace[2]).toBe(1);
+            expect(documentService.deleteDocumentById).toHaveBeenCalledWith('Users', 'user-1', 3);
+        });
+    });
+
     describe('when the account has no playable membership', () => {
         it('should sign nobody in and store nothing', async () => {
             post.mockResolvedValue({
