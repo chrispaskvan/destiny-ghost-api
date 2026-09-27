@@ -93,8 +93,6 @@ const startServer = async () => {
                     console.error(`${label} failed to shut down`, result.reason);
                 }
             });
-
-            insecureServer.close();
         },
         logger: (msg, err) => log.error({ err }, msg),
     });
