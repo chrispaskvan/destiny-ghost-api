@@ -90,7 +90,6 @@ describe('startServer shutdown wiring', () => {
             expect(close).not.toHaveBeenCalled();
         }
         expect(processExternalPromisesWithTimeout).not.toHaveBeenCalled();
-        expect(httpServer.close).not.toHaveBeenCalled();
 
         grpcShutdown.resolve();
         await shutdown;
@@ -98,7 +97,7 @@ describe('startServer shutdown wiring', () => {
         for (const close of [cacheQuit, jobsQuit, poolClose, subscriberClose]) {
             expect(close).toHaveBeenCalledOnce();
         }
-        expect(httpServer.close).toHaveBeenCalledOnce();
+        expect(httpServer.close).not.toHaveBeenCalled();
         expect(processExternalPromisesWithTimeout).toHaveBeenCalledOnce();
         expect(processExternalPromisesWithTimeout).toHaveBeenCalledWith(
             expect.arrayContaining([
@@ -132,7 +131,7 @@ describe('startServer shutdown wiring', () => {
                 expect(close).toHaveBeenCalledOnce();
             }
             expect(processExternalPromisesWithTimeout).toHaveBeenCalledOnce();
-            expect(httpServer.close).toHaveBeenCalledOnce();
+            expect(httpServer.close).not.toHaveBeenCalled();
         },
     );
 });
