@@ -1,5 +1,6 @@
 // @ts-check
 import { z } from 'zod';
+import supportedMembershipTypes from '../helpers/bungie.membershipTypes.js';
 import QueryBuilder from '../helpers/queryBuilder.js';
 import log from '../helpers/log.js';
 import notificationTypes from '../notifications/notification.types.js';
@@ -36,10 +37,28 @@ const storedBungieTokenSchema = bungieTokenSchema.partial().required({
  * @private
  */
 const anonymousUserSchema = z.object({
-    displayName: z.string().min(3).max(16),
+    /**
+     * Bungie supplies this, so the bounds describe the platforms rather than a
+     * form: a Steam persona name runs to 32 characters, well past the 16 an
+     * Xbox gamertag or a PSN online ID stops at.
+     */
+    displayName: z.string().min(3).max(32),
     membershipId: z.string(),
-    membershipType: z.number().int().min(1).max(2),
+    membershipType: z.literal(supportedMembershipTypes),
     profilePicturePath: z.string(),
+});
+
+/**
+ * The identity fields a platform move rewrites. Picked from
+ * `anonymousUserSchema` rather than restated, so the supported platform list
+ * keeps one definition - `membershipType` is the Cosmos partition key, and
+ * `movePlatform` is the only write that chooses a new one.
+ * @private
+ */
+const platformMembershipSchema = anonymousUserSchema.pick({
+    displayName: true,
+    membershipId: true,
+    membershipType: true,
 });
 
 /**
@@ -87,7 +106,7 @@ const userSchema = z.object({
      */
     consentUpdatedAt: z.number().int().optional(),
     membershipId: z.string(),
-    membershipType: z.number().int(),
+    membershipType: z.literal(supportedMembershipTypes),
     lastName: z.string(),
     notifications: z.array(notificationSchema).default([]),
     patches: z.array(z.object({})).default([]),
@@ -647,6 +666,41 @@ class UserService {
     }
 
     /**
+     * Get user from their Bungie.net membership id.
+     *
+     * The platform `membershipId` changes when a player moves the membership
+     * that owns their cross-saved data; this one does not, which makes it the
+     * only way to recognise such an account as a returning user.
+     *
+     * Documents written before the full token was persisted carry no
+     * `bungie.membership_id` and will not match. They pick one up on their next
+     * ordinary sign-in, so the gap closes itself rather than needing a backfill.
+     * @param {string} bungieMembershipId
+     * @returns {Promise<import('../helpers/documents.js').CosmosDocument<User> | undefined>}
+     */
+    async getUserByBungieMembershipId(bungieMembershipId) {
+        if (typeof bungieMembershipId !== 'string' || !bungieMembershipId) {
+            return Promise.reject(new Error('bungieMembershipId string is required'));
+        }
+
+        const qb = new QueryBuilder();
+        const documents = /** @type {import('../helpers/documents.js').CosmosDocument<User>[]} */ (
+            await this.documents.getDocuments(
+                userCollectionId,
+                qb.where('bungie.membership_id', bungieMembershipId).getQuery(),
+            )
+        );
+
+        if (documents.length > 1) {
+            throw new Error(
+                `more than 1 document found for bungie.membership_id ${bungieMembershipId}`,
+            );
+        }
+
+        return documents[0];
+    }
+
+    /**
      * Read only the consent fields for a number, always from Cosmos.
      *
      * `getUserByPhoneNumber` would answer the same question, but it selects
@@ -789,6 +843,83 @@ class UserService {
                 'Failed to cache the user; continuing without it.',
             );
         }
+    }
+
+    /**
+     * Move a user to the platform that now owns their cross-saved data.
+     *
+     * `membershipType` is the Cosmos partition key, and a partition key is
+     * fixed for the life of a document: no update changes it, and there is no
+     * cross-partition transaction to do it atomically. So the record is
+     * recreated under the new platform and the old copy removed, carrying the
+     * registration - phone number, notifications, consent - across with it.
+     *
+     * Create first, delete second. A failure between the two leaves a
+     * duplicate, which is visible and recoverable; the other order would leave
+     * a registered user with no document at all.
+     *
+     * Deliberately skips `userSchema`, like `updateUserSubscription`: the
+     * stored document is already in hand, and a legacy record that fails the
+     * schema must still be movable. Only the incoming identity is validated,
+     * because it chooses the new partition.
+     * @param {import('../helpers/documents.js').CosmosDocument<User>} storedUser
+     * @param {Record<string, *>} membership - the membership Bungie now reports
+     * @returns {Promise<import('../helpers/documents.js').CosmosDocument<User>>}
+     */
+    async movePlatform(storedUser, membership) {
+        try {
+            platformMembershipSchema.parse(membership);
+        } catch (err) {
+            if (err instanceof z.ZodError) {
+                return Promise.reject(Error(JSON.stringify(err.issues)));
+            }
+            return Promise.reject(err);
+        }
+
+        const { _etag, _rid, _self, _attachments, _ts, ...carried } = storedUser;
+        const moved = { ...carried, ...membership };
+        const created = await this.documents.createDocument(userCollectionId, moved);
+
+        try {
+            await this.documents.deleteDocumentById(
+                userCollectionId,
+                storedUser.id,
+                storedUser.membershipType,
+            );
+        } catch (err) {
+            /**
+             * The move itself already succeeded. Rejecting here would report a
+             * completed sign-in as failed and still leave the duplicate, so the
+             * only useful thing left to do is say so loudly.
+             */
+            log.error(
+                { err, userId: storedUser.id, membershipType: storedUser.membershipType },
+                'Moved the user but could not remove the old document; a duplicate remains.',
+            );
+        }
+
+        /**
+         * Ahead of caching the new document, not after: the phone-number and
+         * email-address keys are shared by both records and hold a
+         * displayName+membershipType pointer that no longer resolves.
+         */
+        try {
+            await this.cacheService.deleteUser(storedUser);
+        } catch (err) {
+            log.warn(
+                { err, userId: storedUser.id },
+                'Failed to clear the cache after moving the user; continuing without it.',
+            );
+        }
+
+        const movedDocument =
+            /** @type {import('../helpers/documents.js').CosmosDocument<User>} */ (
+                created ?? moved
+            );
+
+        await this.#cache(movedDocument);
+
+        return movedDocument;
     }
 
     /**

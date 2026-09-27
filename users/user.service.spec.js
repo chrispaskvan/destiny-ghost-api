@@ -7,6 +7,7 @@ import UserService from './user.service.js';
 import log from '../helpers/log.js';
 
 const cacheService = {
+    deleteUser: vi.fn(),
     getUser: vi.fn(),
     setUser: vi.fn(),
 };
@@ -112,6 +113,60 @@ describe('UserService', () => {
                 await expect(
                     userService.createAnonymousUser(anonymousUserWithoutMembershipId),
                 ).rejects.toThrow(undefined);
+            });
+        });
+
+        describe.each([
+            ['Xbox', 1],
+            ['PlayStation Network', 2],
+            ['Steam', 3],
+            ['Epic Games Store', 6],
+        ])('when the anonymous user is on %s', (_platform, membershipType) => {
+            it('should create the anonymous user', async () => {
+                userService.getUserByDisplayName = vi.fn().mockResolvedValue();
+
+                await userService.createAnonymousUser({ ...anonymousUser, membershipType });
+
+                expect(documentService.createDocument).toHaveBeenCalledWith(
+                    'Users',
+                    expect.objectContaining({ membershipType }),
+                );
+            });
+        });
+
+        describe.each([
+            ['None', 0],
+            ['Blizzard, migrated to Steam in 2019', 4],
+            ['Stadia, retired in 2023', 5],
+            ['BungieNext, not a playable platform', 254],
+        ])('when the membership type is %s', (_platform, membershipType) => {
+            it('should reject without creating a partial user', async () => {
+                userService.getUserByDisplayName = vi.fn().mockResolvedValue();
+
+                await expect(
+                    userService.createAnonymousUser({ ...anonymousUser, membershipType }),
+                ).rejects.toThrow();
+
+                expect(documentService.createDocument).not.toHaveBeenCalled();
+            });
+        });
+
+        describe('when the display name is a 32 character Steam persona name', () => {
+            it('should create the anonymous user', async () => {
+                userService.getUserByDisplayName = vi.fn().mockResolvedValue();
+
+                const displayName = chance.string({ length: 32, alpha: true });
+
+                await userService.createAnonymousUser({
+                    ...anonymousUser,
+                    displayName,
+                    membershipType: 3,
+                });
+
+                expect(documentService.createDocument).toHaveBeenCalledWith(
+                    'Users',
+                    expect.objectContaining({ displayName }),
+                );
             });
         });
 
@@ -395,6 +450,161 @@ describe('UserService', () => {
 
                 expect(documentService.getDocuments).toHaveBeenCalled();
             });
+        });
+    });
+
+    describe('getUserByBungieMembershipId', () => {
+        it('should return the user whose stored token carries that id', async () => {
+            documentService.getDocuments.mockResolvedValue([user]);
+
+            await expect(userService.getUserByBungieMembershipId('99')).resolves.toEqual(user);
+        });
+
+        it('should query on the Bungie membership id, not the platform one', async () => {
+            documentService.getDocuments.mockResolvedValue([user]);
+
+            await userService.getUserByBungieMembershipId('99');
+
+            const [, query] = documentService.getDocuments.mock.calls[0];
+
+            expect(query.query).toContain('bungie.membership_id');
+            expect(query.parameters).toEqual([{ name: '@membership_id', value: '99' }]);
+        });
+
+        it('should return undefined when nothing matches', async () => {
+            documentService.getDocuments.mockResolvedValue([]);
+
+            await expect(userService.getUserByBungieMembershipId('99')).resolves.toBeUndefined();
+        });
+
+        it('should fail when more than one document matches', async () => {
+            documentService.getDocuments.mockResolvedValue([user, user]);
+
+            await expect(userService.getUserByBungieMembershipId('99')).rejects.toThrow();
+        });
+
+        it('should reject an empty id without querying', async () => {
+            await expect(userService.getUserByBungieMembershipId('')).rejects.toThrow();
+
+            expect(documentService.getDocuments).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('movePlatform', () => {
+        const storedUser = {
+            ...user,
+            _etag: 'some-etag',
+            _rid: 'some-rid',
+            _self: 'some-self',
+            _attachments: 'attachments/',
+            _ts: 1700000000,
+            dateRegistered: '2026-01-01T00:00:00Z',
+            id: 'user-1',
+            membershipId: '11',
+            membershipType: 1,
+        };
+        const steamMembership = {
+            displayName: 'SteamPersona',
+            membershipId: '4611686018400000000',
+            membershipType: 3,
+            profilePicturePath: '/thing1',
+        };
+
+        beforeEach(() => {
+            documentService.createDocument.mockImplementation(document =>
+                Promise.resolve(document),
+            );
+            documentService.createDocument.mockImplementation((_collection, document) =>
+                Promise.resolve({ ...document, _etag: 'new-etag' }),
+            );
+            documentService.deleteDocumentById.mockResolvedValue();
+            cacheService.deleteUser.mockResolvedValue();
+            cacheService.setUser.mockResolvedValue();
+        });
+
+        it('should create the record under the new platform, carrying the registration', async () => {
+            await userService.movePlatform(storedUser, steamMembership);
+
+            expect(documentService.createDocument).toHaveBeenCalledWith(
+                'Users',
+                expect.objectContaining({
+                    displayName: 'SteamPersona',
+                    membershipType: 3,
+                    membershipId: '4611686018400000000',
+                    // the whole point of the move: registration survives it
+                    dateRegistered: '2026-01-01T00:00:00Z',
+                    phoneNumber: storedUser.phoneNumber,
+                    emailAddress: storedUser.emailAddress,
+                    id: 'user-1',
+                }),
+            );
+        });
+
+        it('should not carry the old Cosmos system properties onto the new record', async () => {
+            await userService.movePlatform(storedUser, steamMembership);
+
+            const [, document] = documentService.createDocument.mock.calls[0];
+
+            expect(document).not.toHaveProperty('_etag');
+            expect(document).not.toHaveProperty('_rid');
+            expect(document).not.toHaveProperty('_self');
+            expect(document).not.toHaveProperty('_attachments');
+            expect(document).not.toHaveProperty('_ts');
+        });
+
+        it('should delete the old record from its own partition', async () => {
+            await userService.movePlatform(storedUser, steamMembership);
+
+            expect(documentService.deleteDocumentById).toHaveBeenCalledWith('Users', 'user-1', 1);
+        });
+
+        it('should create before deleting, so a failure leaves a duplicate and not a gap', async () => {
+            const { promise: createPending, resolve: finishCreate } = Promise.withResolvers();
+
+            documentService.createDocument.mockReturnValue(createPending);
+
+            const moving = userService.movePlatform(storedUser, steamMembership);
+
+            await Promise.resolve();
+
+            expect(documentService.deleteDocumentById).not.toHaveBeenCalled();
+
+            finishCreate({ ...storedUser, ...steamMembership });
+            await moving;
+
+            expect(documentService.deleteDocumentById).toHaveBeenCalled();
+        });
+
+        it('should still resolve when the old record cannot be removed', async () => {
+            const errorLog = vi.spyOn(log, 'error').mockImplementation(() => {});
+
+            documentService.deleteDocumentById.mockRejectedValue(new Error('cosmos unavailable'));
+
+            await expect(
+                userService.movePlatform(storedUser, steamMembership),
+            ).resolves.toBeDefined();
+
+            expect(errorLog).toHaveBeenCalled();
+
+            errorLog.mockRestore();
+        });
+
+        it('should clear the old cache keys before caching the moved record', async () => {
+            await userService.movePlatform(storedUser, steamMembership);
+
+            expect(cacheService.deleteUser).toHaveBeenCalledWith(storedUser);
+            expect(cacheService.deleteUser.mock.invocationCallOrder[0]).toBeLessThan(
+                cacheService.setUser.mock.invocationCallOrder[0],
+            );
+        });
+
+        it('should reject an unsupported platform without writing anything', async () => {
+            await expect(
+                userService.movePlatform(storedUser, { ...steamMembership, membershipType: 5 }),
+            ).rejects.toThrow();
+
+            expect(documentService.createDocument).not.toHaveBeenCalled();
+            expect(documentService.deleteDocumentById).not.toHaveBeenCalled();
         });
     });
 

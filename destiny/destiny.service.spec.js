@@ -111,6 +111,105 @@ describe('DestinyService', () => {
                 });
             });
 
+            describe('when cross save is enabled', () => {
+                it('should return the membership that owns the data', async () => {
+                    const owner = {
+                        crossSaveOverride: 3,
+                        displayName: chance.word(),
+                        membershipId: '3',
+                        membershipType: 3,
+                    };
+
+                    get.mockImplementation(() =>
+                        Promise.resolve({
+                            ErrorCode: 1,
+                            Response: {
+                                destinyMemberships: [
+                                    {
+                                        crossSaveOverride: 3,
+                                        displayName: chance.word(),
+                                        membershipId: '2',
+                                        membershipType: 2,
+                                    },
+                                    owner,
+                                ],
+                            },
+                        }),
+                    );
+
+                    await expect(destinyService.getCurrentUser(chance.hash())).resolves.toEqual({
+                        displayName: owner.displayName,
+                        membershipId: owner.membershipId,
+                        membershipType: owner.membershipType,
+                        profilePicturePath: undefined,
+                    });
+                });
+            });
+
+            describe('when cross save is off', () => {
+                it('should return the only membership', async () => {
+                    const membership = {
+                        crossSaveOverride: 0,
+                        displayName: chance.word(),
+                        membershipId: '6',
+                        membershipType: 6,
+                    };
+
+                    get.mockImplementation(() =>
+                        Promise.resolve({
+                            ErrorCode: 1,
+                            Response: { destinyMemberships: [membership] },
+                        }),
+                    );
+
+                    await expect(destinyService.getCurrentUser(chance.hash())).resolves.toEqual({
+                        displayName: membership.displayName,
+                        membershipId: membership.membershipId,
+                        membershipType: membership.membershipType,
+                        profilePicturePath: undefined,
+                    });
+                });
+            });
+
+            describe('when the account has no Destiny memberships', () => {
+                it('should resolve undefined rather than throw', async () => {
+                    get.mockImplementation(() =>
+                        Promise.resolve({
+                            ErrorCode: 1,
+                            Response: { destinyMemberships: [] },
+                        }),
+                    );
+
+                    await expect(
+                        destinyService.getCurrentUser(chance.hash()),
+                    ).resolves.toBeUndefined();
+                });
+            });
+
+            describe('when the playable membership is on an unsupported platform', () => {
+                it('should resolve undefined', async () => {
+                    get.mockImplementation(() =>
+                        Promise.resolve({
+                            ErrorCode: 1,
+                            Response: {
+                                destinyMemberships: [
+                                    {
+                                        crossSaveOverride: 0,
+                                        displayName: chance.word(),
+                                        membershipId: '5',
+                                        membershipType: 5,
+                                    },
+                                ],
+                            },
+                        }),
+                    );
+
+                    await expect(
+                        destinyService.getCurrentUser(chance.hash()),
+                    ).resolves.toBeUndefined();
+                });
+            });
+
             describe('when ErrorCode is not 1', () => {
                 it('should throw carrying the error details from the response', async () => {
                     get.mockImplementation(() =>

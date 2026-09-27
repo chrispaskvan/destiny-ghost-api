@@ -1,9 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Chance from 'chance';
 import getEpoch from '../helpers/get-epoch.js';
+import { get, post } from '../helpers/bungie.request.js';
+import DestinyService from '../destiny/destiny.service.js';
 import UserController from './user.controller.js';
+import UserService from './user.service.js';
 import InvalidPhoneNumberError from './invalid-phone-number.error.js';
 
+vi.mock('../helpers/bungie.request.js');
 vi.mock('../helpers/postmaster.js', () => ({
     default: class {
         register = vi.fn();
@@ -36,8 +40,10 @@ const userService = {
     getUserByEmailAddress: vi.fn(),
     getUserByEmailAddressToken: vi.fn(),
     getUserById: vi.fn(),
+    getUserByBungieMembershipId: vi.fn(),
     getUserByMembershipId: vi.fn(),
     getUserByPhoneNumber: vi.fn(),
+    movePlatform: vi.fn().mockImplementation(user => Promise.resolve(user)),
     updateAnonymousUser: vi.fn().mockImplementation(user => Promise.resolve(user)),
     updateUser: vi.fn().mockImplementation(user => Promise.resolve(user)),
 };
@@ -473,12 +479,18 @@ describe('UserController', () => {
     });
 
     describe('signIn', () => {
+        /**
+         * `membership_id` is the Bungie.net id, the one identifier that
+         * survives a cross-save owner change. Shared between the mock and the
+         * assertions so the fixture cannot drift from what is asserted.
+         */
+        const bungieToken = {
+            access_token: 'some-access-token',
+            membership_id: 'bungie-net-99',
+        };
+
         beforeEach(() => {
-            destinyService.getAccessTokenFromCode.mockImplementation(() =>
-                Promise.resolve({
-                    access_token: 'some-access-token',
-                }),
-            );
+            destinyService.getAccessTokenFromCode.mockResolvedValue(bungieToken);
         });
 
         describe('when current user is not found', () => {
@@ -498,9 +510,7 @@ describe('UserController', () => {
                     const currentUser = await userController.signIn({});
 
                     expect(currentUser).toEqual({
-                        bungie: {
-                            access_token: 'some-access-token',
-                        },
+                        bungie: bungieToken,
                         ...mockUser,
                     });
                     expect(userService.createAnonymousUser).toHaveBeenCalled();
@@ -517,12 +527,77 @@ describe('UserController', () => {
                         const currentUser = await userController.signIn({});
 
                         expect(currentUser).toEqual({
-                            bungie: {
-                                access_token: 'some-access-token',
-                            },
+                            bungie: bungieToken,
                             ...mockUser,
                         });
                         expect(userService.updateAnonymousUser).toHaveBeenCalled();
+                    });
+                });
+
+                describe('when the cross-save owner has changed', () => {
+                    /**
+                     * Bungie reports the owning membership, so moving cross save
+                     * to another platform changes both the membership id and the
+                     * platform. Nothing the old record is keyed on still matches.
+                     */
+                    const steamUser = {
+                        displayName: 'SteamPersona',
+                        membershipId: 'steam-membership',
+                        membershipType: 3,
+                        profilePicturePath: 'some-profile-picture-path',
+                    };
+                    const storedXboxUser = {
+                        dateRegistered: Temporal.Now.instant().toString(),
+                        displayName: 'XboxGamertag',
+                        id: 'user-1',
+                        membershipId: 'xbox-membership',
+                        membershipType: 1,
+                    };
+
+                    beforeEach(() => {
+                        destinyService.getCurrentUser.mockResolvedValue(steamUser);
+                        userService.getUserByMembershipId.mockResolvedValue(undefined);
+                        userService.getUserByBungieMembershipId.mockResolvedValue(storedXboxUser);
+                    });
+
+                    it('should find the record by its Bungie membership id', async () => {
+                        await userController.signIn({});
+
+                        expect(userService.getUserByBungieMembershipId).toHaveBeenCalledWith(
+                            'bungie-net-99',
+                        );
+                    });
+
+                    it('should move the record rather than update it in place', async () => {
+                        await userController.signIn({});
+
+                        expect(userService.movePlatform).toHaveBeenCalledWith(
+                            storedXboxUser,
+                            expect.objectContaining({ membershipType: 3 }),
+                        );
+                        expect(userService.updateUser).not.toHaveBeenCalled();
+                        expect(userService.createAnonymousUser).not.toHaveBeenCalled();
+                    });
+
+                    it('should return the signed-in user', async () => {
+                        await expect(userController.signIn({})).resolves.toMatchObject({
+                            displayName: 'SteamPersona',
+                            membershipType: 3,
+                        });
+                    });
+                });
+
+                describe('when the platform is unchanged', () => {
+                    it('should update in place without moving partitions', async () => {
+                        userService.getUserByMembershipId.mockResolvedValue({
+                            dateRegistered: Temporal.Now.instant().toString(),
+                            ...mockUser,
+                        });
+
+                        await userController.signIn({});
+
+                        expect(userService.movePlatform).not.toHaveBeenCalled();
+                        expect(userService.updateUser).toHaveBeenCalled();
                     });
                 });
 
@@ -538,9 +613,7 @@ describe('UserController', () => {
                         const currentUser = await userController.signIn({});
 
                         expect(currentUser).toEqual({
-                            bungie: {
-                                access_token: 'some-access-token',
-                            },
+                            bungie: bungieToken,
                             ...mockUser,
                         });
                         expect(userService.updateUser).toHaveBeenCalled();
@@ -918,6 +991,183 @@ describe('UserController', () => {
 
                 expect(userService.updateUser).not.toHaveBeenCalled();
             });
+        });
+    });
+});
+
+/**
+ * Issue #718 lived in the seam rather than in either module: the membership
+ * `DestinyService` picks is the one `UserService` validates, and the two
+ * disagreed about which platforms exist. Both are real here, with only Bungie
+ * and Cosmos replaced, so a fixture has to survive the whole first sign-in.
+ */
+describe('UserController.signIn against the real Destiny and User services', () => {
+    const cacheService = { deleteUser: vi.fn(), getUser: vi.fn(), setUser: vi.fn() };
+    const documentService = {
+        createDocument: vi.fn(),
+        deleteDocumentById: vi.fn(),
+        getDocuments: vi.fn(() => []),
+    };
+
+    let controller;
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+
+        controller = new UserController({
+            destinyService: new DestinyService({ cacheService: {} }),
+            notificationService,
+            userService: new UserService({ cacheService, client: {}, documentService }),
+            worldRepository,
+        });
+    });
+
+    describe.each([
+        ['Xbox', 1],
+        ['PlayStation Network', 2],
+        ['Steam', 3],
+        ['Epic Games Store', 6],
+    ])('when a first time visitor signs in on %s', (_platform, platformMembershipType) => {
+        it('should persist the anonymous user', async () => {
+            const bungieDisplayName = chance.string({ length: 12, alpha: true });
+
+            post.mockResolvedValue({
+                access_token: 'some-access-token',
+                expires_in: 3600,
+                membership_id: '99',
+                refresh_token: 'some-refresh-token',
+            });
+            get.mockResolvedValueOnce({
+                ErrorCode: 1,
+                Response: {
+                    bungieNetUser: { profilePicturePath: '/img/profile/avatars/Destiny26.jpg' },
+                    destinyMemberships: [
+                        {
+                            crossSaveOverride: 0,
+                            displayName: bungieDisplayName,
+                            membershipId: '4611686018400000000',
+                            membershipType: platformMembershipType,
+                        },
+                    ],
+                },
+            });
+
+            await expect(controller.signIn({ code: 'some-code' })).resolves.toMatchObject({
+                displayName: bungieDisplayName,
+                membershipType: platformMembershipType,
+            });
+
+            expect(documentService.createDocument).toHaveBeenCalledWith(
+                'Users',
+                expect.objectContaining({
+                    displayName: bungieDisplayName,
+                    membershipType: platformMembershipType,
+                }),
+            );
+        });
+    });
+
+    describe('when a registered player moves their cross-save owner to Steam', () => {
+        /**
+         * The lookup by platform membership id misses, because that id changed
+         * with the owner. Only `bungie.membership_id` still matches - and the
+         * record cannot simply be updated, because `membershipType` is the
+         * Cosmos partition key.
+         */
+        const storedXboxUser = {
+            _etag: 'stored-etag',
+            bungie: { access_token: 'old-token', membership_id: 'bungie-net-99' },
+            dateRegistered: '2026-01-01T00:00:00Z',
+            displayName: 'XboxGamertag',
+            emailAddress: 'player@destiny-ghost.com',
+            id: 'user-1',
+            membershipId: 'xbox-membership',
+            membershipType: 1,
+            phoneNumber: '+12085551234',
+        };
+
+        beforeEach(() => {
+            post.mockResolvedValue({
+                access_token: 'some-access-token',
+                expires_in: 3600,
+                membership_id: 'bungie-net-99',
+                refresh_token: 'some-refresh-token',
+            });
+            get.mockResolvedValueOnce({
+                ErrorCode: 1,
+                Response: {
+                    destinyMemberships: [
+                        {
+                            crossSaveOverride: 3,
+                            displayName: 'XboxGamertag',
+                            membershipId: 'xbox-membership',
+                            membershipType: 1,
+                        },
+                        {
+                            crossSaveOverride: 3,
+                            displayName: 'SteamPersona',
+                            membershipId: 'steam-membership',
+                            membershipType: 3,
+                        },
+                    ],
+                },
+            });
+            documentService.getDocuments.mockImplementation((_collection, query) =>
+                Promise.resolve(
+                    query.query.includes('bungie.membership_id') ? [storedXboxUser] : [],
+                ),
+            );
+            documentService.createDocument.mockImplementation((_collection, document) =>
+                Promise.resolve(document),
+            );
+        });
+
+        it('should keep the registration instead of stranding it on the old partition', async () => {
+            await expect(controller.signIn({ code: 'some-code' })).resolves.toMatchObject({
+                displayName: 'SteamPersona',
+                membershipType: 3,
+            });
+
+            expect(documentService.createDocument).toHaveBeenCalledWith(
+                'Users',
+                expect.objectContaining({
+                    displayName: 'SteamPersona',
+                    membershipId: 'steam-membership',
+                    membershipType: 3,
+                    dateRegistered: '2026-01-01T00:00:00Z',
+                    phoneNumber: '+12085551234',
+                    emailAddress: 'player@destiny-ghost.com',
+                }),
+            );
+            expect(documentService.deleteDocumentById).toHaveBeenCalledWith('Users', 'user-1', 1);
+        });
+
+        it('should not sign them in as a brand new anonymous user', async () => {
+            await controller.signIn({ code: 'some-code' });
+
+            const [, document] = documentService.createDocument.mock.calls[0];
+
+            expect(document.dateRegistered).toBeDefined();
+            expect(documentService.createDocument).toHaveBeenCalledTimes(1);
+        });
+    });
+
+    describe('when the account has no playable membership', () => {
+        it('should sign nobody in and store nothing', async () => {
+            post.mockResolvedValue({
+                access_token: 'some-access-token',
+                expires_in: 3600,
+                membership_id: '99',
+                refresh_token: 'some-refresh-token',
+            });
+            get.mockResolvedValueOnce({
+                ErrorCode: 1,
+                Response: { destinyMemberships: [] },
+            });
+
+            await expect(controller.signIn({ code: 'some-code' })).resolves.toBeUndefined();
+
+            expect(documentService.createDocument).not.toHaveBeenCalled();
         });
     });
 });

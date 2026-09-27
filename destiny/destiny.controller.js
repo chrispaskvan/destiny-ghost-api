@@ -63,7 +63,7 @@ class DestinyController {
      *
      * @param {string} displayName
      * @param {number} membershipType
-     * @returns {Promise<import('../destiny/destiny.service.js').CurrentUser>}
+     * @returns {Promise<import('../destiny/destiny.service.js').CurrentUser | undefined>}
      */
     async getCurrentUser(displayName, membershipType) {
         const currentUser = await this.users.getUserByDisplayName(displayName, membershipType);
