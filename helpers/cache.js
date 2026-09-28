@@ -37,7 +37,8 @@ const redisConfiguration = {
     },
     url,
     ...options,
-    // Pin RESP2: the production Redis deployment does not support RESP3, which node-redis defaults to as of v6.
+    // Pin RESP2: rate-limiter-flexible and connect-redis parse replies in RESP2 shapes, and nothing here uses
+    // RESP3-only features. The server (Azure Managed Redis 7.4) accepts RESP3, which node-redis defaults to as of v6.
     // Placed after the spread so settings files can't silently override this.
     RESP: 2,
 };
