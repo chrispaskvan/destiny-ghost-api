@@ -22,7 +22,8 @@ const { redis } = configuration;
 const redisConfiguration = {
     maxRetriesPerRequest: 0,
     ...redis,
-    // Pin RESP2: the production Redis deployment does not support RESP3, which ioredis defaults to as of v6.
+    // Pin RESP2: BullMQ parses replies in RESP2 shapes and hasn't been verified on RESP3. The server
+    // (Azure Managed Redis 7.4) accepts RESP3, which ioredis defaults to as of v6.
     // Placed after the spread so settings files can't silently override this.
     protocol: 2,
 };
