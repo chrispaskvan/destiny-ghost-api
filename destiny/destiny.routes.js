@@ -7,7 +7,7 @@ import { Router } from 'express';
 import DestinyController from './destiny.controller.js';
 import authorizeUser from '../authorization/authorization.middleware.js';
 import getMaxAgeFromCacheControl from '../helpers/get-max-age-from-cache-control.js';
-import toTemporalInstant from '../helpers/to-temporal-instant.js';
+import isNotModified from '../helpers/is-not-modified.js';
 
 /** @typedef {import('../users/user.routes.js').AppSessionData} AppSessionData */
 
@@ -177,18 +177,16 @@ const routes = ({ destinyService, userService, worldRepository }) => {
                 data: { manifest },
                 meta: { lastModified, maxAge },
             } = result;
-            const ifModifiedSince = toTemporalInstant(req.headers['if-modified-since']);
-            const lastModifiedInstant = toTemporalInstant(lastModified);
 
-            res.set({
-                'Last-Modified': lastModified,
-                'Cache-Control': `max-age=${maxAge}`,
-            });
-            res.status(
-                Temporal.Instant.compare(ifModifiedSince, lastModifiedInstant) > 0
-                    ? StatusCodes.NOT_MODIFIED
-                    : StatusCodes.OK,
-            ).json(manifest);
+            res.set('Cache-Control', `max-age=${maxAge}`);
+            if (lastModified) {
+                res.set('Last-Modified', lastModified);
+            }
+            if (isNotModified(req.headers['if-modified-since'], lastModified)) {
+                res.status(StatusCodes.NOT_MODIFIED).end();
+            } else {
+                res.status(StatusCodes.OK).json(manifest);
+            }
         },
     );
 
