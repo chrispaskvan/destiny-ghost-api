@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { StatusCodes } from 'http-status-codes';
 import Chance from 'chance';
 import { createResponse, createRequest } from 'node-mocks-http';
@@ -483,6 +483,56 @@ describe('Destiny2Router', () => {
             } finally {
                 vi.useRealTimers();
             }
+        });
+    });
+
+    describe('getManifest', () => {
+        const lastModified = 'Sat, 25 Apr 2020 17:00:00 GMT';
+
+        beforeEach(() => {
+            vi.spyOn(destiny2Controller, 'getManifest').mockResolvedValue({
+                data: { manifest },
+                meta: { lastModified, maxAge: 3600 },
+            });
+        });
+
+        afterEach(() => {
+            vi.mocked(destiny2Controller.getManifest).mockRestore();
+        });
+
+        const getManifest = headers =>
+            new Promise((done, reject) => {
+                const req = createRequest({
+                    method: 'GET',
+                    url: '/manifest',
+                    headers,
+                });
+
+                res.on('end', done);
+                res.on('error', reject);
+                destiny2Router(req, res, next);
+            });
+
+        it('should respond with not modified when If-Modified-Since equals Last-Modified', async () => {
+            await getManifest({ 'if-modified-since': lastModified });
+
+            expect(res.statusCode).toEqual(StatusCodes.NOT_MODIFIED);
+            expect(res._getData()).toEqual('');
+            expect(res.getHeader('Last-Modified')).toEqual(lastModified);
+        });
+
+        it('should respond with the manifest when it changed after If-Modified-Since', async () => {
+            await getManifest({ 'if-modified-since': 'Sat, 25 Apr 2020 16:59:59 GMT' });
+
+            expect(res.statusCode).toEqual(StatusCodes.OK);
+            expect(res._getJSONData()).toEqual(manifest);
+        });
+
+        it('should respond with the manifest when If-Modified-Since is missing', async () => {
+            await getManifest({});
+
+            expect(res.statusCode).toEqual(StatusCodes.OK);
+            expect(res._getJSONData()).toEqual(manifest);
         });
     });
 });
