@@ -5,7 +5,7 @@
  * @module healthController
  * @author Chris Paskvan
  */
-import { getHeapStatistics } from 'v8';
+import { getHeapStatistics } from 'node:v8';
 import { convert } from 'html-to-text';
 
 import { get } from '../helpers/request.js';

@@ -14,10 +14,10 @@ export default defineConfig({
             reporter: ['clover', 'html', 'json'],
             thresholds: {
                 autoUpdate: true,
-                statements: 88.63,
+                statements: 90.32,
                 branches: 88.99,
-                functions: 86.15,
-                lines: 88.78,
+                functions: 88.38,
+                lines: 90.47,
             },
         },
         exclude: [...defaultExclude, '**/.claude/**'],
