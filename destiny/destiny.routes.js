@@ -178,10 +178,10 @@ const routes = ({ destinyService, userService, worldRepository }) => {
                 meta: { lastModified, maxAge },
             } = result;
 
-            res.set({
-                'Last-Modified': lastModified,
-                'Cache-Control': `max-age=${maxAge}`,
-            });
+            res.set('Cache-Control', `max-age=${maxAge}`);
+            if (lastModified) {
+                res.set('Last-Modified', lastModified);
+            }
             if (isNotModified(req.headers['if-modified-since'], lastModified)) {
                 res.status(StatusCodes.NOT_MODIFIED).end();
             } else {

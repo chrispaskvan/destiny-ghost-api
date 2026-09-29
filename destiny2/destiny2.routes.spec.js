@@ -534,5 +534,18 @@ describe('Destiny2Router', () => {
             expect(res.statusCode).toEqual(StatusCodes.OK);
             expect(res._getJSONData()).toEqual(manifest);
         });
+
+        it('should omit Last-Modified when the manifest has no modified date', async () => {
+            vi.mocked(destiny2Controller.getManifest).mockResolvedValue({
+                data: { manifest },
+                meta: { maxAge: 3600 },
+            });
+
+            await getManifest({ 'if-modified-since': lastModified });
+
+            expect(res.statusCode).toEqual(StatusCodes.OK);
+            expect(res.getHeader('Last-Modified')).toBeUndefined();
+            expect(res.getHeader('Cache-Control')).toEqual('max-age=3600');
+        });
     });
 });
