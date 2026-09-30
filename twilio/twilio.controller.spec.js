@@ -572,43 +572,17 @@ describe('TwilioController', () => {
             });
 
             /**
-             * `queryItem` drops every result when the search term contains
-             * 'Catalyst'. Two things make that guard dead rather than
-             * protective, and these tests pin both so the next reader does
-             * not mistake it for load-bearing:
-             *
-             * The check is case sensitive and `request()` lowercases the
-             * message before calling in, so it cannot fire on the only path
-             * that reaches it in production. And it is redundant anyway -
-             * every catalyst in the manifest is itemType 19, 20, 0 or 12, and
-             * the itemType filter beside it keeps only 2, 3 and 4, so no
-             * catalyst survives that far.
-             *
-             * Both cases below need an item the manifest does not contain (a
-             * weapon-typed 'Catalyst') to reach the guard at all, which is the
-             * clearest evidence it does nothing. Tracked in #741.
+             * Every catalyst in the manifest is itemType 19, 20, 0 or 12, so
+             * the type filter alone keeps them out of the reply (#741).
              */
-            it('should drop a capitalised catalyst term, the only way the guard fires', async () => {
+            it('should not answer a catalyst search with the catalyst', async () => {
                 worldRepository.getItemByName.mockResolvedValue([
-                    weapon({ itemName: 'Gjallarhorn Catalyst' }),
+                    weapon({ itemName: 'Gjallarhorn Catalyst', itemType: 19 }),
                 ]);
 
                 await expect(twilioController.queryItem('Gjallarhorn Catalyst')).resolves.toEqual(
                     [],
                 );
-            });
-
-            it('should not reach the guard through request, which lowercases first', async () => {
-                worldRepository.getItemByName.mockResolvedValue([
-                    weapon({ itemName: 'Gjallarhorn Catalyst' }),
-                ]);
-
-                const { message } = await twilioController.request({
-                    body: inbound('Gjallarhorn Catalyst'),
-                    cookies: {},
-                });
-
-                expect(message).toContain('Rocket Launcher');
             });
 
             it('should look up a name typed with smart quotes', async () => {
