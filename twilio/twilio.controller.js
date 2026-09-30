@@ -362,9 +362,9 @@ class TwilioController {
      */
     async queryItem(itemName) {
         const allItems = await this.world.getItemByName(itemName.replace(/[\u2018\u2019]/g, "'"));
-        const items = allItems.filter(
-            ({ itemType }) => !itemName.includes('Catalyst') && [2, 3, 4].includes(itemType ?? -1),
-        );
+        // Catalysts are itemType 19, 20, 0 or 12 in the manifest, so this
+        // filter is what keeps a catalyst search from returning anything.
+        const items = allItems.filter(({ itemType }) => [2, 3, 4].includes(itemType ?? -1));
 
         if (items.length > 0) {
             if (items.length > 1) {
