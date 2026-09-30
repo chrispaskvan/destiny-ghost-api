@@ -10,7 +10,6 @@
  * the wiki at {@link http://bungienetplatform.wikia.com/wiki/Endpoints} or
  * the Bungie web API platform help page {@link https://www.bungie.net/platform/destiny/help/}.
  */
-import { stringify } from 'qs';
 import { get, post } from '../helpers/bungie.request.js';
 import supportedMembershipTypes from '../helpers/bungie.membershipTypes.js';
 import DestinyError from './destiny.error.js';
@@ -173,7 +172,7 @@ class DestinyService {
             ...grant,
         };
         const options = {
-            data: stringify(data),
+            data: new URLSearchParams(data).toString(),
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
                 'x-api-key': apiKey,

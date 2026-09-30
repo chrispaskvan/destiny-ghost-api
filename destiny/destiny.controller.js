@@ -1,15 +1,5 @@
 // @ts-check
 import { randomBytes } from 'node:crypto';
-import { createRequire } from 'node:module';
-
-/**
- * `base64url`'s own .d.ts declares an ESM `export default`, but it's a CJS
- * package - under this project's module resolution (no esModuleInterop)
- * that makes TypeScript see the whole module namespace instead of the
- * callable function. `require` sidesteps the mistyped default import.
- * @type {import('base64url').Base64Url}
- */
-const base64url = createRequire(import.meta.url)('base64url');
 
 /**
  * Constructor options for DestinyController. Generic over the destiny
@@ -45,7 +35,7 @@ class DestinyController {
      * @returns {string}
      */
     static #getRandomState() {
-        return base64url(randomBytes(11));
+        return randomBytes(11).toString('base64url');
     }
 
     /**
