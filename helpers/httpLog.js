@@ -20,7 +20,7 @@ import { redactQuery, redactUrl } from './redact.js';
  * `pino-http`'s `.d.ts` has no `export =`, so under this project's module
  * resolution (no esModuleInterop) a default import type-checks as the
  * whole module namespace instead of the callable factory - the same issue
- * worked around for `base64url`/`ioredis` elsewhere. `require` sidesteps
+ * worked around for `ioredis` in helpers/jobs.js. `require` sidesteps
  * the mistyped default import.
  * @type {typeof import('pino-http').default}
  */

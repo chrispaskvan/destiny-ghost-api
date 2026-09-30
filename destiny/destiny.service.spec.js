@@ -3,7 +3,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Chance from 'chance';
-import { get } from '../helpers/bungie.request.js';
+import { get, post } from '../helpers/bungie.request.js';
 import DestinyError from './destiny.error.js';
 import DestinyService from './destiny.service.js';
 import mockManifestResponse from '../mocks/manifestResponse.json';
@@ -27,6 +27,28 @@ beforeEach(() => {
 describe('DestinyService', () => {
     beforeEach(() => {
         vi.resetAllMocks();
+    });
+
+    describe('getAccessToken', () => {
+        it('should post the grant as a form-encoded body', async () => {
+            const code = `${chance.word()} ${chance.word()}&=`;
+            const token = { access_token: chance.guid() };
+
+            post.mockResolvedValue(token);
+
+            const result = await DestinyService.getAccessToken({
+                code,
+                grant_type: 'authorization_code',
+            });
+            const [{ data, headers }] = post.mock.calls[0];
+            const body = new URLSearchParams(data);
+
+            expect(result).toBe(token);
+            expect(headers['Content-Type']).toBe('application/x-www-form-urlencoded');
+            expect(body.get('code')).toBe(code);
+            expect(body.get('grant_type')).toBe('authorization_code');
+            expect([...body.keys()]).toEqual(['client_id', 'client_secret', 'code', 'grant_type']);
+        });
     });
 
     describe('getCharacters', () => {
