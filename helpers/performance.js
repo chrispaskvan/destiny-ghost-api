@@ -113,7 +113,10 @@ const channels = [
         /** @param {HttpMessage} message */
         ({ request, response }) => {
             receiveHeaders(request);
-            response.once('end', () => completeRequest(request));
+            // 'close' rather than 'end', which a reset after the headers
+            // never emits; no 'error' listener, since adding one would stop
+            // an error the caller doesn't handle from being thrown
+            response.once('close', () => completeRequest(request, response.errored ?? undefined));
         },
     ],
     [

@@ -18,11 +18,14 @@ vi.mock('./log.js', () => ({
  */
 const headersDelay = 50;
 const bodyDelay = 100;
-const server = createServer((_req, res) => {
+const server = createServer((req, res) => {
     setTimeout(() => {
         res.writeHead(200);
         res.write('headers sent');
-        setTimeout(() => res.end(), bodyDelay);
+        setTimeout(
+            () => (req.url.startsWith('/reset') ? res.socket.destroy() : res.end()),
+            bodyDelay,
+        );
     }, headersDelay);
 });
 const http2Server = createHttp2Server().on('stream', stream => {
@@ -116,6 +119,32 @@ describe('performance', () => {
                 timeToHeaders: undefined,
                 duration: expect.any(Number),
                 error: expect.stringContaining('ECONNREFUSED'),
+            });
+        }
+    });
+
+    it('should log a response reset after its headers', async () => {
+        await new Promise(resolve => {
+            get(`http://127.0.0.1:${port}/reset/http`, res =>
+                res
+                    .on('error', () => undefined)
+                    .on('close', resolve)
+                    .resume(),
+            );
+        });
+        await fetch(`http://127.0.0.1:${port}/reset/fetch`)
+            .then(response => response.text())
+            .catch(() => undefined);
+
+        for (const url of [
+            `http://127.0.0.1:${port}/reset/http`,
+            `http://127.0.0.1:${port}/reset/fetch`,
+        ]) {
+            expect(loggedFields(`HTTP Request: GET ${url}`)).toEqual({
+                entry: `HTTP Request: GET ${url}`,
+                timeToHeaders: expect.any(Number),
+                duration: expect.any(Number),
+                error: expect.any(String),
             });
         }
     });
