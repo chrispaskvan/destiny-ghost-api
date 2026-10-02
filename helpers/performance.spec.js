@@ -28,11 +28,18 @@ const server = createServer((req, res) => {
         );
     }, headersDelay);
 });
-const http2Server = createHttp2Server().on('stream', stream => {
+const http2Server = createHttp2Server().on('stream', (stream, headers) => {
+    stream.on('error', () => undefined);
     setTimeout(() => {
         stream.respond({ ':status': 200 });
         stream.write('headers sent');
-        setTimeout(() => stream.end(), bodyDelay);
+        setTimeout(
+            () =>
+                headers[':path'].startsWith('/reset')
+                    ? stream.destroy(new Error('reset'))
+                    : stream.end(),
+            bodyDelay,
+        );
     }, headersDelay);
 });
 let port;
@@ -149,10 +156,21 @@ describe('performance', () => {
         await fetch(`http://127.0.0.1:${port}/reset/fetch`)
             .then(response => response.text())
             .catch(() => undefined);
+        const session = connect(`http://127.0.0.1:${http2Port}`);
+        const stream = session.request({ ':path': '/reset/http2' });
+
+        await new Promise(resolve =>
+            stream
+                .on('error', () => undefined)
+                .on('close', resolve)
+                .resume(),
+        );
+        session.close();
 
         for (const url of [
             `http://127.0.0.1:${port}/reset/http`,
             `http://127.0.0.1:${port}/reset/fetch`,
+            `http://127.0.0.1:${http2Port}/reset/http2`,
         ]) {
             expect(loggedFields(`HTTP Request: GET ${url}`)).toEqual({
                 entry: `HTTP Request: GET ${url}`,

@@ -101,7 +101,7 @@ const completeRequest = (key, error) => {
  * @typedef {import('node:http').IncomingMessage} IncomingMessage
  * @typedef {{ request: ClientRequest, response: IncomingMessage, error: Error }} HttpMessage
  * @typedef {{ request: { method: string, origin: string, path: string }, error: Error }} UndiciMessage
- * @typedef {{ stream: object, headers: import('node:http2').OutgoingHttpHeaders, error: Error }} Http2Message
+ * @typedef {{ stream: import('node:http2').ClientHttp2Stream, headers: import('node:http2').OutgoingHttpHeaders }} Http2Message
  */
 /** @type {Array<[string, (message: any) => void]>} */
 const channels = [
@@ -157,27 +157,21 @@ const channels = [
     [
         'http2.client.stream.created',
         /** @param {Http2Message} message */
-        ({ stream, headers }) =>
+        ({ stream, headers }) => {
             startRequest(
                 stream,
                 String(headers[':method']),
                 `${headers[':scheme']}://${headers[':authority']}${headers[':path']}`,
-            ),
+            );
+            // The stream's own 'close' rather than the close channel, which
+            // is published before a reset's error and would log a success
+            stream.once('close', () => completeRequest(stream, stream.errored ?? undefined));
+        },
     ],
     [
         'http2.client.stream.finish',
         /** @param {Http2Message} message */
         ({ stream }) => receiveHeaders(stream),
-    ],
-    [
-        'http2.client.stream.close',
-        /** @param {Http2Message} message */
-        ({ stream }) => completeRequest(stream),
-    ],
-    [
-        'http2.client.stream.error',
-        /** @param {Http2Message} message */
-        ({ stream, error }) => completeRequest(stream, error),
     ],
 ];
 
