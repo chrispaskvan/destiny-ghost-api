@@ -4,6 +4,7 @@ import { subscribe, unsubscribe } from 'node:diagnostics_channel';
 import { performance } from 'node:perf_hooks';
 
 import log from './log.js';
+import { redactUrl } from './redact.js';
 
 /**
  * Durations are computed from `performance.now()` rather than marks and
@@ -50,12 +51,18 @@ const hook = createHook({
  */
 const requests = new WeakMap();
 /**
+ * The URL is censored here because Pino's redaction works on object paths and
+ * cannot see a credential inside the query string of `entry`.
+ *
  * @param {object} key
  * @param {string} method
  * @param {string} url
  */
 const startRequest = (key, method, url) => {
-    requests.set(key, { entry: `HTTP Request: ${method} ${url}`, start: performance.now() });
+    requests.set(key, {
+        entry: `HTTP Request: ${method} ${redactUrl(url)}`,
+        start: performance.now(),
+    });
 };
 /** @param {object} key */
 const receiveHeaders = key => {

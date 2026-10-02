@@ -42,11 +42,16 @@ let http2Port;
 const loggedFields = entry =>
     vi.mocked(log.info).mock.calls.find(([fields]) => fields.entry === entry)?.[0];
 
+/**
+ * Lower bounds only, with a millisecond of slack for timer and clock rounding,
+ * since a loaded event loop can only delay either event. The gap between them
+ * separates headers from completion; half the body delay tolerates the
+ * headers being handled late.
+ */
 const expectHeadersThenBody = fields => {
-    // A millisecond of slack for timer and clock rounding
     expect(fields.timeToHeaders).toBeGreaterThanOrEqual(headersDelay - 1);
-    expect(fields.timeToHeaders).toBeLessThan(headersDelay + bodyDelay);
     expect(fields.duration).toBeGreaterThanOrEqual(headersDelay + bodyDelay - 1);
+    expect(fields.duration - fields.timeToHeaders).toBeGreaterThanOrEqual(bodyDelay / 2);
 };
 
 describe('performance', () => {
@@ -121,6 +126,15 @@ describe('performance', () => {
                 error: expect.stringContaining('ECONNREFUSED'),
             });
         }
+    });
+
+    it('should censor credentials in the query string', async () => {
+        await (await fetch(`http://127.0.0.1:${port}/redact?token=secret&page=2`)).text();
+
+        expect(
+            loggedFields(`HTTP Request: GET http://127.0.0.1:${port}/redact?token=REDACTED&page=2`),
+        ).toBeDefined();
+        expect(JSON.stringify(vi.mocked(log.info).mock.calls)).not.toContain('secret');
     });
 
     it('should log a response reset after its headers', async () => {
