@@ -134,15 +134,9 @@ class HealthController {
         const { rss, heapTotal, heapUsed, external } = process.memoryUsage();
         const { heap_size_limit: heapSizeLimit } = getHeapStatistics();
         const swap = HealthController.getSwap();
-        const totalMemory = totalmem();
-        const constrainedMemory = process.constrainedMemory();
-        // 0 when no limit is detected, and 2^64 (cgroup's "max") on App Service,
-        // so only a limit below physical memory is a real one
-        const containerMemoryLimit =
-            constrainedMemory > 0 && constrainedMemory < totalMemory
-                ? constrainedMemory
-                : undefined;
-        const memoryLimit = containerMemoryLimit ?? totalMemory;
+        // The smaller of the container limit and physical memory. No limit is
+        // reported as 0, or on App Service as 2^64 (the cgroup's "max")
+        const memoryLimit = Math.min(process.constrainedMemory() || Infinity, totalmem());
 
         return {
             rss: convertBytesToMegaBytes(rss),
@@ -152,11 +146,6 @@ class HealthController {
             external: convertBytesToMegaBytes(external),
             heapSizeLimit: convertBytesToMegaBytes(heapSizeLimit),
             percentageOfHeapLimit: percentageOf(heapUsed, heapSizeLimit),
-            containerMemoryLimit:
-                containerMemoryLimit === undefined
-                    ? undefined
-                    : convertBytesToMegaBytes(containerMemoryLimit),
-            totalMemory: convertBytesToMegaBytes(totalMemory),
             memoryLimit: convertBytesToMegaBytes(memoryLimit),
             percentageOfMemoryLimit: percentageOf(rss + (swap ?? 0), memoryLimit),
         };

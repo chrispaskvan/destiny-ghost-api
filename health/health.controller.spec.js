@@ -244,8 +244,6 @@ describe('HealthController', () => {
                 percentageOfHeapLimit: Math.round(
                     ((300 * megabyte) / getHeapStatistics().heap_size_limit) * 100,
                 ),
-                containerMemoryLimit: 1024,
-                totalMemory: Math.floor(totalmem() / megabyte),
                 memoryLimit: 1024,
                 percentageOfMemoryLimit: 75,
             });
@@ -261,7 +259,6 @@ describe('HealthController', () => {
             const result = HealthController.getMemoryUsage();
 
             expect(result.swap).toBeUndefined();
-            expect(result.containerMemoryLimit).toBeUndefined();
             expect(result.memoryLimit).toBe(Math.floor(totalmem() / megabyte));
             expect(result.percentageOfMemoryLimit).toBe(
                 Math.round(((512 * megabyte) / totalmem()) * 100),
