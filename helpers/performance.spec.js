@@ -183,4 +183,17 @@ describe('performance', () => {
 
         expect(log.info).not.toHaveBeenCalled();
     });
+
+    it('should not log a response that completes after being disabled', async () => {
+        await new Promise(resolve => {
+            get(`http://127.0.0.1:${port}/in-flight`, res => {
+                performanceHook.disable();
+                res.resume().on('close', resolve);
+            });
+        });
+
+        expect(
+            loggedFields(`HTTP Request: GET http://127.0.0.1:${port}/in-flight`),
+        ).toBeUndefined();
+    });
 });

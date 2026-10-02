@@ -46,10 +46,11 @@ const hook = createHook({
 /**
  * Outbound HTTP requests from any library, keyed by the client's request
  * object. Keyed weakly because a response whose body is never read never
- * completes.
+ * completes. Replaced on disable, since a response already past its
+ * headers still holds a 'close' listener that would complete it.
  * @type {WeakMap<object, { entry: string, start: number, timeToHeaders?: number }>}
  */
-const requests = new WeakMap();
+let requests = new WeakMap();
 /**
  * The URL is censored here because Pino's redaction works on object paths and
  * cannot see a credential inside the query string of `entry`.
@@ -193,5 +194,6 @@ export default {
             unsubscribe(name, onMessage);
         }
         lookups.clear();
+        requests = new WeakMap();
     },
 };
