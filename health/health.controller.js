@@ -5,6 +5,8 @@
  * @module healthController
  * @author Chris Paskvan
  */
+import { readFileSync } from 'node:fs';
+import { totalmem } from 'node:os';
 import { getHeapStatistics } from 'node:v8';
 import { convert } from 'html-to-text';
 
@@ -32,7 +34,7 @@ let failures;
 /** @typedef {import('../helpers/world2.js').default} World2 */
 
 /**
- * Only `getMemoryUsage`/`getMetrics` are exercised without a full set of
+ * Only `getSwap`/`getMemoryUsage`/`getMetrics` are exercised without a full set of
  * dependencies (see health.controller.spec.js), so every property here is
  * optional to allow that construction; every other method assumes its
  * dependency is present, matching how the routes always construct this
@@ -89,25 +91,74 @@ class HealthController {
     }
 
     /**
+     * The process's swapped-out memory, which `rss` does not include, read
+     * from `/proc/self/status`. Undefined where that file is unavailable
+     * (macOS) or unreadable (production must grant it to the permission
+     * model).
+     *
+     * @static
+     * @returns {number | undefined} bytes
+     * @memberof HealthController
+     */
+    static getSwap() {
+        try {
+            const [, kilobytes] =
+                readFileSync('/proc/self/status', 'utf8').match(/^VmSwap:\s+(\d+) kB$/m) ?? [];
+
+            return kilobytes === undefined ? undefined : Number(kilobytes) * 1024;
+        } catch {
+            return undefined;
+        }
+    }
+
+    /**
+     * Reports usage against the two limits that can end the process: the V8
+     * heap limit ("heap out of memory") and the memory available to it, the
+     * smaller of the container limit and physical RAM. The process's footprint
+     * is `rss` plus `swap`, since swapped pages are still memory it holds.
+     *
      * {@link https://www.valentinog.com/blog/node-usage/|Guide: How To Inspect Memory Usage in Node.js}
      * {@link https://deepu.tech/memory-management-in-v8/|Visualizing memory management in V8 Engine (JavaScript, NodeJS, Deno, WebAssembly)}
      *
      * @static
-     * @returns {{ rss: number, heapTotal: number, heapUsed: number, external: number, totalAvailableSize: number }}
      * @memberof HealthController
      */
     static getMemoryUsage() {
         /** @param {number} bytes */
         const convertBytesToMegaBytes = bytes => Math.floor(bytes / (1024 * 1024));
+        /**
+         * @param {number} used
+         * @param {number} limit
+         */
+        const percentageOf = (used, limit) => Math.round((used / limit) * 100);
         const { rss, heapTotal, heapUsed, external } = process.memoryUsage();
-        const { total_available_size: totalAvailableSize } = getHeapStatistics();
+        const { heap_size_limit: heapSizeLimit } = getHeapStatistics();
+        const swap = HealthController.getSwap();
+        const totalMemory = totalmem();
+        const constrainedMemory = process.constrainedMemory();
+        // 0 when no limit is detected, and 2^64 (cgroup's "max") on App Service,
+        // so only a limit below physical memory is a real one
+        const containerMemoryLimit =
+            constrainedMemory > 0 && constrainedMemory < totalMemory
+                ? constrainedMemory
+                : undefined;
+        const memoryLimit = containerMemoryLimit ?? totalMemory;
 
         return {
             rss: convertBytesToMegaBytes(rss),
+            swap: swap === undefined ? undefined : convertBytesToMegaBytes(swap),
             heapTotal: convertBytesToMegaBytes(heapTotal),
             heapUsed: convertBytesToMegaBytes(heapUsed),
             external: convertBytesToMegaBytes(external),
-            totalAvailableSize: convertBytesToMegaBytes(totalAvailableSize),
+            heapSizeLimit: convertBytesToMegaBytes(heapSizeLimit),
+            percentageOfHeapLimit: percentageOf(heapUsed, heapSizeLimit),
+            containerMemoryLimit:
+                containerMemoryLimit === undefined
+                    ? undefined
+                    : convertBytesToMegaBytes(containerMemoryLimit),
+            totalMemory: convertBytesToMegaBytes(totalMemory),
+            memoryLimit: convertBytesToMegaBytes(memoryLimit),
+            percentageOfMemoryLimit: percentageOf(rss + (swap ?? 0), memoryLimit),
         };
     }
 
@@ -115,8 +166,8 @@ class HealthController {
         const memory = /** @type {typeof HealthController} */ (this.constructor).getMemoryUsage();
 
         applicationInsights.trackMetric({
-            name: 'Ratio of RSS Memory to Total Available Size',
-            value: Math.round(memory.rss / memory.totalAvailableSize),
+            name: 'Percentage of Memory Limit',
+            value: memory.percentageOfMemoryLimit,
         });
 
         log.info(

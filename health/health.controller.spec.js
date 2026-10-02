@@ -1,10 +1,18 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { totalmem } from 'node:os';
+import { getHeapStatistics } from 'node:v8';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { get } from '../helpers/request.js';
 import applicationInsights from '../helpers/application-insights.js';
 import HealthController from './health.controller.js';
 import manifestResponse from '../mocks/manifestResponse.json';
 import manifest2Response from '../mocks/manifest2Response.json';
 
+vi.mock('node:fs', async importOriginal => {
+    const actual = await importOriginal();
+
+    return { ...actual, readFileSync: vi.fn(actual.readFileSync) };
+});
 vi.mock('../helpers/request.js');
 vi.mock('../helpers/bungie.request.js', () => ({
     getCircuitBreakerStatus: vi.fn(() => ({
@@ -24,6 +32,7 @@ vi.mock('../helpers/log.js', () => ({
     },
 }));
 
+const megabyte = 1024 * 1024;
 const { Response: manifest } = manifestResponse;
 const { Response: manifest2 } = manifest2Response;
 const destinyService = {
@@ -185,35 +194,93 @@ describe('HealthController', () => {
         });
     });
 
+    describe('getSwap', () => {
+        it('should return VmSwap from /proc/self/status in bytes', () => {
+            vi.mocked(readFileSync).mockReturnValueOnce(
+                'VmRSS:\t  376832 kB\nVmSwap:\t  262144 kB\n',
+            );
+
+            expect(HealthController.getSwap()).toBe(256 * megabyte);
+            expect(readFileSync).toHaveBeenCalledWith('/proc/self/status', 'utf8');
+        });
+
+        it('should return undefined when /proc/self/status cannot be read', () => {
+            vi.mocked(readFileSync).mockImplementationOnce(() => {
+                throw Object.assign(new Error('Access to this API has been restricted'), {
+                    code: 'ERR_ACCESS_DENIED',
+                });
+            });
+
+            expect(HealthController.getSwap()).toBeUndefined();
+        });
+    });
+
     describe('getMemoryUsage', () => {
-        it('should return memory usage in megabytes', () => {
+        beforeEach(() => {
+            vi.spyOn(process, 'memoryUsage').mockReturnValue({
+                rss: 512 * megabyte,
+                heapTotal: 400 * megabyte,
+                heapUsed: 300 * megabyte,
+                external: 7 * megabyte,
+                arrayBuffers: 0,
+            });
+        });
+
+        afterEach(() => vi.restoreAllMocks());
+
+        it('should count swap against the container limit when it is the smaller limit', () => {
+            vi.spyOn(HealthController, 'getSwap').mockReturnValue(256 * megabyte);
+            vi.spyOn(process, 'constrainedMemory').mockReturnValue(1024 * megabyte);
+
             const result = HealthController.getMemoryUsage();
 
-            expect(result).toHaveProperty('rss');
-            expect(result).toHaveProperty('heapTotal');
-            expect(result).toHaveProperty('heapUsed');
-            expect(result).toHaveProperty('external');
-            expect(result).toHaveProperty('totalAvailableSize');
-            Object.values(result).forEach(value => {
-                expect(typeof value).toBe('number');
+            expect(result).toEqual({
+                rss: 512,
+                swap: 256,
+                heapTotal: 400,
+                heapUsed: 300,
+                external: 7,
+                heapSizeLimit: Math.floor(getHeapStatistics().heap_size_limit / megabyte),
+                percentageOfHeapLimit: Math.round(
+                    ((300 * megabyte) / getHeapStatistics().heap_size_limit) * 100,
+                ),
+                containerMemoryLimit: 1024,
+                totalMemory: Math.floor(totalmem() / megabyte),
+                memoryLimit: 1024,
+                percentageOfMemoryLimit: 75,
             });
+        });
+
+        it.each([
+            ['no limit is detected', 0],
+            ['the cgroup reports no limit as 2^64', 2 ** 64],
+        ])('should fall back to physical memory when %s', (_description, constrainedMemory) => {
+            vi.spyOn(HealthController, 'getSwap').mockReturnValue(undefined);
+            vi.spyOn(process, 'constrainedMemory').mockReturnValue(constrainedMemory);
+
+            const result = HealthController.getMemoryUsage();
+
+            expect(result.swap).toBeUndefined();
+            expect(result.containerMemoryLimit).toBeUndefined();
+            expect(result.memoryLimit).toBe(Math.floor(totalmem() / megabyte));
+            expect(result.percentageOfMemoryLimit).toBe(
+                Math.round(((512 * megabyte) / totalmem()) * 100),
+            );
         });
     });
 
     describe('getMetrics', () => {
-        it('should return memory metrics and track them', async () => {
+        it('should return memory metrics and track the percentage of the memory limit', async () => {
             const controller = new HealthController();
 
             const { memory } = await controller.getMetrics();
 
             expect(memory).toHaveProperty('rss');
-            expect(memory).toHaveProperty('heapTotal');
-            expect(memory).toHaveProperty('heapUsed');
-            expect(memory).toHaveProperty('external');
-            expect(memory).toHaveProperty('totalAvailableSize');
+            expect(memory).toHaveProperty('heapSizeLimit');
+            expect(memory).toHaveProperty('memoryLimit');
             expect(applicationInsights.trackMetric).toHaveBeenCalledWith({
-                name: 'Ratio of RSS Memory to Total Available Size',
-                value: expect.any(Number),
+                name: 'Percentage of Memory Limit',
+                value: memory.percentageOfMemoryLimit,
             });
         });
     });
