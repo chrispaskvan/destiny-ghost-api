@@ -251,13 +251,17 @@ describe('HealthController', () => {
             });
         });
 
-        it('should fall back to physical memory when no container limit is detected', () => {
+        it.each([
+            ['no limit is detected', 0],
+            ['the cgroup reports no limit as 2^64', 2 ** 64],
+        ])('should fall back to physical memory when %s', (_description, constrainedMemory) => {
             vi.spyOn(HealthController, 'getSwap').mockReturnValue(undefined);
-            vi.spyOn(process, 'constrainedMemory').mockReturnValue(0);
+            vi.spyOn(process, 'constrainedMemory').mockReturnValue(constrainedMemory);
 
             const result = HealthController.getMemoryUsage();
 
             expect(result.swap).toBeUndefined();
+            expect(result.containerMemoryLimit).toBeUndefined();
             expect(result.memoryLimit).toBe(Math.floor(totalmem() / megabyte));
             expect(result.percentageOfMemoryLimit).toBe(
                 Math.round(((512 * megabyte) / totalmem()) * 100),
