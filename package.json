@@ -9,7 +9,7 @@
         "format": "remark . --quiet --frail --output",
         "lint": "biome check --write .",
         "lint:ci": "biome check .",
-        "start:production": "NODE_ENV=production node --permission --allow-fs-read=./ --allow-fs-read=/var/tmp/ --allow-fs-write=./databases --allow-fs-write=/var/tmp/ --allow-worker --allow-addons --allow-net --disable-proto=delete --disable-warning=SecurityWarning --disable-warning=ExperimentalWarning --env-file-if-exists=.env --max-old-space-size=8192 --unhandled-rejections=strict start.js",
+        "start:production": "NODE_ENV=production node --permission --allow-fs-read=./ --allow-fs-read=/var/tmp/ --allow-fs-read=/proc/self/status --allow-fs-write=./databases --allow-fs-write=/var/tmp/ --allow-worker --allow-addons --allow-net --disable-proto=delete --disable-warning=SecurityWarning --disable-warning=ExperimentalWarning --env-file-if-exists=.env --max-old-space-size=768 --unhandled-rejections=strict start.js",
         "start:dev": "NODE_ENV=development pnpm start",
         "start": "node --disable-proto=delete --env-file-if-exists=.env --max-old-space-size=8192 --unhandled-rejections=strict start.js",
         "swagger": "rm -f openapi.json && swagger-jsdoc -d openapi.cjs ./**/*.routes.js -o openapi.json",
