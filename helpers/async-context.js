@@ -2,7 +2,9 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 /**
- * One outbound HTTP request made while handling an inbound one.
+ * One outbound HTTP request made while handling an inbound one. `error` is
+ * present only when the request failed, and may be empty: `new Error()` and
+ * some socket resets carry no message.
  * @typedef {{ host: string, duration: number, error?: string }} Timing
  */
 

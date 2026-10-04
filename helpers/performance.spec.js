@@ -127,9 +127,25 @@ describe('performance', () => {
                 });
             });
 
+            expect(timings).toStrictEqual([
+                { host: `127.0.0.1:${port}`, duration: expect.any(Number) },
+                { host: `127.0.0.1:${port}`, duration: expect.any(Number) },
+            ]);
+        });
+
+        it('should record a failed request with its error, even an empty one', async () => {
+            await inRequest(async () => {
+                await fetch(`http://127.0.0.1:${port}/reset/failed`)
+                    .then(response => response.text())
+                    .catch(() => undefined);
+            });
+
             expect(timings).toEqual([
-                { host: `127.0.0.1:${port}`, duration: expect.any(Number), error: undefined },
-                { host: `127.0.0.1:${port}`, duration: expect.any(Number), error: undefined },
+                {
+                    host: `127.0.0.1:${port}`,
+                    duration: expect.any(Number),
+                    error: expect.any(String),
+                },
             ]);
         });
 

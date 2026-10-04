@@ -86,7 +86,7 @@ const summarizeDependencies = () => {
             host,
             calls: calls.length,
             duration: Math.round(calls.reduce((total, { duration }) => total + duration, 0)),
-            errors: calls.filter(({ error }) => error).length,
+            errors: calls.filter(({ error }) => error !== undefined).length,
         }),
     );
 };

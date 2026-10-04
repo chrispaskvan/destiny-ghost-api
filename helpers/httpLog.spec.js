@@ -149,4 +149,10 @@ describe('summarizeDependencies', () => {
             { host: 'api.twilio.com', calls: 1, duration: 120, errors: 0 },
         ]);
     });
+
+    it('should count a failure whose error has no message', () => {
+        expect(summarizeWith([{ host: 'www.bungie.net', duration: 12, error: '' }])).toEqual([
+            { host: 'www.bungie.net', calls: 1, duration: 12, errors: 1 },
+        ]);
+    });
 });

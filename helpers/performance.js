@@ -130,7 +130,11 @@ const completeRequest = (key, error) => {
         const duration = elapsed(request.start);
 
         requests.delete(key);
-        request.timings?.push({ host: request.host, duration, error: error?.message });
+        request.timings?.push({
+            host: request.host,
+            duration,
+            ...(error && { error: error.message }),
+        });
         if (logEach) {
             request.logger.info(
                 {
