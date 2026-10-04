@@ -66,6 +66,7 @@ const contextMiddleware = (_req, _res, next) => {
     const store = new Map();
 
     store.set('logger', child);
+    store.set('timings', []);
 
     return context.run(store, next);
 };

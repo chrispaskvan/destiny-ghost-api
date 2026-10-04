@@ -47,10 +47,11 @@ const loaders = {
 
         /**
          * Performance Hook
+         *
+         * Always on, so each request's log carries its outbound calls; each
+         * call is logged separately only in development.
          */
-        if (process.env.NODE_ENV === 'development') {
-            hook.enable();
-        }
+        hook.enable({ log: process.env.NODE_ENV === 'development' });
 
         /**
          * Check for the latest manifest definition and database from Bungie.
