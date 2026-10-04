@@ -3,6 +3,7 @@ import { createServer, get } from 'node:http';
 import { connect, createServer as createHttp2Server } from 'node:http2';
 import { performance } from 'node:perf_hooks';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import context from './async-context.js';
 import log from './log.js';
 import performanceHook from './performance.js';
 
@@ -83,6 +84,93 @@ describe('performance', () => {
         await (await fetch(`http://127.0.0.1:${port}/fetch?q=1`)).text();
 
         expectHeadersThenBody(loggedFields(`HTTP Request: GET http://127.0.0.1:${port}/fetch?q=1`));
+    });
+
+    it('should split the time fetch spent waiting to send from the time the server took', async () => {
+        await (await fetch(`http://127.0.0.1:${port}/send`)).text();
+
+        const { timeToSend, timeToHeaders } = loggedFields(
+            `HTTP Request: GET http://127.0.0.1:${port}/send`,
+        );
+
+        expect(timeToSend).toBeGreaterThanOrEqual(0);
+        expect(timeToHeaders - timeToSend).toBeGreaterThanOrEqual(headersDelay - 1);
+    });
+
+    describe('when called while handling a request', () => {
+        const logger = { info: vi.fn() };
+        /** @type {import('./async-context.js').Timing[]} */
+        let timings;
+        /** @param {() => Promise<unknown>} callback */
+        const inRequest = callback =>
+            context.run(
+                // @ts-expect-error - a stand-in for the request's Pino child logger
+                new Map([
+                    ['logger', logger],
+                    ['timings', timings],
+                ]),
+                callback,
+            );
+
+        beforeEach(() => {
+            timings = [];
+            logger.info.mockClear();
+        });
+
+        it("should record each outbound request against the request's timings", async () => {
+            await inRequest(async () => {
+                await (await fetch(`http://127.0.0.1:${port}/recorded`)).text();
+                await new Promise(resolve => {
+                    get(`http://127.0.0.1:${port}/recorded`, res =>
+                        res.resume().on('close', resolve),
+                    );
+                });
+            });
+
+            expect(timings).toEqual([
+                { host: `127.0.0.1:${port}`, duration: expect.any(Number), error: undefined },
+                { host: `127.0.0.1:${port}`, duration: expect.any(Number), error: undefined },
+            ]);
+        });
+
+        /**
+         * The lookup completes in an async hook's destroy callback, which runs
+         * in no request's context; read there, the logger was the root one.
+         */
+        it("should log a DNS lookup through the request's logger", async () => {
+            // A connection of its own, since a pooled one needs no lookup and
+            // would leave later tests none to make
+            await inRequest(
+                () =>
+                    new Promise(resolve => {
+                        get(`http://localhost:${port}/lookup`, { agent: false }, res =>
+                            res.resume().on('close', resolve),
+                        );
+                    }),
+            );
+
+            await vi.waitFor(() => {
+                expect(logger.info).toHaveBeenCalledWith(
+                    expect.objectContaining({ entry: 'DNS Lookup: localhost' }),
+                    'Performance Measurement',
+                );
+            });
+            expect(loggedFields('DNS Lookup: localhost')).toBeUndefined();
+        });
+
+        it('should record without logging when each request is not logged', async () => {
+            performanceHook.disable();
+            performanceHook.enable({ log: false });
+
+            await inRequest(async () => {
+                await (await fetch(`http://127.0.0.1:${port}/quiet`)).text();
+            });
+            await new Promise(resolve => setTimeout(resolve, 10));
+
+            expect(timings).toHaveLength(1);
+            expect(logger.info).not.toHaveBeenCalled();
+            expect(log.info).not.toHaveBeenCalled();
+        });
     });
 
     it('should time node:http to its response headers and body, and its DNS lookup', async () => {
@@ -174,6 +262,8 @@ describe('performance', () => {
         ]) {
             expect(loggedFields(`HTTP Request: GET ${url}`)).toEqual({
                 entry: `HTTP Request: GET ${url}`,
+                // fetch alone reports when the request was written
+                ...(url.endsWith('/fetch') && { timeToSend: expect.any(Number) }),
                 timeToHeaders: expect.any(Number),
                 duration: expect.any(Number),
                 error: expect.any(String),
