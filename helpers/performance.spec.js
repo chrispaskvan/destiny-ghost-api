@@ -1,6 +1,12 @@
 import { once } from 'node:events';
+import { readFileSync } from 'node:fs';
 import { createServer, get } from 'node:http';
-import { connect, createServer as createHttp2Server } from 'node:http2';
+import {
+    connect,
+    createServer as createHttp2Server,
+    createSecureServer as createSecureHttp2Server,
+} from 'node:http2';
+import { getCACertificates, setDefaultCACertificates } from 'node:tls';
 import { performance } from 'node:perf_hooks';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import context from './async-context.js';
@@ -43,8 +49,26 @@ const http2Server = createHttp2Server().on('stream', (stream, headers) => {
         );
     }, headersDelay);
 });
+/**
+ * fetch speaks HTTP/2 only over TLS, after negotiating it, so this server has
+ * a self-signed certificate - for localhost, and trusted only by this spec.
+ */
+const cert = readFileSync(new URL('../mocks/tls/localhost.cert.pem', import.meta.url), 'utf8');
+const secureHttp2Server = createSecureHttp2Server({
+    allowHTTP1: true,
+    cert,
+    key: readFileSync(new URL('../mocks/tls/localhost.key.pem', import.meta.url)),
+}).on('request', (_req, res) => {
+    setTimeout(() => {
+        res.writeHead(200);
+        res.write('headers sent');
+        setTimeout(() => res.end(), bodyDelay);
+    }, headersDelay);
+});
+const defaultCACertificates = getCACertificates('default');
 let port;
 let http2Port;
+let securePort;
 
 /** @param {string} entry */
 const loggedFields = entry =>
@@ -66,14 +90,23 @@ describe('performance', () => {
     beforeAll(async () => {
         server.listen(0, '127.0.0.1');
         http2Server.listen(0, '127.0.0.1');
-        await Promise.all([once(server, 'listening'), once(http2Server, 'listening')]);
+        secureHttp2Server.listen(0, '127.0.0.1');
+        await Promise.all([
+            once(server, 'listening'),
+            once(http2Server, 'listening'),
+            once(secureHttp2Server, 'listening'),
+        ]);
         ({ port } = server.address());
         ({ port: http2Port } = http2Server.address());
+        ({ port: securePort } = secureHttp2Server.address());
+        setDefaultCACertificates([...defaultCACertificates, cert]);
     });
 
     afterAll(() => {
+        setDefaultCACertificates(defaultCACertificates);
         server.close();
         http2Server.close();
+        secureHttp2Server.close();
     });
 
     beforeEach(() => performanceHook.enable());
@@ -84,6 +117,41 @@ describe('performance', () => {
         await (await fetch(`http://127.0.0.1:${port}/fetch?q=1`)).text();
 
         expectHeadersThenBody(loggedFields(`HTTP Request: GET http://127.0.0.1:${port}/fetch?q=1`));
+    });
+
+    /**
+     * Over HTTP/2, fetch sends the request on a node:http2 stream, which
+     * publishes the http2 channels as well as undici's.
+     */
+    it('should time fetch over HTTP/2 once, with its time to send', async () => {
+        const url = `https://127.0.0.1:${securePort}/fetch-h2`;
+        const response = await fetch(url);
+
+        await response.text();
+        // The duplicate this guards against completes on the http2 stream's
+        // 'close', which follows the end of the body
+        await new Promise(resolve => setTimeout(resolve, 50));
+
+        const entries = vi
+            .mocked(log.info)
+            .mock.calls.filter(([fields]) => fields.entry === `HTTP Request: GET ${url}`);
+
+        expect(entries).toHaveLength(1);
+        expectHeadersThenBody(entries[0][0]);
+        expect(entries[0][0].timeToSend).toEqual(expect.any(Number));
+    });
+
+    it('should still time a node:http2 stream made right after fetch over HTTP/2', async () => {
+        const session = connect(`http://127.0.0.1:${http2Port}`);
+
+        await (await fetch(`https://127.0.0.1:${securePort}/before`)).text();
+        const stream = session.request({ ':path': '/after' });
+
+        stream.resume();
+        await once(stream, 'close');
+        session.close();
+
+        expect(loggedFields(`HTTP Request: GET http://127.0.0.1:${http2Port}/after`)).toBeDefined();
     });
 
     it('should split the time fetch spent waiting to send from the time the server took', async () => {

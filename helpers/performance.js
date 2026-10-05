@@ -111,6 +111,33 @@ const sendHeaders = key => {
         request.timeToSend = elapsed(request.start);
     }
 };
+/**
+ * fetch negotiates HTTP/2 when a server offers it - Bungie does - and undici
+ * then sends the request on a node:http2 stream, which publishes the http2
+ * channels too: one request, timed twice. undici creates that stream in the
+ * same synchronous call that publishes undici:client:sendHeaders, so the
+ * first stream created before the next microtask is fetch's own, and left to
+ * the undici channels, which also carry the time to send.
+ */
+let sendingOverHttp2 = false;
+/** @param {import('node:tls').TLSSocket} [socket] */
+const expectHttp2Stream = socket => {
+    if (socket?.alpnProtocol === 'h2') {
+        sendingOverHttp2 = true;
+        queueMicrotask(() => {
+            sendingOverHttp2 = false;
+        });
+    }
+};
+/** Whether this stream is fetch's, consuming the expectation if so. */
+const isFetchStream = () => {
+    const isFetch = sendingOverHttp2;
+
+    sendingOverHttp2 = false;
+
+    return isFetch;
+};
+
 /** @param {object} key */
 const receiveHeaders = key => {
     const request = requests.get(key);
@@ -156,7 +183,7 @@ const completeRequest = (key, error) => {
  * @typedef {import('node:http').ClientRequest} ClientRequest
  * @typedef {import('node:http').IncomingMessage} IncomingMessage
  * @typedef {{ request: ClientRequest, response: IncomingMessage, error: Error }} HttpMessage
- * @typedef {{ request: { method: string, origin: string, path: string }, error: Error }} UndiciMessage
+ * @typedef {{ request: { method: string, origin: string, path: string }, error: Error, socket?: import('node:tls').TLSSocket }} UndiciMessage
  * @typedef {{ stream: import('node:http2').ClientHttp2Stream, headers: import('node:http2').OutgoingHttpHeaders }} Http2Message
  */
 /** @type {Array<[string, (message: any) => void]>} */
@@ -197,7 +224,10 @@ const channels = [
     [
         'undici:client:sendHeaders',
         /** @param {UndiciMessage} message */
-        ({ request }) => sendHeaders(request),
+        ({ request, socket }) => {
+            sendHeaders(request);
+            expectHttp2Stream(socket);
+        },
     ],
     [
         'undici:request:headers',
@@ -219,6 +249,9 @@ const channels = [
         'http2.client.stream.created',
         /** @param {Http2Message} message */
         ({ stream, headers }) => {
+            if (isFetchStream()) {
+                return;
+            }
             startRequest(
                 stream,
                 String(headers[':method']),
