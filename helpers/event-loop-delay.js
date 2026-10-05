@@ -6,9 +6,9 @@
  * shows it where CPU does not.
  *
  * Measuring starts when this module is evaluated, which start.js does before
- * anything else, so the first read covers startup. server.js reads it once
- * the server is listening, which leaves /health/metrics reporting only time
- * the server could have been answering requests.
+ * anything else. server.js reads startup's delay once the server is
+ * listening, which leaves /health/metrics reporting only time the server
+ * could have been answering requests.
  *
  * @module event-loop-delay
  */
@@ -20,21 +20,20 @@ const histogram = monitorEventLoopDelay({ resolution });
 
 histogram.enable();
 
-/**
- * The histogram discards its first interval, and at startup that interval
- * is the synchronous evaluation of every module imported after this one -
- * the stall startup is read for. A timer set now can run only once that
- * evaluation lets go of the loop, so how late it ran is that stall; the
- * first read folds it into max.
- *
- * @type {number}
- */
-let evaluationDelay = 0;
 const evaluatedAt = performance.now();
 
-setTimeout(() => {
-    evaluationDelay = performance.now() - evaluatedAt;
-}, 0).unref();
+/**
+ * The histogram discards its first interval, and at startup that interval is
+ * the synchronous evaluation of every module imported after this one - the
+ * stall startup is read for. A timer set now runs only once the loop first
+ * gets to its timers, after all of startup's synchronous work, so how late it
+ * ran is that stall. Its timer is unref'd too.
+ *
+ * @type {Promise<number>}
+ */
+const firstTurn = new Promise(resolve => {
+    setTimeout(() => resolve(performance.now() - evaluatedAt), 0).unref();
+});
 
 /**
  * Percentiles since the last read, in milliseconds, then starts over.
@@ -54,13 +53,29 @@ const readEventLoopDelay = () => {
         p50: toMilliseconds(histogram.percentile(50)),
         p95: toMilliseconds(histogram.percentile(95)),
         p99: toMilliseconds(histogram.percentile(99)),
-        max: Math.max(toMilliseconds(histogram.max), Math.round(evaluationDelay * 100) / 100),
+        max: toMilliseconds(histogram.max),
     };
 
     histogram.reset();
-    evaluationDelay = 0;
 
     return delay;
 };
 
+/**
+ * Startup's delay, read once the loop has first reached its timers - not
+ * when called. server.js calls it when the server starts listening, which
+ * can be in the same turn as the modules evaluating: read then, the
+ * histogram had sampled none of it, and the reset left it to land in the
+ * first /health/metrics read instead.
+ *
+ * @returns {Promise<{ p50: number, p95: number, p99: number, max: number }>}
+ */
+const readStartupEventLoopDelay = async () => {
+    const evaluationDelay = await firstTurn;
+    const delay = readEventLoopDelay();
+
+    return { ...delay, max: Math.max(delay.max, Math.round(evaluationDelay * 100) / 100) };
+};
+
 export default readEventLoopDelay;
+export { readStartupEventLoopDelay };

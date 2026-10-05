@@ -10,7 +10,7 @@ import express from 'express';
 import { createTerminus } from '@godaddy/terminus';
 
 import applicationInsights from './helpers/application-insights.js';
-import readEventLoopDelay from './helpers/event-loop-delay.js';
+import { readStartupEventLoopDelay } from './helpers/event-loop-delay.js';
 import cache from './helpers/cache.js';
 import jobs from './helpers/jobs.js';
 import log from './helpers/log.js';
@@ -101,7 +101,7 @@ const startServer = async ({ grpc = false } = {}) => {
         logger: (msg, err) => log.error({ err }, msg),
     });
 
-    insecureConnection = insecureServer.listen(port, () => {
+    insecureConnection = insecureServer.listen(port, async () => {
         const cpuCount = cpus().length;
         const duration = Math.round(performance.now() - start);
         /**
@@ -111,10 +111,11 @@ const startServer = async ({ grpc = false } = {}) => {
          */
         const sinceProcessStart = Math.round(performance.now());
         /**
-         * Read here, so startup's delay is reported once, on its own, and
-         * /health/metrics only ever reports time the server was listening.
+         * Reported once, on its own, so /health/metrics only ever reports
+         * time the server was listening. Resolves once the loop has turned,
+         * since listening can come in the same turn as the startup it covers.
          */
-        const eventLoopDelay = readEventLoopDelay();
+        const eventLoopDelay = await readStartupEventLoopDelay();
 
         applicationInsights.trackMetric({ name: 'startup-time', value: duration });
         applicationInsights.trackMetric({

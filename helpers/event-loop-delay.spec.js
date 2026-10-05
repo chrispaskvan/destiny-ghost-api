@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
+import { createServer } from 'node:http';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import readEventLoopDelay from './event-loop-delay.js';
 
 describe('readEventLoopDelay', () => {
@@ -32,22 +33,41 @@ describe('readEventLoopDelay', () => {
     });
 
     /**
-     * start.js imports this module first, then every other module is
-     * evaluated synchronously in the same turn: that is the histogram's first
-     * interval, which it discards.
+     * The order start.js runs in: this module first, then every other module
+     * evaluating synchronously, then startServer listening - its callback can
+     * run before any timer has, as here.
      */
-    it('should count a stall in the synchronous evaluation that follows it', async () => {
-        vi.resetModules();
-        const { default: readFresh } = await import('./event-loop-delay.js');
-        const start = performance.now();
+    describe('when startup blocks the loop before the server listens', () => {
+        let startup;
+        let runtime;
 
-        while (performance.now() - start < 300) {
-            // the modules imported after it, evaluating
-        }
-        await new Promise(resolve => setTimeout(resolve, 50));
+        beforeAll(async () => {
+            vi.resetModules();
+            const { default: read, readStartupEventLoopDelay } = await import(
+                './event-loop-delay.js'
+            );
+            const blockedAt = performance.now();
 
-        expect(readFresh().max).toBeGreaterThanOrEqual(250);
-        // Counted once, by the startup read
-        expect(readFresh().max).toBeLessThan(250);
+            while (performance.now() - blockedAt < 300) {
+                // the modules imported after it, evaluating
+            }
+
+            const server = createServer();
+
+            startup = await new Promise(resolve => {
+                server.listen(0, '127.0.0.1', () => resolve(readStartupEventLoopDelay()));
+            });
+            server.close();
+            await new Promise(resolve => setTimeout(resolve, 50));
+            runtime = read();
+        });
+
+        it('should report the stall as startup', () => {
+            expect(startup.max).toBeGreaterThanOrEqual(250);
+        });
+
+        it('should leave it out of the first runtime read', () => {
+            expect(runtime.max).toBeLessThan(250);
+        });
     });
 });
