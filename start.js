@@ -1,3 +1,5 @@
+// First, so event-loop delay is measured across the rest of startup
+import './helpers/event-loop-delay.js';
 import { startServer } from './server.js';
 
 function exitOnError(err) {
