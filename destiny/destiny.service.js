@@ -86,6 +86,16 @@ const {
 const servicePlatform = `${host}/platform`;
 
 /**
+ * @constant
+ * @type {string}
+ * @description Base URL for the Destiny 1 API. Bungie redirects
+ * `/platform/Destiny/` here by way of plain HTTP, which would send the API key
+ * unencrypted, so it is requested directly. Every Bungie API path ends with a
+ * slash; without one, Bungie answers with a redirect to it.
+ */
+const destinyPlatform = `${host}/d1/platform`;
+
+/**
  * Destiny Service Class
  *
  * Generic over the cache implementation so `Destiny2Service` can reach the
@@ -98,6 +108,13 @@ class DestinyService {
      * @type {string}
      */
     _api = 'Destiny';
+
+    /**
+     * Base URL for this game's API, which the manifest is requested from.
+     * @protected
+     * @type {string}
+     */
+    _platform = destinyPlatform;
 
     /**
      * @param {{ cacheService: TCache }} options
@@ -117,7 +134,7 @@ class DestinyService {
             headers: {
                 'x-api-key': apiKey,
             },
-            url: `${servicePlatform}/${this._api}/Manifest`,
+            url: `${this._platform}/${this._api}/Manifest/`,
         };
         const { data: responseBody, headers } =
             /** @type {{ data: BungieResponse<DestinyManifest>, headers: Record<string, string | undefined> }} */ (
@@ -235,7 +252,7 @@ class DestinyService {
             headers: {
                 'x-api-key': apiKey,
             },
-            url: `${servicePlatform}/Destiny/${membershipType}/Account/${membershipId}/Summary/`,
+            url: `${destinyPlatform}/Destiny/${membershipType}/Account/${membershipId}/Summary/`,
         };
         const responseBody =
             /** @type {BungieResponse<{ data: { characters: DestinyCharacter[] } }>} */ (

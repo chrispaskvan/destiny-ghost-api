@@ -56,6 +56,12 @@ class Destiny2Service extends DestinyService {
     _api = 'Destiny2';
 
     /**
+     * @protected
+     * @type {string}
+     */
+    _platform = servicePlatform;
+
+    /**
      * Find players by display name.
      *
      * @param {string} displayName
@@ -125,7 +131,7 @@ class Destiny2Service extends DestinyService {
             headers: {
                 'x-api-key': apiKey,
             },
-            url: `${servicePlatform}/Destiny2/${membershipType}/Account/${membershipId}/Stats`,
+            url: `${servicePlatform}/Destiny2/${membershipType}/Account/${membershipId}/Stats/`,
         };
         const responseBody = /** @type {BungieResponse} */ (await get(options));
 
@@ -200,7 +206,7 @@ class Destiny2Service extends DestinyService {
                 headers: {
                     'x-api-key': apiKey,
                 },
-                url: `${servicePlatform}/Destiny2/${membershipType}/Profile/${membershipId}?components=Characters`,
+                url: `${servicePlatform}/Destiny2/${membershipType}/Profile/${membershipId}/?components=Characters`,
             };
             const responseBody =
                 /** @type {BungieResponse<{ characters: { data: Record<string, Destiny2Character> } }>} */ (
@@ -273,7 +279,7 @@ class Destiny2Service extends DestinyService {
                 authorization: `Bearer ${accessToken}`,
                 'x-api-key': apiKey,
             },
-            url: `${servicePlatform}/Destiny2/${membershipType}/Profile/${membershipId}/Character/${characterId}/Vendors/${strangeGearOffersHash}?components=402`,
+            url: `${servicePlatform}/Destiny2/${membershipType}/Profile/${membershipId}/Character/${characterId}/Vendors/${strangeGearOffersHash}/?components=402`,
         };
         const responseBody =
             /** @type {BungieResponse<{ sales: { data: Record<string, { itemHash: number }> } }>} */ (
