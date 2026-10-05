@@ -207,5 +207,5 @@ export default () => {
         world2Repository: world2,
     });
 
-    return { manifests, routes };
+    return { manifests, routes, world2 };
 };

@@ -87,7 +87,21 @@ describe('Express session and webhook boundaries', () => {
         },
     );
 
-    it.each(['/users', '/director', '/twilio-other'])(
+    it.each(['/docs', '/docs/swagger-ui.css', '/health/metrics', '/ping'])(
+        'serves %s without loading a session even when the store throws',
+        async path => {
+            sessionMiddleware.mockImplementation((_req, _res, next) =>
+                next(new Error('Redis unavailable')),
+            );
+
+            const res = await request(path);
+
+            expect(res.statusCode).toBe(200);
+            expect(sessionMiddleware).not.toHaveBeenCalled();
+        },
+    );
+
+    it.each(['/users', '/director', '/twilio-other', '/docsify'])(
         'still requires a session for %s',
         async path => {
             const res = await request(path);

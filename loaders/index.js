@@ -41,7 +41,7 @@ const loaders = {
         /**
          * Routes
          */
-        const { manifests, routes } = Routes();
+        const { manifests, routes, world2 } = Routes();
 
         app.use('/', routes);
 
@@ -78,6 +78,8 @@ const loaders = {
         });
 
         app.use(errorMiddleware);
+
+        return { world2 };
     },
 };
 

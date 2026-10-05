@@ -1,9 +1,11 @@
 /**
  * World Model Tests
  */
-import { existsSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DatabaseSync } from 'node:sqlite';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import World from './world2.js';
 import itif from './itif.js';
 import log from './log.js';
@@ -146,4 +148,83 @@ describe("It's Bungie's 2nd world. You're just querying it.", () => {
             expect(weaponCategory).toEqual(1);
         },
     );
+});
+
+/**
+ * A manifest of a few rows, read through the real worker pool, so the
+ * queries' json_extract columns are exercised rather than mocked.
+ */
+describe('when items and vendors are read from the manifest', () => {
+    const items = [
+        { hash: 4_294_967_295, displayProperties: { name: 'Night Watch' }, flavorText: 'a' },
+        { hash: 2, displayProperties: { name: 'Ace of Spades' }, itemTypeAndTierDisplayName: 'b' },
+        { hash: 3, displayProperties: {} },
+        { hash: 4, displayProperties: { name: 'NIGHTSHADE' } },
+    ];
+    const vendors = [{ hash: 5, displayProperties: { icon: '/xur.png' } }];
+    const temporaryDirectory = mkdtempSync(join(tmpdir(), 'world2-'));
+    const fileName = 'world_sql_content.content';
+    let manifest;
+
+    beforeAll(async () => {
+        const database = new DatabaseSync(join(temporaryDirectory, fileName));
+        const tables = {
+            DestinyItemCategoryDefinition: [],
+            DestinyClassDefinition: [],
+            DestinyDamageTypeDefinition: [],
+            DestinyInventoryItemDefinition: items,
+            DestinyLoreDefinition: [],
+            DestinyVendorDefinition: vendors,
+        };
+
+        for (const [table, rows] of Object.entries(tables)) {
+            database.exec(`CREATE TABLE ${table} (id INTEGER PRIMARY KEY, json BLOB)`);
+            for (const row of rows) {
+                database
+                    .prepare(`INSERT INTO ${table} (id, json) VALUES (?, ?)`)
+                    .run(row.hash | 0, JSON.stringify(row));
+            }
+        }
+        database.close();
+
+        manifest = new World({ pool });
+        manifest.directory = temporaryDirectory;
+        manifest.bootstrapped = manifest.bootstrap(fileName);
+        await manifest.bootstrapped;
+    });
+
+    afterAll(() => rmSync(temporaryDirectory, { force: true, recursive: true }));
+
+    it('should look up an item by its hash, including one past 2^31', async () => {
+        expect(await manifest.getItemByHash(4_294_967_295)).toEqual(items[0]);
+        expect(await manifest.getItemByHash(2)).toEqual(items[1]);
+        expect(await manifest.getItemByHash(6)).toBeUndefined();
+    });
+
+    it('should search names case-insensitively, in table order, with their aliases', async () => {
+        const found = await manifest.getItemByName(' night ');
+
+        expect(found.map(({ hash }) => hash)).toEqual([4_294_967_295, 4]);
+        expect(found[0]).toEqual({
+            ...items[0],
+            itemCategory: undefined,
+            itemName: 'Night Watch',
+        });
+        expect(await manifest.getItemByName('spades')).toEqual([
+            { ...items[1], itemCategory: 'b', itemName: 'Ace of Spades' },
+        ]);
+    });
+
+    it('should list every item in table order, as the inventory routes and gRPC read them', () => {
+        expect(manifest.items.length).toEqual(items.length);
+        // Hashes only: getItemByName, above, adds its aliases to the items it returns
+        expect(manifest.items.slice(1, 3).map(({ hash }) => hash)).toEqual([2, 3]);
+        expect([...manifest.items.entries()].map(([, { hash }]) => hash)).toEqual(
+            items.map(({ hash }) => hash),
+        );
+    });
+
+    it("should return a vendor's icon", async () => {
+        expect(await manifest.getVendorIcon(5)).toEqual('https://www.bungie.net/xur.png');
+    });
 });

@@ -17,16 +17,19 @@ import loaders from './loaders/index.js';
 import subscriber from './helpers/subscriber.js';
 import processExternalPromisesWithTimeout from './helpers/process-external-promises-with-timeout.js';
 import pool from './helpers/pool.js';
-import { stopServer as stopGrpcServer } from './grpc.js';
+import { startServer as startGrpcServer, stopServer as stopGrpcServer } from './grpc.js';
 
 let insecureConnection;
 let secureConnection;
 
-const startServer = async () => {
+/**
+ * @param {{ grpc?: boolean }} [options] - also start the gRPC server, sharing
+ * the REST API's manifest; start.js does, the integration tests do not
+ */
+const startServer = async ({ grpc = false } = {}) => {
     const start = performance.now();
     const app = express();
-
-    await loaders.init({ app });
+    const { world2 } = await loaders.init({ app });
 
     /**
      * Server(s)
@@ -108,6 +111,10 @@ const startServer = async () => {
 
     insecureServer.headersTimeout = serverOptions.headersTimeout;
     insecureServer.keepAliveTimeout = serverOptions.keepAliveTimeout;
+
+    if (grpc) {
+        await startGrpcServer({ world: world2 });
+    }
 
     return insecureServer.address();
 };

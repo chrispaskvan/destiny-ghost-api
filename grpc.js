@@ -3,8 +3,6 @@ import protoLoader from '@grpc/proto-loader';
 
 import configuration from './helpers/config.js';
 import log from './helpers/log.js';
-import World2 from './helpers/world2.js';
-import pool from './helpers/pool.js';
 
 let server;
 let generation = 0;
@@ -67,9 +65,15 @@ const createGetAllHandler = world => (call, callback) => {
 
 /**
  * Resolve once the port is bound, so callers can await a listening server.
+ *
+ * Serves the REST API's World2 rather than loading its own, which held a
+ * second copy of the manifest and, never sent updateManifest, kept serving
+ * the one the process started with.
+ *
+ * @param {{ world: { items?: { length: number, slice: Function } } }} options
  * @returns {Promise<void>}
  */
-const startServer = () =>
+const startServer = ({ world }) =>
     new Promise((resolve, reject) => {
         const packageDefinition = protoLoader.loadSync('./items.proto', {
             keepCase: true,
@@ -78,11 +82,6 @@ const startServer = () =>
             arrays: true,
         });
         const itemsProto = grpc.loadPackageDefinition(packageDefinition);
-        const directory = process.env.DESTINY2_DATABASE_DIR;
-        const world = new World2({
-            directory,
-            pool,
-        });
         const port = 1102;
 
         const attempt = generation;

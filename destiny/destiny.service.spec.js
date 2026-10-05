@@ -6,6 +6,7 @@ import Chance from 'chance';
 import { get, post } from '../helpers/bungie.request.js';
 import DestinyError from './destiny.error.js';
 import DestinyService from './destiny.service.js';
+import configuration from '../helpers/config.js';
 import mockManifestResponse from '../mocks/manifestResponse.json';
 
 vi.mock('../helpers/bungie.request.js');
@@ -27,6 +28,35 @@ beforeEach(() => {
 describe('DestinyService', () => {
     beforeEach(() => {
         vi.resetAllMocks();
+    });
+
+    /**
+     * Bungie redirects an API path without a trailing slash to one with it, and
+     * Destiny 1 paths under /platform to /d1/platform by way of plain HTTP - which
+     * fetch follows, sending the API key unencrypted. Each request has to be for
+     * the URL Bungie actually serves.
+     */
+    describe('Bungie URLs', () => {
+        const { host } = configuration.bungie;
+
+        it.each([
+            [
+                'getManifest',
+                () => destinyService.getManifest(true),
+                `${host}/d1/platform/Destiny/Manifest/`,
+            ],
+            [
+                'getCharacters',
+                () => destinyService.getCharacters('11', 2),
+                `${host}/d1/platform/Destiny/2/Account/11/Summary/`,
+            ],
+        ])('%s should request the URL Bungie serves', async (_name, request, url) => {
+            get.mockResolvedValue({ ErrorCode: 2 });
+
+            await request().catch(() => undefined);
+
+            expect(get.mock.calls[0][0].url).toEqual(url);
+        });
     });
 
     describe('getAccessToken', () => {

@@ -8,8 +8,6 @@ vi.mock('./helpers/config.js', () => ({
         notificationHeaders: { 'x-test-header': 'test-value' },
     },
 }));
-vi.mock('./helpers/pool.js', () => ({ default: {} }));
-vi.mock('./helpers/world2.js', () => ({ default: vi.fn() }));
 vi.mock('./helpers/log.js', () => ({
     default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
@@ -53,7 +51,7 @@ describe('stopServer', () => {
 
     it('waits for graceful completion and clears the fallback timer', async () => {
         started = true;
-        await startServer();
+        await startServer({ world: {} });
         const completed = vi.fn();
         const shutdown = stopServer().then(completed);
 
@@ -75,7 +73,7 @@ describe('stopServer', () => {
 
     it('forces shutdown after three seconds and ignores a late callback', async () => {
         started = true;
-        await startServer();
+        await startServer({ world: {} });
         const completed = vi.fn();
         const shutdown = stopServer().then(completed);
 
@@ -102,7 +100,7 @@ describe('stopServer', () => {
         });
 
         const listening = vi.fn();
-        const start = startServer().then(listening);
+        const start = startServer({ world: {} }).then(listening);
 
         await Promise.resolve();
         expect(listening).not.toHaveBeenCalled();
@@ -122,7 +120,7 @@ describe('stopServer', () => {
             callback(err),
         );
 
-        await expect(startServer()).rejects.toBe(err);
+        await expect(startServer({ world: {} })).rejects.toBe(err);
 
         await expect(stopServer()).resolves.toBeUndefined();
         expect(grpcServer.tryShutdown).not.toHaveBeenCalled();
@@ -134,11 +132,11 @@ describe('stopServer', () => {
             binds.push(callback);
         });
 
-        const first = startServer();
+        const first = startServer({ world: {} });
 
         await expect(stopServer()).resolves.toBeUndefined();
 
-        const second = startServer();
+        const second = startServer({ world: {} });
 
         binds[0](null, 1102);
         await first;
@@ -163,7 +161,7 @@ describe('stopServer', () => {
             bound = callback;
         });
 
-        const start = startServer();
+        const start = startServer({ world: {} });
 
         await expect(stopServer()).resolves.toBeUndefined();
 
@@ -183,7 +181,7 @@ describe('stopServer', () => {
             bound = callback;
         });
 
-        const start = startServer();
+        const start = startServer({ world: {} });
 
         await expect(stopServer()).resolves.toBeUndefined();
         expect(grpcServer.tryShutdown).not.toHaveBeenCalled();

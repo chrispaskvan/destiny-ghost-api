@@ -6,6 +6,7 @@
  * @summary Destiny World database.
  */
 import { join, basename } from 'node:path';
+import DefinitionTable from './definition-table.js';
 import World from './world.js';
 import log from './log.js';
 
@@ -92,9 +93,14 @@ class World2 extends World {
                     'SELECT json FROM DestinyItemCategoryDefinition',
                     'SELECT json FROM DestinyClassDefinition',
                     'SELECT json FROM DestinyDamageTypeDefinition',
-                    'SELECT json FROM DestinyInventoryItemDefinition',
+                    // Items and vendors are parsed on demand (see DefinitionTable);
+                    // SQLite extracts what is needed to index and search them
+                    `SELECT json_extract(json, '$.hash') AS hash,
+                        json_extract(json, '$.displayProperties.name') AS name, json
+                        FROM DestinyInventoryItemDefinition`,
                     'SELECT json FROM DestinyLoreDefinition',
-                    'SELECT json FROM DestinyVendorDefinition',
+                    `SELECT json_extract(json, '$.hash') AS hash, json
+                        FROM DestinyVendorDefinition`,
                 ],
             });
 
@@ -108,8 +114,6 @@ class World2 extends World {
             );
             /** @type {LoreDefinition[]} */
             const lores = loreDefinitions.map(({ json: lore }) => JSON.parse(lore));
-            /** @type {VendorDefinition[]} */
-            const vendors = vendorDefinitions.map(({ json: vendor }) => JSON.parse(vendor));
 
             /** @type {CategoryDefinition[]} */
             this.categories = categoryDefinitions.map(({ json: category }) => JSON.parse(category));
@@ -125,14 +129,26 @@ class World2 extends World {
             this.damageTypeHashMap = new Map(
                 damageTypes.map(damageType => [damageType.hash, damageType]),
             );
-            /** @type {ItemDefinition[]} */
-            this.items = itemDefinitions.map(({ json: item }) => JSON.parse(item));
-            /** @type {Map<number, ItemDefinition>} */
-            this.itemHashMap = new Map(this.items.map(item => [item.hash, item]));
+            /** @type {DefinitionTable<ItemDefinition>} */
+            this.itemHashMap = new DefinitionTable(
+                /** @type {Array<{ hash: number, json: string }>} */ (itemDefinitions),
+            );
+            this.items = this.itemHashMap;
+            /**
+             * Lowercase names in table order, for getItemByName to search
+             * without parsing every item.
+             * @type {Array<{ hash: number, name: string }>}
+             */
+            this.itemNames = itemDefinitions.map(({ hash, name }) => ({
+                hash: /** @type {number} */ (hash),
+                name: /** @type {string | null} */ (name)?.toLowerCase() ?? '',
+            }));
             /** @type {Map<number, LoreDefinition>} */
             this.loreDefinitionHashMap = new Map(lores.map(lore => [lore.hash, lore]));
-            /** @type {Map<number, VendorDefinition>} */
-            this.vendorHashMap = new Map(vendors.map(vendor => [vendor.hash, vendor]));
+            /** @type {DefinitionTable<VendorDefinition>} */
+            this.vendors = new DefinitionTable(
+                /** @type {Array<{ hash: number, json: string }>} */ (vendorDefinitions),
+            );
         } catch (err) {
             log.error({ err }, 'Error loading the second world');
 
@@ -208,9 +224,9 @@ class World2 extends World {
             return [];
         }
 
-        const items = this.items.filter(({ displayProperties: { name } = {} }) =>
-            (name ?? '').toLowerCase().includes(lowerCaseItemName),
-        );
+        const items = this.itemNames
+            .filter(({ name }) => name.includes(lowerCaseItemName))
+            .map(({ hash }) => /** @type {ItemDefinition} */ (this.itemHashMap.get(hash)));
 
         return items.map(item =>
             Object.assign(item, {
@@ -251,7 +267,7 @@ class World2 extends World {
     async getVendorIcon(vendorHash) {
         await this.bootstrapped;
 
-        const vendor = this.vendorHashMap.get(vendorHash);
+        const vendor = this.vendors.get(vendorHash);
         const icon = vendor?.displayProperties?.icon;
 
         return icon ? `https://www.bungie.net${icon}` : undefined;

@@ -9,6 +9,8 @@ import mockProfileCharactersResponse from '../mocks/profileCharactersResponse.js
 import mockPlayerStatisticsResponse from '../mocks/playerStatisticsResponse.json';
 import mockXurResponse from '../mocks/xurResponse.json';
 import { get, post } from '../helpers/bungie.request.js';
+import configuration from '../helpers/config.js';
+import { strangeGearOffersHash } from './destiny2.constants.js';
 
 vi.mock('../helpers/bungie.request.js');
 
@@ -37,6 +39,45 @@ beforeEach(() => {
 describe('Destiny2Service', () => {
     beforeEach(() => {
         vi.resetAllMocks();
+    });
+
+    /**
+     * Bungie redirects an API path without a trailing slash to one with it, and
+     * Destiny 1 paths under /platform to /d1/platform by way of plain HTTP - which
+     * fetch follows, sending the API key unencrypted. Each request has to be for
+     * the URL Bungie actually serves.
+     */
+    describe('Bungie URLs', () => {
+        const { host } = configuration.bungie;
+
+        it.each([
+            [
+                'getManifest',
+                () => destiny2Service.getManifest(true),
+                `${host}/Platform/Destiny2/Manifest/`,
+            ],
+            [
+                'getPlayerStatistics',
+                () => destiny2Service.getPlayerStatistics('11', 2),
+                `${host}/Platform/Destiny2/2/Account/11/Stats/`,
+            ],
+            [
+                'getProfile',
+                () => destiny2Service.getProfile('11', 2, true),
+                `${host}/Platform/Destiny2/2/Profile/11/?components=Characters`,
+            ],
+            [
+                'getXur',
+                () => destiny2Service.getXur('11', 2, '22'),
+                `${host}/Platform/Destiny2/2/Profile/11/Character/22/Vendors/${strangeGearOffersHash}/?components=402`,
+            ],
+        ])('%s should request the URL Bungie serves', async (_name, request, url) => {
+            get.mockResolvedValue({ ErrorCode: 2 });
+
+            await request().catch(() => undefined);
+
+            expect(get.mock.calls[0][0].url).toEqual(url);
+        });
     });
 
     describe('findPlayers', () => {

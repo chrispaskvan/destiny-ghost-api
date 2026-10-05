@@ -1,5 +1,4 @@
 import { startServer } from './server.js';
-import { startServer as grpcStart } from './grpc.js';
 
 function exitOnError(err) {
     console.error('Fatal error', err);
@@ -7,8 +6,7 @@ function exitOnError(err) {
 }
 
 async function start() {
-    await startServer();
-    await grpcStart();
+    await startServer({ grpc: true });
 }
 
 process.on('unhandledRejection', reason => {
