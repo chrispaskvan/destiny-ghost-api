@@ -88,8 +88,20 @@ export default app => {
         store,
     });
 
+    /**
+     * Requests that never read a session skip loading one, which is a Redis
+     * round trip: Twilio webhooks; liveness and health, which can then report
+     * diagnostics during a store outage; and the API docs, each of whose
+     * static assets otherwise waited on a session it did not use.
+     *
+     * @param {import('express').Request} req
+     * @param {import('express').Response} res
+     */
+    const isSessionless = (req, res) =>
+        res.locals.isTwilioWebhook || /^\/(?:docs|health|ping)(?:\/|$)/i.test(req.path);
+
     app.use((req, res, next) => {
-        if (res.locals.isTwilioWebhook) {
+        if (isSessionless(req, res)) {
             return next();
         }
 
@@ -99,14 +111,10 @@ export default app => {
     /**
      * If the Redis store is disconnected, express-session calls next() without
      * setting req.session. Fail fast with an explicit error rather than letting
-     * the request proceed sessionless. Twilio skips session loading entirely;
-     * liveness and health endpoints can report diagnostics during a store outage.
+     * the request proceed sessionless.
      */
     app.use((req, res, next) => {
-        const isSessionless =
-            res.locals.isTwilioWebhook || /^\/(?:ping|health)(?:\/|$)/.test(req.path);
-
-        if (!isSessionless && !req.session) {
+        if (!isSessionless(req, res) && !req.session) {
             const error = new Error('Session store unavailable.');
 
             error.statusCode = StatusCodes.SERVICE_UNAVAILABLE;
