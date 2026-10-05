@@ -10,6 +10,7 @@ import express from 'express';
 import { createTerminus } from '@godaddy/terminus';
 
 import applicationInsights from './helpers/application-insights.js';
+import { readStartupEventLoopDelay } from './helpers/event-loop-delay.js';
 import cache from './helpers/cache.js';
 import jobs from './helpers/jobs.js';
 import log from './helpers/log.js';
@@ -100,13 +101,32 @@ const startServer = async ({ grpc = false } = {}) => {
         logger: (msg, err) => log.error({ err }, msg),
     });
 
-    insecureConnection = insecureServer.listen(port, () => {
+    insecureConnection = insecureServer.listen(port, async () => {
         const cpuCount = cpus().length;
         const duration = Math.round(performance.now() - start);
+        /**
+         * `duration` covers only startServer; this also covers loading and
+         * evaluating every module before it, where a cold start spends most
+         * of its time.
+         */
+        const sinceProcessStart = Math.round(performance.now());
+        /**
+         * Reported once, on its own, so /health/metrics only ever reports
+         * time the server was listening. Resolves once the loop has turned,
+         * since listening can come in the same turn as the startup it covers.
+         */
+        const eventLoopDelay = await readStartupEventLoopDelay();
 
         applicationInsights.trackMetric({ name: 'startup-time', value: duration });
+        applicationInsights.trackMetric({
+            name: 'Startup Event Loop Delay max',
+            value: eventLoopDelay.max,
+        });
 
-        log.info({ port, cpuCount, duration }, 'HTTP server is listening');
+        log.info(
+            { port, cpuCount, duration, sinceProcessStart, eventLoopDelay },
+            'HTTP server is listening',
+        );
     });
 
     insecureServer.headersTimeout = serverOptions.headersTimeout;

@@ -1,3 +1,6 @@
+// First, so event-loop delay is measured across the rest of startup
+import './helpers/event-loop-delay.js';
+import gcPauses from './helpers/gc-pauses.js';
 import { startServer } from './server.js';
 
 function exitOnError(err) {
@@ -6,6 +9,7 @@ function exitOnError(err) {
 }
 
 async function start() {
+    gcPauses.enable();
     await startServer({ grpc: true });
 }
 

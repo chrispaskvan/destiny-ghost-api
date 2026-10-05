@@ -7,13 +7,13 @@
  */
 import { readFileSync } from 'node:fs';
 import { totalmem } from 'node:os';
-import { monitorEventLoopDelay } from 'node:perf_hooks';
 import { getHeapStatistics } from 'node:v8';
 import { convert } from 'html-to-text';
 
 import { get } from '../helpers/request.js';
 import { getCircuitBreakerStatus } from '../helpers/bungie.request.js';
 import applicationInsights from '../helpers/application-insights.js';
+import readEventLoopDelay from '../helpers/event-loop-delay.js';
 import log from '../helpers/log.js';
 
 /**
@@ -27,17 +27,6 @@ const notAvailable = 'N/A';
  * @type {number}
  */
 let failures;
-
-/**
- * How long the event loop was late to run a timer. Synchronous work - JSON
- * parsing, a CPU-bound loop - delays every other request without moving
- * CPU percentage much, so this shows it where CPU does not. Its timer is
- * unref'd, so it never holds the process open.
- */
-const resolution = 10;
-const eventLoopDelay = monitorEventLoopDelay({ resolution });
-
-eventLoopDelay.enable();
 
 /** @typedef {import('../destiny/destiny.service.js').default} DestinyService */
 /** @typedef {import('../destiny2/destiny2.service.js').default} Destiny2Service */
@@ -164,30 +153,15 @@ class HealthController {
     }
 
     /**
-     * Percentiles since the last call, in milliseconds, then starts over, so
-     * each call to /health/metrics reports the interval since the one before
-     * rather than everything since the process started.
-     *
-     * The histogram records the whole interval between its timer's runs, so an
-     * idle loop reads as the resolution; that is subtracted to leave the delay.
+     * Event-loop delay since the previous call, so each call to
+     * /health/metrics reports the interval since the one before; the first
+     * reports the time since the server started listening.
      *
      * @static
      * @memberof HealthController
      */
     static getEventLoopDelay() {
-        /** @param {number} nanoseconds */
-        const toMilliseconds = nanoseconds =>
-            Math.max(0, Math.round(nanoseconds / 1e4 - resolution * 100) / 100);
-        const delay = {
-            p50: toMilliseconds(eventLoopDelay.percentile(50)),
-            p95: toMilliseconds(eventLoopDelay.percentile(95)),
-            p99: toMilliseconds(eventLoopDelay.percentile(99)),
-            max: toMilliseconds(eventLoopDelay.max),
-        };
-
-        eventLoopDelay.reset();
-
-        return delay;
+        return readEventLoopDelay();
     }
 
     async getMetrics() {

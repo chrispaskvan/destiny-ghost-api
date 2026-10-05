@@ -15,6 +15,7 @@ const {
     trackMetric,
     logInfo,
     logError,
+    readStartupEventLoopDelay,
 } = vi.hoisted(() => ({
     createServer: vi.fn(),
     createTerminus: vi.fn(),
@@ -29,6 +30,7 @@ const {
     trackMetric: vi.fn(),
     logInfo: vi.fn(),
     logError: vi.fn(),
+    readStartupEventLoopDelay: vi.fn(),
 }));
 
 vi.mock('node:http', () => ({ createServer }));
@@ -44,6 +46,7 @@ vi.mock('./helpers/process-external-promises-with-timeout.js', () => ({
 }));
 vi.mock('./helpers/application-insights.js', () => ({ default: { trackMetric } }));
 vi.mock('./helpers/log.js', () => ({ default: { info: logInfo, error: logError } }));
+vi.mock('./helpers/event-loop-delay.js', () => ({ readStartupEventLoopDelay }));
 
 const world2 = { items: [] };
 
@@ -76,6 +79,41 @@ describe('startServer gRPC', () => {
         startGrpcServer.mockRejectedValue(err);
 
         await expect(startServer({ grpc: true })).rejects.toBe(err);
+    });
+});
+
+describe('startServer once listening', () => {
+    const startupDelay = { p50: 1, p95: 2, p99: 30, max: 63_173 };
+
+    beforeEach(() => {
+        vi.resetAllMocks();
+        createServer.mockReturnValue({
+            listen: vi.fn((_port, callback) => {
+                callback();
+                return {};
+            }),
+            address: vi.fn().mockReturnValue({ port: 1100 }),
+        });
+        loadersInit.mockResolvedValue({ world2 });
+        readStartupEventLoopDelay.mockResolvedValue(startupDelay);
+    });
+
+    it("should report startup's event-loop delay on its own, and the time since the process started", async () => {
+        await startServer();
+
+        expect(readStartupEventLoopDelay).toHaveBeenCalledOnce();
+        await vi.waitFor(() => expect(logInfo).toHaveBeenCalled());
+        expect(trackMetric).toHaveBeenCalledWith({
+            name: 'Startup Event Loop Delay max',
+            value: startupDelay.max,
+        });
+        expect(logInfo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                eventLoopDelay: startupDelay,
+                sinceProcessStart: expect.any(Number),
+            }),
+            'HTTP server is listening',
+        );
     });
 });
 
