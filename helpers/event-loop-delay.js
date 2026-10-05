@@ -21,11 +21,28 @@ const histogram = monitorEventLoopDelay({ resolution });
 histogram.enable();
 
 /**
+ * The histogram discards its first interval, and at startup that interval
+ * is the synchronous evaluation of every module imported after this one -
+ * the stall startup is read for. A timer set now can run only once that
+ * evaluation lets go of the loop, so how late it ran is that stall; the
+ * first read folds it into max.
+ *
+ * @type {number}
+ */
+let evaluationDelay = 0;
+const evaluatedAt = performance.now();
+
+setTimeout(() => {
+    evaluationDelay = performance.now() - evaluatedAt;
+}, 0).unref();
+
+/**
  * Percentiles since the last read, in milliseconds, then starts over.
  *
  * The histogram records the whole interval between its timer's runs, so an
  * idle loop reads as the resolution; that is subtracted to leave the delay.
- * The first interval after a reset is discarded by the histogram itself.
+ * It also discards the first interval after a reset, so a stall that begins
+ * within one resolution of a read goes uncounted, however long it lasts.
  *
  * @returns {{ p50: number, p95: number, p99: number, max: number }}
  */
@@ -37,10 +54,11 @@ const readEventLoopDelay = () => {
         p50: toMilliseconds(histogram.percentile(50)),
         p95: toMilliseconds(histogram.percentile(95)),
         p99: toMilliseconds(histogram.percentile(99)),
-        max: toMilliseconds(histogram.max),
+        max: Math.max(toMilliseconds(histogram.max), Math.round(evaluationDelay * 100) / 100),
     };
 
     histogram.reset();
+    evaluationDelay = 0;
 
     return delay;
 };
