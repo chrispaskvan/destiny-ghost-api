@@ -5,6 +5,7 @@ const {
     createServer,
     createTerminus,
     loadersInit,
+    startGrpcServer,
     stopGrpcServer,
     cacheQuit,
     jobsQuit,
@@ -18,6 +19,7 @@ const {
     createServer: vi.fn(),
     createTerminus: vi.fn(),
     loadersInit: vi.fn(),
+    startGrpcServer: vi.fn(),
     stopGrpcServer: vi.fn(),
     cacheQuit: vi.fn(),
     jobsQuit: vi.fn(),
@@ -32,7 +34,7 @@ const {
 vi.mock('node:http', () => ({ createServer }));
 vi.mock('@godaddy/terminus', () => ({ createTerminus }));
 vi.mock('./loaders/index.js', () => ({ default: { init: loadersInit } }));
-vi.mock('./grpc.js', () => ({ stopServer: stopGrpcServer }));
+vi.mock('./grpc.js', () => ({ startServer: startGrpcServer, stopServer: stopGrpcServer }));
 vi.mock('./helpers/cache.js', () => ({ default: { quit: cacheQuit } }));
 vi.mock('./helpers/jobs.js', () => ({ default: { quit: jobsQuit } }));
 vi.mock('./helpers/pool.js', () => ({ default: { close: poolClose } }));
@@ -42,6 +44,40 @@ vi.mock('./helpers/process-external-promises-with-timeout.js', () => ({
 }));
 vi.mock('./helpers/application-insights.js', () => ({ default: { trackMetric } }));
 vi.mock('./helpers/log.js', () => ({ default: { info: logInfo, error: logError } }));
+
+const world2 = { items: [] };
+
+describe('startServer gRPC', () => {
+    beforeEach(() => {
+        vi.resetAllMocks();
+        createServer.mockReturnValue({
+            listen: vi.fn().mockReturnThis(),
+            address: vi.fn().mockReturnValue({ port: 1100 }),
+        });
+        loadersInit.mockResolvedValue({ world2 });
+        startGrpcServer.mockResolvedValue(undefined);
+    });
+
+    it("should start gRPC on the REST API's World2 when asked", async () => {
+        await startServer({ grpc: true });
+
+        expect(startGrpcServer).toHaveBeenCalledExactlyOnceWith({ world: world2 });
+    });
+
+    it('should not start gRPC otherwise, as for the integration tests', async () => {
+        await startServer();
+
+        expect(startGrpcServer).not.toHaveBeenCalled();
+    });
+
+    it('should reject when gRPC fails to start, for start.js to exit on', async () => {
+        const err = new Error('EADDRINUSE');
+
+        startGrpcServer.mockRejectedValue(err);
+
+        await expect(startServer({ grpc: true })).rejects.toBe(err);
+    });
+});
 
 describe('startServer shutdown wiring', () => {
     let onSignal;
@@ -56,7 +92,7 @@ describe('startServer shutdown wiring', () => {
         };
         createServer.mockReturnValue(httpServer);
         onSignal = undefined;
-        loadersInit.mockResolvedValue(undefined);
+        loadersInit.mockResolvedValue({ world2 });
         for (const close of [cacheQuit, jobsQuit, poolClose, subscriberClose]) {
             close.mockResolvedValue(undefined);
         }
