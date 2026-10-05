@@ -12,7 +12,8 @@ vi.mock('./log.js', () => ({
     default: pino({}, { write: () => {} }),
 }));
 
-import { requestSerializer } from './httpLog.js';
+import context from './async-context.js';
+import { requestSerializer, summarizeDependencies } from './httpLog.js';
 import { censor } from './redact.js';
 
 const chance = new Chance();
@@ -118,5 +119,40 @@ describe('requestSerializer', () => {
 
             expect(serialize(req).raw).toBe(req);
         });
+    });
+});
+
+describe('summarizeDependencies', () => {
+    /** @param {import('./async-context.js').Timing[]} [timings] */
+    const summarizeWith = timings =>
+        context.run(
+            // @ts-expect-error - only the timings are read
+            new Map(timings && [['timings', timings]]),
+            summarizeDependencies,
+        );
+
+    it('should leave the field out when the request made no outbound calls', () => {
+        expect(summarizeWith([])).toBeUndefined();
+        expect(summarizeWith()).toBeUndefined();
+        expect(summarizeDependencies()).toBeUndefined();
+    });
+
+    it('should total the calls to each host', () => {
+        expect(
+            summarizeWith([
+                { host: 'www.bungie.net', duration: 400.4 },
+                { host: 'api.twilio.com', duration: 120.2 },
+                { host: 'www.bungie.net', duration: 300.4, error: 'other side closed' },
+            ]),
+        ).toEqual([
+            { host: 'www.bungie.net', calls: 2, duration: 701, errors: 1 },
+            { host: 'api.twilio.com', calls: 1, duration: 120, errors: 0 },
+        ]);
+    });
+
+    it('should count a failure whose error has no message', () => {
+        expect(summarizeWith([{ host: 'www.bungie.net', duration: 12, error: '' }])).toEqual([
+            { host: 'www.bungie.net', calls: 1, duration: 12, errors: 1 },
+        ]);
     });
 });

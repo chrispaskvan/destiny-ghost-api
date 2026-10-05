@@ -65,6 +65,32 @@ const requestSerializer = serialized => {
     return serialized;
 };
 
+/**
+ * The outbound requests made while handling this one, one entry per host, so
+ * the request's own log line shows where its time went. Durations are summed:
+ * calls made concurrently add up to more than the request took. Undefined when
+ * there were none, which leaves the field out of the log.
+ *
+ * Only calls that complete before the response does are counted, since this
+ * runs when the response finishes.
+ */
+const summarizeDependencies = () => {
+    const timings = context.getStore()?.get('timings');
+
+    if (!timings?.length) {
+        return undefined;
+    }
+
+    return Object.entries(Object.groupBy(timings, ({ host }) => host)).map(
+        ([host, calls = []]) => ({
+            host,
+            calls: calls.length,
+            duration: Math.round(calls.reduce((total, { duration }) => total + duration, 0)),
+            errors: calls.filter(({ error }) => error !== undefined).length,
+        }),
+    );
+};
+
 /** @type {import('pino-http').Options<import('express').Request, import('express').Response>} */
 const options = {
     customErrorObject: (_req, _res, _err, loggableObject) => {
@@ -72,6 +98,7 @@ const options = {
 
         return {
             traceId,
+            dependencies: summarizeDependencies(),
             ...loggableObject,
         };
     },
@@ -98,6 +125,7 @@ const options = {
 
         return {
             traceId,
+            dependencies: summarizeDependencies(),
             ...loggableObject,
         };
     },
@@ -129,4 +157,4 @@ const options = {
  * directly is equivalent and far more legible.
  */
 export default PinoHttp(options);
-export { requestSerializer };
+export { requestSerializer, summarizeDependencies };

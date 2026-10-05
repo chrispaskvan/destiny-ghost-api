@@ -7,6 +7,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { totalmem } from 'node:os';
+import { monitorEventLoopDelay } from 'node:perf_hooks';
 import { getHeapStatistics } from 'node:v8';
 import { convert } from 'html-to-text';
 
@@ -26,6 +27,17 @@ const notAvailable = 'N/A';
  * @type {number}
  */
 let failures;
+
+/**
+ * How long the event loop was late to run a timer. Synchronous work - JSON
+ * parsing, a CPU-bound loop - delays every other request without moving
+ * CPU percentage much, so this shows it where CPU does not. Its timer is
+ * unref'd, so it never holds the process open.
+ */
+const resolution = 10;
+const eventLoopDelay = monitorEventLoopDelay({ resolution });
+
+eventLoopDelay.enable();
 
 /** @typedef {import('../destiny/destiny.service.js').default} DestinyService */
 /** @typedef {import('../destiny2/destiny2.service.js').default} Destiny2Service */
@@ -151,22 +163,56 @@ class HealthController {
         };
     }
 
+    /**
+     * Percentiles since the last call, in milliseconds, then starts over, so
+     * each call to /health/metrics reports the interval since the one before
+     * rather than everything since the process started.
+     *
+     * The histogram records the whole interval between its timer's runs, so an
+     * idle loop reads as the resolution; that is subtracted to leave the delay.
+     *
+     * @static
+     * @memberof HealthController
+     */
+    static getEventLoopDelay() {
+        /** @param {number} nanoseconds */
+        const toMilliseconds = nanoseconds =>
+            Math.max(0, Math.round(nanoseconds / 1e4 - resolution * 100) / 100);
+        const delay = {
+            p50: toMilliseconds(eventLoopDelay.percentile(50)),
+            p95: toMilliseconds(eventLoopDelay.percentile(95)),
+            p99: toMilliseconds(eventLoopDelay.percentile(99)),
+            max: toMilliseconds(eventLoopDelay.max),
+        };
+
+        eventLoopDelay.reset();
+
+        return delay;
+    }
+
     async getMetrics() {
-        const memory = /** @type {typeof HealthController} */ (this.constructor).getMemoryUsage();
+        const Controller = /** @type {typeof HealthController} */ (this.constructor);
+        const memory = Controller.getMemoryUsage();
+        const loopDelay = Controller.getEventLoopDelay();
 
         applicationInsights.trackMetric({
             name: 'Percentage of Memory Limit',
             value: memory.percentageOfMemoryLimit,
         });
+        applicationInsights.trackMetric({
+            name: 'Event Loop Delay p99',
+            value: loopDelay.p99,
+        });
 
         log.info(
             {
                 memory,
+                eventLoopDelay: loopDelay,
             },
             'Memory Statistics',
         );
 
-        return { memory };
+        return { memory, eventLoopDelay: loopDelay };
     }
 
     static async twilio() {
