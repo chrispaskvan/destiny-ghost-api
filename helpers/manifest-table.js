@@ -86,7 +86,7 @@ class ManifestTable {
 
         const [row] = await this.#query(`SELECT json FROM ${this.#table} WHERE id = ?`, [hash | 0]);
 
-        return row ? this.#cached(JSON.parse(row.json)) : undefined;
+        return row ? this.#shared(row.json) : undefined;
     }
 
     /**
@@ -101,16 +101,28 @@ class ManifestTable {
     async select(sql, parameters, setup) {
         const rows = await this.#query(sql, parameters, setup);
 
-        return rows.map(({ json }) => {
-            /** @type {T} */
-            const definition = JSON.parse(json);
-
-            return this.#cache.get(definition.hash) ?? this.#cached(definition);
-        });
+        return rows.map(({ json }) => this.#shared(json));
     }
 
-    /** @param {T} definition */
-    #cached(definition) {
+    /**
+     * The cached definition for a row read from the table, or the row's
+     * definition, cached. Checked after the query, not only before it:
+     * concurrent reads of an uncached hash each query it, and the last to
+     * finish would otherwise replace the object the first had cached and
+     * returned - one a search may since have added aliases to.
+     *
+     * @param {string} json
+     * @returns {T}
+     */
+    #shared(json) {
+        /** @type {T} */
+        const definition = JSON.parse(json);
+        const cached = this.#cache.get(definition.hash);
+
+        if (cached) {
+            return cached;
+        }
+
         this.#cache.set(definition.hash, definition);
 
         return definition;

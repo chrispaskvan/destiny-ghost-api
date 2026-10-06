@@ -60,6 +60,16 @@ const itemNames = `CREATE TEMP TABLE item_names AS
     FROM DestinyInventoryItemDefinition ORDER BY rowid`;
 
 /**
+ * True for a row whose `id` isn't the one ManifestTable#get looks it up by:
+ * its `hash`, an unsigned 32-bit integer, as a signed one (`hash | 0`). An
+ * `id` that only matches once both are masked to 32 bits, such as the
+ * unsigned hash itself, would never be found. A missing or out-of-range
+ * hash counts too.
+ */
+const mismatchedId = `(typeof(hash) != 'integer' OR hash < 0 OR hash > 4294967295
+    OR id IS NOT (CASE WHEN hash > 2147483647 THEN hash - 4294967296 ELSE hash END))`;
+
+/**
  * World2 Repository
  */
 class World2 extends World {
@@ -114,12 +124,11 @@ class World2 extends World {
                      * Items and vendors stay in SQLite, read by `id` (see
                      * ManifestTable), so every row's `id` must be its hash.
                      */
-                    `SELECT count(*) AS count,
-                        sum((hash & 4294967295) != (id & 4294967295)) AS mismatched
+                    `SELECT count(*) AS count, sum(${mismatchedId}) AS mismatched
                         FROM temp.item_names`,
-                    `SELECT count(*) AS count,
-                        sum((json_extract(json, '$.hash') & 4294967295) != (id & 4294967295)) AS mismatched
-                        FROM DestinyVendorDefinition`,
+                    `SELECT count(*) AS count, sum(${mismatchedId}) AS mismatched
+                        FROM (SELECT id, json_extract(json, '$.hash') AS hash
+                            FROM DestinyVendorDefinition)`,
                 ],
             });
 

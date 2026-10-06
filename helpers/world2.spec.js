@@ -318,6 +318,39 @@ describe('when items and vendors are read from the manifest', () => {
         );
     });
 
+    /**
+     * Masked to 32 bits the unsigned hash matches its signed id, yet a
+     * lookup by `hash | 0` would never find it.
+     */
+    it('should refuse a manifest whose ids are its hashes unsigned', async () => {
+        const unsigned = 'unsigned.content';
+        const world = new World({ pool });
+
+        createManifest(unsigned, ({ hash }) => hash);
+        world.directory = temporaryDirectory;
+
+        await expect(world.load(unsigned)).rejects.toThrow(
+            '1 DestinyInventoryItemDefinition rows have an id other than their hash',
+        );
+    });
+
+    it('should return one object to concurrent reads of an uncached item', async () => {
+        const world = new World({ pool });
+
+        world.directory = temporaryDirectory;
+        await world.load(fileName);
+
+        const [first, second] = await Promise.all([world.getItemByHash(4), world.getItemByHash(4)]);
+        const [[found], third] = await Promise.all([
+            world.getItemByName('nightshade'),
+            world.getItemByHash(4),
+        ]);
+
+        expect(second).toBe(first);
+        expect(found).toBe(first);
+        expect(third).toBe(first);
+    });
+
     it("should return a vendor's icon", async () => {
         expect(await manifest.getVendorIcon(5)).toEqual('https://www.bungie.net/xur.png');
     });
