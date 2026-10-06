@@ -190,8 +190,8 @@ describe('/destiny2', () => {
                             return items;
                         }
 
-                        // World2 now holds items in a DefinitionTable, which has no map
-                        return items.slice().map((item, index) => ({
+                        // World2 reads items from the manifest as needed: slice() is async
+                        return (await items.slice()).map((item, index) => ({
                             ...item,
                             // Inflate the streamed payload so gzip backpressure cycles happen within the test window.
                             flavorText: [

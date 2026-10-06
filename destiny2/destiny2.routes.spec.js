@@ -168,6 +168,69 @@ describe('Destiny2Router', () => {
                 destiny2Router(req, res, next);
             }));
 
+        /**
+         * World2's items are a ManifestTable: its slice() resolves a page read
+         * from the manifest, and its entries() yields the table a batch at a
+         * time.
+         */
+        describe('when the items are read from the manifest', () => {
+            const definitions = [1, 2, 3].map(hash => ({ hash }));
+            const manifestTable = {
+                length: definitions.length,
+                slice: vi.fn(async (start, end) => definitions.slice(start, end)),
+                async *entries() {
+                    for (const entry of definitions.entries()) {
+                        await Promise.resolve();
+                        yield entry;
+                    }
+                },
+            };
+            const respond = query =>
+                new Promise(resolve => {
+                    res.on('end', resolve);
+                    destiny2Router(
+                        createRequest({
+                            method: 'GET',
+                            url: '/inventory',
+                            query,
+                            headers: configuration.notificationHeaders,
+                        }),
+                        res,
+                        next,
+                    );
+                });
+
+            beforeEach(() => {
+                world.items = manifestTable;
+            });
+
+            it('should answer a page with the items it reads', async () => {
+                await respond({ page: '2', size: '2' });
+
+                expect(res.statusCode).toEqual(StatusCodes.OK);
+                expect(manifestTable.slice).toHaveBeenCalledWith(2, 4);
+                expect(JSON.parse(res._getData())).toMatchObject({
+                    data: [{ hash: 3 }],
+                    page: { size: 2, total: 3, pages: 2, number: 2 },
+                });
+            });
+
+            it('should stream every item', async () => {
+                const write = res.write.bind(res);
+
+                // The mock response reports backpressure on every write otherwise
+                res.write = vi.fn(chunk => {
+                    write(chunk);
+
+                    return true;
+                });
+                await respond({});
+
+                expect(res.statusCode).toEqual(StatusCodes.OK);
+                expect(JSON.parse(res._getData())).toEqual(definitions);
+            });
+        });
+
         it('should paginate using the first value when page/size are repeated query parameters', () =>
             new Promise((done, reject) => {
                 world.items = [

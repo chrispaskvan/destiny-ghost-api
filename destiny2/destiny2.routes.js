@@ -243,7 +243,8 @@ const routes = ({ authenticationController, destiny2Controller }) => {
                 'Transfer-Encoding': 'chunked',
             });
 
-            for (const [index, item] of items.entries()) {
+            // An array, or a ManifestTable reading the manifest a batch at a time
+            for await (const [index, item] of items.entries()) {
                 if (aborted) {
                     log.info(
                         `${req.method} ${req.url} request aborted at item ${index} of ${items.length}`,
@@ -281,7 +282,7 @@ const routes = ({ authenticationController, destiny2Controller }) => {
             if (Number.isNaN(size)) size = 11;
 
             const start = (page - 1) * size;
-            const data = items.slice(start, start + size);
+            const data = await items.slice(start, start + size);
             const pages = Math.ceil(items.length / size);
 
             res.status(StatusCodes.OK).json({
