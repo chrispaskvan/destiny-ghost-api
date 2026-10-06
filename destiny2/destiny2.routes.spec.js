@@ -202,6 +202,7 @@ describe('Destiny2Router', () => {
 
             beforeEach(() => {
                 world.items = manifestTable;
+                manifestTable.slice.mockClear();
             });
 
             it('should answer a page with the items it reads', async () => {
@@ -213,6 +214,28 @@ describe('Destiny2Router', () => {
                     data: [{ hash: 3 }],
                     page: { size: 2, total: 3, pages: 2, number: 2 },
                 });
+            });
+
+            /**
+             * A page reaches SQLite as LIMIT and OFFSET: a negative offset
+             * reads as 0, answering page 0 with page 1, and one past a safe
+             * integer fails as a datatype mismatch.
+             */
+            it.each([
+                ['page 0', { page: '0', size: '2' }],
+                ['a negative page', { page: '-1' }],
+                ['size 0', { size: '0' }],
+                ['a negative size', { page: '1', size: '-5' }],
+                ['a page past a safe integer', { page: '99999999999999999999' }],
+                ['an offset past a safe integer', { page: '9007199254740991', size: '2' }],
+            ])('should reject %s as a bad request', async (_case, query) => {
+                await respond(query);
+
+                expect(res.statusCode).toEqual(StatusCodes.BAD_REQUEST);
+                expect(JSON.parse(res._getData())).toEqual({
+                    errors: [{ message: 'page and size must be positive integers.' }],
+                });
+                expect(manifestTable.slice).not.toHaveBeenCalled();
             });
 
             it('should stream every item', async () => {

@@ -120,11 +120,21 @@ class ManifestTable {
      * Definitions `start` to `end` in table order, freshly parsed: listing
      * the table must not flush the cache of definitions read by hash.
      *
+     * Unlike Array#slice, a negative `start` is refused rather than counted
+     * from the end: SQLite reads a negative OFFSET as 0, and a limit past
+     * 2^53 is no longer an integer it accepts.
+     *
      * @param {number} [start]
      * @param {number} [end]
      * @returns {Promise<T[]>}
      */
     async slice(start = 0, end = this.#length) {
+        if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0) {
+            throw new RangeError(
+                `slice(${start}, ${end}) needs a start of 0 or more and safe integers`,
+            );
+        }
+
         const limit = Math.max(0, end - start);
 
         if (!limit) {

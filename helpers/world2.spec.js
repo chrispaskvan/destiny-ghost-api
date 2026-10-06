@@ -276,6 +276,11 @@ describe('when items and vendors are read from the manifest', () => {
         expect(await manifest.items.slice(1, 3)).toEqual(items.slice(1, 3));
         expect(await manifest.items.slice(4, 99)).toEqual(items.slice(4));
         expect(await manifest.items.slice(3, 3)).toEqual([]);
+        // Not handed to SQLite, where a negative OFFSET reads as 0
+        await expect(manifest.items.slice(-2, 2)).rejects.toThrow(RangeError);
+        await expect(manifest.items.slice(0, Number.MAX_SAFE_INTEGER + 2)).rejects.toThrow(
+            RangeError,
+        );
         expect(listed).toEqual(items.map(({ hash }, index) => [index, hash]));
     });
 
