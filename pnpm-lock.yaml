@@ -35,9 +35,6 @@ importers:
       awesome-phonenumber:
         specifier: ^7.8.0
         version: 7.8.0
-      bottleneck:
-        specifier: ^2.19.5
-        version: 2.19.5
       bullmq:
         specifier: ^6.3.11
         version: 6.3.11(ioredis@6.0.0)(redis@6.3.0(@opentelemetry/api@1.9.1))
@@ -1379,9 +1376,6 @@ packages:
   body-parser@2.3.0:
     resolution: {integrity: sha512-2cGmJupaNgg+QUwVLAucDuWuoMZ6EX9iHDRswZ5lsNYEmwPaRknMPCLZz07yTzVq/83p4o/wzbDZbBrTvGGTIw==}
     engines: {node: '>=18'}
-
-  bottleneck@2.19.5:
-    resolution: {integrity: sha512-VHiNCbI1lKdl44tGrhNfU3lup0Tj/ZBMJB5/2ZbNXRCPuRCO7ed2mgcK4r17y+KB2EfuYuRaVlwNbAeaWGSpbw==}
 
   brace-expansion@2.1.2:
     resolution: {integrity: sha512-w5JZcKgdhDOgOwm8H+KgbosopHMuGcl6qbulwjtz3SM7I7P3yW1eAjzMPLrIE+NQ9vjgANKHWeMHnrT0OXW1oA==}
@@ -4620,8 +4614,6 @@ snapshots:
       type-is: 2.1.0
     transitivePeerDependencies:
       - supports-color
-
-  bottleneck@2.19.5: {}
 
   brace-expansion@2.1.2:
     dependencies:
