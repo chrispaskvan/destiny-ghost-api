@@ -5,6 +5,7 @@
 import { readdirSync, statSync, existsSync, createWriteStream, unlinkSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
+import { setTimeout } from 'node:timers/promises';
 // @types/node does not yet declare Node's zlib zip API (this Node version supports it).
 // @ts-expect-error
 import { ZipFile } from 'node:zlib';
@@ -46,10 +47,23 @@ import sanitizeDirectory from './sanitize-directory.js';
  */
 class World {
     /**
+     * Resolves once a world has loaded and stays resolved through later
+     * reloads, which build their tables before replacing the loaded ones, so
+     * queries keep reading the current world while a new one loads.
+     * @type {PromiseWithResolvers<void>}
+     */
+    #loaded = Promise.withResolvers();
+    #isLoaded = false;
+
+    /**
      * @param {{ directory?: string, pool?: ManifestPool }} [options]
      */
     constructor({ directory, pool } = {}) {
-        /** @type {Promise<void> | null} */
+        /**
+         * The most recent load, which resolves without loading anything when
+         * no manifest is on disk yet.
+         * @type {Promise<void> | null}
+         */
         this.bootstrapped = null;
         this.pool = pool;
 
@@ -65,8 +79,45 @@ class World {
                 .map(file => file.name);
 
             this.directory = directory;
-            this.bootstrapped = this.bootstrap(databaseFileName); // Store the bootstrap promise
+            this.bootstrapped = databaseFileName ? this.load(databaseFileName) : Promise.resolve();
         }
+    }
+
+    /**
+     * Load a manifest database, and mark the world ready once it has.
+     *
+     * @protected
+     * @param {string} fileName
+     * @returns {Promise<void>}
+     */
+    load(fileName) {
+        this.bootstrapped = this.bootstrap(fileName).then(() => {
+            this.#isLoaded = true;
+            this.#loaded.resolve();
+        });
+
+        return this.bootstrapped;
+    }
+
+    /**
+     * Wait for a world to have loaded. A fresh instance downloads its first
+     * manifest at startup, which takes minutes, so this rejects after
+     * `timeout` instead of holding a request (or a Twilio webhook) open.
+     *
+     * @param {number} [timeout] milliseconds
+     * @returns {Promise<void>}
+     */
+    async ready(timeout = 5000) {
+        if (this.#isLoaded) {
+            return;
+        }
+
+        await Promise.race([
+            this.#loaded.promise,
+            setTimeout(timeout, undefined, { ref: false }).then(() => {
+                throw new Error('The Destiny manifest is still loading');
+            }),
+        ]);
     }
 
     /**
@@ -127,7 +178,7 @@ class World {
             return [];
         }
 
-        await this.bootstrapped;
+        await this.ready();
 
         const cards = [...this.grimoireCards];
 
@@ -147,7 +198,7 @@ class World {
      * @returns {Promise<string | undefined>}
      */
     async getVendorIcon(vendorHash) {
-        await this.bootstrapped;
+        await this.ready();
 
         const vendor = this.vendorHashMap.get(vendorHash);
         const icon = vendor?.summary?.vendorIcon;
@@ -254,8 +305,7 @@ class World {
             log.info(`Content downloaded from ${relativeUrl}`);
 
             await unzipFile(`${databasePath}.zip`, databaseDirectory);
-            this.bootstrapped = this.bootstrap(fileName);
-            await this.bootstrapped;
+            await this.load(fileName);
 
             return manifest;
         } catch (err) {

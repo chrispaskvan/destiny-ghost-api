@@ -160,7 +160,7 @@ class World2 extends World {
      * @returns {Promise<number>}
      */
     async getWeaponCategory() {
-        await this.bootstrapped;
+        await this.ready();
 
         if (this.#weaponCategory === undefined) {
             const weaponCategory = this.categories.find(
@@ -183,7 +183,7 @@ class World2 extends World {
      * @returns {Promise<ClassDefinition | undefined>}
      */
     async getClassByHash(classHash) {
-        await this.bootstrapped;
+        await this.ready();
 
         return this.classHashMap.get(classHash);
     }
@@ -194,7 +194,7 @@ class World2 extends World {
      * @returns {Promise<DamageTypeDefinition | undefined>}
      */
     async getDamageTypeByHash(damageTypeHash) {
-        await this.bootstrapped;
+        await this.ready();
 
         return this.damageTypeHashMap.get(damageTypeHash);
     }
@@ -205,7 +205,7 @@ class World2 extends World {
      * @returns {Promise<ItemDefinition | undefined>}
      */
     async getItemByHash(itemHash) {
-        await this.bootstrapped;
+        await this.ready();
 
         return this.itemHashMap.get(itemHash);
     }
@@ -216,7 +216,7 @@ class World2 extends World {
      * @returns {Promise<ItemDefinition[]>}
      */
     async getItemByName(itemName) {
-        await this.bootstrapped;
+        await this.ready();
 
         const lowerCaseItemName = itemName.trim().toLowerCase();
 
@@ -243,7 +243,7 @@ class World2 extends World {
      * @returns {Promise<CategoryDefinition | undefined>}
      */
     async getItemCategory(itemCategoryHash) {
-        await this.bootstrapped;
+        await this.ready();
 
         return this.categoryHashMap.get(itemCategoryHash);
     }
@@ -254,7 +254,7 @@ class World2 extends World {
      * @returns {Promise<LoreDefinition | undefined>}
      */
     async getLore(hash) {
-        await this.bootstrapped;
+        await this.ready();
 
         return this.loreDefinitionHashMap.get(hash);
     }
@@ -265,7 +265,7 @@ class World2 extends World {
      * @returns {Promise<string | undefined>}
      */
     async getVendorIcon(vendorHash) {
-        await this.bootstrapped;
+        await this.ready();
 
         const vendor = this.vendors.get(vendorHash);
         const icon = vendor?.displayProperties?.icon;
