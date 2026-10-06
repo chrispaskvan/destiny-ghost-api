@@ -6,7 +6,7 @@
  * @summary Destiny World database.
  */
 import { join, basename } from 'node:path';
-import DefinitionTable from './definition-table.js';
+import ManifestTable from './manifest-table.js';
 import World from './world.js';
 import log from './log.js';
 
@@ -47,6 +47,19 @@ import log from './log.js';
  */
 
 /**
+ * Each item's lowercased name, in table order, for getItemByName. A temp
+ * table lives on the worker's connection to one manifest, so each worker
+ * builds it once per manifest: ~350 ms over 30,000 items, after which a
+ * search takes ~1.3 ms - against ~290 ms for json_extract over every row's
+ * JSON on each search. It also carries each hash, for bootstrap to check
+ * against `id`.
+ */
+const itemNames = `CREATE TEMP TABLE item_names AS
+    SELECT id, json_extract(json, '$.hash') AS hash,
+        lower_unicode(json_extract(json, '$.displayProperties.name')) AS name
+    FROM DestinyInventoryItemDefinition ORDER BY rowid`;
+
+/**
  * World2 Repository
  */
 class World2 extends World {
@@ -84,25 +97,43 @@ class World2 extends World {
                 categoryDefinitions,
                 classDefinitions,
                 damageTypeDefinitions,
-                itemDefinitions,
                 loreDefinitions,
-                vendorDefinitions,
+                [itemCheck],
+                [vendorCheck],
             ] = await pool.run({
                 databasePath,
+                // Built here too, so the worker that loads the manifest is
+                // ready for the first search
+                setup: [itemNames],
                 queries: [
                     'SELECT json FROM DestinyItemCategoryDefinition',
                     'SELECT json FROM DestinyClassDefinition',
                     'SELECT json FROM DestinyDamageTypeDefinition',
-                    // Items and vendors are parsed on demand (see DefinitionTable);
-                    // SQLite extracts what is needed to index and search them
-                    `SELECT json_extract(json, '$.hash') AS hash,
-                        json_extract(json, '$.displayProperties.name') AS name, json
-                        FROM DestinyInventoryItemDefinition`,
                     'SELECT json FROM DestinyLoreDefinition',
-                    `SELECT json_extract(json, '$.hash') AS hash, json
+                    /**
+                     * Items and vendors stay in SQLite, read by `id` (see
+                     * ManifestTable), so every row's `id` must be its hash.
+                     */
+                    `SELECT count(*) AS count,
+                        sum((hash & 4294967295) != (id & 4294967295)) AS mismatched
+                        FROM temp.item_names`,
+                    `SELECT count(*) AS count,
+                        sum((json_extract(json, '$.hash') & 4294967295) != (id & 4294967295)) AS mismatched
                         FROM DestinyVendorDefinition`,
                 ],
             });
+
+            /** @type {Array<[string, import('./world.js').ManifestRow]>} */
+            const checks = [
+                ['DestinyInventoryItemDefinition', itemCheck],
+                ['DestinyVendorDefinition', vendorCheck],
+            ];
+
+            for (const [table, { mismatched }] of checks) {
+                if (mismatched) {
+                    throw new Error(`${mismatched} ${table} rows have an id other than their hash`);
+                }
+            }
 
             /** @type {ClassDefinition[]} */
             const classes = classDefinitions.map(({ json: classDefinition }) =>
@@ -129,26 +160,23 @@ class World2 extends World {
             this.damageTypeHashMap = new Map(
                 damageTypes.map(damageType => [damageType.hash, damageType]),
             );
-            /** @type {DefinitionTable<ItemDefinition>} */
-            this.itemHashMap = new DefinitionTable(
-                /** @type {Array<{ hash: number, json: string }>} */ (itemDefinitions),
-            );
-            this.items = this.itemHashMap;
-            /**
-             * Lowercase names in table order, for getItemByName to search
-             * without parsing every item.
-             * @type {Array<{ hash: number, name: string }>}
-             */
-            this.itemNames = itemDefinitions.map(({ hash, name }) => ({
-                hash: /** @type {number} */ (hash),
-                name: /** @type {string | null} */ (name)?.toLowerCase() ?? '',
-            }));
+            /** @type {ManifestTable<ItemDefinition>} */
+            this.items = new ManifestTable({
+                pool,
+                databasePath,
+                table: 'DestinyInventoryItemDefinition',
+                length: /** @type {number} */ (itemCheck.count),
+            });
             /** @type {Map<number, LoreDefinition>} */
             this.loreDefinitionHashMap = new Map(lores.map(lore => [lore.hash, lore]));
-            /** @type {DefinitionTable<VendorDefinition>} */
-            this.vendors = new DefinitionTable(
-                /** @type {Array<{ hash: number, json: string }>} */ (vendorDefinitions),
-            );
+            /** @type {ManifestTable<VendorDefinition>} */
+            this.vendors = new ManifestTable({
+                pool,
+                databasePath,
+                table: 'DestinyVendorDefinition',
+                length: /** @type {number} */ (vendorCheck.count),
+                cacheSize: 50,
+            });
         } catch (err) {
             log.error({ err }, 'Error loading the second world');
 
@@ -207,7 +235,7 @@ class World2 extends World {
     async getItemByHash(itemHash) {
         await this.ready();
 
-        return this.itemHashMap.get(itemHash);
+        return this.items.get(itemHash);
     }
 
     /**
@@ -224,9 +252,14 @@ class World2 extends World {
             return [];
         }
 
-        const items = this.itemNames
-            .filter(({ name }) => name.includes(lowerCaseItemName))
-            .map(({ hash }) => /** @type {ItemDefinition} */ (this.itemHashMap.get(hash)));
+        // instr, unlike LIKE, has no wildcards for a name to escape
+        const items = await this.items.select(
+            `SELECT d.json FROM temp.item_names n
+                JOIN DestinyInventoryItemDefinition d ON d.id = n.id
+                WHERE instr(n.name, ?) > 0 ORDER BY n.rowid`,
+            [lowerCaseItemName],
+            [itemNames],
+        );
 
         return items.map(item =>
             Object.assign(item, {
@@ -267,7 +300,7 @@ class World2 extends World {
     async getVendorIcon(vendorHash) {
         await this.ready();
 
-        const vendor = this.vendors.get(vendorHash);
+        const vendor = await this.vendors.get(vendorHash);
         const icon = vendor?.displayProperties?.icon;
 
         return icon ? `https://www.bungie.net${icon}` : undefined;

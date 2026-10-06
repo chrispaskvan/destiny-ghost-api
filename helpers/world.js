@@ -25,7 +25,12 @@ import sanitizeDirectory from './sanitize-directory.js';
  * The subset of tinypool's `Pool` used by this repository. Structural so
  * tests can substitute a stub.
  * @typedef {Object} ManifestPool
- * @property {(data: { databasePath: string, queries: string[] }) => Promise<ManifestRow[][]>} run
+ * @property {(data: {
+ *   databasePath: string,
+ *   queries: string[],
+ *   parameters?: Array<Array<import('node:sqlite').SQLInputValue> | undefined>,
+ *   setup?: string[],
+ * }) => Promise<ManifestRow[][]>} run - see helpers/worker.js
  */
 
 /**
