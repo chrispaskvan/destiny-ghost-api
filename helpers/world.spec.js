@@ -86,6 +86,20 @@ describe('bootstrap', () => {
 
         expect(log.error).toHaveBeenCalledWith({ err }, 'Error loading the first world');
     });
+
+    it('should wait for the first manifest instead of failing before it loads', async () => {
+        const card = { cardId: 1, cardName: 'Ghost' };
+        const run = vi.fn().mockResolvedValue([[{ json: JSON.stringify(card) }], []]);
+        const w = new World({ pool: { run } });
+
+        w.directory = databaseDirectory;
+
+        const cards = w.getGrimoireCards(1);
+
+        await w.load('world.content');
+
+        expect(await cards).toEqual([card]);
+    });
 });
 
 describe('updateManifest path safety', () => {

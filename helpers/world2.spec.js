@@ -189,11 +189,37 @@ describe('when items and vendors are read from the manifest', () => {
 
         manifest = new World({ pool });
         manifest.directory = temporaryDirectory;
-        manifest.bootstrapped = manifest.bootstrap(fileName);
-        await manifest.bootstrapped;
+        await manifest.load(fileName);
     });
 
     afterAll(() => rmSync(temporaryDirectory, { force: true, recursive: true }));
+
+    it('should wait for the first manifest instead of failing before it loads', async () => {
+        const fresh = new World({ pool });
+
+        fresh.directory = temporaryDirectory;
+
+        // As /health and Twilio do while a fresh container downloads its manifest
+        const found = fresh.getItemByName('spades');
+
+        await fresh.load(fileName);
+
+        expect((await found).map(({ hash }) => hash)).toEqual([2]);
+    });
+
+    it('should reject with a clear error when no manifest loads in time', async () => {
+        await expect(new World({ pool }).ready(20)).rejects.toThrow(
+            'The Destiny manifest is still loading',
+        );
+    });
+
+    it('should keep serving the loaded world when a reload fails', async () => {
+        vi.spyOn(pool, 'run').mockRejectedValueOnce(new Error('database disk image is malformed'));
+
+        await expect(manifest.load(fileName)).rejects.toThrow('database disk image is malformed');
+
+        expect(await manifest.getItemByHash(2)).toEqual(items[1]);
+    });
 
     it('should look up an item by its hash, including one past 2^31', async () => {
         expect(await manifest.getItemByHash(4_294_967_295)).toEqual(items[0]);
