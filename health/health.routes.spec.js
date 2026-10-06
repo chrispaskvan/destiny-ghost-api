@@ -39,9 +39,23 @@ describe('HealthRouter', () => {
         });
     });
 
+    /**
+     * Resolves once the response has ended. The router returns before its
+     * async handler does, so assertions made in an 'end' listener while only
+     * awaiting the router ran after the test had already passed.
+     *
+     * @param {import('node-mocks-http').MockRequest<any>} req
+     */
+    const respond = req =>
+        new Promise(resolve => {
+            res.on('end', resolve);
+            healthRouter(req, res, next);
+        });
+
     describe('getHealth', () => {
         describe('when all services are healthy', () => {
             const world = {
+                ready: () => Promise.resolve(),
                 getGrimoireCards: () =>
                     Promise.resolve([
                         {
@@ -50,6 +64,7 @@ describe('HealthRouter', () => {
                     ]),
             };
             const world2 = {
+                ready: () => Promise.resolve(),
                 getItemByName: () =>
                     Promise.resolve([
                         {
@@ -91,30 +106,28 @@ describe('HealthRouter', () => {
                 });
                 documents.getDocuments = vi.fn().mockResolvedValue([2]);
 
-                res.on('end', () => {
-                    expect(res.statusCode).toEqual(StatusCodes.OK);
+                await respond(req);
 
-                    const body = JSON.parse(res._getData());
+                expect(res.statusCode).toEqual(StatusCodes.OK);
 
-                    expect(body).toEqual({
-                        bungie: {
-                            state: 'closed',
-                            stats: { failures: 0, rejects: 0, successes: 0, timeouts: 0 },
-                        },
-                        documents: 2,
-                        twilio: 'All Systems Go',
-                        destiny: {
-                            manifest: '56578.17.04.12.1251-6',
-                            world: 'Red Hand IX',
-                        },
-                        destiny2: {
-                            manifest: '61966.18.01.12.0839-8',
-                            world: 'Eyasluna Legendary Hand Cannon',
-                        },
-                    });
+                const body = JSON.parse(res._getData());
+
+                expect(body).toEqual({
+                    bungie: {
+                        state: 'closed',
+                        stats: { failures: 0, rejects: 0, successes: 0, timeouts: 0 },
+                    },
+                    documents: 2,
+                    twilio: 'All Systems Go',
+                    destiny: {
+                        manifest: '56578.17.04.12.1251-6',
+                        world: 'Red Hand IX',
+                    },
+                    destiny2: {
+                        manifest: '61966.18.01.12.0839-8',
+                        world: 'Eyasluna Legendary Hand Cannon',
+                    },
                 });
-
-                await healthRouter(req, res, next);
             });
         });
 
@@ -123,6 +136,7 @@ describe('HealthRouter', () => {
                 close: () => Promise.resolve(),
                 getItemByName: () => Promise.reject(new Error()),
                 open: () => Promise.resolve(),
+                ready: () => Promise.resolve(),
             };
             const world2 = world;
 
@@ -152,30 +166,28 @@ describe('HealthRouter', () => {
                 destiny2Service.getManifest = vi.fn().mockRejectedValue(new Error());
                 documents.getDocuments = vi.fn().mockRejectedValue(new Error());
 
-                res.on('end', () => {
-                    expect(res.statusCode).toEqual(StatusCodes.SERVICE_UNAVAILABLE);
+                await respond(req);
 
-                    const body = JSON.parse(res._getData());
+                expect(res.statusCode).toEqual(StatusCodes.SERVICE_UNAVAILABLE);
 
-                    expect(body).toEqual({
-                        bungie: {
-                            state: 'closed',
-                            stats: { failures: 0, rejects: 0, successes: 0, timeouts: 0 },
-                        },
-                        documents: -1,
-                        twilio: 'N/A',
-                        destiny: {
-                            manifest: 'N/A',
-                            world: 'N/A',
-                        },
-                        destiny2: {
-                            manifest: 'N/A',
-                            world: 'N/A',
-                        },
-                    });
+                const body = JSON.parse(res._getData());
+
+                expect(body).toEqual({
+                    bungie: {
+                        state: 'closed',
+                        stats: { failures: 0, rejects: 0, successes: 0, timeouts: 0 },
+                    },
+                    documents: -1,
+                    twilio: 'N/A',
+                    destiny: {
+                        manifest: 'N/A',
+                        world: 'N/A',
+                    },
+                    destiny2: {
+                        manifest: 'N/A',
+                        world: 'N/A',
+                    },
                 });
-
-                await healthRouter(req, res, next);
             });
         });
     });

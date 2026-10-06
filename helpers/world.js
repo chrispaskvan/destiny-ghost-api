@@ -6,6 +6,7 @@ import { readdirSync, statSync, existsSync, createWriteStream, unlinkSync } from
 import { basename, join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { setTimeout } from 'node:timers/promises';
+import { StatusCodes } from 'http-status-codes';
 // @types/node does not yet declare Node's zlib zip API (this Node version supports it).
 // @ts-expect-error
 import { ZipFile } from 'node:zlib';
@@ -104,10 +105,16 @@ class World {
      * manifest at startup, which takes minutes, so this rejects after
      * `timeout` instead of holding a request (or a Twilio webhook) open.
      *
+     * The default leaves room inside the 5-second request timeout set in
+     * loaders/express.js. Waiting the full 5 seconds, as it once did, raced
+     * that timeout: the request was cut off first, so the caller got no
+     * response at all and this error was logged after the socket had gone.
+     * The error carries a 503 for the error middleware to send.
+     *
      * @param {number} [timeout] milliseconds
      * @returns {Promise<void>}
      */
-    async ready(timeout = 5000) {
+    async ready(timeout = 2000) {
         if (this.#isLoaded) {
             return;
         }
@@ -115,7 +122,9 @@ class World {
         await Promise.race([
             this.#loaded.promise,
             setTimeout(timeout, undefined, { ref: false }).then(() => {
-                throw new Error('The Destiny manifest is still loading');
+                throw Object.assign(new Error('The Destiny manifest is still loading'), {
+                    statusCode: StatusCodes.SERVICE_UNAVAILABLE,
+                });
             }),
         ]);
     }
