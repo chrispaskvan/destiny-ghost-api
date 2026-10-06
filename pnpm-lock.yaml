@@ -16,7 +16,7 @@ importers:
         version: 4.12.1
       '@google/genai':
         specifier: ^2.27.0
-        version: 2.27.0(@modelcontextprotocol/sdk@1.32.0(zod@4.6.5))
+        version: 2.27.0(@modelcontextprotocol/sdk@1.32.1(zod@4.6.5))
       '@grpc/grpc-js':
         specifier: ^1.14.5
         version: 1.14.5
@@ -24,8 +24,8 @@ importers:
         specifier: ^0.8.1
         version: 0.8.1
       '@modelcontextprotocol/sdk':
-        specifier: ^1.32.0
-        version: 1.32.0(zod@4.6.5)
+        specifier: ^1.32.1
+        version: 1.32.1(zod@4.6.5)
       '@paralleldrive/cuid2':
         specifier: ^3.3.0
         version: 3.3.0
@@ -84,8 +84,8 @@ importers:
         specifier: ^11.5.3
         version: 11.5.3
       nodemailer:
-        specifier: ^10.0.14
-        version: 10.0.14
+        specifier: ^10.0.15
+        version: 10.0.15
       opossum:
         specifier: ^10.0.0
         version: 10.0.0
@@ -429,8 +429,8 @@ packages:
   '@microsoft/applicationinsights-web-snippet@1.2.3':
     resolution: {integrity: sha512-59ex4x1/PabGQIg+o0GKG5olqAJYBvMOiXec/9HCD3hK2y36YMWT0ivq5mequvtS5+21kco3SOnMB6QyScLPIA==}
 
-  '@modelcontextprotocol/sdk@1.32.0':
-    resolution: {integrity: sha512-8BviX/hK4Gd2eL1KdTwm0gfl4d3wdoErW0Jd00h6nomUAtk6IJk5vwQJc6kfWtJTzN5OEV/lgIiJKI8fiDGAlA==}
+  '@modelcontextprotocol/sdk@1.32.1':
+    resolution: {integrity: sha512-2DdE+SJDtzLEEWzY1ZjY7Q+VcPhcV1KisD3zI4u0XZyktsjHum1mwbMI+JaulUBi2OZk+KJAi2uPXzxichPkdw==}
     engines: {node: '>=18'}
     peerDependencies:
       '@cfworker/json-schema': ^4.1.1
@@ -2450,8 +2450,8 @@ packages:
       '@types/node':
         optional: true
 
-  nodemailer@10.0.14:
-    resolution: {integrity: sha512-eJoLFKg55fesSlzUekmfOv/SBXh4KUYT8oiQc2RLP0tfG0rbNMJBK7wgHJwXTJwqyKlSJMz9UzDZ4v+aHEvo8g==}
+  nodemailer@10.0.15:
+    resolution: {integrity: sha512-EUqp5PhtcsYXs9Fq/lS7s/8zlTrnBqmzZWzFFROrNikMiz+om/YRKMwqN907t+0A1KKyT8jd39CBUbFZmaZmcA==}
     engines: {node: '>=20.0.0'}
 
   nopt@7.2.1:
@@ -3585,14 +3585,14 @@ snapshots:
     dependencies:
       stoppable: 1.1.0
 
-  '@google/genai@2.27.0(@modelcontextprotocol/sdk@1.32.0(zod@4.6.5))':
+  '@google/genai@2.27.0(@modelcontextprotocol/sdk@1.32.1(zod@4.6.5))':
     dependencies:
       google-auth-library: 10.9.1
       p-retry: 4.6.2
       protobufjs: 7.6.6
       ws: 8.21.3
     optionalDependencies:
-      '@modelcontextprotocol/sdk': 1.32.0(zod@4.6.5)
+      '@modelcontextprotocol/sdk': 1.32.1(zod@4.6.5)
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -3640,7 +3640,7 @@ snapshots:
 
   '@microsoft/applicationinsights-web-snippet@1.2.3': {}
 
-  '@modelcontextprotocol/sdk@1.32.0(zod@4.6.5)':
+  '@modelcontextprotocol/sdk@1.32.1(zod@4.6.5)':
     dependencies:
       '@hono/node-server': 1.19.14(hono@4.12.29)
       ajv: 8.20.0
@@ -5715,7 +5715,7 @@ snapshots:
       '@types/express': 5.0.6
       '@types/node': 26.4.0
 
-  nodemailer@10.0.14: {}
+  nodemailer@10.0.15: {}
 
   nopt@7.2.1:
     dependencies:
