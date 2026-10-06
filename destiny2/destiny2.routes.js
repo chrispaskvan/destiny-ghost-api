@@ -243,7 +243,8 @@ const routes = ({ authenticationController, destiny2Controller }) => {
                 'Transfer-Encoding': 'chunked',
             });
 
-            for (const [index, item] of items.entries()) {
+            // An array, or a ManifestTable reading the manifest a batch at a time
+            for await (const [index, item] of items.entries()) {
                 if (aborted) {
                     log.info(
                         `${req.method} ${req.url} request aborted at item ${index} of ${items.length}`,
@@ -280,8 +281,25 @@ const routes = ({ authenticationController, destiny2Controller }) => {
             if (Number.isNaN(page)) page = 1;
             if (Number.isNaN(size)) size = 11;
 
+            /**
+             * Checked before the values reach SQL: SQLite reads a negative
+             * OFFSET as 0, so page 0 returned page 1 labelled as page 0, and
+             * a limit past 2^53 failed as a datatype mismatch, a 500.
+             */
+            if (
+                !Number.isSafeInteger(page) ||
+                !Number.isSafeInteger(size) ||
+                page < 1 ||
+                size < 1 ||
+                !Number.isSafeInteger(page * size)
+            ) {
+                return res.status(StatusCodes.BAD_REQUEST).json({
+                    errors: [{ message: 'page and size must be positive integers.' }],
+                });
+            }
+
             const start = (page - 1) * size;
-            const data = items.slice(start, start + size);
+            const data = await items.slice(start, start + size);
             const pages = Math.ceil(items.length / size);
 
             res.status(StatusCodes.OK).json({

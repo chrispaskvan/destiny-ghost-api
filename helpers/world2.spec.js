@@ -55,7 +55,7 @@ describe('bootstrap', () => {
     });
 
     it('should log the path of the manifest it loads', async () => {
-        const run = vi.fn().mockResolvedValue([[], [], [], [], [], []]);
+        const run = vi.fn().mockResolvedValue([[], [], [], [], [{ count: 0 }], [{ count: 0 }]]);
         const world2 = new World({ pool: { run } });
 
         world2.directory = databaseDirectory;
@@ -160,14 +160,20 @@ describe('when items and vendors are read from the manifest', () => {
         { hash: 2, displayProperties: { name: 'Ace of Spades' }, itemTypeAndTierDisplayName: 'b' },
         { hash: 3, displayProperties: {} },
         { hash: 4, displayProperties: { name: 'NIGHTSHADE' } },
+        // Uppercase beyond ASCII, which SQLite's lower() and LIKE leave alone
+        { hash: 6, displayProperties: { name: 'ÆON SAFE' } },
     ];
     const vendors = [{ hash: 5, displayProperties: { icon: '/xur.png' } }];
     const temporaryDirectory = mkdtempSync(join(tmpdir(), 'world2-'));
     const fileName = 'world_sql_content.content';
     let manifest;
 
-    beforeAll(async () => {
-        const database = new DatabaseSync(join(temporaryDirectory, fileName));
+    /**
+     * A manifest as Bungie builds it: each row's `id` is its hash as a signed
+     * 32-bit integer, unless `idOf` says otherwise.
+     */
+    const createManifest = (name, idOf = ({ hash }) => hash | 0) => {
+        const database = new DatabaseSync(join(temporaryDirectory, name));
         const tables = {
             DestinyItemCategoryDefinition: [],
             DestinyClassDefinition: [],
@@ -182,10 +188,14 @@ describe('when items and vendors are read from the manifest', () => {
             for (const row of rows) {
                 database
                     .prepare(`INSERT INTO ${table} (id, json) VALUES (?, ?)`)
-                    .run(row.hash | 0, JSON.stringify(row));
+                    .run(idOf(row), JSON.stringify(row));
             }
         }
         database.close();
+    };
+
+    beforeAll(async () => {
+        createManifest(fileName);
 
         manifest = new World({ pool });
         manifest.directory = temporaryDirectory;
@@ -237,7 +247,7 @@ describe('when items and vendors are read from the manifest', () => {
     it('should look up an item by its hash, including one past 2^31', async () => {
         expect(await manifest.getItemByHash(4_294_967_295)).toEqual(items[0]);
         expect(await manifest.getItemByHash(2)).toEqual(items[1]);
-        expect(await manifest.getItemByHash(6)).toBeUndefined();
+        expect(await manifest.getItemByHash(7)).toBeUndefined();
     });
 
     it('should search names case-insensitively, in table order, with their aliases', async () => {
@@ -254,13 +264,91 @@ describe('when items and vendors are read from the manifest', () => {
         ]);
     });
 
-    it('should list every item in table order, as the inventory routes and gRPC read them', () => {
+    it('should list every item in table order, as the inventory routes and gRPC read them', async () => {
+        const listed = [];
+
+        // Two at a time, so the listing has to pick up where each batch ended
+        for await (const [index, { hash }] of manifest.items.entries(2)) {
+            listed.push([index, hash]);
+        }
+
         expect(manifest.items.length).toEqual(items.length);
-        // Hashes only: getItemByName, above, adds its aliases to the items it returns
-        expect(manifest.items.slice(1, 3).map(({ hash }) => hash)).toEqual([2, 3]);
-        expect([...manifest.items.entries()].map(([, { hash }]) => hash)).toEqual(
-            items.map(({ hash }) => hash),
+        expect(await manifest.items.slice(1, 3)).toEqual(items.slice(1, 3));
+        expect(await manifest.items.slice(4, 99)).toEqual(items.slice(4));
+        expect(await manifest.items.slice(3, 3)).toEqual([]);
+        // Not handed to SQLite, where a negative OFFSET reads as 0
+        await expect(manifest.items.slice(-2, 2)).rejects.toThrow(RangeError);
+        await expect(manifest.items.slice(0, Number.MAX_SAFE_INTEGER + 2)).rejects.toThrow(
+            RangeError,
         );
+        expect(listed).toEqual(items.map(({ hash }, index) => [index, hash]));
+    });
+
+    it('should search names beyond ASCII as toLowerCase() folds them', async () => {
+        expect((await manifest.getItemByName('æon')).map(({ hash }) => hash)).toEqual([6]);
+    });
+
+    it('should search names literally, with no wildcards', async () => {
+        expect(await manifest.getItemByName('%')).toEqual([]);
+        expect(await manifest.getItemByName('_')).toEqual([]);
+    });
+
+    it('should return the same object for an item read again', async () => {
+        expect(await manifest.getItemByHash(3)).toBe(await manifest.getItemByHash(3));
+    });
+
+    it("should keep the item table out of this process's heap", () => {
+        expect(manifest).not.toHaveProperty('itemNames');
+        expect(manifest).not.toHaveProperty('itemHashMap');
+    });
+
+    /**
+     * Items are read by `id`; were it not the hash, every lookup would miss,
+     * silently. A load that finds that fails, keeping the world it had.
+     */
+    it("should refuse a manifest whose ids aren't its hashes", async () => {
+        const mismatched = 'mismatched.content';
+        const world = new World({ pool });
+
+        createManifest(mismatched, ({ hash }) => hash + 1_000);
+        world.directory = temporaryDirectory;
+
+        await expect(world.load(mismatched)).rejects.toThrow(
+            `${items.length} DestinyInventoryItemDefinition rows have an id other than their hash`,
+        );
+    });
+
+    /**
+     * Masked to 32 bits the unsigned hash matches its signed id, yet a
+     * lookup by `hash | 0` would never find it.
+     */
+    it('should refuse a manifest whose ids are its hashes unsigned', async () => {
+        const unsigned = 'unsigned.content';
+        const world = new World({ pool });
+
+        createManifest(unsigned, ({ hash }) => hash);
+        world.directory = temporaryDirectory;
+
+        await expect(world.load(unsigned)).rejects.toThrow(
+            '1 DestinyInventoryItemDefinition rows have an id other than their hash',
+        );
+    });
+
+    it('should return one object to concurrent reads of an uncached item', async () => {
+        const world = new World({ pool });
+
+        world.directory = temporaryDirectory;
+        await world.load(fileName);
+
+        const [first, second] = await Promise.all([world.getItemByHash(4), world.getItemByHash(4)]);
+        const [[found], third] = await Promise.all([
+            world.getItemByName('nightshade'),
+            world.getItemByHash(4),
+        ]);
+
+        expect(second).toBe(first);
+        expect(found).toBe(first);
+        expect(third).toBe(first);
     });
 
     it("should return a vendor's icon", async () => {

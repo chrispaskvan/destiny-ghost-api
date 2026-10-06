@@ -7,7 +7,7 @@ import log from './helpers/log.js';
 let server;
 let generation = 0;
 
-const createGetAllHandler = world => (call, callback) => {
+const createGetAllHandler = world => async (call, callback) => {
     for (const [key, value1] of Object.entries(configuration.notificationHeaders)) {
         const [value2] = call.metadata.get(key);
 
@@ -47,7 +47,19 @@ const createGetAllHandler = world => (call, callback) => {
         });
     }
 
-    const data = items.slice((page - 1) * size, page * size);
+    let data;
+
+    try {
+        // An array, or a ManifestTable reading the page from the manifest
+        data = await items.slice((page - 1) * size, page * size);
+    } catch (err) {
+        log.error({ err }, 'Failed to read the inventory');
+
+        return callback({
+            code: grpc.status.UNAVAILABLE,
+            message: 'No items are currently available.',
+        });
+    }
 
     callback(null, {
         data,

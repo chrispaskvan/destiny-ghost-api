@@ -289,10 +289,10 @@ describe('createGetAllHandler', () => {
     });
 
     describe('pagination', () => {
-        it('defaults to page 1, size 11 when request fields are null', () => {
+        it('defaults to page 1, size 11 when request fields are null', async () => {
             const handler = createGetAllHandler(world);
 
-            handler(createCall(), callback);
+            await handler(createCall(), callback);
 
             const [, response] = callback.mock.calls[0];
 
@@ -301,10 +301,10 @@ describe('createGetAllHandler', () => {
             expect(response.data).toHaveLength(11);
         });
 
-        it('returns the correct slice for a given page', () => {
+        it('returns the correct slice for a given page', async () => {
             const handler = createGetAllHandler(world);
 
-            handler(createCall({ page: 2, size: 10 }), callback);
+            await handler(createCall({ page: 2, size: 10 }), callback);
 
             const [, response] = callback.mock.calls[0];
 
@@ -312,30 +312,30 @@ describe('createGetAllHandler', () => {
             expect(response.data).toHaveLength(10);
         });
 
-        it('sets links.next_page to the next page number when more pages exist', () => {
+        it('sets links.next_page to the next page number when more pages exist', async () => {
             const handler = createGetAllHandler(world);
 
-            handler(createCall({ page: 1, size: 10 }), callback);
+            await handler(createCall({ page: 1, size: 10 }), callback);
 
             const [, response] = callback.mock.calls[0];
 
             expect(response.links.next_page).toBe('2');
         });
 
-        it('sets links.next_page to empty string on the last page', () => {
+        it('sets links.next_page to empty string on the last page', async () => {
             const handler = createGetAllHandler(world);
 
-            handler(createCall({ page: 4, size: 10 }), callback);
+            await handler(createCall({ page: 4, size: 10 }), callback);
 
             const [, response] = callback.mock.calls[0];
 
             expect(response.links.next_page).toBe('');
         });
 
-        it('returns correct page metadata', () => {
+        it('returns correct page metadata', async () => {
             const handler = createGetAllHandler(world);
 
-            handler(createCall({ page: 2, size: 10 }), callback);
+            await handler(createCall({ page: 2, size: 10 }), callback);
 
             const [, response] = callback.mock.calls[0];
 
@@ -345,6 +345,37 @@ describe('createGetAllHandler', () => {
                 pages: 4,
                 number: 2,
             });
+        });
+    });
+
+    /**
+     * World2's items are a ManifestTable, which reads each page from the
+     * manifest's SQLite database.
+     */
+    describe('when the items are read from the manifest', () => {
+        it('should answer with the page it reads', async () => {
+            const slice = vi.fn(async (start, end) => world.items.slice(start, end));
+            const handler = createGetAllHandler({ items: { length: 33, slice } });
+
+            await handler(createCall({ page: 3, size: 10 }), callback);
+
+            expect(slice).toHaveBeenCalledWith(20, 30);
+            expect(callback.mock.calls[0][1].data.map(({ hash }) => hash)).toEqual([
+                20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+            ]);
+        });
+
+        it('should answer UNAVAILABLE when the page cannot be read', async () => {
+            const slice = vi.fn().mockRejectedValue(new Error('database disk image is malformed'));
+            const handler = createGetAllHandler({ items: { length: 33, slice } });
+
+            await handler(createCall(), callback);
+
+            expect(callback).toHaveBeenCalledExactlyOnceWith({
+                code: grpc.status.UNAVAILABLE,
+                message: 'No items are currently available.',
+            });
+            expect(log.error).toHaveBeenCalled();
         });
     });
 });
