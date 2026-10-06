@@ -10,7 +10,10 @@ const {
     invalidConsume,
     invalidGet,
     MockRateLimiterRes,
+    limiterOptions,
 } = vi.hoisted(() => ({
+    // Recorded at import time; `clearMocks` would wipe the calls of a vi.fn() constructor.
+    limiterOptions: [],
     consume: vi.fn(),
     ingressConsume: vi.fn(),
     senderConsume: vi.fn(),
@@ -28,7 +31,9 @@ const {
 
 vi.mock('rate-limiter-flexible', () => ({
     RateLimiterRedis: class {
-        constructor({ points, keyPrefix }) {
+        constructor(options) {
+            const { points, keyPrefix } = options;
+            limiterOptions.push(options);
             this.points = points;
             this.consume = {
                 austringer: consume,
@@ -56,6 +61,22 @@ import rateLimiterMiddleware, {
     twilioPreflightMiddleware,
     rejectTwilioRequest,
 } from './rate-limiter.middleware.js';
+
+describe('rate limiter store', () => {
+    it('keeps every bucket on the cache client, through the node-redis code path', () => {
+        expect(limiterOptions.map(({ keyPrefix }) => keyPrefix)).toEqual([
+            'austringer',
+            'twilio-ingress',
+            'twilio-sender',
+            'twilio-callback',
+            'twilio-fallback',
+            'twilio-invalid',
+        ]);
+        for (const options of limiterOptions) {
+            expect(options).toMatchObject({ storeClient: cache, useRedisPackage: true });
+        }
+    });
+});
 
 describe('rateLimiterMiddleware', () => {
     let req, res, next;

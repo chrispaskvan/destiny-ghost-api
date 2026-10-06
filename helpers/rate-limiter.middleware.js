@@ -3,39 +3,43 @@ import { StatusCodes } from 'http-status-codes';
 import { RateLimiterRedis, RateLimiterRes } from 'rate-limiter-flexible';
 import client from './cache.js';
 
+// rate-limiter-flexible picks its node-redis code path by the client's class name (`Commander`),
+// which node-redis v6 no longer uses. Without `useRedisPackage` every consume throws, and
+// consumePoints below fails open on that error, so no limit is ever enforced.
+const store = { storeClient: client, useRedisPackage: true };
 const options = {
-    storeClient: client,
+    ...store,
     keyPrefix: 'austringer',
     points: 100, // 100 requests
     duration: 1, // per 1 second
 };
 const rateLimiter = new RateLimiterRedis(options);
 const twilioIngressLimiter = new RateLimiterRedis({
-    storeClient: client,
+    ...store,
     keyPrefix: 'twilio-ingress',
     points: 1000,
     duration: 1,
 });
 const twilioSenderLimiter = new RateLimiterRedis({
-    storeClient: client,
+    ...store,
     keyPrefix: 'twilio-sender',
     points: 20,
     duration: 60,
 });
 const twilioCallbackLimiter = new RateLimiterRedis({
-    storeClient: client,
+    ...store,
     keyPrefix: 'twilio-callback',
     points: 1000,
     duration: 1,
 });
 const twilioFallbackLimiter = new RateLimiterRedis({
-    storeClient: client,
+    ...store,
     keyPrefix: 'twilio-fallback',
     points: 1000,
     duration: 1,
 });
 const twilioInvalidLimiter = new RateLimiterRedis({
-    storeClient: client,
+    ...store,
     keyPrefix: 'twilio-invalid',
     points: 10,
     duration: 1,
