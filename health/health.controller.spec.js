@@ -56,6 +56,7 @@ describe('HealthController', () => {
     describe('getHealth', () => {
         describe('when all services are healthy', () => {
             const world = {
+                ready: () => Promise.resolve(),
                 getGrimoireCards: () =>
                     Promise.resolve([
                         {
@@ -64,6 +65,7 @@ describe('HealthController', () => {
                     ]),
             };
             const world2 = {
+                ready: () => Promise.resolve(),
                 getItemByName: () =>
                     Promise.resolve([
                         {
@@ -135,11 +137,13 @@ describe('HealthController', () => {
                 close: () => Promise.resolve(),
                 getItemByName: () => Promise.reject(new Error()),
                 open: () => Promise.resolve(),
+                ready: () => Promise.resolve(),
             };
             const world2 = {
                 close: () => Promise.resolve(),
                 getItemByName: () => Promise.reject(new Error()),
                 open: () => Promise.resolve(),
+                ready: () => Promise.resolve(),
             };
 
             beforeEach(() => {
@@ -191,6 +195,45 @@ describe('HealthController', () => {
                     },
                 });
             });
+        });
+    });
+
+    /**
+     * A fresh container downloads its manifest for minutes after it starts
+     * listening; /health has to answer the platform's probe meanwhile.
+     */
+    describe('when the manifests are still loading', () => {
+        const loading = () => Promise.reject(new Error('The Destiny manifest is still loading'));
+        const world = { ready: vi.fn(loading), getGrimoireCards: vi.fn() };
+        const world2 = { ready: vi.fn(loading), getItemByName: vi.fn() };
+
+        beforeEach(() => {
+            get.mockResolvedValue({ status: { description: 'All Systems Go' } });
+            destinyService.getManifest = vi.fn().mockResolvedValue({ data: { manifest } });
+            destiny2Service.getManifest = vi.fn().mockResolvedValue({
+                data: { manifest: manifest2 },
+            });
+            documents.getDocuments = vi.fn().mockResolvedValue([]);
+            healthController = new HealthController({
+                destinyService,
+                destiny2Service,
+                documents,
+                store,
+                worldRepository: world,
+                world2Repository: world2,
+            });
+        });
+
+        it('should report them as failures without waiting for them', async () => {
+            const { failures, health } = await healthController.getHealth();
+
+            expect(world.ready).toHaveBeenCalledWith(0);
+            expect(world2.ready).toHaveBeenCalledWith(0);
+            expect(world.getGrimoireCards).not.toHaveBeenCalled();
+            expect(world2.getItemByName).not.toHaveBeenCalled();
+            expect(failures).toEqual(2);
+            expect(health.destiny.world).toEqual('N/A');
+            expect(health.destiny2.world).toEqual('N/A');
         });
     });
 

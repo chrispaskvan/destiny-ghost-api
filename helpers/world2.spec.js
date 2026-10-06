@@ -207,10 +207,23 @@ describe('when items and vendors are read from the manifest', () => {
         expect((await found).map(({ hash }) => hash)).toEqual([2]);
     });
 
-    it('should reject with a clear error when no manifest loads in time', async () => {
-        await expect(new World({ pool }).ready(20)).rejects.toThrow(
-            'The Destiny manifest is still loading',
-        );
+    it('should reject with a clear error, as a 503, when no manifest loads in time', async () => {
+        await expect(new World({ pool }).ready(20)).rejects.toMatchObject({
+            message: 'The Destiny manifest is still loading',
+            statusCode: 503,
+        });
+    });
+
+    /**
+     * Requests time out at 5 seconds (loaders/express.js). Waiting as long
+     * meant the request was cut off first, with no response sent.
+     */
+    it('should give up by default well before the request timeout', async () => {
+        const started = performance.now();
+
+        await expect(new World({ pool }).ready()).rejects.toThrow('still loading');
+
+        expect(performance.now() - started).toBeLessThan(3000);
     });
 
     it('should keep serving the loaded world when a reload fails', async () => {

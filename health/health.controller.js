@@ -211,13 +211,23 @@ class HealthController {
         );
     }
 
+    /**
+     * Health checks report a manifest that is still loading rather than wait
+     * for it: /health runs its checks in turn, and waiting on both worlds
+     * would outlast the request timeout, answering the platform's health
+     * probe with nothing.
+     */
     async getWorldItem() {
+        await this.world.ready(0);
+
         const [{ cardName = '' } = {}] = await this.world.getGrimoireCards(1);
 
         return convert(cardName);
     }
 
     async getWorld2Item() {
+        await this.world2.ready(0);
+
         const [{ itemName = notAvailable, itemTypeAndTierDisplayName } = {}] =
             await this.world2.getItemByName('The Martlet');
 
