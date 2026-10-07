@@ -55,6 +55,10 @@ describe('ClaimCheck', () => {
             expect(claimCheck2.number).toBe('different-id');
         });
 
+        it('should take an operation id the caller already minted', () => {
+            expect(new ClaimCheck('operation-id').number).toBe('operation-id');
+        });
+
         it('should make number property read-only', () => {
             const originalNumber = claimCheck.number;
 

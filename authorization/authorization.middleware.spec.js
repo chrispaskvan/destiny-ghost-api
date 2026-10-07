@@ -23,6 +23,7 @@ describe('authorizeUser', () => {
 
             expect(res.statusCode).toEqual(StatusCodes.UNAUTHORIZED);
             expect(next).not.toBeCalled();
+            expect(res.locals.caller).toBeUndefined();
         });
     });
 
@@ -38,6 +39,7 @@ describe('authorizeUser', () => {
 
             expect(res.statusCode).toEqual(StatusCodes.UNAUTHORIZED);
             expect(next).not.toBeCalled();
+            expect(res.locals.caller).toBeUndefined();
         });
     });
 
@@ -50,6 +52,7 @@ describe('authorizeUser', () => {
             authorizeUser(req, res, next);
 
             expect(next).toBeCalled();
+            expect(res.locals.caller).toBe('notification-headers');
         });
     });
 
@@ -65,6 +68,7 @@ describe('authorizeUser', () => {
             authorizeUser(req, res, next);
 
             expect(next).toBeCalled();
+            expect(res.locals.caller).toBe(apiKey.header);
         });
     });
 });

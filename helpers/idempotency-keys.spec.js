@@ -1,56 +1,160 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import cache from './cache.js';
-import { getIdempotencyKey, setIdempotencyKey } from './idempotency-keys.js';
+import { accept, release, reserve } from './idempotency-keys.js';
 
-vi.mock('./cache.js');
+vi.mock('./cache.js', () => ({ default: { get: vi.fn(), set: vi.fn(), eval: vi.fn() } }));
+
+/**
+ * Just enough of Redis's GET and SET for two requests to interleave: every
+ * command resolves on a later turn, as a network round trip would, and SET
+ * honours NX and GET in one step, as the server does.
+ */
+const inMemoryCache = () => {
+    const store = new Map();
+    const later = value => new Promise(resolve => setImmediate(() => resolve(value)));
+
+    cache.get.mockImplementation(key => later(store.get(key) ?? null));
+    cache.set.mockImplementation((key, value, { condition, GET } = {}) => {
+        const previous = store.get(key) ?? null;
+
+        if (!(condition === 'NX' && previous !== null)) {
+            store.set(key, value);
+        }
+
+        return later(GET ? previous : 'OK');
+    });
+};
+
+const reservation = {
+    caller: 'x-api-key',
+    key: 'xur-2026-10-09',
+    fingerprint: 'POST /notifications/Xur',
+    operationId: 'op-1',
+};
+const stored = (overrides = {}) =>
+    JSON.stringify({
+        operationId: 'op-0',
+        fingerprint: reservation.fingerprint,
+        state: 'accepted',
+        ...overrides,
+    });
 
 describe('idempotency-keys', () => {
     beforeEach(() => {
-        vi.clearAllMocks();
+        vi.resetAllMocks();
     });
 
-    describe('getIdempotencyKey', () => {
-        it('should throw an error if idempotencyKey is not a string', async () => {
-            await expect(getIdempotencyKey(null)).rejects.toThrow();
-            await expect(getIdempotencyKey(123)).rejects.toThrow();
+    describe('reserve', () => {
+        it('should reserve in one atomic command, namespaced and scoped to the caller', async () => {
+            cache.set.mockResolvedValue(null);
+
+            await expect(reserve(reservation)).resolves.toEqual({ outcome: 'reserved' });
+
+            expect(cache.set).toHaveBeenCalledExactlyOnceWith(
+                'idempotency:notifications:x-api-key:xur-2026-10-09',
+                JSON.stringify({
+                    operationId: 'op-1',
+                    fingerprint: reservation.fingerprint,
+                    state: 'pending',
+                }),
+                { condition: 'NX', expiration: { type: 'EX', value: 60 }, GET: true },
+            );
         });
 
-        it('should return the value from cache', async () => {
-            const idempotencyKey = 'test-key';
-            const value = 'test-value';
+        it('should let exactly one of two concurrent requests reserve a key', async () => {
+            inMemoryCache();
 
-            cache.get.mockResolvedValue(value);
+            const results = await Promise.all([
+                reserve(reservation),
+                reserve({ ...reservation, operationId: 'op-2' }),
+            ]);
 
-            const result = await getIdempotencyKey(idempotencyKey);
+            expect(results.map(({ outcome }) => outcome).sort()).toEqual([
+                'in-progress',
+                'reserved',
+            ]);
+        });
 
-            expect(cache.get).toHaveBeenCalledWith(idempotencyKey);
-            expect(result).toBe(value);
+        it('should keep two callers using the same key apart', async () => {
+            cache.set.mockResolvedValue(null);
+
+            await reserve(reservation);
+            await reserve({ ...reservation, caller: 'notification-headers' });
+
+            const [[first], [second]] = cache.set.mock.calls;
+
+            expect(first).not.toBe(second);
+        });
+
+        it('should replay the operation an accepted key holds', async () => {
+            cache.set.mockResolvedValue(stored());
+
+            await expect(reserve(reservation)).resolves.toEqual({
+                outcome: 'replay',
+                operationId: 'op-0',
+            });
+        });
+
+        it('should report a key another request is still starting', async () => {
+            cache.set.mockResolvedValue(stored({ state: 'pending' }));
+
+            await expect(reserve(reservation)).resolves.toEqual({ outcome: 'in-progress' });
+        });
+
+        it.each(['accepted', 'pending'])(
+            'should refuse a key reused for a different request, %s or not',
+            async state => {
+                cache.set.mockResolvedValue(
+                    stored({ fingerprint: 'POST /notifications/Banshee-44', state }),
+                );
+
+                await expect(reserve(reservation)).resolves.toEqual({ outcome: 'mismatch' });
+            },
+        );
+    });
+
+    describe.each([
+        ['accept', accept],
+        ['release', release],
+    ])('%s', (_name, act) => {
+        it('should act only on our own pending reservation', async () => {
+            cache.eval.mockResolvedValue(1);
+
+            await expect(act(reservation)).resolves.toBe(true);
+
+            const [, { keys, arguments: args }] = cache.eval.mock.calls[0];
+
+            expect(keys).toEqual(['idempotency:notifications:x-api-key:xur-2026-10-09']);
+            expect(args[0]).toBe(
+                JSON.stringify({
+                    operationId: 'op-1',
+                    fingerprint: reservation.fingerprint,
+                    state: 'pending',
+                }),
+            );
+        });
+
+        it('should report a reservation that is no longer ours', async () => {
+            cache.eval.mockResolvedValue(0);
+
+            await expect(act(reservation)).resolves.toBe(false);
         });
     });
 
-    describe('setIdempotencyKey', () => {
-        it('should throw an error if idempotencyKey is not a string', async () => {
-            await expect(setIdempotencyKey(null, 'claim-check')).rejects.toThrow();
-            await expect(setIdempotencyKey(123, 'claim-check')).rejects.toThrow();
-        });
+    describe('accept', () => {
+        it('should keep the accepted operation for a day', async () => {
+            cache.eval.mockResolvedValue(1);
 
-        it('should throw an error if claimCheckNumber is not a string', async () => {
-            await expect(setIdempotencyKey('test-key', null)).rejects.toThrow();
-            await expect(setIdempotencyKey('test-key', 123)).rejects.toThrow();
-        });
+            await accept(reservation);
 
-        it('should set the value in cache and set expiration', async () => {
-            const idempotencyKey = 'test-key';
-            const claimCheckNumber = 'claim-check';
+            const [, { arguments: args }] = cache.eval.mock.calls[0];
 
-            cache.set.mockResolvedValue();
-            cache.expire.mockResolvedValue(true);
-
-            const result = await setIdempotencyKey(idempotencyKey, claimCheckNumber);
-
-            expect(cache.set).toHaveBeenCalledWith(idempotencyKey, claimCheckNumber);
-            expect(cache.expire).toHaveBeenCalledWith(idempotencyKey, 86400);
-            expect(result).toBe(true);
+            expect(JSON.parse(args[1])).toEqual({
+                operationId: 'op-1',
+                fingerprint: reservation.fingerprint,
+                state: 'accepted',
+            });
+            expect(args[2]).toBe('86400');
         });
     });
 });

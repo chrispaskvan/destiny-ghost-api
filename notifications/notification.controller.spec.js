@@ -5,7 +5,7 @@ import subscriber from '../helpers/subscriber.js';
 import NotificationController from './notification.controller.js';
 import NotificationError from './notification.error.js';
 import notificationTypes from './notification.types.js';
-import ClaimCheck, { SKIPPED } from '../helpers/claim-check.js';
+import ClaimCheck, { DUPLICATE, SKIPPED } from '../helpers/claim-check.js';
 import log from '../helpers/log.js';
 
 vi.mock('bullmq', () => ({
@@ -145,15 +145,16 @@ describe('NotificationController', () => {
                 const subscription = notificationTypes.Xur;
 
                 userService.getUserByPhoneNumber.mockResolvedValue(mockUser);
-                publisher.sendNotification.mockResolvedValue();
+                publisher.sendNotification.mockResolvedValue({ deduplicated: false });
                 mockClaimCheck.addPhoneNumber.mockResolvedValue();
 
-                const result = await notificationController.create(subscription, phoneNumber);
+                const result = await notificationController.create(subscription, { phoneNumber });
 
                 expect(userService.getUserByPhoneNumber).toHaveBeenCalledWith(phoneNumber);
                 expect(publisher.sendNotification).toHaveBeenCalledWith(mockUser, {
                     notificationType: subscription,
                     claimCheckNumber,
+                    deduplicationId: `${claimCheckNumber}-${phoneNumber}`,
                 });
                 expect(mockClaimCheck.addPhoneNumber).toHaveBeenCalledWith(phoneNumber);
                 expect(result).toBe(claimCheckNumber);
@@ -165,7 +166,7 @@ describe('NotificationController', () => {
                 userService.getUserByPhoneNumber.mockResolvedValue(null);
 
                 await expect(
-                    notificationController.create(subscription, phoneNumber),
+                    notificationController.create(subscription, { phoneNumber }),
                 ).rejects.toThrow(NotificationError);
 
                 expect(NotificationError).toHaveBeenCalledWith('user not found');
@@ -178,7 +179,7 @@ describe('NotificationController', () => {
                 userService.getUserByPhoneNumber.mockResolvedValue(userWithoutPhone);
 
                 await expect(
-                    notificationController.create(subscription, phoneNumber),
+                    notificationController.create(subscription, { phoneNumber }),
                 ).rejects.toThrow(NotificationError);
             });
 
@@ -189,7 +190,7 @@ describe('NotificationController', () => {
                 userService.getUserByPhoneNumber.mockResolvedValue(optedOutUser);
 
                 await expect(
-                    notificationController.create(subscription, phoneNumber),
+                    notificationController.create(subscription, { phoneNumber }),
                 ).rejects.toThrow(NotificationError);
 
                 expect(NotificationError).toHaveBeenCalledWith(
@@ -205,7 +206,7 @@ describe('NotificationController', () => {
                 const numberOfSubscribedUsers = 11;
                 const subscribedUsers = new Array(numberOfSubscribedUsers).fill(mockUser);
 
-                publisher.sendNotification.mockResolvedValue();
+                publisher.sendNotification.mockResolvedValue({ deduplicated: false });
                 userService.getSubscribedUsers.mockResolvedValue(subscribedUsers);
                 mockClaimCheck.addPhoneNumber.mockResolvedValue();
 
@@ -217,6 +218,45 @@ describe('NotificationController', () => {
                 expect(publisher.sendNotification).toHaveBeenCalledTimes(numberOfSubscribedUsers);
                 expect(result).toBe(claimCheckNumber);
             });
+
+            it('should name each recipient by the event, not the operation', async () => {
+                vi.spyOn(Temporal.Now, 'zonedDateTimeISO').mockReturnValueOnce(
+                    Temporal.ZonedDateTime.from('2026-10-09T17:00:00[UTC]'),
+                );
+                publisher.sendNotification.mockResolvedValue({ deduplicated: false });
+                userService.getSubscribedUsers.mockResolvedValue([mockUser]);
+
+                await notificationController.create(notificationTypes.Xur, {
+                    operationId: claimCheckNumber,
+                });
+                await new Promise(resolve => setImmediate(resolve));
+
+                expect(ClaimCheck).toHaveBeenCalledWith(claimCheckNumber);
+                expect(publisher.sendNotification).toHaveBeenCalledWith(mockUser, {
+                    notificationType: notificationTypes.Xur,
+                    claimCheckNumber,
+                    deduplicationId: `Xur-2026-10-06-${phoneNumber}`,
+                });
+            });
+
+            it.each([
+                [false, undefined],
+                [true, DUPLICATE],
+            ])(
+                'should record a recipient deduplicated=%s with status %s',
+                async (deduplicated, status) => {
+                    publisher.sendNotification.mockResolvedValue({ deduplicated });
+                    userService.getSubscribedUsers.mockResolvedValue([mockUser]);
+
+                    await notificationController.create(notificationTypes.Xur);
+                    await new Promise(resolve => setImmediate(resolve));
+
+                    expect(mockClaimCheck.addPhoneNumber).toHaveBeenCalledExactlyOnceWith(
+                        phoneNumber,
+                        status,
+                    );
+                },
+            );
 
             it('should cap concurrent sends so an unbounded subscriber list does not fire every enqueue/claim-check write at once', async () => {
                 const subscription = notificationTypes.Xur;
@@ -240,14 +280,14 @@ describe('NotificationController', () => {
                 expect(publisher.sendNotification).toHaveBeenCalledTimes(concurrencyLimit);
 
                 pendingResolvers.splice(0).forEach(resolve => {
-                    resolve();
+                    resolve({ deduplicated: false });
                 });
                 await new Promise(resolve => setImmediate(resolve));
 
                 expect(publisher.sendNotification).toHaveBeenCalledTimes(numberOfSubscribedUsers);
 
                 pendingResolvers.splice(0).forEach(resolve => {
-                    resolve();
+                    resolve({ deduplicated: false });
                 });
             });
         });
