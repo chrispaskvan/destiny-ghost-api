@@ -184,6 +184,14 @@ class Publisher {
 
         // BullMQ refuses a custom id containing ':'; neither part can.
         const jobId = `${claimCheckNumber}-${membershipId}`;
+        /**
+         * The deduplication key outlives the job it came from. BullMQ's own
+         * pruning (`removeOnComplete`/`removeOnFail`, by count or age)
+         * leaves it alone, and so does finishing a job while the key has a
+         * TTL; only an explicit removal - `job.remove()`, `queue.clean()` -
+         * deletes it. So the retention above can stay short without
+         * shortening the week this holds a repeat back for.
+         */
         const result = await this.#queue.add('notification', message, {
             jobId,
             deduplication: {
