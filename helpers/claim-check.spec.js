@@ -5,6 +5,7 @@ import cache from './cache.js';
 vi.mock('./cache.js', () => ({
     default: {
         hSet: vi.fn(),
+        hSetNX: vi.fn(),
         hGet: vi.fn(),
         hGetAll: vi.fn(),
         expire: vi.fn(),
@@ -73,7 +74,7 @@ describe('ClaimCheck', () => {
         it('should add a phone number with default status "queued"', async () => {
             await claimCheck.addPhoneNumber(testPhoneNumber);
 
-            expect(cache.hSet).toHaveBeenCalledWith(
+            expect(cache.hSetNX).toHaveBeenCalledWith(
                 testClaimCheckId,
                 testPhoneNumber,
                 status.queued,
@@ -84,7 +85,7 @@ describe('ClaimCheck', () => {
         it('should add a phone number with custom status', async () => {
             await claimCheck.addPhoneNumber(testPhoneNumber, status.processing);
 
-            expect(cache.hSet).toHaveBeenCalledWith(
+            expect(cache.hSetNX).toHaveBeenCalledWith(
                 testClaimCheckId,
                 testPhoneNumber,
                 status.processing,
@@ -92,19 +93,26 @@ describe('ClaimCheck', () => {
             expect(cache.expire).toHaveBeenCalledWith(testClaimCheckId, claimCheckExpiration);
         });
 
+        it('should never overwrite a status already recorded', async () => {
+            await claimCheck.addPhoneNumber(testPhoneNumber);
+
+            expect(cache.hSetNX).toHaveBeenCalledOnce();
+            expect(cache.hSet).not.toHaveBeenCalled();
+        });
+
         it('should handle multiple phone numbers', async () => {
             await claimCheck.addPhoneNumber(testPhoneNumber, status.queued);
             await claimCheck.addPhoneNumber(testPhoneNumber2, status.processing);
 
-            expect(cache.hSet).toHaveBeenCalledTimes(2);
+            expect(cache.hSetNX).toHaveBeenCalledTimes(2);
             expect(cache.expire).toHaveBeenCalledTimes(2);
-            expect(cache.hSet).toHaveBeenNthCalledWith(
+            expect(cache.hSetNX).toHaveBeenNthCalledWith(
                 1,
                 testClaimCheckId,
                 testPhoneNumber,
                 status.queued,
             );
-            expect(cache.hSet).toHaveBeenNthCalledWith(
+            expect(cache.hSetNX).toHaveBeenNthCalledWith(
                 2,
                 testClaimCheckId,
                 testPhoneNumber2,
@@ -115,7 +123,7 @@ describe('ClaimCheck', () => {
         it('should handle cache errors gracefully', async () => {
             const cacheError = new Error('Cache connection failed');
 
-            vi.mocked(cache.hSet).mockRejectedValueOnce(cacheError);
+            vi.mocked(cache.hSetNX).mockRejectedValueOnce(cacheError);
 
             await expect(claimCheck.addPhoneNumber(testPhoneNumber)).rejects.toThrow(
                 'Cache connection failed',

@@ -16,6 +16,7 @@ const documentService = {
     createDocument: vi.fn(),
     deleteDocumentById: vi.fn(),
     getDocuments: vi.fn(),
+    getDocumentsPage: vi.fn(),
     updateDocument: vi.fn(),
 };
 
@@ -1114,6 +1115,47 @@ describe('UserService', () => {
                 expect(users).toHaveLength(1);
                 expect(users[0].isSubscribed).toBe(true);
             });
+        });
+    });
+
+    describe('getSubscribedUsersPage', () => {
+        it('should reject a type there are no subscriptions for', async () => {
+            await expect(userService.getSubscribedUsersPage('not-a-type')).rejects.toThrow();
+            expect(documentService.getDocumentsPage).not.toHaveBeenCalled();
+        });
+
+        it('should read the page the cursor names, with the same query as getSubscribedUsers', async () => {
+            documentService.getDocuments.mockResolvedValue([]);
+            documentService.getDocumentsPage.mockResolvedValue({
+                items: [],
+                continuationToken: undefined,
+            });
+
+            await userService.getSubscribedUsers('Xur');
+            await userService.getSubscribedUsersPage('Xur', 'page-2');
+
+            const [[, query]] = documentService.getDocuments.mock.calls;
+
+            expect(documentService.getDocumentsPage).toHaveBeenCalledExactlyOnceWith(
+                'Users',
+                query,
+                { continuationToken: 'page-2', maxItemCount: 100 },
+            );
+        });
+
+        it('should drop opted-out users and hand back the next cursor', async () => {
+            documentService.getDocumentsPage.mockResolvedValue({
+                items: [
+                    { ...user, isSubscribed: false },
+                    { ...user, isSubscribed: undefined },
+                ],
+                continuationToken: 'page-3',
+            });
+
+            const page = await userService.getSubscribedUsersPage('Xur', 'page-2');
+
+            expect(page.users).toHaveLength(1);
+            expect(page.cursor).toBe('page-3');
         });
     });
 

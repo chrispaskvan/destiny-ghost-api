@@ -7,7 +7,7 @@ import log from '../helpers/log.js';
 import NotificationRouter from './notification.routes.js';
 
 const { controller } = vi.hoisted(() => ({
-    controller: { create: vi.fn(), getClaimCheck: vi.fn() },
+    controller: { create: vi.fn(), getBroadcast: vi.fn(), getClaimCheck: vi.fn() },
 }));
 
 vi.mock('@paralleldrive/cuid2', () => ({ createId: () => 'op-new' }));
@@ -53,10 +53,7 @@ describe('NotificationRouter', () => {
         release.mockResolvedValue(true);
         stopKeepAlive = vi.fn();
         keepAlive.mockReturnValue(stopKeepAlive);
-        controller.create.mockResolvedValue({
-            claimCheckNumber: 'op-new',
-            scheduled: Promise.resolve({ failed: 0 }),
-        });
+        controller.create.mockResolvedValue({ claimCheckNumber: 'op-new' });
     });
 
     /**
@@ -103,44 +100,29 @@ describe('NotificationRouter', () => {
             expect(res.getHeader('Destiny-Ghost-Postmaster')).toBe('op-new');
         });
 
-        it('should answer 202 at once but accept the key only once every recipient is queued', async () => {
-            const scheduling = Promise.withResolvers();
+        it('should accept the key, and answer 202, only once the broadcast is recorded', async () => {
+            const recording = Promise.withResolvers();
+            let answered = false;
 
             reserve.mockResolvedValue({ outcome: 'reserved' });
-            controller.create.mockResolvedValue({
-                claimCheckNumber: 'op-new',
-                scheduled: scheduling.promise,
+            controller.create.mockReturnValue(recording.promise);
+            res.on('end', () => {
+                answered = true;
             });
 
-            await broadcast();
-            await settle();
+            const request = broadcast();
 
-            expect(res.statusCode).toBe(StatusCodes.ACCEPTED);
+            await settle();
             expect(accept).not.toHaveBeenCalled();
-            expect(stopKeepAlive).not.toHaveBeenCalled();
+            expect(answered).toBe(false);
 
-            scheduling.resolve({ failed: 0 });
-            await settle();
+            recording.resolve({ claimCheckNumber: 'op-new' });
+            await request;
 
             expect(accept).toHaveBeenCalledExactlyOnceWith(reservation);
             expect(release).not.toHaveBeenCalled();
             expect(stopKeepAlive).toHaveBeenCalledOnce();
-        });
-
-        it('should release the key when some recipients could not be queued, so a retry can', async () => {
-            reserve.mockResolvedValue({ outcome: 'reserved' });
-            controller.create.mockResolvedValue({
-                claimCheckNumber: 'op-new',
-                scheduled: Promise.resolve({ failed: 2 }),
-            });
-
-            await broadcast();
-            await settle();
-
             expect(res.statusCode).toBe(StatusCodes.ACCEPTED);
-            expect(release).toHaveBeenCalledExactlyOnceWith(reservation);
-            expect(accept).not.toHaveBeenCalled();
-            expect(stopKeepAlive).toHaveBeenCalledOnce();
         });
 
         it('should replay the original operation without starting another', async () => {
@@ -210,6 +192,47 @@ describe('NotificationRouter', () => {
             expect(res.getHeader('Destiny-Ghost-Postmaster')).toBe('op-new');
             expect(log.warn).toHaveBeenCalledOnce();
             expect(stopKeepAlive).toHaveBeenCalledOnce();
+        });
+    });
+
+    describe('GET /broadcasts/:claimCheck', () => {
+        const progress = (url = '/broadcasts/op-1') =>
+            new Promise(resolve => {
+                res.on('end', resolve);
+                router(createRequest({ method: 'GET', url }), res, resolve);
+            });
+
+        it("should report the broadcast's progress", async () => {
+            const broadcast = {
+                state: 'active',
+                queued: 100,
+                duplicates: 2,
+                done: false,
+                attemptsMade: 0,
+                failedReason: undefined,
+            };
+
+            controller.getBroadcast.mockResolvedValue(broadcast);
+
+            await progress();
+
+            expect(controller.getBroadcast).toHaveBeenCalledExactlyOnceWith('op-1');
+            expect(res.statusCode).toBe(StatusCodes.OK);
+            expect(res._getJSONData()).toEqual({
+                state: 'active',
+                queued: 100,
+                duplicates: 2,
+                done: false,
+                attemptsMade: 0,
+            });
+        });
+
+        it('should 404 a broadcast that does not exist or has expired', async () => {
+            controller.getBroadcast.mockResolvedValue(undefined);
+
+            await progress();
+
+            expect(res.statusCode).toBe(StatusCodes.NOT_FOUND);
         });
     });
 });

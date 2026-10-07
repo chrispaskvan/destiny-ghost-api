@@ -98,6 +98,16 @@ describe('Subscriber', () => {
             });
         });
 
+        it('should let a queue allow its jobs to be picked up again after more than one crash', () => {
+            subscriber.listen(vi.fn(), 'broadcasts', { concurrency: 1, maxStalledCount: 5 });
+
+            expect(MockWorkerConstructor).toHaveBeenCalledWith('broadcasts', expect.any(Function), {
+                connection: { host: 'localhost', port: 6379 },
+                concurrency: 1,
+                maxStalledCount: 5,
+            });
+        });
+
         it('should set up event listeners', () => {
             const callback = vi.fn();
 
@@ -137,7 +147,23 @@ describe('Subscriber', () => {
                     claimCheckNumber: 'claim-456',
                     notificationType: 'Xur',
                 },
+                mockJob,
             );
+        });
+
+        it("should return the handler's result, for BullMQ to keep as the job's return value", async () => {
+            const callback = vi.fn().mockResolvedValue({ queued: 3 });
+
+            subscriber.listen(callback);
+
+            const jobProcessor = MockWorkerConstructor.mock.calls[0][1];
+
+            await expect(
+                jobProcessor({
+                    id: 'job-1',
+                    data: { body: '{}', applicationProperties: {} },
+                }),
+            ).resolves.toEqual({ queued: 3 });
         });
 
         /**

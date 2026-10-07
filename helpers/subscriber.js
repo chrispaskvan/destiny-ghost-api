@@ -21,13 +21,16 @@ class Subscriber {
 
     /**
      * @constructor
-     * @param {(user: *, options: { claimCheckNumber: string, notificationType: string }) => Promise<void>} callback
+     * @param {(body: *, options: { claimCheckNumber: string, notificationType: string }, job: import('bullmq').Job) => Promise<*>} callback -
+     * handed the job itself too, for a handler that records progress on it
      * @param {string} [queueName] - The queue name to subscribe to.
-     * @param {{ concurrency?: number }} [options] - Concurrency defaults to 5,
-     * which suits independent notification sends. A queue whose jobs must be
-     * applied in the order they were enqueued needs 1.
+     * @param {{ concurrency?: number, maxStalledCount?: number }} [options] -
+     * Concurrency defaults to 5, which suits independent notification sends.
+     * A queue whose jobs must be applied in the order they were enqueued
+     * needs 1. `maxStalledCount` is how many times a job whose worker died
+     * is picked up again before it is failed; BullMQ's default is 1.
      */
-    listen(callback, queueName = 'notifications', { concurrency = 5 } = {}) {
+    listen(callback, queueName = 'notifications', { concurrency = 5, maxStalledCount } = {}) {
         const worker = new Worker(
             queueName,
             async job => {
@@ -59,10 +62,14 @@ class Subscriber {
                         'Processing job',
                     );
 
-                    await callback(user, {
-                        claimCheckNumber,
-                        notificationType,
-                    });
+                    const result = await callback(
+                        user,
+                        {
+                            claimCheckNumber,
+                            notificationType,
+                        },
+                        job,
+                    );
 
                     log.info(
                         {
@@ -73,6 +80,8 @@ class Subscriber {
                         },
                         'Job processed successfully',
                     );
+
+                    return result;
                 } catch (err) {
                     log.error(
                         {
@@ -88,6 +97,7 @@ class Subscriber {
             {
                 connection: client,
                 concurrency,
+                ...(maxStalledCount && { maxStalledCount }),
             },
         );
 

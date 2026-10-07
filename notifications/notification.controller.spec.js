@@ -7,6 +7,7 @@ import NotificationError from './notification.error.js';
 import notificationTypes from './notification.types.js';
 import ClaimCheck, { DUPLICATE, SKIPPED } from '../helpers/claim-check.js';
 import log from '../helpers/log.js';
+import { enqueueBroadcast } from './broadcast.queue.js';
 
 vi.mock('bullmq', () => ({
     // Matches real BullMQ's constructor, which only accepts a message - a
@@ -32,6 +33,7 @@ vi.mock('../helpers/publisher.js');
 vi.mock('../helpers/subscriber.js');
 vi.mock('./notification.error.js');
 vi.mock('../helpers/claim-check.js');
+vi.mock('./broadcast.queue.js', () => ({ enqueueBroadcast: vi.fn(), QUEUE_NAME: 'broadcasts' }));
 vi.mock('../helpers/log.js', () => ({
     default: {
         info: vi.fn(),
@@ -87,6 +89,7 @@ const notificationService = {
 };
 const userService = {
     getSubscribedUsers: vi.fn(),
+    getSubscribedUsersPage: vi.fn(),
     getUserByPhoneNumber: vi.fn(),
     getConsentByPhoneNumber: vi.fn(),
 };
@@ -157,8 +160,7 @@ describe('NotificationController', () => {
                     deduplicationId: `${claimCheckNumber}-${phoneNumber}`,
                 });
                 expect(mockClaimCheck.addPhoneNumber).toHaveBeenCalledWith(phoneNumber);
-                expect(result.claimCheckNumber).toBe(claimCheckNumber);
-                await expect(result.scheduled).resolves.toEqual({ failed: 0 });
+                expect(result).toEqual({ claimCheckNumber });
             });
 
             it('should throw NotificationError when user is not found', async () => {
@@ -202,133 +204,204 @@ describe('NotificationController', () => {
         });
 
         describe('when phone number is not provided', () => {
-            it('should send notifications to all subscribed users', async () => {
-                const subscription = notificationTypes.Xur;
-                const numberOfSubscribedUsers = 11;
-                const subscribedUsers = new Array(numberOfSubscribedUsers).fill(mockUser);
-
-                publisher.sendNotification.mockResolvedValue({ deduplicated: false });
-                userService.getSubscribedUsers.mockResolvedValue(subscribedUsers);
-                mockClaimCheck.addPhoneNumber.mockResolvedValue();
-
-                const result = await notificationController.create(subscription);
-
-                await new Promise(resolve => setImmediate(resolve));
-
-                expect(userService.getSubscribedUsers).toHaveBeenCalledWith(subscription);
-                expect(publisher.sendNotification).toHaveBeenCalledTimes(numberOfSubscribedUsers);
-                expect(result.claimCheckNumber).toBe(claimCheckNumber);
-                await expect(result.scheduled).resolves.toEqual({ failed: 0 });
-            });
-
-            it('should settle scheduled only once every recipient has been attempted', async () => {
-                const queueing = Promise.withResolvers();
-                let settled = false;
-
-                publisher.sendNotification
-                    .mockResolvedValueOnce({ deduplicated: false })
-                    .mockReturnValueOnce(queueing.promise);
-                userService.getSubscribedUsers.mockResolvedValue([mockUser, mockUser]);
-
-                const { scheduled } = await notificationController.create(notificationTypes.Xur);
-
-                scheduled.then(() => {
-                    settled = true;
-                });
-                await new Promise(resolve => setImmediate(resolve));
-                expect(settled).toBe(false);
-
-                queueing.resolve({ deduplicated: false });
-
-                await expect(scheduled).resolves.toEqual({ failed: 0 });
-            });
-
-            it('should count recipients that could not be queued instead of rejecting', async () => {
-                const err = new Error('Redis unavailable');
-
-                publisher.sendNotification
-                    .mockRejectedValueOnce(err)
-                    .mockResolvedValueOnce({ deduplicated: false })
-                    .mockRejectedValueOnce(err);
-                userService.getSubscribedUsers.mockResolvedValue([mockUser, mockUser, mockUser]);
-
-                const { scheduled } = await notificationController.create(notificationTypes.Xur);
-
-                await expect(scheduled).resolves.toEqual({ failed: 2 });
-                expect(log.error).toHaveBeenCalledTimes(2);
-            });
-
-            it('should name each recipient by the event, not the operation', async () => {
+            it('should record the broadcast durably for the worker, in the week it was accepted', async () => {
                 vi.spyOn(Temporal.Now, 'zonedDateTimeISO').mockReturnValueOnce(
                     Temporal.ZonedDateTime.from('2026-10-09T17:00:00[UTC]'),
                 );
-                publisher.sendNotification.mockResolvedValue({ deduplicated: false });
-                userService.getSubscribedUsers.mockResolvedValue([mockUser]);
+                enqueueBroadcast.mockResolvedValue({ id: claimCheckNumber });
 
-                await notificationController.create(notificationTypes.Xur, {
+                const result = await notificationController.create(notificationTypes.Xur, {
                     operationId: claimCheckNumber,
                 });
-                await new Promise(resolve => setImmediate(resolve));
 
                 expect(ClaimCheck).toHaveBeenCalledWith(claimCheckNumber);
-                expect(publisher.sendNotification).toHaveBeenCalledWith(mockUser, {
+                expect(enqueueBroadcast).toHaveBeenCalledExactlyOnceWith({
+                    operationId: claimCheckNumber,
                     notificationType: notificationTypes.Xur,
-                    claimCheckNumber,
-                    deduplicationId: `Xur-2026-10-06-${phoneNumber}`,
+                    weeklyReset: '2026-10-06',
                 });
+                expect(userService.getSubscribedUsersPage).not.toHaveBeenCalled();
+                expect(publisher.sendNotification).not.toHaveBeenCalled();
+                expect(result).toEqual({ claimCheckNumber });
             });
 
-            it.each([
-                [false, undefined],
-                [true, DUPLICATE],
-            ])(
-                'should record a recipient deduplicated=%s with status %s',
-                async (deduplicated, status) => {
-                    publisher.sendNotification.mockResolvedValue({ deduplicated });
-                    userService.getSubscribedUsers.mockResolvedValue([mockUser]);
-
-                    await notificationController.create(notificationTypes.Xur);
-                    await new Promise(resolve => setImmediate(resolve));
-
-                    expect(mockClaimCheck.addPhoneNumber).toHaveBeenCalledExactlyOnceWith(
-                        phoneNumber,
-                        status,
-                    );
-                },
-            );
-
-            it('should cap concurrent sends so an unbounded subscriber list does not fire every enqueue/claim-check write at once', async () => {
-                const subscription = notificationTypes.Xur;
-                const numberOfSubscribedUsers = 25;
-                const concurrencyLimit = 20;
-                const subscribedUsers = new Array(numberOfSubscribedUsers).fill(mockUser);
-                const pendingResolvers = [];
-
-                publisher.sendNotification.mockImplementation(
-                    () =>
-                        new Promise(resolve => {
-                            pendingResolvers.push(resolve);
-                        }),
+            it('should refuse a type there are no subscriptions for, without recording it', async () => {
+                await expect(notificationController.create('not-a-type')).rejects.toThrow(
+                    'notificationType is not valid',
                 );
-                mockClaimCheck.addPhoneNumber.mockResolvedValue();
-                userService.getSubscribedUsers.mockResolvedValue(subscribedUsers);
-
-                await notificationController.create(subscription);
-                await new Promise(resolve => setImmediate(resolve));
-
-                expect(publisher.sendNotification).toHaveBeenCalledTimes(concurrencyLimit);
-
-                pendingResolvers.splice(0).forEach(resolve => {
-                    resolve({ deduplicated: false });
-                });
-                await new Promise(resolve => setImmediate(resolve));
-
-                expect(publisher.sendNotification).toHaveBeenCalledTimes(numberOfSubscribedUsers);
-
-                pendingResolvers.splice(0).forEach(resolve => {
-                    resolve({ deduplicated: false });
-                });
+                expect(enqueueBroadcast).not.toHaveBeenCalled();
             });
+
+            it('should not acknowledge a broadcast that could not be recorded', async () => {
+                const err = new Error('Redis unavailable');
+
+                enqueueBroadcast.mockRejectedValue(err);
+
+                await expect(notificationController.create(notificationTypes.Xur)).rejects.toBe(
+                    err,
+                );
+            });
+        });
+    });
+
+    describe('broadcast worker', () => {
+        const otherUser = { ...mockUser, membershipId: chance.guid(), phoneNumber: chance.phone() };
+        let broadcast;
+
+        /**
+         * A job as BullMQ hands it over: the envelope `enqueueBroadcast`
+         * writes, with whatever progress an earlier attempt saved, and an
+         * `updateData` that saves the way Redis would.
+         */
+        const jobWith = progress => {
+            const job = {
+                data: {
+                    body: JSON.stringify({ weeklyReset: '2026-09-29' }),
+                    applicationProperties: {
+                        claimCheckNumber,
+                        notificationType: notificationTypes.Xur,
+                    },
+                    ...(progress && { progress }),
+                },
+                updateData: vi.fn(async data => {
+                    job.data = data;
+                }),
+            };
+
+            return job;
+        };
+        const run = job =>
+            broadcast(JSON.parse(job.data.body), job.data.applicationProperties, job);
+
+        beforeEach(() => {
+            [broadcast] = subscriber.listen.mock.calls.find(([, queue]) => queue === 'broadcasts');
+            publisher.sendNotification.mockResolvedValue({ deduplicated: false });
+            mockClaimCheck.addPhoneNumber.mockResolvedValue();
+        });
+
+        it('should listen one broadcast at a time, surviving more than one crash', () => {
+            expect(subscriber.listen).toHaveBeenCalledWith(expect.any(Function), 'broadcasts', {
+                concurrency: 1,
+                maxStalledCount: 5,
+            });
+        });
+
+        it('should queue every page, saving progress after each, until there are no more', async () => {
+            const job = jobWith();
+
+            userService.getSubscribedUsersPage
+                .mockResolvedValueOnce({ users: [mockUser], cursor: 'page-2' })
+                .mockResolvedValueOnce({ users: [otherUser], cursor: undefined });
+
+            await expect(run(job)).resolves.toEqual({ queued: 2, duplicates: 0, done: true });
+
+            expect(userService.getSubscribedUsersPage.mock.calls).toEqual([
+                [notificationTypes.Xur, undefined],
+                [notificationTypes.Xur, 'page-2'],
+            ]);
+            expect(job.updateData.mock.calls.map(([data]) => data.progress)).toEqual([
+                { cursor: 'page-2', queued: 1, duplicates: 0, done: false },
+                { cursor: undefined, queued: 2, duplicates: 0, done: true },
+            ]);
+            expect(ClaimCheck).toHaveBeenCalledWith(claimCheckNumber);
+        });
+
+        it('should deduplicate by the week the broadcast was accepted in, not the current one', async () => {
+            userService.getSubscribedUsersPage.mockResolvedValueOnce({
+                users: [mockUser],
+                cursor: undefined,
+            });
+
+            await run(jobWith());
+
+            expect(publisher.sendNotification).toHaveBeenCalledExactlyOnceWith(mockUser, {
+                notificationType: notificationTypes.Xur,
+                claimCheckNumber,
+                deduplicationId: `Xur-2026-09-29-${phoneNumber}`,
+            });
+        });
+
+        it('should resume from the page an earlier attempt saved', async () => {
+            const job = jobWith({ cursor: 'page-3', queued: 200, duplicates: 4, done: false });
+
+            userService.getSubscribedUsersPage.mockResolvedValueOnce({
+                users: [mockUser],
+                cursor: undefined,
+            });
+
+            await expect(run(job)).resolves.toEqual({ queued: 201, duplicates: 4, done: true });
+            expect(userService.getSubscribedUsersPage).toHaveBeenCalledExactlyOnceWith(
+                notificationTypes.Xur,
+                'page-3',
+            );
+        });
+
+        it('should do nothing more for a broadcast already finished', async () => {
+            await run(jobWith({ queued: 3, duplicates: 0, done: true }));
+
+            expect(userService.getSubscribedUsersPage).not.toHaveBeenCalled();
+        });
+
+        it('should save a page only once every recipient on it is queued', async () => {
+            const queueing = Promise.withResolvers();
+            const job = jobWith();
+
+            userService.getSubscribedUsersPage.mockResolvedValueOnce({
+                users: [mockUser, otherUser],
+                cursor: undefined,
+            });
+            publisher.sendNotification
+                .mockResolvedValueOnce({ deduplicated: false })
+                .mockReturnValueOnce(queueing.promise);
+
+            const running = run(job);
+
+            await new Promise(resolve => setImmediate(resolve));
+            expect(job.updateData).not.toHaveBeenCalled();
+
+            queueing.resolve({ deduplicated: false });
+            await running;
+
+            expect(job.updateData).toHaveBeenCalledOnce();
+        });
+
+        it('should fail the page, without saving past it, when a recipient cannot be queued', async () => {
+            const job = jobWith();
+
+            userService.getSubscribedUsersPage
+                .mockResolvedValueOnce({ users: [mockUser], cursor: 'page-2' })
+                .mockResolvedValueOnce({ users: [mockUser, otherUser], cursor: undefined });
+            publisher.sendNotification
+                .mockResolvedValueOnce({ deduplicated: false })
+                .mockResolvedValueOnce({ deduplicated: false })
+                .mockRejectedValueOnce(new Error('Redis unavailable'));
+
+            await expect(run(job)).rejects.toThrow('1 of 2 recipients');
+
+            expect(job.updateData).toHaveBeenCalledOnce();
+            expect(job.data.progress.cursor).toBe('page-2');
+            expect(log.error).toHaveBeenCalledOnce();
+        });
+
+        it('should count recipients already queued for this week as duplicates', async () => {
+            userService.getSubscribedUsersPage.mockResolvedValueOnce({
+                users: [mockUser, otherUser],
+                cursor: undefined,
+            });
+            publisher.sendNotification
+                .mockResolvedValueOnce({ deduplicated: true })
+                .mockResolvedValueOnce({ deduplicated: false });
+
+            await expect(run(jobWith())).resolves.toEqual({
+                queued: 1,
+                duplicates: 1,
+                done: true,
+            });
+            expect(mockClaimCheck.addPhoneNumber).toHaveBeenCalledWith(phoneNumber, DUPLICATE);
+            expect(mockClaimCheck.addPhoneNumber).toHaveBeenCalledWith(
+                otherUser.phoneNumber,
+                undefined,
+            );
         });
     });
 

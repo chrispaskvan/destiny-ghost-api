@@ -13,6 +13,11 @@ import notificationTypes from '../notifications/notification.types.js';
  */
 const messageCollectionId = 'Messages';
 const userCollectionId = 'Users';
+/**
+ * Subscribers read per page of a broadcast: small enough that a page re-run
+ * after a crash is cheap, large enough that a broadcast is a few round trips.
+ */
+const SUBSCRIBED_USERS_PAGE_SIZE = 100;
 
 /**
  * Schema for Bungie OAuth tokens.
@@ -479,20 +484,18 @@ class UserService {
     }
 
     /**
-     * Get subscribed users for a given notification type. Excludes users who
-     * have opted out via SMS (isSubscribed === false); users missing the
-     * field are treated as subscribed, since it defaults to true and existing
-     * documents predate the field.
+     * The query for users subscribed to a notification type, or a rejection
+     * when the type is not one there are subscriptions for.
      * @param {string} notificationType
-     * @returns {Promise<SubscribedUser[]>}
+     * @returns {import('../helpers/queryBuilder.js').Query}
      */
-    async getSubscribedUsers(notificationType) {
+    static #subscribedUsersQuery(notificationType) {
         const notification = Object.values(notificationTypes).find(
             type => notificationType === type,
         );
 
         if (!notification) {
-            return Promise.reject(Error('notificationType is not valid'));
+            throw new Error('notificationType is not valid');
         }
 
         const qb = new QueryBuilder();
@@ -507,11 +510,50 @@ class UserService {
             .where('type', notification)
             .where('enabled', true);
 
+        return qb.getQuery();
+    }
+
+    /**
+     * Get subscribed users for a given notification type. Excludes users who
+     * have opted out via SMS (isSubscribed === false); users missing the
+     * field are treated as subscribed, since it defaults to true and existing
+     * documents predate the field.
+     * @param {string} notificationType
+     * @returns {Promise<SubscribedUser[]>}
+     */
+    async getSubscribedUsers(notificationType) {
         const documents = /** @type {SubscribedUser[]} */ (
-            await this.documents.getDocuments(userCollectionId, qb.getQuery())
+            await this.documents.getDocuments(
+                userCollectionId,
+                UserService.#subscribedUsersQuery(notificationType),
+            )
         );
 
         return documents.filter(document => document.isSubscribed !== false);
+    }
+
+    /**
+     * Get one page of the users `getSubscribedUsers` would return, so a
+     * broadcast can work through them a page at a time and record where it
+     * got to. Pages are read live: a user who subscribes part way through is
+     * included only if their page has not been read yet.
+     * @param {string} notificationType
+     * @param {string} [cursor] - where the previous page left off; omitted
+     * for the first page
+     * @returns {Promise<{ users: SubscribedUser[], cursor: string | undefined }>}
+     * `cursor` is undefined after the last page
+     */
+    async getSubscribedUsersPage(notificationType, cursor) {
+        const { items, continuationToken } = await this.documents.getDocumentsPage(
+            userCollectionId,
+            UserService.#subscribedUsersQuery(notificationType),
+            { continuationToken: cursor, maxItemCount: SUBSCRIBED_USERS_PAGE_SIZE },
+        );
+        const users = /** @type {SubscribedUser[]} */ (items).filter(
+            user => user.isSubscribed !== false,
+        );
+
+        return { users, cursor: continuationToken };
     }
 
     /**

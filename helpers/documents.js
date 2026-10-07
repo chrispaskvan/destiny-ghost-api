@@ -88,6 +88,27 @@ class Documents {
     }
 
     /**
+     * Get one page of documents from a query.
+     *
+     * The returned `continuationToken` names where the next page starts and
+     * can be stored and passed back later, even by another process, to carry
+     * on from there; it is undefined once the query is exhausted.
+     * @template T
+     * @param {string} collectionId
+     * @param {string | import('@azure/cosmos').SqlQuerySpec} query
+     * @param {{ continuationToken?: string, maxItemCount: number }} options
+     * @returns {Promise<{ items: T[], continuationToken: string | undefined }>}
+     */
+    async getDocumentsPage(collectionId, query, { continuationToken, maxItemCount }) {
+        const container = await this.#getCollection(collectionId);
+        const { resources: items, continuationToken: next } = await container.items
+            .query(query, { continuationToken, maxItemCount })
+            .fetchNext();
+
+        return { items, continuationToken: next || undefined };
+    }
+
+    /**
      * Insert if new or update an existing document.
      * @template {import('@azure/cosmos').ItemDefinition} T
      * @param {string} collectionId
