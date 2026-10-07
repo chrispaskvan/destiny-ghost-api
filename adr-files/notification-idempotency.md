@@ -16,7 +16,7 @@ The broadcast itself also ran inside the request's process: the route answered 2
 
 ## Decision
 
-**Reserve, then accept.** Before any work starts, the route reserves `idempotency:notifications:<caller>:<key>` with one `SET NX EX 60 GET`, storing the operation's id, a fingerprint of the request, and `state: pending`. The operation id is derived from the request - a SHA-256 of caller, key and fingerprint - rather than minted, so every request carrying the same key for the same request names the same operation. Whichever request lands first reserves the key; every other one reads what it stored, with no window between the check and the write:
+**Reserve, then accept.** Before any work starts, the route reserves `idempotency:notifications:<caller>:<key>` with one `SET NX EX 60 GET`, storing the operation's id, a fingerprint of the request, and `state: pending`. The operation id is derived from the request rather than minted, so every request carrying the same key for the same request names the same operation. It is an HMAC-SHA256 of caller, key and fingerprint, keyed with a subkey of the session secret (HKDF, info `idempotency-operation-id`). The operation id is also the claim check that progress and receipts are read with, and caller, route and short keys are guessable, so an unkeyed hash would let any other authorized caller work out someone else's claim check; the keyed one is as hard to guess as a random id. Rotating the session secret changes the ids, which matters only for a retry still in flight across the rotation. Whichever request lands first reserves the key; every other one reads what it stored, with no window between the check and the write:
 
 | Stored value | Response |
 | --- | --- |

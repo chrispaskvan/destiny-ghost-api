@@ -1,3 +1,4 @@
+import { createHash, createHmac, hkdfSync } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cache from './cache.js';
 import log from './log.js';
@@ -5,6 +6,7 @@ import { accept, keepAlive, operationIdFor, release, reserve } from './idempoten
 
 vi.mock('./cache.js', () => ({ default: { get: vi.fn(), set: vi.fn(), eval: vi.fn() } }));
 vi.mock('./log.js', () => ({ default: { warn: vi.fn() } }));
+vi.mock('./config.js', () => ({ default: { session: { secret: 'test-session-secret' } } }));
 
 /**
  * Just enough of Redis's GET and SET for two requests to interleave: every
@@ -68,6 +70,41 @@ describe('idempotency-keys', () => {
 
         it('should make an id BullMQ accepts as a job id', () => {
             expect(operationIdFor(request)).toMatch(/^[0-9a-f]{64}$/);
+        });
+
+        /**
+         * The id is the claim check that progress and receipts are read
+         * with, so knowing the caller, route and key must not be enough to
+         * work it out: it is an HMAC under a subkey of the session secret,
+         * not a plain hash and not keyed with the session secret itself.
+         */
+        it('should be keyed with a subkey of the server secret, not computable from the request alone', () => {
+            const input = `${request.caller}\n${request.key}\n${request.fingerprint}`;
+            const subkey = Buffer.from(
+                hkdfSync('sha256', 'test-session-secret', '', 'idempotency-operation-id', 32),
+            );
+
+            expect(operationIdFor(request)).toBe(
+                createHmac('sha256', subkey).update(input).digest('hex'),
+            );
+            expect(operationIdFor(request)).not.toBe(
+                createHash('sha256').update(input).digest('hex'),
+            );
+            expect(operationIdFor(request)).not.toBe(
+                createHmac('sha256', 'test-session-secret').update(input).digest('hex'),
+            );
+        });
+
+        it('should key with the first session secret when there is a list of them', async () => {
+            vi.resetModules();
+            vi.doMock('./config.js', () => ({
+                default: { session: { secret: ['test-session-secret', 'older-secret'] } },
+            }));
+
+            const { operationIdFor: withList } = await import('./idempotency-keys.js');
+
+            expect(withList(request)).toBe(operationIdFor(request));
+            vi.doUnmock('./config.js');
         });
     });
 

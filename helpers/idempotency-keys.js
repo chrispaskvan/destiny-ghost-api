@@ -10,9 +10,26 @@
  *
  * @module idempotencyKeys
  */
-import { createHash } from 'node:crypto';
+import { createHmac, hkdfSync } from 'node:crypto';
 import cache from './cache.js';
+import configuration from './config.js';
 import log from './log.js';
+
+/**
+ * The key operation ids are signed with: a subkey of the session secret,
+ * derived for this purpose alone so it is unrelated to the one that signs
+ * cookies. express-session takes one secret or a list, signing with the
+ * first.
+ */
+const OPERATION_ID_KEY = Buffer.from(
+    hkdfSync(
+        'sha256',
+        [configuration.session.secret].flat()[0],
+        '',
+        'idempotency-operation-id',
+        32,
+    ),
+);
 
 /**
  * How long a reservation outlives the process holding it. The holder renews
@@ -95,14 +112,23 @@ return 1
  * Every request carrying the same key for the same request names the same
  * operation, so a retry that arrives after a reservation lapsed - its accept
  * failed, say, after the work was already recorded - finds that work under
- * the same id instead of recording it a second time. Separators keep
- * `caller`, `key` and `fingerprint` from running into one another, and the
- * hash keeps the id free of the `:` BullMQ forbids in job ids.
+ * the same id instead of recording it a second time.
+ *
+ * The id is also the claim check a caller reads progress and receipts with,
+ * so it must be as hard to guess as a random one: caller and route are
+ * predictable and keys can be short, so a plain hash of them could be
+ * worked out by anyone else holding a credential. Keying the hash with a
+ * server secret keeps it stable for a retry and unguessable without that
+ * secret. Separators keep `caller`, `key` and `fingerprint` from running
+ * into one another, and hex keeps the id free of the `:` BullMQ forbids in
+ * job ids.
  * @param {Pick<Reservation, 'caller' | 'key' | 'fingerprint'>} reservation
  * @returns {string}
  */
 const operationIdFor = ({ caller, key, fingerprint }) =>
-    createHash('sha256').update(`${caller}\n${key}\n${fingerprint}`).digest('hex');
+    createHmac('sha256', OPERATION_ID_KEY)
+        .update(`${caller}\n${key}\n${fingerprint}`)
+        .digest('hex');
 
 /** @param {Pick<Reservation, 'caller' | 'key'>} reservation */
 const keyFor = ({ caller, key }) => `idempotency:notifications:${caller}:${key}`;

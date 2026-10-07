@@ -22,6 +22,9 @@ const { controller } = vi.hoisted(() => ({
  * which connects on import, so that is replaced: nothing here may reach Redis.
  */
 vi.mock('../helpers/cache.js', () => ({ default: {} }));
+vi.mock('../helpers/config.js', () => ({
+    default: { session: { secret: 'test-session-secret' } },
+}));
 vi.mock('../helpers/idempotency-keys.js', async importOriginal => ({
     accept: vi.fn(),
     keepAlive: vi.fn(),
