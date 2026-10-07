@@ -9,6 +9,7 @@
 // @ts-check
 import { Queue, QueueEvents } from 'bullmq';
 import applicationInsights from './application-insights.js';
+import closeAll from './close-all.js';
 import client from './jobs.js';
 import context from './async-context.js';
 import log from './log.js';
@@ -183,6 +184,18 @@ class Publisher {
         );
 
         return result;
+    }
+
+    /**
+     * Clean up resources. The shared jobs connection is left open: BullMQ
+     * does not own it, and `server.js` quits it once everything that uses it
+     * has closed.
+     */
+    async close() {
+        await closeAll(
+            [this.#queueEvents.close(), this.#queue.close()],
+            'Publisher failed to close',
+        );
     }
 }
 

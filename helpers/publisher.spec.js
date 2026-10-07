@@ -5,6 +5,8 @@ const { mocks } = vi.hoisted(() => ({
     mocks: {
         add: vi.fn().mockResolvedValue('some-job'),
         getJob: vi.fn(),
+        queueClose: vi.fn(),
+        queueEventsClose: vi.fn(),
         queueEventsOn: vi.fn(),
         constructorArgs: null,
     },
@@ -18,6 +20,9 @@ vi.mock('bullmq', () => ({
         getJob(...args) {
             return mocks.getJob(...args);
         }
+        close() {
+            return mocks.queueClose();
+        }
 
         constructor(...args) {
             mocks.constructorArgs = args;
@@ -26,6 +31,9 @@ vi.mock('bullmq', () => ({
     QueueEvents: class {
         on(...args) {
             return mocks.queueEventsOn(...args);
+        }
+        close() {
+            return mocks.queueEventsClose();
         }
     },
 }));
@@ -115,6 +123,56 @@ describe('Publisher', () => {
             });
             expect(message.body).not.toContain(accessToken);
             expect(message.body).not.toContain(code);
+        });
+    });
+
+    describe('close', () => {
+        it.each([
+            ['Queue', mocks.queueClose, mocks.queueEventsClose],
+            ['QueueEvents', mocks.queueEventsClose, mocks.queueClose],
+        ])('should not resolve until its %s has closed', async (_label, pending, settled) => {
+            const closing = Promise.withResolvers();
+            let closed = false;
+
+            pending.mockReturnValue(closing.promise);
+            settled.mockResolvedValue(undefined);
+
+            const close = publisher.close().then(() => {
+                closed = true;
+            });
+
+            await new Promise(resolve => setImmediate(resolve));
+            expect(mocks.queueClose).toHaveBeenCalledOnce();
+            expect(mocks.queueEventsClose).toHaveBeenCalledOnce();
+            expect(closed).toBe(false);
+
+            closing.resolve();
+            await close;
+
+            expect(closed).toBe(true);
+        });
+
+        it('should keep waiting for the queue when its queue events fail to close', async () => {
+            const closing = Promise.withResolvers();
+            const err = new Error('close failed');
+            let settled = false;
+
+            mocks.queueEventsClose.mockRejectedValue(err);
+            mocks.queueClose.mockReturnValue(closing.promise);
+
+            const close = publisher.close().catch(reason => {
+                settled = true;
+                return reason;
+            });
+
+            await new Promise(resolve => setImmediate(resolve));
+            expect(settled).toBe(false);
+
+            closing.resolve();
+            const reason = await close;
+
+            expect(reason).toBeInstanceOf(AggregateError);
+            expect(reason.errors).toEqual([err]);
         });
     });
 

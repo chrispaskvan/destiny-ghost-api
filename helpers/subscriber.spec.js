@@ -239,6 +239,41 @@ describe('Subscriber', () => {
             expect(mockWorkerInstance.close).toHaveBeenCalledTimes(2);
         });
 
+        it('should keep waiting for a draining worker when another fails to close', async () => {
+            const draining = Promise.withResolvers();
+            const err = new Error('close failed');
+            const failing = { close: vi.fn().mockRejectedValueOnce(err), on: vi.fn() };
+            const busy = { close: vi.fn().mockReturnValue(draining.promise), on: vi.fn() };
+            let settled = false;
+
+            MockWorkerConstructor
+                // biome-ignore lint/complexity/useArrowFunction: function expression required — `new` ignores return value of arrow functions
+                .mockImplementationOnce(function () {
+                    return failing;
+                })
+                // biome-ignore lint/complexity/useArrowFunction: function expression required — `new` ignores return value of arrow functions
+                .mockImplementationOnce(function () {
+                    return busy;
+                });
+            subscriber.listen(vi.fn(), 'queue1');
+            subscriber.listen(vi.fn(), 'queue2');
+
+            const closing = subscriber.close().catch(reason => {
+                settled = true;
+                return reason;
+            });
+
+            await new Promise(resolve => setImmediate(resolve));
+            expect(busy.close).toHaveBeenCalledOnce();
+            expect(settled).toBe(false);
+
+            draining.resolve();
+            const reason = await closing;
+
+            expect(reason).toBeInstanceOf(AggregateError);
+            expect(reason.errors).toEqual([err]);
+        });
+
         it('should handle close with no workers', async () => {
             await expect(subscriber.close()).resolves.not.toThrow();
         });
