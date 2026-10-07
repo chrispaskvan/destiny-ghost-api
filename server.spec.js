@@ -10,6 +10,8 @@ const {
     cacheQuit,
     jobsQuit,
     poolClose,
+    publisherClose,
+    consentQueueClose,
     subscriberClose,
     processExternalPromisesWithTimeout,
     trackMetric,
@@ -25,6 +27,8 @@ const {
     cacheQuit: vi.fn(),
     jobsQuit: vi.fn(),
     poolClose: vi.fn(),
+    publisherClose: vi.fn(),
+    consentQueueClose: vi.fn(),
     subscriberClose: vi.fn(),
     processExternalPromisesWithTimeout: vi.fn(),
     trackMetric: vi.fn(),
@@ -40,7 +44,9 @@ vi.mock('./grpc.js', () => ({ startServer: startGrpcServer, stopServer: stopGrpc
 vi.mock('./helpers/cache.js', () => ({ default: { quit: cacheQuit } }));
 vi.mock('./helpers/jobs.js', () => ({ default: { quit: jobsQuit } }));
 vi.mock('./helpers/pool.js', () => ({ default: { close: poolClose } }));
+vi.mock('./helpers/publisher.js', () => ({ default: { close: publisherClose } }));
 vi.mock('./helpers/subscriber.js', () => ({ default: { close: subscriberClose } }));
+vi.mock('./twilio/consent.queue.js', () => ({ default: { close: consentQueueClose } }));
 vi.mock('./helpers/process-external-promises-with-timeout.js', () => ({
     default: processExternalPromisesWithTimeout,
 }));
@@ -49,6 +55,11 @@ vi.mock('./helpers/log.js', () => ({ default: { info: logInfo, error: logError }
 vi.mock('./helpers/event-loop-delay.js', () => ({ readStartupEventLoopDelay }));
 
 const world2 = { items: [] };
+const workers = [subscriberClose];
+const producers = [publisherClose, consentQueueClose];
+const connections = [cacheQuit, jobsQuit, poolClose];
+const allCloses = [...workers, ...producers, ...connections];
+const settle = () => new Promise(resolve => setImmediate(resolve));
 
 describe('startServer gRPC', () => {
     beforeEach(() => {
@@ -131,16 +142,14 @@ describe('startServer shutdown wiring', () => {
         createServer.mockReturnValue(httpServer);
         onSignal = undefined;
         loadersInit.mockResolvedValue({ world2 });
-        for (const close of [cacheQuit, jobsQuit, poolClose, subscriberClose]) {
+        for (const close of allCloses) {
             close.mockResolvedValue(undefined);
         }
         createTerminus.mockImplementation((_server, options) => {
             onSignal = options.onSignal;
         });
         processExternalPromisesWithTimeout.mockImplementation(async externalPromises =>
-            Promise.all(externalPromises).then(results =>
-                results.map(value => ({ status: 'fulfilled', value })),
-            ),
+            Promise.allSettled(externalPromises),
         );
     });
 
@@ -160,7 +169,7 @@ describe('startServer shutdown wiring', () => {
         const shutdown = onSignal();
         await Promise.resolve();
         expect(stopGrpcServer).toHaveBeenCalledOnce();
-        for (const close of [cacheQuit, jobsQuit, poolClose, subscriberClose]) {
+        for (const close of allCloses) {
             expect(close).not.toHaveBeenCalled();
         }
         expect(processExternalPromisesWithTimeout).not.toHaveBeenCalled();
@@ -168,20 +177,91 @@ describe('startServer shutdown wiring', () => {
         grpcShutdown.resolve();
         await shutdown;
 
-        for (const close of [cacheQuit, jobsQuit, poolClose, subscriberClose]) {
+        for (const close of allCloses) {
             expect(close).toHaveBeenCalledOnce();
         }
         expect(httpServer.close).not.toHaveBeenCalled();
-        expect(processExternalPromisesWithTimeout).toHaveBeenCalledOnce();
-        expect(processExternalPromisesWithTimeout).toHaveBeenCalledWith(
-            expect.arrayContaining([
-                expect.any(Promise),
-                expect.any(Promise),
-                expect.any(Promise),
-                expect.any(Promise),
-            ]),
-            3000,
-        );
+        expect(processExternalPromisesWithTimeout.mock.calls).toEqual([
+            [[expect.any(Promise)], 10_000],
+            [[expect.any(Promise), expect.any(Promise)], 3000],
+            [[expect.any(Promise), expect.any(Promise), expect.any(Promise)], 3000],
+        ]);
+    });
+
+    it('keeps producers and connections open until the workers have drained', async () => {
+        const draining = Promise.withResolvers();
+        subscriberClose.mockReturnValue(draining.promise);
+
+        await startServer();
+        const shutdown = onSignal();
+        await settle();
+
+        expect(subscriberClose).toHaveBeenCalledOnce();
+        for (const close of [...producers, ...connections]) {
+            expect(close).not.toHaveBeenCalled();
+        }
+
+        draining.resolve();
+        await shutdown;
+
+        for (const close of [...producers, ...connections]) {
+            expect(close).toHaveBeenCalledOnce();
+        }
+    });
+
+    it('keeps connections open until the producers have closed', async () => {
+        const closing = Promise.withResolvers();
+        publisherClose.mockReturnValue(closing.promise);
+
+        await startServer();
+        const shutdown = onSignal();
+        await settle();
+
+        for (const close of [...workers, ...producers]) {
+            expect(close).toHaveBeenCalledOnce();
+        }
+        for (const close of connections) {
+            expect(close).not.toHaveBeenCalled();
+        }
+
+        closing.resolve();
+        await shutdown;
+
+        for (const close of connections) {
+            expect(close).toHaveBeenCalledOnce();
+        }
+    });
+
+    it('moves on to the next stage when a drain times out', async () => {
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        subscriberClose.mockReturnValue(new Promise(() => {}));
+        processExternalPromisesWithTimeout.mockResolvedValueOnce([{ status: 'timed-out' }]);
+
+        await startServer();
+        await onSignal();
+
+        for (const close of [...producers, ...connections]) {
+            expect(close).toHaveBeenCalledOnce();
+        }
+        expect(consoleError).toHaveBeenCalledWith('Subscriber failed to shut down in time');
+        consoleError.mockRestore();
+    });
+
+    it('moves on to the next stage when a close throws', async () => {
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const err = new Error('already closed');
+        publisherClose.mockImplementation(() => {
+            throw err;
+        });
+
+        await startServer();
+        await expect(onSignal()).resolves.toBeUndefined();
+
+        for (const close of connections) {
+            expect(close).toHaveBeenCalledOnce();
+        }
+        expect(consoleError).toHaveBeenCalledWith('Publisher failed to shut down', err);
+        consoleError.mockRestore();
     });
 
     it.each(['rejects', 'throws'])(
@@ -201,10 +281,10 @@ describe('startServer shutdown wiring', () => {
 
             expect(stopGrpcServer).toHaveBeenCalledOnce();
             expect(logError).toHaveBeenCalledExactlyOnceWith({ err }, 'GRPC failed to shut down');
-            for (const close of [cacheQuit, jobsQuit, poolClose, subscriberClose]) {
+            for (const close of allCloses) {
                 expect(close).toHaveBeenCalledOnce();
             }
-            expect(processExternalPromisesWithTimeout).toHaveBeenCalledOnce();
+            expect(processExternalPromisesWithTimeout).toHaveBeenCalledTimes(3);
             expect(httpServer.close).not.toHaveBeenCalled();
         },
     );

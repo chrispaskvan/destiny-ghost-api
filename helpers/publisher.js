@@ -184,6 +184,15 @@ class Publisher {
 
         return result;
     }
+
+    /**
+     * Clean up resources. The shared jobs connection is left open: BullMQ
+     * does not own it, and `server.js` quits it once everything that uses it
+     * has closed.
+     */
+    async close() {
+        await Promise.all([this.#queueEvents.close(), this.#queue.close()]);
+    }
 }
 
 const publisher = new Publisher();

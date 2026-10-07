@@ -15,13 +15,81 @@ import cache from './helpers/cache.js';
 import jobs from './helpers/jobs.js';
 import log from './helpers/log.js';
 import loaders from './loaders/index.js';
+import publisher from './helpers/publisher.js';
 import subscriber from './helpers/subscriber.js';
+import consentQueue from './twilio/consent.queue.js';
 import processExternalPromisesWithTimeout from './helpers/process-external-promises-with-timeout.js';
 import pool from './helpers/pool.js';
 import { startServer as startGrpcServer, stopServer as stopGrpcServer } from './grpc.js';
 
 let insecureConnection;
 let secureConnection;
+
+/**
+ * @typedef {Object} ShutdownStage
+ * @property {[label: string, close: () => Promise<unknown>][]} tasks
+ * @property {number} timeout - milliseconds
+ */
+
+/**
+ * Shared resources, closed in order. Each stage starts only once the one
+ * before it has finished or run out of time.
+ *
+ * Workers come first because an active job still needs everything after
+ * them: Redis for its claim-check receipt and the Twilio rate limiter, the
+ * worker pool for manifest reads. `subscriber.close()` waits for those jobs
+ * to finish, and a job outliving the drain timeout is not lost - BullMQ
+ * finds it stalled and runs it again, which is the at-least-once delivery
+ * the queue already promises. The producers come next, while the jobs
+ * connection they share is still up, and the connections themselves last.
+ *
+ * The whole sequence is bounded at 16 seconds, after Terminus has stopped
+ * the HTTP server and gRPC has drained.
+ * @type {ShutdownStage[]}
+ */
+const shutdownStages = [
+    { tasks: [['Subscriber', () => subscriber.close()]], timeout: 10_000 },
+    {
+        tasks: [
+            ['Publisher', () => publisher.close()],
+            ['Consent queue', () => consentQueue.close()],
+        ],
+        timeout: 3000,
+    },
+    {
+        tasks: [
+            ['Cache', () => cache.quit()],
+            ['Job queue', () => jobs.quit()],
+            ['Worker pool', () => pool.close()],
+        ],
+        timeout: 3000,
+    },
+];
+
+/**
+ * Close one stage's resources together and report each outcome. A close
+ * that fails or times out is logged rather than thrown, so the stages after
+ * it still run.
+ * @param {ShutdownStage} stage
+ */
+const closeStage = async ({ tasks, timeout }) => {
+    const results = await processExternalPromisesWithTimeout(
+        tasks.map(async ([, close]) => close()),
+        timeout,
+    );
+
+    tasks.forEach(([label], index) => {
+        const result = results[index];
+
+        if (result.status === 'fulfilled') {
+            console.log(`${label} shut down`);
+        } else if (result.status === 'timed-out') {
+            console.error(`${label} failed to shut down in time`);
+        } else {
+            console.error(`${label} failed to shut down`, result.reason);
+        }
+    });
+};
 
 /**
  * @param {{ grpc?: boolean }} [options] - also start the gRPC server, sharing
@@ -75,28 +143,9 @@ const startServer = async ({ grpc = false } = {}) => {
                 log.error({ err }, 'GRPC failed to shut down');
             }
 
-            const shutdownTasks = [
-                ['Cache', cache.quit()],
-                ['Job queue', jobs.quit()],
-                ['Worker pool', pool.close()],
-                ['Subscriber', subscriber.close()],
-            ];
-            const results = await processExternalPromisesWithTimeout(
-                shutdownTasks.map(([, task]) => task),
-                3000,
-            );
-
-            shutdownTasks.forEach(([label], index) => {
-                const result = results[index];
-
-                if (result.status === 'fulfilled') {
-                    console.log(`${label} shut down`);
-                } else if (result.status === 'timed-out') {
-                    console.error(`${label} failed to shut down in time`);
-                } else {
-                    console.error(`${label} failed to shut down`, result.reason);
-                }
-            });
+            for (const stage of shutdownStages) {
+                await closeStage(stage);
+            }
         },
         logger: (msg, err) => log.error({ err }, msg),
     });
