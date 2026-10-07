@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cache from './cache.js';
 import log from './log.js';
-import { accept, keepAlive, release, reserve } from './idempotency-keys.js';
+import { accept, keepAlive, operationIdFor, release, reserve } from './idempotency-keys.js';
 
 vi.mock('./cache.js', () => ({ default: { get: vi.fn(), set: vi.fn(), eval: vi.fn() } }));
 vi.mock('./log.js', () => ({ default: { warn: vi.fn() } }));
@@ -44,6 +44,31 @@ const stored = (overrides = {}) =>
 describe('idempotency-keys', () => {
     beforeEach(() => {
         vi.resetAllMocks();
+    });
+
+    describe('operationIdFor', () => {
+        const request = {
+            caller: reservation.caller,
+            key: reservation.key,
+            fingerprint: reservation.fingerprint,
+        };
+
+        it('should name the same operation every time for the same request', () => {
+            expect(operationIdFor(request)).toBe(operationIdFor({ ...request }));
+        });
+
+        it.each([
+            ['caller', { caller: 'notification-headers' }],
+            ['key', { key: 'xur-2026-10-16' }],
+            ['fingerprint', { fingerprint: 'POST /notifications/Banshee-44' }],
+            ['boundary between fields', { caller: 'x-api-keyx', key: 'ur-2026-10-09' }],
+        ])('should name a different operation when the %s differs', (_label, change) => {
+            expect(operationIdFor({ ...request, ...change })).not.toBe(operationIdFor(request));
+        });
+
+        it('should make an id BullMQ accepts as a job id', () => {
+            expect(operationIdFor(request)).toMatch(/^[0-9a-f]{64}$/);
+        });
     });
 
     describe('reserve', () => {

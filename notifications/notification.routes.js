@@ -1,9 +1,14 @@
 // @ts-check
-import { createId } from '@paralleldrive/cuid2';
 import { Router } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import { z } from 'zod';
-import { accept, keepAlive, release, reserve } from '../helpers/idempotency-keys.js';
+import {
+    accept,
+    keepAlive,
+    operationIdFor,
+    release,
+    reserve,
+} from '../helpers/idempotency-keys.js';
 import log from '../helpers/log.js';
 import notificationTypes from './notification.types.js';
 import NotificationController from './notification.controller.js';
@@ -116,12 +121,12 @@ const routes = ({
             return;
         }
 
-        const reservation = {
+        const request = {
             caller: res.locals.caller,
             key: key.data,
             fingerprint: `POST /notifications/${subscription}`,
-            operationId: createId(),
         };
+        const reservation = { ...request, operationId: operationIdFor(request) };
         const reserved = await reserve(reservation);
 
         if (reserved.outcome === 'mismatch') {
@@ -172,8 +177,10 @@ const routes = ({
          * The broadcast is recorded by now and will run regardless, so
          * nothing below may turn this into a failure: the client would retry
          * a broadcast that is already under way. A reservation that cannot be
-         * accepted lapses with its lease instead, and the broadcast's own job
-         * id stops a retry after that from recording it twice.
+         * accepted lapses with its lease instead. A retry after that derives
+         * the same operation id from the same key, so it finds this broadcast
+         * already recorded under that id rather than recording a second one,
+         * and answers with this claim check.
          */
         try {
             if (!(await accept(reservation))) {

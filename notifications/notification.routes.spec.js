@@ -2,7 +2,13 @@ import { EventEmitter } from 'node:events';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { StatusCodes } from 'http-status-codes';
 import { createRequest, createResponse } from 'node-mocks-http';
-import { accept, keepAlive, release, reserve } from '../helpers/idempotency-keys.js';
+import {
+    accept,
+    keepAlive,
+    operationIdFor,
+    release,
+    reserve,
+} from '../helpers/idempotency-keys.js';
 import log from '../helpers/log.js';
 import NotificationRouter from './notification.routes.js';
 
@@ -10,10 +16,16 @@ const { controller } = vi.hoisted(() => ({
     controller: { create: vi.fn(), getBroadcast: vi.fn(), getClaimCheck: vi.fn() },
 }));
 
-vi.mock('@paralleldrive/cuid2', () => ({ createId: () => 'op-new' }));
-vi.mock('../helpers/idempotency-keys.js', () => ({
+/**
+ * `operationIdFor` is the real one, so these tests check that the same key
+ * really does name the same operation. Its module imports the cache client,
+ * which connects on import, so that is replaced: nothing here may reach Redis.
+ */
+vi.mock('../helpers/cache.js', () => ({ default: {} }));
+vi.mock('../helpers/idempotency-keys.js', async importOriginal => ({
     accept: vi.fn(),
     keepAlive: vi.fn(),
+    operationIdFor: (await importOriginal()).operationIdFor,
     release: vi.fn(),
     reserve: vi.fn(),
 }));
@@ -31,12 +43,12 @@ vi.mock('./notification.controller.js', () => ({
     }),
 }));
 
-const reservation = {
+const request = {
     caller: 'x-api-key',
     key: 'xur-week-41',
     fingerprint: 'POST /notifications/Xur',
-    operationId: 'op-new',
 };
+const reservation = { ...request, operationId: operationIdFor(request) };
 
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
@@ -88,7 +100,7 @@ describe('NotificationRouter', () => {
             expect(reserve).toHaveBeenCalledExactlyOnceWith(reservation);
             expect(keepAlive).toHaveBeenCalledExactlyOnceWith(reservation);
             expect(controller.create).toHaveBeenCalledExactlyOnceWith('Xur', {
-                operationId: 'op-new',
+                operationId: reservation.operationId,
             });
             expect(reserve.mock.invocationCallOrder[0]).toBeLessThan(
                 keepAlive.mock.invocationCallOrder[0],
@@ -123,6 +135,20 @@ describe('NotificationRouter', () => {
             expect(release).not.toHaveBeenCalled();
             expect(stopKeepAlive).toHaveBeenCalledOnce();
             expect(res.statusCode).toBe(StatusCodes.ACCEPTED);
+        });
+
+        it('should name the same operation for a retry after the key lapsed, so it is not recorded twice', async () => {
+            reserve.mockResolvedValue({ outcome: 'reserved' });
+            accept.mockResolvedValue(false);
+
+            await broadcast();
+            res = createResponse({ eventEmitter: EventEmitter });
+            await broadcast();
+
+            const [[, first], [, second]] = controller.create.mock.calls;
+
+            expect(first.operationId).toBe(second.operationId);
+            expect(first.operationId).toBe(reservation.operationId);
         });
 
         it('should replay the original operation without starting another', async () => {

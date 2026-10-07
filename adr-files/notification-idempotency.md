@@ -16,7 +16,7 @@ The broadcast itself also ran inside the request's process: the route answered 2
 
 ## Decision
 
-**Reserve, then accept.** Before any work starts, the route reserves `idempotency:notifications:<caller>:<key>` with one `SET NX EX 60 GET`, storing the new operation's id, a fingerprint of the request, and `state: pending`. Whichever request lands first reserves the key; every other one reads what it stored, with no window between the check and the write:
+**Reserve, then accept.** Before any work starts, the route reserves `idempotency:notifications:<caller>:<key>` with one `SET NX EX 60 GET`, storing the operation's id, a fingerprint of the request, and `state: pending`. The operation id is derived from the request - a SHA-256 of caller, key and fingerprint - rather than minted, so every request carrying the same key for the same request names the same operation. Whichever request lands first reserves the key; every other one reads what it stored, with no window between the check and the write:
 
 | Stored value | Response |
 | --- | --- |
@@ -42,6 +42,8 @@ If the process dies part way, the job's lock lapses and BullMQ hands it to the n
 ## Consequences
 
 A crash after the 202 no longer depends on the client to recover: the broadcast job resumes on its own. The pending lease now covers only the short window between reserving the key and recording the job; if the process dies there, the key expires within 60 seconds and a retry starts again.
+
+Because the operation id comes from the key, a reservation that lapses after its broadcast was recorded - its accept failed, say - cannot lead to a second broadcast: a retry derives the same id, finds the job already recorded under it, and answers with the original claim check. The flip side is that a key reused after it expires names the old operation again for as long as that broadcast's job is retained (a day after it finishes), and gets its receipt rather than a new broadcast. Clients should use a fresh key per broadcast.
 
 The week a broadcast deduplicates against is fixed when it is accepted and stored on its job, so a broadcast that runs or resumes past Tuesday's reset still belongs to the week it was accepted in.
 
