@@ -151,6 +151,29 @@ describe('Publisher', () => {
 
             expect(closed).toBe(true);
         });
+
+        it('should keep waiting for the queue when its queue events fail to close', async () => {
+            const closing = Promise.withResolvers();
+            const err = new Error('close failed');
+            let settled = false;
+
+            mocks.queueEventsClose.mockRejectedValue(err);
+            mocks.queueClose.mockReturnValue(closing.promise);
+
+            const close = publisher.close().catch(reason => {
+                settled = true;
+                return reason;
+            });
+
+            await new Promise(resolve => setImmediate(resolve));
+            expect(settled).toBe(false);
+
+            closing.resolve();
+            const reason = await close;
+
+            expect(reason).toBeInstanceOf(AggregateError);
+            expect(reason.errors).toEqual([err]);
+        });
     });
 
     describe('failed event handler', () => {

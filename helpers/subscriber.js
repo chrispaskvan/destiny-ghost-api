@@ -7,6 +7,7 @@
  */
 // @ts-check
 import { Worker } from 'bullmq';
+import closeAll from './close-all.js';
 import client from './jobs.js';
 import log from './log.js';
 import safeReviver from './safe-reviver.js';
@@ -114,10 +115,14 @@ class Subscriber {
     }
 
     /**
-     * Clean up resources.
+     * Clean up resources. Each worker finishes its active jobs first, and a
+     * worker that fails to close does not cut the others' drain short.
      */
     async close() {
-        await Promise.all(this.#workers.map(worker => worker.close()));
+        await closeAll(
+            this.#workers.map(worker => worker.close()),
+            'Subscriber failed to close',
+        );
     }
 }
 

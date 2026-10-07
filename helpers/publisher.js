@@ -9,6 +9,7 @@
 // @ts-check
 import { Queue, QueueEvents } from 'bullmq';
 import applicationInsights from './application-insights.js';
+import closeAll from './close-all.js';
 import client from './jobs.js';
 import context from './async-context.js';
 import log from './log.js';
@@ -191,7 +192,10 @@ class Publisher {
      * has closed.
      */
     async close() {
-        await Promise.all([this.#queueEvents.close(), this.#queue.close()]);
+        await closeAll(
+            [this.#queueEvents.close(), this.#queue.close()],
+            'Publisher failed to close',
+        );
     }
 }
 
