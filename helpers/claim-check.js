@@ -12,11 +12,27 @@ const claimCheckExpiration = 86400; // 1 day in seconds
  */
 const SKIPPED = 'skipped';
 
+/**
+ * The outcome recorded when a recipient was already queued for the same
+ * event by another operation - a second broadcast for the same week, or a
+ * retry of one whose reservation lapsed - so this one queued nothing for
+ * them. Their delivery is reported on that other operation's receipt.
+ */
+const DUPLICATE = 'duplicate';
+
 class ClaimCheck {
     /**
      * Claim Check Number
      */
-    #number = createId();
+    #number;
+
+    /**
+     * @param {string} [number] - an operation's id, when the caller has
+     * already minted one; a new id otherwise
+     */
+    constructor(number = createId()) {
+        this.#number = number;
+    }
 
     get number() {
         return this.#number;
@@ -50,4 +66,4 @@ class ClaimCheck {
     }
 }
 
-export { ClaimCheck as default, claimCheckExpiration, SKIPPED };
+export { ClaimCheck as default, claimCheckExpiration, DUPLICATE, SKIPPED };

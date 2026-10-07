@@ -129,6 +129,14 @@ class Publisher {
     }
 
     /**
+     * Missing Deduplication Id Error
+     * @returns {never}
+     */
+    static throwIfMissingDeduplicationId() {
+        throw new PublisherError('deduplication id is required');
+    }
+
+    /**
      * Send notification of a specific type to a user.
      *
      * Narrowing happens here rather than at the call sites because the queue
@@ -139,9 +147,15 @@ class Publisher {
      * only the identifiers cross into it, and the worker loads current state
      * for itself.
      *
+     * The caller decides what counts as the same notification twice, through
+     * `deduplicationId`. A job carrying an id that is already queued, or was
+     * in the last week, is not added: BullMQ hands back the job that holds the
+     * id instead, so a returned id other than this job's own means it was
+     * deduplicated.
+     *
      * @param {QueuedUser} user
-     * @param {{ notificationType: string, claimCheckNumber: string }} param1
-     * @returns {Promise<*>}
+     * @param {{ notificationType: string, claimCheckNumber: string, deduplicationId: string }} param1
+     * @returns {Promise<{ deduplicated: boolean }>}
      */
     async sendNotification(
         user,
@@ -152,6 +166,9 @@ class Publisher {
             claimCheckNumber = /** @type {typeof Publisher} */ (
                 this.constructor
             ).throwIfMissingClaimCheckNumber(),
+            deduplicationId = /** @type {typeof Publisher} */ (
+                this.constructor
+            ).throwIfMissingDeduplicationId(),
         },
     ) {
         const { membershipId, membershipType, phoneNumber } = user;
@@ -165,13 +182,24 @@ class Publisher {
             },
         };
 
-        const deduplicationId = `${notificationType}-${phoneNumber}`;
+        // BullMQ refuses a custom id containing ':'; neither part can.
+        const jobId = `${claimCheckNumber}-${membershipId}`;
+        /**
+         * The deduplication key outlives the job it came from. BullMQ's own
+         * pruning (`removeOnComplete`/`removeOnFail`, by count or age)
+         * leaves it alone, and so does finishing a job while the key has a
+         * TTL; only an explicit removal - `job.remove()`, `queue.clean()` -
+         * deletes it. So the retention above can stay short without
+         * shortening the week this holds a repeat back for.
+         */
         const result = await this.#queue.add('notification', message, {
+            jobId,
             deduplication: {
                 id: deduplicationId,
-                ttl: 3_600_000,
+                ttl: 604_800_000,
             },
         });
+        const deduplicated = result.id !== jobId;
 
         log.info(
             {
@@ -179,11 +207,12 @@ class Publisher {
                 notificationType,
                 phoneNumber,
                 deduplicationId,
+                deduplicated,
             },
             'Message published to queue',
         );
 
-        return result;
+        return { deduplicated };
     }
 
     /**

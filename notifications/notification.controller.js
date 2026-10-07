@@ -8,9 +8,10 @@ import NotificationError from './notification.error.js';
 import notificationTypes from './notification.types.js';
 import DestinyError from '../destiny/destiny.error.js';
 import XurUnavailableError from './xur-unavailable.error.js';
-import ClaimCheck, { SKIPPED } from '../helpers/claim-check.js';
+import ClaimCheck, { DUPLICATE, SKIPPED } from '../helpers/claim-check.js';
 import mayDeliver from '../helpers/consent.js';
 import log from '../helpers/log.js';
+import currentWeeklyReset from '../helpers/weekly-reset.js';
 
 /**
  * Constructor options for NotificationController.
@@ -281,11 +282,24 @@ class NotificationController {
     /**
      * Send notification(s)
      *
+     * Each recipient is queued under a deduplication id that says what makes
+     * two sends the same one. A broadcast names the event - the notification
+     * type and the Destiny week - so a second broadcast for the same week,
+     * however it was triggered, cannot text anyone twice, while next week's
+     * is never mistaken for it. A single-recipient send is deliberate, so it
+     * names only its own operation: sending it again sends it again.
+     *
      * @param {string} subscription
-     * @param {string} [phoneNumber]
+     * @param {{ operationId?: string, phoneNumber?: string }} [options] -
+     * `operationId` when the caller has already reserved one; a new id
+     * otherwise
+     * @returns {Promise<{ claimCheckNumber: string, scheduled: Promise<{ failed: number }> }>}
+     * resolves once the operation has started. A broadcast goes on queueing
+     * recipients after that; `scheduled` settles when every one has been
+     * attempted, with how many could not be queued, and never rejects.
      */
-    async create(subscription, phoneNumber) {
-        const claimCheck = new ClaimCheck();
+    async create(subscription, { operationId, phoneNumber } = {}) {
+        const claimCheck = new ClaimCheck(operationId);
         const claimCheckNumber = claimCheck.number;
 
         if (phoneNumber) {
@@ -299,31 +313,43 @@ class NotificationController {
                 await this.publisher.sendNotification(user, {
                     notificationType: subscription,
                     claimCheckNumber,
+                    deduplicationId: `${claimCheckNumber}-${user.phoneNumber}`,
                 });
                 await claimCheck.addPhoneNumber(phoneNumber);
 
-                return claimCheckNumber;
+                return { claimCheckNumber, scheduled: Promise.resolve({ failed: 0 }) };
             }
 
             throw new NotificationError('user not found');
         }
 
         const users = await this.users.getSubscribedUsers(subscription);
+        const weeklyReset = currentWeeklyReset();
         const limit = pLimit(20);
         /** @param {import('../users/user.service.js').SubscribedUser} user */
         const sendNotification = async user => {
-            await this.publisher.sendNotification(user, {
+            const { deduplicated } = await this.publisher.sendNotification(user, {
                 notificationType: subscription,
                 claimCheckNumber,
+                deduplicationId: `${subscription}-${weeklyReset}-${user.phoneNumber}`,
             });
-            await claimCheck.addPhoneNumber(user.phoneNumber);
+
+            await claimCheck.addPhoneNumber(user.phoneNumber, deduplicated ? DUPLICATE : undefined);
         };
 
-        Promise.all(users.map(user => limit(() => sendNotification(user)))).catch(err =>
-            log.error(err),
-        );
+        const scheduled = Promise.allSettled(
+            users.map(user => limit(() => sendNotification(user))),
+        ).then(results => {
+            const failures = results.filter(result => result.status === 'rejected');
 
-        return claimCheckNumber;
+            for (const { reason: err } of failures) {
+                log.error({ err, claimCheckNumber }, 'Unable to queue a notification.');
+            }
+
+            return { failed: failures.length };
+        });
+
+        return { claimCheckNumber, scheduled };
     }
 
     /**

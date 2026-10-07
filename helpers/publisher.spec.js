@@ -3,7 +3,7 @@ import Chance from 'chance';
 
 const { mocks } = vi.hoisted(() => ({
     mocks: {
-        add: vi.fn().mockResolvedValue('some-job'),
+        add: vi.fn(async (_name, _data, { jobId }) => ({ id: jobId })),
         getJob: vi.fn(),
         queueClose: vi.fn(),
         queueEventsClose: vi.fn(),
@@ -75,17 +75,49 @@ describe('Publisher', () => {
     });
 
     describe('sendNotification', () => {
-        it('should send a notification to a user', async () => {
-            const user = {
-                name: chance.name(),
-                email: chance.email(),
-            };
-            const result = await publisher.sendNotification(user, {
-                notificationType: 'Xur',
-                claimCheckNumber: '11',
-            });
+        it('should queue a job named for the operation and recipient', async () => {
+            const membershipId = chance.string({ length: 10, pool: '0123456789' });
+            const result = await publisher.sendNotification(
+                { membershipId, membershipType: 2, phoneNumber: '+12085550123' },
+                {
+                    notificationType: 'Xur',
+                    claimCheckNumber: 'op1',
+                    deduplicationId: 'Xur-2026-10-06-+12085550123',
+                },
+            );
+            const [, , options] = mocks.add.mock.calls.at(-1);
 
-            expect(result).toBe('some-job');
+            expect(options).toEqual({
+                jobId: `op1-${membershipId}`,
+                deduplication: { id: 'Xur-2026-10-06-+12085550123', ttl: 604_800_000 },
+            });
+            expect(options.jobId).not.toContain(':');
+            expect(result).toEqual({ deduplicated: false });
+        });
+
+        it('should report a job BullMQ deduplicated into another', async () => {
+            mocks.add.mockResolvedValueOnce({ id: 'op0-4611686018' });
+
+            const result = await publisher.sendNotification(
+                { membershipId: '4611686018', membershipType: 2, phoneNumber: '+12085550123' },
+                {
+                    notificationType: 'Xur',
+                    claimCheckNumber: 'op1',
+                    deduplicationId: 'Xur-2026-10-06-+12085550123',
+                },
+            );
+
+            expect(result).toEqual({ deduplicated: true });
+        });
+
+        it('should require a deduplication id', async () => {
+            await expect(
+                publisher.sendNotification(
+                    { membershipId: '1', membershipType: 2, phoneNumber: '+12085550123' },
+                    { notificationType: 'Xur', claimCheckNumber: 'op1' },
+                ),
+            ).rejects.toThrow('deduplication id is required');
+            expect(mocks.add).not.toHaveBeenCalled();
         });
 
         /**
@@ -111,7 +143,7 @@ describe('Publisher', () => {
                     bungie: { access_token: accessToken, refresh_token: chance.hash() },
                     membership: { tokens: { code, blob: chance.hash() } },
                 },
-                { notificationType: 'Xur', claimCheckNumber: '11' },
+                { notificationType: 'Xur', claimCheckNumber: '11', deduplicationId: '11-1' },
             );
 
             const [, message] = mocks.add.mock.calls.at(-1);

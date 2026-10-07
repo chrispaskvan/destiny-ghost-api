@@ -8,16 +8,23 @@ import configuration from '../helpers/config.js';
 /** @typedef {{ header: string, key: string }} ApiKey */
 
 /**
- * Check for expected notification headers.
+ * The credential a request authenticated with, which scopes anything the
+ * caller names for itself - an idempotency key, say - so two callers cannot
+ * collide on the same name.
  *
  * @param {import('http').IncomingHttpHeaders} headers
- * @returns {boolean}
+ * @returns {string | undefined} the matching API key's header, or
+ * `notification-headers`; undefined when nothing matched
  */
-const authorized = headers => {
+const callerOf = headers => {
     /** @type {ApiKey[]} */
     const apiKeys = configuration.apiKeys;
-    const apiKeyEntries = apiKeys.map(({ header, key }) => [header, key]);
-    const apiKeyPresent = apiKeyEntries.some(([header, key]) => headers[header] === key);
+    const apiKey = apiKeys.find(({ header, key }) => headers[header] === key);
+
+    if (apiKey) {
+        return apiKey.header;
+    }
+
     /** @type {Record<string, string>} */
     const notificationHeaders = configuration.notificationHeaders;
     const notificationEntries = Object.entries(notificationHeaders);
@@ -25,7 +32,7 @@ const authorized = headers => {
         notificationEntries.find(([key2, value2]) => key1 === key2 && value1 === value2),
     );
 
-    return apiKeyPresent || headerEntries.length === notificationEntries.length;
+    return headerEntries.length === notificationEntries.length ? 'notification-headers' : undefined;
 };
 
 /**
@@ -36,14 +43,15 @@ const authorized = headers => {
  * @returns {void}
  */
 function authorizeUser(req, res, next) {
-    const { headers } = req;
+    const caller = callerOf(req.headers);
 
-    if (!authorized(headers)) {
+    if (!caller) {
         res.status(StatusCodes.UNAUTHORIZED).end();
 
         return;
     }
 
+    res.locals.caller = caller;
     next();
 }
 
