@@ -484,12 +484,12 @@ class UserService {
     }
 
     /**
-     * The query for users subscribed to a notification type, or a rejection
-     * when the type is not one there are subscriptions for.
+     * The notification type itself, or a rejection when it is not one there
+     * are subscriptions for.
      * @param {string} notificationType
-     * @returns {import('../helpers/queryBuilder.js').Query}
+     * @returns {string}
      */
-    static #subscribedUsersQuery(notificationType) {
+    static #notificationFor(notificationType) {
         const notification = Object.values(notificationTypes).find(
             type => notificationType === type,
         );
@@ -498,6 +498,17 @@ class UserService {
             throw new Error('notificationType is not valid');
         }
 
+        return notification;
+    }
+
+    /**
+     * The query for users subscribed to a notification type, or a rejection
+     * when the type is not one there are subscriptions for.
+     * @param {string} notificationType
+     * @returns {import('../helpers/queryBuilder.js').Query}
+     */
+    static #subscribedUsersQuery(notificationType) {
+        const notification = UserService.#notificationFor(notificationType);
         const qb = new QueryBuilder();
 
         qb.select('displayName')
@@ -535,25 +546,47 @@ class UserService {
     /**
      * Get one page of the users `getSubscribedUsers` would return, so a
      * broadcast can work through them a page at a time and record where it
-     * got to. Pages are read live: a user who subscribes part way through is
-     * included only if their page has not been read yet.
+     * got to.
+     *
+     * Pages are keyed on the document id, in id order: each page starts after
+     * the last id the previous one returned. Ids never change, so a user who
+     * stays subscribed throughout is never skipped, however other documents
+     * change meanwhile - an opaque continuation token cannot promise that,
+     * because a query without `ORDER BY` has no defined order to resume in.
+     * Pages are still read live: a user who subscribes part way through is
+     * included only if their id is past the cursor when it gets there.
+     *
+     * The cursor is the last id Cosmos returned, before opted-out users are
+     * dropped, so a page that ends on one still moves the cursor on.
+     * `QueryBuilder` has no `TOP`, `ORDER BY` or range filter, so the query
+     * is written out; its select, join and filters match `getSubscribedUsers`.
      * @param {string} notificationType
-     * @param {string} [cursor] - where the previous page left off; omitted
-     * for the first page
+     * @param {string} [cursor] - the last id the previous page returned;
+     * omitted for the first page
      * @returns {Promise<{ users: SubscribedUser[], cursor: string | undefined }>}
      * `cursor` is undefined after the last page
      */
-    async getSubscribedUsersPage(notificationType, cursor) {
-        const { items, continuationToken } = await this.documents.getDocumentsPage(
-            userCollectionId,
-            UserService.#subscribedUsersQuery(notificationType),
-            { continuationToken: cursor, maxItemCount: SUBSCRIBED_USERS_PAGE_SIZE },
+    async getSubscribedUsersPage(notificationType, cursor = '') {
+        const notification = UserService.#notificationFor(notificationType);
+        const items = /** @type {(SubscribedUser & { id: string })[]} */ (
+            await this.documents.getDocuments(userCollectionId, {
+                query:
+                    'SELECT TOP @pageSize u.id, u.displayName, u.isSubscribed, u.membershipId, ' +
+                    'u.membershipType, u.phoneNumber FROM Users u JOIN n IN u.notifications ' +
+                    'WHERE n.type = @type AND n.enabled = @enabled AND u.id > @after ' +
+                    'ORDER BY u.id',
+                parameters: [
+                    { name: '@pageSize', value: SUBSCRIBED_USERS_PAGE_SIZE },
+                    { name: '@type', value: notification },
+                    { name: '@enabled', value: true },
+                    { name: '@after', value: cursor },
+                ],
+            })
         );
-        const users = /** @type {SubscribedUser[]} */ (items).filter(
-            user => user.isSubscribed !== false,
-        );
+        const users = items.filter(user => user.isSubscribed !== false);
+        const next = items.length === SUBSCRIBED_USERS_PAGE_SIZE ? items.at(-1)?.id : undefined;
 
-        return { users, cursor: continuationToken };
+        return { users, cursor: next };
     }
 
     /**

@@ -86,43 +86,4 @@ describe('Documents', () => {
 
         expect(result).toBeDefined();
     });
-
-    describe('getDocumentsPage', () => {
-        it('should fetch one page from where the token says, and the token for the next', async () => {
-            const fetchNext = vi.fn().mockResolvedValue({
-                resources: [document],
-                continuationToken: 'page-3',
-            });
-
-            container.items.query.mockReturnValueOnce({ fetchNext });
-
-            const page = await documentService.getDocumentsPage(collectionId, 'SELECT * FROM m', {
-                continuationToken: 'page-2',
-                maxItemCount: 100,
-            });
-
-            expect(container.items.query).toHaveBeenLastCalledWith('SELECT * FROM m', {
-                continuationToken: 'page-2',
-                maxItemCount: 100,
-            });
-            expect(page).toEqual({ items: [document], continuationToken: 'page-3' });
-        });
-
-        it.each([undefined, null, ''])(
-            'should report the last page with no token when Cosmos returns %j',
-            async token => {
-                container.items.query.mockReturnValueOnce({
-                    fetchNext: vi
-                        .fn()
-                        .mockResolvedValue({ resources: [], continuationToken: token }),
-                });
-
-                const page = await documentService.getDocumentsPage(collectionId, 'q', {
-                    maxItemCount: 100,
-                });
-
-                expect(page.continuationToken).toBeUndefined();
-            },
-        );
-    });
 });
