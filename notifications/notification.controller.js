@@ -293,6 +293,10 @@ class NotificationController {
      * @param {{ operationId?: string, phoneNumber?: string }} [options] -
      * `operationId` when the caller has already reserved one; a new id
      * otherwise
+     * @returns {Promise<{ claimCheckNumber: string, scheduled: Promise<{ failed: number }> }>}
+     * resolves once the operation has started. A broadcast goes on queueing
+     * recipients after that; `scheduled` settles when every one has been
+     * attempted, with how many could not be queued, and never rejects.
      */
     async create(subscription, { operationId, phoneNumber } = {}) {
         const claimCheck = new ClaimCheck(operationId);
@@ -313,7 +317,7 @@ class NotificationController {
                 });
                 await claimCheck.addPhoneNumber(phoneNumber);
 
-                return claimCheckNumber;
+                return { claimCheckNumber, scheduled: Promise.resolve({ failed: 0 }) };
             }
 
             throw new NotificationError('user not found');
@@ -333,11 +337,19 @@ class NotificationController {
             await claimCheck.addPhoneNumber(user.phoneNumber, deduplicated ? DUPLICATE : undefined);
         };
 
-        Promise.all(users.map(user => limit(() => sendNotification(user)))).catch(err =>
-            log.error(err),
-        );
+        const scheduled = Promise.allSettled(
+            users.map(user => limit(() => sendNotification(user))),
+        ).then(results => {
+            const failures = results.filter(result => result.status === 'rejected');
 
-        return claimCheckNumber;
+            for (const { reason: err } of failures) {
+                log.error({ err, claimCheckNumber }, 'Unable to queue a notification.');
+            }
+
+            return { failed: failures.length };
+        });
+
+        return { claimCheckNumber, scheduled };
     }
 
     /**

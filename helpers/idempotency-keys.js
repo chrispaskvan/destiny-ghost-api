@@ -2,21 +2,29 @@
 /**
  * Idempotency keys for asynchronous operations.
  *
- * A key is reserved before any work starts and accepted once the work has,
- * so concurrent requests carrying one key resolve to one operation and a
- * replay returns that operation instead of starting another. See
+ * A key is reserved before any work starts and accepted once the work is
+ * scheduled, so concurrent requests carrying one key resolve to one
+ * operation and a replay returns that operation instead of starting
+ * another. See
  * `adr-files/notification-idempotency.md`.
  *
  * @module idempotencyKeys
  */
 import cache from './cache.js';
+import log from './log.js';
 
 /**
- * Long enough to start the work - `NotificationController.create` reads the
- * subscriber list before it returns - and short enough that a process dying
- * mid-reservation strands the key for no longer than a client's retry.
+ * How long a reservation outlives the process holding it. The holder renews
+ * it for as long as it is working (see `keepAlive`), so this bounds only how
+ * long a process that died mid-operation keeps a client's retry waiting, not
+ * how long the work may take.
  */
 const PENDING_TTL_SECONDS = 60;
+
+/**
+ * Renew three times a lease, so one slow or failed renewal does not lose it.
+ */
+const RENEW_INTERVAL_MS = (PENDING_TTL_SECONDS * 1000) / 3;
 
 /**
  * How long a replay returns the original operation. Matches the claim check
@@ -34,6 +42,19 @@ if redis.call('GET', KEYS[1]) ~= ARGV[1] then
 end
 
 redis.call('SET', KEYS[1], ARGV[2], 'EX', ARGV[3])
+
+return 1
+`;
+
+/**
+ * Extend our pending reservation's lease, under the same guard as `ACCEPT`.
+ */
+const RENEW = `
+if redis.call('GET', KEYS[1]) ~= ARGV[1] then
+    return 0
+end
+
+redis.call('EXPIRE', KEYS[1], ARGV[2])
 
 return 1
 `;
@@ -107,7 +128,46 @@ const reserve = async reservation => {
 };
 
 /**
- * Record that the reserved operation has started, so replays return it.
+ * Hold a pending reservation for as long as its operation is running, so a
+ * slow operation is not mistaken for a dead one and started again.
+ *
+ * A renewal that fails is logged and the next one tries again; a renewal
+ * that finds the reservation gone stops, since there is nothing left to hold.
+ * @param {Reservation} reservation
+ * @returns {() => void} stops renewing
+ */
+const keepAlive = reservation => {
+    const renew = async () => {
+        try {
+            const renewed = await cache.eval(RENEW, {
+                keys: [keyFor(reservation)],
+                arguments: [valueFor(reservation, 'pending'), String(PENDING_TTL_SECONDS)],
+            });
+
+            if (renewed !== 1) {
+                clearInterval(timer);
+                log.warn(
+                    { operationId: reservation.operationId },
+                    'The idempotency key lapsed while its operation was running.',
+                );
+            }
+        } catch (err) {
+            log.warn(
+                { err, operationId: reservation.operationId },
+                'Unable to renew the idempotency key; retrying at the next interval.',
+            );
+        }
+    };
+    const timer = setInterval(renew, RENEW_INTERVAL_MS);
+
+    timer.unref();
+
+    return () => clearInterval(timer);
+};
+
+/**
+ * Record that the reserved operation is fully scheduled, so replays return
+ * it.
  * @param {Reservation} reservation
  * @returns {Promise<boolean>} false when the reservation was no longer ours
  */
@@ -122,8 +182,8 @@ const accept = async reservation =>
     })) === 1;
 
 /**
- * Free the key after the reserved operation failed to start, so a retry
- * can start it.
+ * Free the key after the reserved operation failed to start or to schedule
+ * all of its work, so a retry can start it.
  * @param {Reservation} reservation
  * @returns {Promise<boolean>} false when the reservation was no longer ours
  */
@@ -133,4 +193,4 @@ const release = async reservation =>
         arguments: [valueFor(reservation, 'pending')],
     })) === 1;
 
-export { accept, release, reserve };
+export { accept, keepAlive, release, reserve };

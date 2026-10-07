@@ -23,7 +23,11 @@ Recipient jobs were deduplicated separately, on notification type and phone numb
 | same fingerprint, pending | 409 Conflict with `Retry-After` |
 | different fingerprint | 422 Unprocessable Content; nothing starts |
 
-Once the broadcast has started, a Lua compare-and-set promotes the reservation to `accepted` and extends it to a day, matching the claim check. If the broadcast fails to start, a Lua compare-and-delete releases the key. Both scripts act only on the reservation this request made, so a request whose lease ran out cannot touch a newer one. (Azure Managed Redis 7.4 has no `SET IFEQ`, which would do this without Lua.)
+The client gets its 202 as soon as the broadcast has started, but the reservation stays pending until every recipient has been queued. Then a Lua compare-and-set promotes it to `accepted` and extends it to a day, matching the claim check. Accepting any earlier would let a replay return a receipt for a broadcast that a crash cut short, with nothing left to finish it.
+
+Two other outcomes release the key with a Lua compare-and-delete: the broadcast fails to start, or some recipients cannot be queued. Either way, a retry can do the missing work.
+
+While the reservation is pending, the process holding it renews the 60-second lease every 20 seconds. A slow subscriber query or a long queueing run is therefore never mistaken for a dead process. All three scripts act only on the reservation this request made, so a request whose lease ran out cannot touch a newer one. (Azure Managed Redis 7.4 has no `SET IFEQ`, which would do this without Lua.)
 
 **Keys are scoped to the caller**, meaning the credential the request authenticated with, so two callers cannot collide on the same key.
 
@@ -31,9 +35,11 @@ Once the broadcast has started, a Lua compare-and-set promotes the reservation t
 
 ## Consequences
 
-The pending lease is the recovery path when the process dies mid-reservation. The key expires after 60 seconds and the client's retry starts a fresh operation. Any recipients the failed attempt had already queued are absorbed by the weekly deduplication. The lease has to outlast the time it takes to start a broadcast, which today is reading the subscriber list.
+The pending lease is the recovery path when the process dies before a broadcast is fully queued. Renewals stop, the key expires within 60 seconds, and a retry starts a fresh operation. Any recipients the failed attempt had already queued are absorbed by the weekly deduplication, so the retry queues only what is missing. While the broadcast is still being queued, replays are told to retry (409) rather than given the receipt.
 
-None of this makes delivery exactly-once: queue execution is at-least-once, and a provider call whose outcome is unknown may be retried. Recording the broadcast durably before answering 202, so a crash part-way through queueing resumes instead of relying on the client to retry, is #568.
+This recovery depends on the client retrying. A client that took the first 202 as final will not, so a crash after that response still loses the unqueued recipients until #568 records the broadcast durably.
+
+None of this makes delivery exactly-once: queue execution is at-least-once, and a provider call whose outcome is unknown may be retried.
 
 Deduplicating by weekly reset assumes each notification type is a weekly event. A type that needs more than one broadcast a week needs its own event identity.
 

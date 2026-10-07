@@ -157,7 +157,8 @@ describe('NotificationController', () => {
                     deduplicationId: `${claimCheckNumber}-${phoneNumber}`,
                 });
                 expect(mockClaimCheck.addPhoneNumber).toHaveBeenCalledWith(phoneNumber);
-                expect(result).toBe(claimCheckNumber);
+                expect(result.claimCheckNumber).toBe(claimCheckNumber);
+                await expect(result.scheduled).resolves.toEqual({ failed: 0 });
             });
 
             it('should throw NotificationError when user is not found', async () => {
@@ -216,7 +217,45 @@ describe('NotificationController', () => {
 
                 expect(userService.getSubscribedUsers).toHaveBeenCalledWith(subscription);
                 expect(publisher.sendNotification).toHaveBeenCalledTimes(numberOfSubscribedUsers);
-                expect(result).toBe(claimCheckNumber);
+                expect(result.claimCheckNumber).toBe(claimCheckNumber);
+                await expect(result.scheduled).resolves.toEqual({ failed: 0 });
+            });
+
+            it('should settle scheduled only once every recipient has been attempted', async () => {
+                const queueing = Promise.withResolvers();
+                let settled = false;
+
+                publisher.sendNotification
+                    .mockResolvedValueOnce({ deduplicated: false })
+                    .mockReturnValueOnce(queueing.promise);
+                userService.getSubscribedUsers.mockResolvedValue([mockUser, mockUser]);
+
+                const { scheduled } = await notificationController.create(notificationTypes.Xur);
+
+                scheduled.then(() => {
+                    settled = true;
+                });
+                await new Promise(resolve => setImmediate(resolve));
+                expect(settled).toBe(false);
+
+                queueing.resolve({ deduplicated: false });
+
+                await expect(scheduled).resolves.toEqual({ failed: 0 });
+            });
+
+            it('should count recipients that could not be queued instead of rejecting', async () => {
+                const err = new Error('Redis unavailable');
+
+                publisher.sendNotification
+                    .mockRejectedValueOnce(err)
+                    .mockResolvedValueOnce({ deduplicated: false })
+                    .mockRejectedValueOnce(err);
+                userService.getSubscribedUsers.mockResolvedValue([mockUser, mockUser, mockUser]);
+
+                const { scheduled } = await notificationController.create(notificationTypes.Xur);
+
+                await expect(scheduled).resolves.toEqual({ failed: 2 });
+                expect(log.error).toHaveBeenCalledTimes(2);
             });
 
             it('should name each recipient by the event, not the operation', async () => {

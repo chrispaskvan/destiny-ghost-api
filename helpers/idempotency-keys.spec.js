@@ -1,8 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cache from './cache.js';
-import { accept, release, reserve } from './idempotency-keys.js';
+import log from './log.js';
+import { accept, keepAlive, release, reserve } from './idempotency-keys.js';
 
 vi.mock('./cache.js', () => ({ default: { get: vi.fn(), set: vi.fn(), eval: vi.fn() } }));
+vi.mock('./log.js', () => ({ default: { warn: vi.fn() } }));
 
 /**
  * Just enough of Redis's GET and SET for two requests to interleave: every
@@ -155,6 +157,67 @@ describe('idempotency-keys', () => {
                 state: 'accepted',
             });
             expect(args[2]).toBe('86400');
+        });
+    });
+
+    describe('keepAlive', () => {
+        const pending = JSON.stringify({
+            operationId: 'op-1',
+            fingerprint: reservation.fingerprint,
+            state: 'pending',
+        });
+
+        beforeEach(() => {
+            vi.useFakeTimers();
+        });
+
+        afterEach(() => {
+            // A renewal that was never stopped must not outlive its test.
+            vi.clearAllTimers();
+            vi.useRealTimers();
+        });
+
+        it('should renew our own lease every 20 seconds until stopped', async () => {
+            cache.eval.mockResolvedValue(1);
+
+            const stop = keepAlive(reservation);
+
+            await vi.advanceTimersByTimeAsync(19_999);
+            expect(cache.eval).not.toHaveBeenCalled();
+
+            await vi.advanceTimersByTimeAsync(40_001);
+            expect(cache.eval).toHaveBeenCalledTimes(3);
+
+            const [, { keys, arguments: args }] = cache.eval.mock.calls[0];
+
+            expect(keys).toEqual(['idempotency:notifications:x-api-key:xur-2026-10-09']);
+            expect(args).toEqual([pending, '60']);
+
+            stop();
+            await vi.advanceTimersByTimeAsync(60_000);
+            expect(cache.eval).toHaveBeenCalledTimes(3);
+        });
+
+        it('should stop renewing once the reservation is no longer ours', async () => {
+            cache.eval.mockResolvedValue(0);
+
+            keepAlive(reservation);
+            await vi.advanceTimersByTimeAsync(60_000);
+
+            expect(cache.eval).toHaveBeenCalledOnce();
+            expect(log.warn).toHaveBeenCalledOnce();
+        });
+
+        it('should keep renewing after a renewal fails', async () => {
+            cache.eval.mockRejectedValueOnce(new Error('Redis unavailable')).mockResolvedValue(1);
+
+            const stop = keepAlive(reservation);
+
+            await vi.advanceTimersByTimeAsync(40_000);
+
+            expect(cache.eval).toHaveBeenCalledTimes(2);
+            expect(log.warn).toHaveBeenCalledOnce();
+            stop();
         });
     });
 });

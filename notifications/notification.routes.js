@@ -3,7 +3,7 @@ import { createId } from '@paralleldrive/cuid2';
 import { Router } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import { z } from 'zod';
-import { accept, release, reserve } from '../helpers/idempotency-keys.js';
+import { accept, keepAlive, release, reserve } from '../helpers/idempotency-keys.js';
 import log from '../helpers/log.js';
 import notificationTypes from './notification.types.js';
 import NotificationController from './notification.controller.js';
@@ -27,6 +27,53 @@ import authorizeUser from '../authorization/authorization.middleware.js';
  */
 
 const idempotencyKeySchema = z.string().min(1).max(255);
+
+/**
+ * Resolve a broadcast's reservation once every recipient has been queued,
+ * or has failed to be.
+ *
+ * Accepting any earlier would let a replay return a receipt for a broadcast
+ * that a crash cut short, with nothing left to finish it. Until this runs,
+ * replays are told to retry, and if the process dies first the lease lapses
+ * so a retry starts the broadcast again; recipients already queued are
+ * absorbed by recipient deduplication.
+ *
+ * When some recipients could not be queued, the key is released rather than
+ * accepted, so that a retry can queue them. Never rejects: by now the client
+ * already has its 202.
+ * @param {import('../helpers/idempotency-keys.js').Reservation} reservation
+ * @param {Promise<{ failed: number }>} scheduled
+ * @returns {Promise<void>}
+ */
+const settleReservation = async (reservation, scheduled) => {
+    const { operationId } = reservation;
+
+    try {
+        const { failed } = await scheduled;
+
+        if (failed) {
+            await release(reservation);
+            log.warn(
+                { operationId, failed },
+                'Released the idempotency key: some recipients could not be queued.',
+            );
+
+            return;
+        }
+
+        if (!(await accept(reservation))) {
+            log.warn(
+                { operationId },
+                'The idempotency key lapsed before its operation was accepted.',
+            );
+        }
+    } catch (err) {
+        log.warn(
+            { err, operationId },
+            'Unable to settle the idempotency key; it expires with its lease.',
+        );
+    }
+};
 
 /**
  * @typedef {Object} NotificationRoutesOptions
@@ -128,13 +175,15 @@ const routes = ({
             return;
         }
 
-        let claimCheck;
+        const stopKeepAlive = keepAlive(reservation);
+        let operation;
 
         try {
-            claimCheck = await notificationController.create(subscription, {
+            operation = await notificationController.create(subscription, {
                 operationId: reservation.operationId,
             });
         } catch (err) {
+            stopKeepAlive();
             await release(reservation).catch(releaseErr =>
                 log.warn(
                     { err: releaseErr, operationId: reservation.operationId },
@@ -145,27 +194,11 @@ const routes = ({
             throw err;
         }
 
-        /**
-         * The broadcast has started by now, so nothing below may turn this
-         * into a failure: the client would retry work that is under way. A
-         * reservation that cannot be accepted lapses with its lease instead,
-         * and a retry after that is absorbed by recipient deduplication.
-         */
-        try {
-            if (!(await accept(reservation))) {
-                log.warn(
-                    { operationId: reservation.operationId },
-                    'The idempotency key lapsed before its operation was accepted.',
-                );
-            }
-        } catch (err) {
-            log.warn(
-                { err, operationId: reservation.operationId },
-                'Unable to accept the idempotency key; it expires with its lease.',
-            );
-        }
+        settleReservation(reservation, operation.scheduled).finally(stopKeepAlive);
 
-        res.set('Destiny-Ghost-Postmaster', claimCheck).status(StatusCodes.ACCEPTED).end();
+        res.set('Destiny-Ghost-Postmaster', operation.claimCheckNumber)
+            .status(StatusCodes.ACCEPTED)
+            .end();
     });
 
     notificationRouter
@@ -181,9 +214,11 @@ const routes = ({
                 return;
             }
 
-            const claimCheck = await notificationController.create(subscription, { phoneNumber });
+            const { claimCheckNumber } = await notificationController.create(subscription, {
+                phoneNumber,
+            });
             const headers = {
-                'Destiny-Ghost-Postmaster': claimCheck,
+                'Destiny-Ghost-Postmaster': claimCheckNumber,
             };
 
             res.set(headers).status(StatusCodes.ACCEPTED).end();

@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { StatusCodes } from 'http-status-codes';
 import { createRequest, createResponse } from 'node-mocks-http';
-import { accept, release, reserve } from '../helpers/idempotency-keys.js';
+import { accept, keepAlive, release, reserve } from '../helpers/idempotency-keys.js';
 import log from '../helpers/log.js';
 import NotificationRouter from './notification.routes.js';
 
@@ -13,6 +13,7 @@ const { controller } = vi.hoisted(() => ({
 vi.mock('@paralleldrive/cuid2', () => ({ createId: () => 'op-new' }));
 vi.mock('../helpers/idempotency-keys.js', () => ({
     accept: vi.fn(),
+    keepAlive: vi.fn(),
     release: vi.fn(),
     reserve: vi.fn(),
 }));
@@ -37,9 +38,12 @@ const reservation = {
     operationId: 'op-new',
 };
 
+const settle = () => new Promise(resolve => setImmediate(resolve));
+
 describe('NotificationRouter', () => {
     let router;
     let res;
+    let stopKeepAlive;
 
     beforeEach(() => {
         vi.clearAllMocks();
@@ -47,7 +51,12 @@ describe('NotificationRouter', () => {
         res = createResponse({ eventEmitter: EventEmitter });
         accept.mockResolvedValue(true);
         release.mockResolvedValue(true);
-        controller.create.mockResolvedValue('op-new');
+        stopKeepAlive = vi.fn();
+        keepAlive.mockReturnValue(stopKeepAlive);
+        controller.create.mockResolvedValue({
+            claimCheckNumber: 'op-new',
+            scheduled: Promise.resolve({ failed: 0 }),
+        });
     });
 
     /**
@@ -74,21 +83,64 @@ describe('NotificationRouter', () => {
             expect(reserve).not.toHaveBeenCalled();
         });
 
-        it('should reserve the key before starting the broadcast, then accept it', async () => {
+        it('should reserve the key before starting the broadcast, holding it meanwhile', async () => {
             reserve.mockResolvedValue({ outcome: 'reserved' });
 
             await broadcast();
 
             expect(reserve).toHaveBeenCalledExactlyOnceWith(reservation);
+            expect(keepAlive).toHaveBeenCalledExactlyOnceWith(reservation);
             expect(controller.create).toHaveBeenCalledExactlyOnceWith('Xur', {
                 operationId: 'op-new',
             });
             expect(reserve.mock.invocationCallOrder[0]).toBeLessThan(
+                keepAlive.mock.invocationCallOrder[0],
+            );
+            expect(keepAlive.mock.invocationCallOrder[0]).toBeLessThan(
                 controller.create.mock.invocationCallOrder[0],
             );
-            expect(accept).toHaveBeenCalledExactlyOnceWith(reservation);
             expect(res.statusCode).toBe(StatusCodes.ACCEPTED);
             expect(res.getHeader('Destiny-Ghost-Postmaster')).toBe('op-new');
+        });
+
+        it('should answer 202 at once but accept the key only once every recipient is queued', async () => {
+            const scheduling = Promise.withResolvers();
+
+            reserve.mockResolvedValue({ outcome: 'reserved' });
+            controller.create.mockResolvedValue({
+                claimCheckNumber: 'op-new',
+                scheduled: scheduling.promise,
+            });
+
+            await broadcast();
+            await settle();
+
+            expect(res.statusCode).toBe(StatusCodes.ACCEPTED);
+            expect(accept).not.toHaveBeenCalled();
+            expect(stopKeepAlive).not.toHaveBeenCalled();
+
+            scheduling.resolve({ failed: 0 });
+            await settle();
+
+            expect(accept).toHaveBeenCalledExactlyOnceWith(reservation);
+            expect(release).not.toHaveBeenCalled();
+            expect(stopKeepAlive).toHaveBeenCalledOnce();
+        });
+
+        it('should release the key when some recipients could not be queued, so a retry can', async () => {
+            reserve.mockResolvedValue({ outcome: 'reserved' });
+            controller.create.mockResolvedValue({
+                claimCheckNumber: 'op-new',
+                scheduled: Promise.resolve({ failed: 2 }),
+            });
+
+            await broadcast();
+            await settle();
+
+            expect(res.statusCode).toBe(StatusCodes.ACCEPTED);
+            expect(release).toHaveBeenCalledExactlyOnceWith(reservation);
+            expect(accept).not.toHaveBeenCalled();
+            expect(stopKeepAlive).toHaveBeenCalledOnce();
         });
 
         it('should replay the original operation without starting another', async () => {
@@ -130,6 +182,7 @@ describe('NotificationRouter', () => {
 
             expect(release).toHaveBeenCalledExactlyOnceWith(reservation);
             expect(accept).not.toHaveBeenCalled();
+            expect(stopKeepAlive).toHaveBeenCalledOnce();
         });
 
         it('should surface the original failure when releasing the key fails too', async () => {
@@ -146,18 +199,17 @@ describe('NotificationRouter', () => {
         it.each([
             ['rejects', () => accept.mockRejectedValue(new Error('Redis unavailable'))],
             ['finds the key lapsed', () => accept.mockResolvedValue(false)],
-        ])(
-            'should still answer 202 when accepting the key %s, since the broadcast has started',
-            async (_label, arrange) => {
-                reserve.mockResolvedValue({ outcome: 'reserved' });
-                arrange();
+        ])('should log rather than fail when accepting the key %s', async (_label, arrange) => {
+            reserve.mockResolvedValue({ outcome: 'reserved' });
+            arrange();
 
-                await broadcast();
+            await broadcast();
+            await settle();
 
-                expect(res.statusCode).toBe(StatusCodes.ACCEPTED);
-                expect(res.getHeader('Destiny-Ghost-Postmaster')).toBe('op-new');
-                expect(log.warn).toHaveBeenCalledOnce();
-            },
-        );
+            expect(res.statusCode).toBe(StatusCodes.ACCEPTED);
+            expect(res.getHeader('Destiny-Ghost-Postmaster')).toBe('op-new');
+            expect(log.warn).toHaveBeenCalledOnce();
+            expect(stopKeepAlive).toHaveBeenCalledOnce();
+        });
     });
 });
