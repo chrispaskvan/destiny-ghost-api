@@ -75,12 +75,13 @@ const enqueueBroadcast = async ({ operationId, notificationType, weeklyReset }) 
 
 /**
  * What a client can learn about a broadcast: where its job stands and how
- * far it has got.
+ * far it has got. Why an attempt failed is left out - BullMQ keeps the raw
+ * error, which can name Cosmos or Redis internals - and stays in the log;
+ * `state` and `attemptsMade` already say that it is failing and how often.
  * @param {string} operationId
  * @returns {Promise<(BroadcastProgress & {
  *     state: string,
  *     attemptsMade: number,
- *     failedReason: string | undefined,
  * }) | undefined>} undefined when there is no such broadcast, or it is
  * older than its retention
  */
@@ -100,7 +101,6 @@ const getBroadcast = async operationId => {
         duplicates,
         done,
         attemptsMade: job.attemptsMade,
-        failedReason: job.failedReason || undefined,
     };
 };
 

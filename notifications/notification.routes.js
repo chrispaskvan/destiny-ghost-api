@@ -5,7 +5,7 @@ import { z } from 'zod';
 import {
     accept,
     keepAlive,
-    operationIdFor,
+    reservationFor,
     release,
     reserve,
 } from '../helpers/idempotency-keys.js';
@@ -126,7 +126,7 @@ const routes = ({
             key: key.data,
             fingerprint: `POST /notifications/${subscription}`,
         };
-        const reservation = { ...request, operationId: operationIdFor(request) };
+        const reservation = reservationFor(request);
         const reserved = await reserve(reservation);
 
         if (reserved.outcome === 'mismatch') {

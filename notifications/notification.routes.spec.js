@@ -28,7 +28,9 @@ vi.mock('../helpers/config.js', () => ({
 vi.mock('../helpers/idempotency-keys.js', async importOriginal => ({
     accept: vi.fn(),
     keepAlive: vi.fn(),
-    operationIdFor: (await importOriginal()).operationIdFor,
+    ...(({ operationIdFor, reservationFor }) => ({ operationIdFor, reservationFor }))(
+        await importOriginal(),
+    ),
     release: vi.fn(),
     reserve: vi.fn(),
 }));
@@ -52,6 +54,8 @@ const request = {
     fingerprint: 'POST /notifications/Xur',
 };
 const reservation = { ...request, operationId: operationIdFor(request) };
+/** What the route holds: the reservation above, with an owner of its own. */
+const held = expect.objectContaining({ ...reservation, owner: expect.any(String) });
 
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
@@ -100,8 +104,8 @@ describe('NotificationRouter', () => {
 
             await broadcast();
 
-            expect(reserve).toHaveBeenCalledExactlyOnceWith(reservation);
-            expect(keepAlive).toHaveBeenCalledExactlyOnceWith(reservation);
+            expect(reserve).toHaveBeenCalledExactlyOnceWith(held);
+            expect(keepAlive).toHaveBeenCalledExactlyOnceWith(held);
             expect(controller.create).toHaveBeenCalledExactlyOnceWith('Xur', {
                 operationId: reservation.operationId,
             });
@@ -134,7 +138,7 @@ describe('NotificationRouter', () => {
             recording.resolve({ claimCheckNumber: 'op-new' });
             await request;
 
-            expect(accept).toHaveBeenCalledExactlyOnceWith(reservation);
+            expect(accept).toHaveBeenCalledExactlyOnceWith(held);
             expect(release).not.toHaveBeenCalled();
             expect(stopKeepAlive).toHaveBeenCalledOnce();
             expect(res.statusCode).toBe(StatusCodes.ACCEPTED);
@@ -152,6 +156,10 @@ describe('NotificationRouter', () => {
 
             expect(first.operationId).toBe(second.operationId);
             expect(first.operationId).toBe(reservation.operationId);
+
+            const [[{ owner: firstOwner }], [{ owner: secondOwner }]] = reserve.mock.calls;
+
+            expect(secondOwner).not.toBe(firstOwner);
         });
 
         it('should replay the original operation without starting another', async () => {
@@ -191,7 +199,7 @@ describe('NotificationRouter', () => {
 
             await expect(broadcast()).resolves.toBe(err);
 
-            expect(release).toHaveBeenCalledExactlyOnceWith(reservation);
+            expect(release).toHaveBeenCalledExactlyOnceWith(held);
             expect(accept).not.toHaveBeenCalled();
             expect(stopKeepAlive).toHaveBeenCalledOnce();
         });
@@ -238,7 +246,6 @@ describe('NotificationRouter', () => {
                 duplicates: 2,
                 done: false,
                 attemptsMade: 0,
-                failedReason: undefined,
             };
 
             controller.getBroadcast.mockResolvedValue(broadcast);

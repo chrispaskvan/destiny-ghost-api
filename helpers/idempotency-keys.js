@@ -10,7 +10,7 @@
  *
  * @module idempotencyKeys
  */
-import { createHmac, hkdfSync } from 'node:crypto';
+import { createHmac, hkdfSync, randomUUID } from 'node:crypto';
 import cache from './cache.js';
 import configuration from './config.js';
 import log from './log.js';
@@ -97,6 +97,10 @@ return 1
  * @property {string} fingerprint - what the request asked for; a key reused
  * for anything else is refused
  * @property {string} operationId - the operation this request would start
+ * @property {string} owner - this request's own mark on the reservation.
+ * Two requests for the same thing name the same operation, so without it
+ * their reservations would be identical, and one whose lease ran out could
+ * renew, accept or release the other's.
  */
 
 /**
@@ -137,8 +141,20 @@ const keyFor = ({ caller, key }) => `idempotency:notifications:${caller}:${key}`
  * @param {Reservation} reservation
  * @param {'pending' | 'accepted'} state
  */
-const valueFor = ({ fingerprint, operationId }, state) =>
-    JSON.stringify({ operationId, fingerprint, state });
+const valueFor = ({ fingerprint, operationId, owner }, state) =>
+    JSON.stringify({ operationId, fingerprint, state, owner });
+
+/**
+ * A reservation for a request: the operation it names, which is the same
+ * for every request like it, and an owner that is this request's alone.
+ * @param {Pick<Reservation, 'caller' | 'key' | 'fingerprint'>} request
+ * @returns {Reservation}
+ */
+const reservationFor = request => ({
+    ...request,
+    operationId: operationIdFor(request),
+    owner: randomUUID(),
+});
 
 /**
  * Claim the key for a new operation, or report what already holds it.
@@ -235,4 +251,4 @@ const release = async reservation =>
         arguments: [valueFor(reservation, 'pending')],
     })) === 1;
 
-export { accept, keepAlive, operationIdFor, release, reserve };
+export { accept, keepAlive, operationIdFor, release, reservationFor, reserve };

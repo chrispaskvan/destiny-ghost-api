@@ -102,11 +102,10 @@ describe('broadcast queue', () => {
                 duplicates: 0,
                 done: false,
                 attemptsMade: 0,
-                failedReason: undefined,
             });
         });
 
-        it('should report the progress saved on the job, and why it last failed', async () => {
+        it('should report the progress saved on the job, but not the raw reason it last failed', async () => {
             mocks.getJob.mockResolvedValue({
                 data: {
                     progress: { cursor: 'page-3', queued: 180, duplicates: 20, done: false },
@@ -124,9 +123,9 @@ describe('broadcast queue', () => {
                 duplicates: 20,
                 done: false,
                 attemptsMade: 2,
-                failedReason: 'Redis unavailable',
             });
             expect(broadcast).not.toHaveProperty('cursor');
+            expect(broadcast).not.toHaveProperty('failedReason');
         });
     });
 });
