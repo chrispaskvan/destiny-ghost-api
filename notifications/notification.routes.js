@@ -1,9 +1,14 @@
 // @ts-check
-import { createId } from '@paralleldrive/cuid2';
 import { Router } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import { z } from 'zod';
-import { accept, keepAlive, release, reserve } from '../helpers/idempotency-keys.js';
+import {
+    accept,
+    keepAlive,
+    reservationFor,
+    release,
+    reserve,
+} from '../helpers/idempotency-keys.js';
 import log from '../helpers/log.js';
 import notificationTypes from './notification.types.js';
 import NotificationController from './notification.controller.js';
@@ -27,53 +32,6 @@ import authorizeUser from '../authorization/authorization.middleware.js';
  */
 
 const idempotencyKeySchema = z.string().min(1).max(255);
-
-/**
- * Resolve a broadcast's reservation once every recipient has been queued,
- * or has failed to be.
- *
- * Accepting any earlier would let a replay return a receipt for a broadcast
- * that a crash cut short, with nothing left to finish it. Until this runs,
- * replays are told to retry, and if the process dies first the lease lapses
- * so a retry starts the broadcast again; recipients already queued are
- * absorbed by recipient deduplication.
- *
- * When some recipients could not be queued, the key is released rather than
- * accepted, so that a retry can queue them. Never rejects: by now the client
- * already has its 202.
- * @param {import('../helpers/idempotency-keys.js').Reservation} reservation
- * @param {Promise<{ failed: number }>} scheduled
- * @returns {Promise<void>}
- */
-const settleReservation = async (reservation, scheduled) => {
-    const { operationId } = reservation;
-
-    try {
-        const { failed } = await scheduled;
-
-        if (failed) {
-            await release(reservation);
-            log.warn(
-                { operationId, failed },
-                'Released the idempotency key: some recipients could not be queued.',
-            );
-
-            return;
-        }
-
-        if (!(await accept(reservation))) {
-            log.warn(
-                { operationId },
-                'The idempotency key lapsed before its operation was accepted.',
-            );
-        }
-    } catch (err) {
-        log.warn(
-            { err, operationId },
-            'Unable to settle the idempotency key; it expires with its lease.',
-        );
-    }
-};
 
 /**
  * @typedef {Object} NotificationRoutesOptions
@@ -111,6 +69,24 @@ const routes = ({
         worldRepository,
     });
 
+    /**
+     * How far a broadcast has got: its job's state, how many recipients it
+     * has queued and found already queued for the week, and, if it has been
+     * retrying, how many times and why.
+     */
+    notificationRouter.route('/broadcasts/:claimCheck').get(authorizeUser, async (req, res) => {
+        const {
+            params: { claimCheck: number },
+        } = req;
+        const broadcast = await notificationController.getBroadcast(number);
+
+        if (broadcast) {
+            res.status(StatusCodes.OK).json(broadcast);
+        } else {
+            res.status(StatusCodes.NOT_FOUND).end();
+        }
+    });
+
     notificationRouter.route('/claimChecks/:claimCheck').get(authorizeUser, async (req, res) => {
         const {
             params: { claimCheck: number },
@@ -128,7 +104,9 @@ const routes = ({
     /**
      * Broadcast a notification to every subscriber, once per
      * `Idempotency-Key`. The key is reserved before any work starts, so
-     * concurrent requests carrying it resolve to one operation; see
+     * concurrent requests carrying it resolve to one operation, and accepted
+     * once the broadcast is durably recorded, after which it finishes
+     * whether or not this process does; see
      * `adr-files/notification-idempotency.md`.
      */
     notificationRouter.route('/:subscription').post(authorizeUser, async (req, res) => {
@@ -143,12 +121,12 @@ const routes = ({
             return;
         }
 
-        const reservation = {
+        const request = {
             caller: res.locals.caller,
             key: key.data,
             fingerprint: `POST /notifications/${subscription}`,
-            operationId: createId(),
         };
+        const reservation = reservationFor(request);
         const reserved = await reserve(reservation);
 
         if (reserved.outcome === 'mismatch') {
@@ -176,14 +154,13 @@ const routes = ({
         }
 
         const stopKeepAlive = keepAlive(reservation);
-        let operation;
+        let claimCheckNumber;
 
         try {
-            operation = await notificationController.create(subscription, {
+            ({ claimCheckNumber } = await notificationController.create(subscription, {
                 operationId: reservation.operationId,
-            });
+            }));
         } catch (err) {
-            stopKeepAlive();
             await release(reservation).catch(releaseErr =>
                 log.warn(
                     { err: releaseErr, operationId: reservation.operationId },
@@ -192,13 +169,34 @@ const routes = ({
             );
 
             throw err;
+        } finally {
+            stopKeepAlive();
         }
 
-        settleReservation(reservation, operation.scheduled).finally(stopKeepAlive);
+        /**
+         * The broadcast is recorded by now and will run regardless, so
+         * nothing below may turn this into a failure: the client would retry
+         * a broadcast that is already under way. A reservation that cannot be
+         * accepted lapses with its lease instead. A retry after that derives
+         * the same operation id from the same key, so it finds this broadcast
+         * already recorded under that id rather than recording a second one,
+         * and answers with this claim check.
+         */
+        try {
+            if (!(await accept(reservation))) {
+                log.warn(
+                    { operationId: reservation.operationId },
+                    'The idempotency key lapsed before its operation was accepted.',
+                );
+            }
+        } catch (err) {
+            log.warn(
+                { err, operationId: reservation.operationId },
+                'Unable to accept the idempotency key; it expires with its lease.',
+            );
+        }
 
-        res.set('Destiny-Ghost-Postmaster', operation.claimCheckNumber)
-            .status(StatusCodes.ACCEPTED)
-            .end();
+        res.set('Destiny-Ghost-Postmaster', claimCheckNumber).status(StatusCodes.ACCEPTED).end();
     });
 
     notificationRouter

@@ -1,10 +1,19 @@
+import { createHash, createHmac, hkdfSync } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cache from './cache.js';
 import log from './log.js';
-import { accept, keepAlive, release, reserve } from './idempotency-keys.js';
+import {
+    accept,
+    keepAlive,
+    operationIdFor,
+    release,
+    reservationFor,
+    reserve,
+} from './idempotency-keys.js';
 
 vi.mock('./cache.js', () => ({ default: { get: vi.fn(), set: vi.fn(), eval: vi.fn() } }));
 vi.mock('./log.js', () => ({ default: { warn: vi.fn() } }));
+vi.mock('./config.js', () => ({ default: { session: { secret: 'test-session-secret' } } }));
 
 /**
  * Just enough of Redis's GET and SET for two requests to interleave: every
@@ -32,6 +41,7 @@ const reservation = {
     key: 'xur-2026-10-09',
     fingerprint: 'POST /notifications/Xur',
     operationId: 'op-1',
+    owner: 'owner-1',
 };
 const stored = (overrides = {}) =>
     JSON.stringify({
@@ -46,6 +56,112 @@ describe('idempotency-keys', () => {
         vi.resetAllMocks();
     });
 
+    describe('operationIdFor', () => {
+        const request = {
+            caller: reservation.caller,
+            key: reservation.key,
+            fingerprint: reservation.fingerprint,
+        };
+
+        it('should name the same operation every time for the same request', () => {
+            expect(operationIdFor(request)).toBe(operationIdFor({ ...request }));
+        });
+
+        it.each([
+            ['caller', { caller: 'notification-headers' }],
+            ['key', { key: 'xur-2026-10-16' }],
+            ['fingerprint', { fingerprint: 'POST /notifications/Banshee-44' }],
+            ['boundary between fields', { caller: 'x-api-keyx', key: 'ur-2026-10-09' }],
+        ])('should name a different operation when the %s differs', (_label, change) => {
+            expect(operationIdFor({ ...request, ...change })).not.toBe(operationIdFor(request));
+        });
+
+        it('should make an id BullMQ accepts as a job id', () => {
+            expect(operationIdFor(request)).toMatch(/^[0-9a-f]{64}$/);
+        });
+
+        /**
+         * The id is the claim check that progress and receipts are read
+         * with, so knowing the caller, route and key must not be enough to
+         * work it out: it is an HMAC under a subkey of the session secret,
+         * not a plain hash and not keyed with the session secret itself.
+         */
+        it('should be keyed with a subkey of the server secret, not computable from the request alone', () => {
+            const input = `${request.caller}\n${request.key}\n${request.fingerprint}`;
+            const subkey = Buffer.from(
+                hkdfSync('sha256', 'test-session-secret', '', 'idempotency-operation-id', 32),
+            );
+
+            expect(operationIdFor(request)).toBe(
+                createHmac('sha256', subkey).update(input).digest('hex'),
+            );
+            expect(operationIdFor(request)).not.toBe(
+                createHash('sha256').update(input).digest('hex'),
+            );
+            expect(operationIdFor(request)).not.toBe(
+                createHmac('sha256', 'test-session-secret').update(input).digest('hex'),
+            );
+        });
+
+        it('should key with the first session secret when there is a list of them', async () => {
+            vi.resetModules();
+            vi.doMock('./config.js', () => ({
+                default: { session: { secret: ['test-session-secret', 'older-secret'] } },
+            }));
+
+            const { operationIdFor: withList } = await import('./idempotency-keys.js');
+
+            expect(withList(request)).toBe(operationIdFor(request));
+            vi.doUnmock('./config.js');
+        });
+    });
+
+    describe('reservationFor', () => {
+        const request = {
+            caller: reservation.caller,
+            key: reservation.key,
+            fingerprint: reservation.fingerprint,
+        };
+
+        it('should name the operation the request stands for, with an owner of its own', () => {
+            const first = reservationFor(request);
+            const second = reservationFor(request);
+
+            expect(first).toMatchObject({ ...request, operationId: operationIdFor(request) });
+            expect(second.operationId).toBe(first.operationId);
+            expect(first.owner).toEqual(expect.any(String));
+            expect(second.owner).not.toBe(first.owner);
+        });
+
+        /**
+         * The case the owner exists for: a request whose lease ran out, and
+         * another that reserved the same request since. Both name the same
+         * operation, so only the owner tells their reservations apart.
+         */
+        it.each([
+            ['accept', accept],
+            ['release', release],
+        ])(
+            "should not let one request %s another's reservation for the same operation",
+            async (_name, act) => {
+                const stale = reservationFor(request);
+                const current = reservationFor(request);
+
+                cache.set.mockResolvedValue(null);
+                await reserve(current);
+
+                const [[, held]] = cache.set.mock.calls;
+
+                cache.eval.mockImplementation(async (_script, { arguments: [expected] }) =>
+                    expected === held ? 1 : 0,
+                );
+
+                await expect(act(stale)).resolves.toBe(false);
+                await expect(act(current)).resolves.toBe(true);
+            },
+        );
+    });
+
     describe('reserve', () => {
         it('should reserve in one atomic command, namespaced and scoped to the caller', async () => {
             cache.set.mockResolvedValue(null);
@@ -58,6 +174,7 @@ describe('idempotency-keys', () => {
                     operationId: 'op-1',
                     fingerprint: reservation.fingerprint,
                     state: 'pending',
+                    owner: 'owner-1',
                 }),
                 { condition: 'NX', expiration: { type: 'EX', value: 60 }, GET: true },
             );
@@ -132,6 +249,7 @@ describe('idempotency-keys', () => {
                     operationId: 'op-1',
                     fingerprint: reservation.fingerprint,
                     state: 'pending',
+                    owner: 'owner-1',
                 }),
             );
         });
@@ -155,6 +273,7 @@ describe('idempotency-keys', () => {
                 operationId: 'op-1',
                 fingerprint: reservation.fingerprint,
                 state: 'accepted',
+                owner: 'owner-1',
             });
             expect(args[2]).toBe('86400');
         });
@@ -165,6 +284,7 @@ describe('idempotency-keys', () => {
             operationId: 'op-1',
             fingerprint: reservation.fingerprint,
             state: 'pending',
+            owner: 'owner-1',
         });
 
         beforeEach(() => {
