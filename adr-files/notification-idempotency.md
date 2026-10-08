@@ -33,7 +33,7 @@ If the process dies part way, the job's lock lapses and BullMQ hands it to the n
 
 `GET /notifications/broadcasts/:claimCheck` reports the job's state, recipients queued, duplicates found, whether every page is done, and, if it has been retrying, how many times. The reason an attempt failed stays in the log rather than the response: it is BullMQ's raw error, which can name Cosmos or Redis internals, and errors are private by default (see `client-safe-error-messages.md`).
 
-**Pages are keyed on document id.** Each page is the next 100 subscribers in id order after the cursor, which is the last id the previous page returned (`SELECT TOP 100 … WHERE … AND u.id > @after ORDER BY u.id`). Ids never change, so nobody who stays subscribed throughout a broadcast is skipped, however other documents change meanwhile. A Cosmos continuation token cannot promise that: it bookmarks a position in a query that, without `ORDER BY`, has no defined order. The cursor is taken before opted-out users are dropped, so a page that ends on one still moves on.
+**Pages are keyed on document id.** Each page is the next 100 subscribers in id order after the cursor, which is the last id the previous page returned (`SELECT TOP 100 … WHERE … AND u.id > @after ORDER BY u.id`). Ids never change, so nobody who stays subscribed throughout a broadcast is skipped, however other documents change meanwhile. A Cosmos continuation token cannot promise that: it bookmarks a position in a query that, without `ORDER BY`, has no defined order. The cursor is taken before opted-out users are dropped, so a page that ends on one still moves on. `ORDER BY u.id` needs a range index on `/id`; the `Users` container's indexing policy includes `/*` with string range indexes, which covers it, and narrowing that policy would break broadcasts.
 
 **Pages are read live, not from a snapshot.** Someone who subscribes part way through a broadcast is included only if their id is still ahead of the cursor. Someone who opts out part way is still skipped, because consent is checked again at send time.
 
@@ -49,7 +49,7 @@ Because the operation id comes from the key, a reservation that lapses after its
 
 The week a broadcast deduplicates against is fixed when it is accepted and stored on its job, so a broadcast that runs or resumes past Tuesday's reset still belongs to the week it was accepted in.
 
-Crash durability rests on Redis keeping what it was given. The deployment needs persistence enabled and `maxmemory-policy noeviction` (which BullMQ requires anyway); an evicted or lost broadcast job is a lost broadcast. That configuration lives in Azure, not in this repository.
+Crash durability rests on Redis keeping what it was given: an evicted or lost broadcast job is a lost broadcast. The deployment needs persistence and `maxmemory-policy noeviction` (which BullMQ requires anyway). As of October 2026 the production cache, Azure Managed Redis `gjallarhorn`, has its eviction policy set to No Eviction and append-only file persistence writing every second, so a Redis restart loses at most about a second of writes. That configuration lives in Azure, not in this repository; changing it weakens what this decision promises.
 
 None of this makes delivery exactly-once: queue execution is at-least-once, and a provider call whose outcome is unknown may be retried.
 
