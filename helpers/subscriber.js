@@ -97,7 +97,7 @@ class Subscriber {
             {
                 connection: client,
                 concurrency,
-                ...(maxStalledCount && { maxStalledCount }),
+                ...(maxStalledCount !== undefined && { maxStalledCount }),
             },
         );
 

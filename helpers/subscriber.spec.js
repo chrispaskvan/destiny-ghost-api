@@ -108,6 +108,24 @@ describe('Subscriber', () => {
             });
         });
 
+        it('should pass on a maxStalledCount of 0, which fails a job on its first stall', () => {
+            subscriber.listen(vi.fn(), 'strict', { maxStalledCount: 0 });
+
+            expect(MockWorkerConstructor).toHaveBeenCalledWith('strict', expect.any(Function), {
+                connection: { host: 'localhost', port: 6379 },
+                concurrency: 5,
+                maxStalledCount: 0,
+            });
+        });
+
+        it('should leave maxStalledCount to BullMQ when none is given', () => {
+            subscriber.listen(vi.fn(), 'default-stalls');
+
+            const [, , options] = MockWorkerConstructor.mock.calls.at(-1);
+
+            expect(options).not.toHaveProperty('maxStalledCount');
+        });
+
         it('should set up event listeners', () => {
             const callback = vi.fn();
 
