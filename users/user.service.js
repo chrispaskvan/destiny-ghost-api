@@ -892,6 +892,27 @@ class UserService {
     }
 
     /**
+     * Whether the account behind a number is part way through a platform move:
+     * it has documents, and every one is marked `movedTo`. `movePlatform`
+     * marks the old copy before creating the new one, so this is the gap
+     * between those writes - or a move whose create failed, until
+     * `clearPlatformMove` restores it. Lookups that want the live record find
+     * nothing here, which is not the same as there being no account.
+     * @param {string} phoneNumber
+     * @returns {Promise<boolean>}
+     */
+    async isMovingPlatforms(phoneNumber) {
+        const documents = /** @type {{ movedTo?: number }[]} */ (
+            await this.documents.getDocuments(
+                userCollectionId,
+                new QueryBuilder().select('movedTo').where('phoneNumber', phoneNumber).getQuery(),
+            )
+        );
+
+        return documents.length > 0 && documents.every(({ movedTo }) => movedTo !== undefined);
+    }
+
+    /**
      * Get user from phone number.
      *
      * `skipCache` bypasses the read only: the Cosmos result is still written

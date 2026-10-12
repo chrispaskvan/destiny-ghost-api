@@ -1117,6 +1117,23 @@ describe('UserService', () => {
         });
     });
 
+    describe('isMovingPlatforms', () => {
+        it.each([
+            ['every document is marked', [{ movedTo: 3 }], true],
+            ['a live document remains', [{ movedTo: 3 }, {}], false],
+            ['there is no document at all', [], false],
+        ])('should say %s means %s', async (_label, documents, moving) => {
+            documentService.getDocuments.mockResolvedValue(documents);
+
+            await expect(userService.isMovingPlatforms('+12085550123')).resolves.toBe(moving);
+
+            const [[, query]] = documentService.getDocuments.mock.calls;
+
+            expect(query.query).toContain('movedTo');
+            expect(query.parameters).toEqual([{ name: '@phoneNumber', value: '+12085550123' }]);
+        });
+    });
+
     describe('getSubscribedUsersPage', () => {
         const parametersOf = ({ parameters }) =>
             Object.fromEntries(parameters.map(({ name, value }) => [name, value]));

@@ -118,6 +118,14 @@ class NotificationController {
     /**
      * The early gate: whether this job is worth starting at all, recording the
      * suppression when it is not.
+     *
+     * A number whose every document is marked `movedTo` belongs to an account
+     * part way through `movePlatform`: the old copy is marked, the new one not
+     * yet created. Consent finds no live account there, but that is not the
+     * same as there being none, so the job throws instead of recording a
+     * skip, and BullMQ tries it again once the move has landed. A move that
+     * never lands fails the job when its retries run out - recorded as a
+     * failure, not quietly skipped.
      * @param {string} phoneNumber
      * @param {string} notificationType
      * @param {string} claimCheckNumber
@@ -126,6 +134,10 @@ class NotificationController {
     async #worthStarting(phoneNumber, notificationType, claimCheckNumber) {
         if (await this.#stillConsents(phoneNumber, notificationType)) {
             return true;
+        }
+
+        if (await this.users.isMovingPlatforms(phoneNumber)) {
+            throw new Error('The account is moving platforms; trying again once the move lands.');
         }
 
         await NotificationController.#recordOutcome(claimCheckNumber, phoneNumber, SKIPPED);

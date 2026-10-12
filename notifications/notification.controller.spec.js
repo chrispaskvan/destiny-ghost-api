@@ -92,6 +92,7 @@ const userService = {
     getSubscribedUsersPage: vi.fn(),
     getUserByPhoneNumber: vi.fn(),
     getConsentByPhoneNumber: vi.fn(),
+    isMovingPlatforms: vi.fn(),
 };
 
 /**
@@ -476,6 +477,44 @@ describe('NotificationController', () => {
                 });
 
                 expect(notificationService.sendMessage).not.toHaveBeenCalled();
+                expect(ClaimCheck.updatePhoneNumber).toHaveBeenCalledWith(
+                    claimCheckNumber,
+                    phoneNumber,
+                    SKIPPED,
+                );
+            });
+
+            /**
+             * Part way through `movePlatform` the number's only document is
+             * the marked old copy, so consent finds no live account. That is
+             * a move in progress, not an account that has gone: the job must
+             * be tried again once the new copy exists, not skipped for good.
+             */
+            it('should try again later, not skip, while the account is moving platforms', async () => {
+                userService.getConsentByPhoneNumber.mockResolvedValue(undefined);
+                userService.isMovingPlatforms.mockResolvedValue(true);
+
+                await expect(
+                    sendMethod(mockUser, {
+                        claimCheckNumber,
+                        notificationType: notificationTypes.Xur,
+                    }),
+                ).rejects.toThrow('moving platforms');
+
+                expect(userService.isMovingPlatforms).toHaveBeenCalledWith(phoneNumber);
+                expect(notificationService.sendMessage).not.toHaveBeenCalled();
+                expect(ClaimCheck.updatePhoneNumber).not.toHaveBeenCalled();
+            });
+
+            it('should skip a number with no account at all, as before', async () => {
+                userService.getConsentByPhoneNumber.mockResolvedValue(undefined);
+                userService.isMovingPlatforms.mockResolvedValue(false);
+
+                await sendMethod(mockUser, {
+                    claimCheckNumber,
+                    notificationType: notificationTypes.Xur,
+                });
+
                 expect(ClaimCheck.updatePhoneNumber).toHaveBeenCalledWith(
                     claimCheckNumber,
                     phoneNumber,
