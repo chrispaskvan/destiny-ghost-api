@@ -140,6 +140,15 @@ class NotificationController {
             throw new Error('The account is moving platforms; trying again once the move lands.');
         }
 
+        /**
+         * Not moving now, but the move may have landed between the consent
+         * read above and that check, leaving a live account the first read
+         * could not see. Reading consent again settles it either way.
+         */
+        if (await this.#stillConsents(phoneNumber, notificationType)) {
+            return true;
+        }
+
         await NotificationController.#recordOutcome(claimCheckNumber, phoneNumber, SKIPPED);
 
         return false;
@@ -189,15 +198,29 @@ class NotificationController {
                 }
 
                 const { access_token: accessToken } = authenticatedUser.bungie;
-                const characters = await this.destiny.getProfile(membershipId, membershipType);
+                /**
+                 * The identity to ask Bungie about is the live record's, which
+                 * `authenticate` reads by phone number, not the one the job
+                 * was queued with: a job queued from the old copy of a user
+                 * part way through a platform move carries the platform they
+                 * have left.
+                 */
+                const {
+                    membershipId: liveMembershipId = membershipId,
+                    membershipType: liveMembershipType = membershipType,
+                } = authenticatedUser;
+                const characters = await this.destiny.getProfile(
+                    liveMembershipId,
+                    liveMembershipType,
+                );
 
                 if (characters?.length) {
                     let itemHashes;
 
                     try {
                         itemHashes = await this.destiny.getXur(
-                            membershipId,
-                            membershipType,
+                            liveMembershipId,
+                            liveMembershipType,
                             characters[0].characterId,
                             accessToken,
                         );

@@ -506,6 +506,58 @@ describe('NotificationController', () => {
                 expect(ClaimCheck.updatePhoneNumber).not.toHaveBeenCalled();
             });
 
+            it('should go ahead if the move lands between the consent read and the move check', async () => {
+                userService.getConsentByPhoneNumber
+                    .mockResolvedValueOnce(undefined)
+                    .mockResolvedValue({ isSubscribed: true });
+                userService.isMovingPlatforms.mockResolvedValue(false);
+                authenticationService.authenticate.mockResolvedValue(undefined);
+
+                await sendMethod(mockUser, {
+                    claimCheckNumber,
+                    notificationType: notificationTypes.Xur,
+                });
+
+                expect(authenticationService.authenticate).toHaveBeenCalled();
+                expect(ClaimCheck.updatePhoneNumber).not.toHaveBeenCalledWith(
+                    claimCheckNumber,
+                    phoneNumber,
+                    SKIPPED,
+                );
+            });
+
+            /**
+             * A job queued from the old copy of a user part way through a
+             * move carries the platform they have left. `authenticate` reads
+             * the live record by phone number, and that is whose identity
+             * goes to Bungie.
+             */
+            it("should ask Bungie about the live record's identity, not the one the job was queued with", async () => {
+                const liveMembershipId = chance.guid();
+
+                authenticationService.authenticate.mockResolvedValue({
+                    bungie: { access_token: accessToken },
+                    membershipId: liveMembershipId,
+                    membershipType: 3,
+                });
+                destinyService.getProfile.mockResolvedValue([mockCharacter]);
+                destinyService.getXur.mockResolvedValue([]);
+                worldRepository.getWeaponCategory.mockResolvedValue(1);
+
+                await sendMethod(
+                    { ...mockUser, membershipType: 1 },
+                    { claimCheckNumber, notificationType: notificationTypes.Xur },
+                );
+
+                expect(destinyService.getProfile).toHaveBeenCalledWith(liveMembershipId, 3);
+                expect(destinyService.getXur).toHaveBeenCalledWith(
+                    liveMembershipId,
+                    3,
+                    characterId,
+                    accessToken,
+                );
+            });
+
             it('should skip a number with no account at all, as before', async () => {
                 userService.getConsentByPhoneNumber.mockResolvedValue(undefined);
                 userService.isMovingPlatforms.mockResolvedValue(false);
