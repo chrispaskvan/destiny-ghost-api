@@ -558,6 +558,13 @@ class UserService {
      *
      * The cursor is the last id Cosmos returned, before opted-out users are
      * dropped, so a page that ends on one still moves the cursor on.
+     *
+     * Ids are only unique among live documents. `movePlatform` recreates a
+     * user under the same id in their new platform's partition, marking the
+     * old copy `movedTo` first, so marked copies are left out: with them in,
+     * a superseded copy sorting at the end of a page would carry the cursor
+     * past its live twin, and that subscriber would be skipped. Marking
+     * before creating is what keeps at most one live copy per id.
      * `QueryBuilder` has no `TOP`, `ORDER BY` or range filter, so the query
      * is written out; its select, join and filters match `getSubscribedUsers`.
      * @param {string} notificationType
@@ -573,7 +580,8 @@ class UserService {
                 query:
                     'SELECT TOP @pageSize u.id, u.displayName, u.isSubscribed, u.membershipId, ' +
                     'u.membershipType, u.phoneNumber FROM Users u JOIN n IN u.notifications ' +
-                    'WHERE n.type = @type AND n.enabled = @enabled AND u.id > @after ' +
+                    'WHERE n.type = @type AND n.enabled = @enabled ' +
+                    'AND NOT IS_DEFINED(u.movedTo) AND u.id > @after ' +
                     'ORDER BY u.id',
                 parameters: [
                     { name: '@pageSize', value: SUBSCRIBED_USERS_PAGE_SIZE },

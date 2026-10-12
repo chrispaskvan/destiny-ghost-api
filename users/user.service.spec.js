@@ -1143,7 +1143,9 @@ describe('UserService', () => {
             expect(collection).toBe('Users');
             expect(page.query).toContain(all.query.slice(all.query.indexOf(' FROM ')));
             expect(page.query).toMatch(/^SELECT TOP @pageSize u\.id, /);
-            expect(page.query).toMatch(/ AND u\.id > @after ORDER BY u\.id$/);
+            expect(page.query).toMatch(
+                / AND NOT IS_DEFINED\(u\.movedTo\) AND u\.id > @after ORDER BY u\.id$/,
+            );
             expect(parametersOf(page)).toEqual({
                 ...parametersOf(all),
                 '@pageSize': 100,
@@ -1179,6 +1181,44 @@ describe('UserService', () => {
             await expect(userService.getSubscribedUsersPage('Xur')).resolves.toMatchObject({
                 cursor: undefined,
             });
+        });
+
+        /**
+         * `movePlatform` leaves a superseded copy, marked `movedTo`, under the
+         * same id as the live record in another partition. If the query let
+         * it in and it sorted last on a page, the cursor would move past the
+         * live twin. The fake honours the query's own exclusion, so dropping
+         * it from the query lets the superseded copy in.
+         */
+        it('should never skip a live subscriber because a superseded copy shares their id', async () => {
+            const live = subscribers(150);
+            const superseded = { ...live[99], membershipType: 1, movedTo: 3 };
+
+            documentService.getDocuments.mockImplementation(async (_collection, query) => {
+                const { '@pageSize': size, '@after': after } = parametersOf(query);
+                const excludesMoved = query.query.includes('NOT IS_DEFINED(u.movedTo)');
+
+                return [superseded, ...live]
+                    .filter(({ movedTo }) => !(excludesMoved && movedTo !== undefined))
+                    .filter(({ id }) => id > after)
+                    .sort((a, b) => a.id.localeCompare(b.id))
+                    .slice(0, size);
+            });
+
+            const seen = [];
+            let cursor;
+
+            do {
+                const page = await userService.getSubscribedUsersPage('Xur', cursor);
+
+                seen.push(...page.users);
+                ({ cursor } = page);
+            } while (cursor);
+
+            expect(seen.filter(({ movedTo }) => movedTo !== undefined)).toEqual([]);
+            for (const { id } of live) {
+                expect(seen.filter(user => user.id === id)).toHaveLength(1);
+            }
         });
 
         /**
