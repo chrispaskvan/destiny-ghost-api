@@ -83,7 +83,6 @@ describe('broadcast queue', () => {
                     weeklyReset: '2026-10-06',
                 }),
             ).resolves.toBe(recorded);
-            expect(mocks.add).not.toHaveBeenCalled();
         });
 
         it('should refuse to record it as a broadcast of something else', async () => {
@@ -96,7 +95,28 @@ describe('broadcast queue', () => {
                     weeklyReset: '2026-10-06',
                 }),
             ).rejects.toBeInstanceOf(BroadcastConflictError);
-            expect(mocks.add).not.toHaveBeenCalled();
+        });
+
+        /**
+         * Two requests for one key, one with a lapsed lease, can both find
+         * nothing recorded and both add. Only the first add is stored, so
+         * each must judge by what was stored after its add, not by what it
+         * looked at before.
+         */
+        it('should judge by what was stored after adding, not by a look beforehand', async () => {
+            mocks.add.mockResolvedValue({ id: 'op-1' });
+            mocks.getJob.mockResolvedValue(recordedAs('Banshee-44'));
+
+            await expect(
+                enqueueBroadcast({
+                    operationId: 'op-1',
+                    notificationType: 'Xur',
+                    weeklyReset: '2026-10-06',
+                }),
+            ).rejects.toBeInstanceOf(BroadcastConflictError);
+            expect(mocks.add.mock.invocationCallOrder[0]).toBeLessThan(
+                mocks.getJob.mock.invocationCallOrder.at(-1),
+            );
         });
     });
 

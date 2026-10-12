@@ -70,28 +70,19 @@ const queue = new Queue(QUEUE_NAME, {
  * broadcast of a different notification type is refused: the operation id
  * comes from the idempotency key alone, so this is a key reused for another
  * request, arriving after the reservation that would have caught it lapsed.
- * The caller holds the key's reservation, so nothing else records under this
- * id between the look and the add.
+ *
+ * The job is added first and what was stored is read back afterwards. Adding
+ * under an id already taken changes nothing, so whichever request's add
+ * landed first is the one stored, and every request - including one whose
+ * lease lapsed part way, racing another for the same key - checks that, not
+ * what it meant to add.
  * @param {{ operationId: string, notificationType: string, weeklyReset: string }} broadcast
  * @returns {Promise<import('bullmq').Job>}
  * @throws {BroadcastConflictError}
  */
 const enqueueBroadcast = async ({ operationId, notificationType, weeklyReset }) => {
-    const recorded = await queue.getJob(operationId);
-
-    if (recorded) {
-        if (recorded.data.applicationProperties.notificationType !== notificationType) {
-            throw new BroadcastConflictError(
-                `operation ${operationId} is already a broadcast of another notification type`,
-            );
-        }
-
-        return recorded;
-    }
-
     const { traceId } = context.getStore()?.get('logger')?.bindings() || {};
-
-    return await queue.add(
+    const added = await queue.add(
         'broadcast',
         {
             body: JSON.stringify({ weeklyReset }),
@@ -103,6 +94,15 @@ const enqueueBroadcast = async ({ operationId, notificationType, weeklyReset }) 
         },
         { jobId: operationId },
     );
+    const stored = await queue.getJob(operationId);
+
+    if (stored && stored.data.applicationProperties.notificationType !== notificationType) {
+        throw new BroadcastConflictError(
+            `operation ${operationId} is already a broadcast of another notification type`,
+        );
+    }
+
+    return stored ?? added;
 };
 
 /**
