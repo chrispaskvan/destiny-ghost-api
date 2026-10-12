@@ -189,6 +189,20 @@ describe('broadcast queue', () => {
             expect(broadcast).not.toHaveProperty('cursor');
         });
 
+        it("should not show BullMQ's own failure reason, only a message written for the caller", async () => {
+            mocks.getJob.mockResolvedValue({
+                data: {},
+                attemptsMade: 5,
+                failedReason: 'job stalled more than allowable limit',
+                getState: async () => 'failed',
+            });
+
+            await expect(getBroadcast('op-1')).resolves.toMatchObject({
+                state: 'failed',
+                failedReason: 'The broadcast could not be completed.',
+            });
+        });
+
         /**
          * A worker that stalled and lost the job can still write progress
          * when it wakes, after the worker that took over has finished, so

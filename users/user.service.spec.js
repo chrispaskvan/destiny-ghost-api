@@ -1143,6 +1143,7 @@ describe('UserService', () => {
             expect(collection).toBe('Users');
             expect(page.query).toContain(all.query.slice(all.query.indexOf(' FROM ')));
             expect(page.query).toMatch(/^SELECT TOP @pageSize u\.id, /);
+            expect(page.query).toContain('u.movedTo');
             expect(page.query).toMatch(/ AND u\.id > @after ORDER BY u\.id$/);
             expect(parametersOf(page)).toEqual({
                 ...parametersOf(all),
@@ -1226,7 +1227,35 @@ describe('UserService', () => {
                     seen.filter(user => user.id === id && user.movedTo === undefined),
                 ).toHaveLength(1);
             }
-            expect(seen.filter(({ movedTo }) => movedTo !== undefined)).toHaveLength(1);
+            expect(seen.filter(({ movedTo }) => movedTo !== undefined)).toEqual([]);
+        });
+
+        it('should keep one copy per id: the live one when there is one, the marked one when it is all there is', async () => {
+            const [live, moving, other] = subscribers(3);
+
+            documentService.getDocuments.mockResolvedValue([
+                { ...live, membershipType: 1, movedTo: 3 },
+                live,
+                { ...moving, membershipType: 1, movedTo: 3 },
+                other,
+            ]);
+
+            const { users } = await userService.getSubscribedUsersPage('Xur');
+
+            expect(users).toEqual([live, { ...moving, membershipType: 1, movedTo: 3 }, other]);
+        });
+
+        it("should follow the live copy's consent, not the superseded copy's", async () => {
+            const [user] = subscribers(1);
+
+            documentService.getDocuments.mockResolvedValue([
+                { ...user, membershipType: 1, movedTo: 3, isSubscribed: true },
+                { ...user, isSubscribed: false },
+            ]);
+
+            const { users } = await userService.getSubscribedUsersPage('Xur');
+
+            expect(users).toEqual([]);
         });
 
         /**

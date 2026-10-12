@@ -13,6 +13,11 @@ import mayDeliver from '../helpers/consent.js';
 import log from '../helpers/log.js';
 import currentWeeklyReset from '../helpers/weekly-reset.js';
 import {
+    PROGRESS_UNSAVED,
+    recipientsNotQueued,
+    SUBSCRIBERS_UNREADABLE,
+} from './broadcast.failures.js';
+import {
     enqueueBroadcast,
     getBroadcast,
     QUEUE_NAME as BROADCAST_QUEUE,
@@ -355,7 +360,7 @@ class NotificationController {
         };
 
         while (!progress.done) {
-            const { users, cursor } = await safely('Subscribers could not be read.', () =>
+            const { users, cursor } = await safely(SUBSCRIBERS_UNREADABLE, () =>
                 this.users.getSubscribedUsersPage(notificationType, progress.cursor),
             );
             const results = await Promise.allSettled(
@@ -368,9 +373,7 @@ class NotificationController {
                     log.error({ err, claimCheckNumber }, 'Unable to queue a notification.');
                 }
 
-                throw new Error(
-                    `${failures.length} of ${users.length} recipients on this page could not be queued.`,
-                );
+                throw new Error(recipientsNotQueued(failures.length, users.length));
             }
 
             const duplicates = results.filter(
@@ -385,9 +388,7 @@ class NotificationController {
             };
             const saved = progress;
 
-            await safely('Progress could not be saved.', () =>
-                job.updateData({ ...job.data, progress: saved }),
-            );
+            await safely(PROGRESS_UNSAVED, () => job.updateData({ ...job.data, progress: saved }));
         }
 
         const { cursor: _cursor, ...totals } = progress;

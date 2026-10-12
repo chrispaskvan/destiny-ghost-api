@@ -8,6 +8,7 @@
 import { Queue } from 'bullmq';
 import client from '../helpers/jobs.js';
 import context from '../helpers/async-context.js';
+import { callerSafe } from './broadcast.failures.js';
 
 const QUEUE_NAME = 'broadcasts';
 
@@ -117,7 +118,9 @@ const enqueueBroadcast = async ({ operationId, notificationType, weeklyReset }) 
  * can briefly step back, which only means a page queued again.
  *
  * `failedReason` is safe to show: the broadcast worker logs each raw error
- * and fails with a message of its own (see `NotificationController`).
+ * and fails with a message of its own, and any other reason BullMQ records
+ * - its own, after too many stalls - is replaced (see
+ * `broadcast.failures.js`).
  * @param {string} operationId
  * @returns {Promise<(BroadcastProgress & {
  *     state: string,
@@ -145,7 +148,7 @@ const getBroadcast = async operationId => {
         duplicates,
         done,
         attemptsMade: job.attemptsMade,
-        failedReason: job.failedReason || undefined,
+        failedReason: callerSafe(job.failedReason),
     };
 };
 

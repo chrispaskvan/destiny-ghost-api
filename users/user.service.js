@@ -561,14 +561,20 @@ class UserService {
      *
      * Ids are not unique across partitions: `movePlatform` recreates a user
      * under the same id in their new platform's partition, and the old copy
-     * stays until it is cleaned up. Both copies are read - they share a
-     * phone number, so recipient deduplication sends once - because leaving
-     * either out could leave a user with no copy at all part way through a
-     * move. What must not happen is a page ending between two copies of one
-     * id, which would carry the cursor past the second. So a full page holds
-     * back the rows of its last id and stops the cursor before them; the
-     * next page reads every copy of that id together. A page holds 100 rows
-     * and an id has at most two copies, so every page still moves on.
+     * stays, marked `movedTo`, until it is cleaned up. Both copies are read,
+     * because between marking the old copy and creating the new one - or
+     * after that create failed - the marked copy is the only one there is.
+     * What must not happen is a page ending between two copies of one id,
+     * which would carry the cursor past the second. So a full page holds back
+     * the rows of its last id and stops the cursor before them; the next page
+     * reads every copy of that id together. A page holds 100 rows and an id
+     * has at most two copies, so every page still moves on.
+     *
+     * With every copy of an id on one page, the page keeps one per id: the
+     * live copy when there is one, the marked copy only when it is all there
+     * is. Sending to both would leave it to chance which one recipient
+     * deduplication kept, and the one kept is the identity the send then uses
+     * with Bungie - the old platform's, if the marked copy won.
      * `QueryBuilder` has no `TOP`, `ORDER BY` or range filter, so the query
      * is written out; its select, join and filters match `getSubscribedUsers`.
      * @param {string} notificationType
@@ -579,11 +585,12 @@ class UserService {
      */
     async getSubscribedUsersPage(notificationType, cursor = '') {
         const notification = UserService.#notificationFor(notificationType);
-        const items = /** @type {(SubscribedUser & { id: string })[]} */ (
+        const items = /** @type {(SubscribedUser & { id: string, movedTo?: number })[]} */ (
             await this.documents.getDocuments(userCollectionId, {
                 query:
                     'SELECT TOP @pageSize u.id, u.displayName, u.isSubscribed, u.membershipId, ' +
-                    'u.membershipType, u.phoneNumber FROM Users u JOIN n IN u.notifications ' +
+                    'u.membershipType, u.movedTo, u.phoneNumber ' +
+                    'FROM Users u JOIN n IN u.notifications ' +
                     'WHERE n.type = @type AND n.enabled = @enabled ' +
                     'AND u.id > @after ' +
                     'ORDER BY u.id',
@@ -598,7 +605,11 @@ class UserService {
         const full = items.length === SUBSCRIBED_USERS_PAGE_SIZE;
         const lastId = items.at(-1)?.id;
         const held = full ? items.filter(({ id }) => id !== lastId) : items;
-        const users = held.filter(user => user.isSubscribed !== false);
+        const live = new Set(
+            held.filter(({ movedTo }) => movedTo === undefined).map(({ id }) => id),
+        );
+        const current = held.filter(({ id, movedTo }) => movedTo === undefined || !live.has(id));
+        const users = current.filter(user => user.isSubscribed !== false);
         /**
          * The fallback to `lastId` is for a page made of one id alone, which
          * two copies at most cannot fill; it keeps the cursor moving rather
