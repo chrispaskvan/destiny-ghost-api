@@ -559,12 +559,16 @@ class UserService {
      * The cursor is the last id Cosmos returned, before opted-out users are
      * dropped, so a page that ends on one still moves the cursor on.
      *
-     * Ids are only unique among live documents. `movePlatform` recreates a
-     * user under the same id in their new platform's partition, marking the
-     * old copy `movedTo` first, so marked copies are left out: with them in,
-     * a superseded copy sorting at the end of a page would carry the cursor
-     * past its live twin, and that subscriber would be skipped. Marking
-     * before creating is what keeps at most one live copy per id.
+     * Ids are not unique across partitions: `movePlatform` recreates a user
+     * under the same id in their new platform's partition, and the old copy
+     * stays until it is cleaned up. Both copies are read - they share a
+     * phone number, so recipient deduplication sends once - because leaving
+     * either out could leave a user with no copy at all part way through a
+     * move. What must not happen is a page ending between two copies of one
+     * id, which would carry the cursor past the second. So a full page holds
+     * back the rows of its last id and stops the cursor before them; the
+     * next page reads every copy of that id together. A page holds 100 rows
+     * and an id has at most two copies, so every page still moves on.
      * `QueryBuilder` has no `TOP`, `ORDER BY` or range filter, so the query
      * is written out; its select, join and filters match `getSubscribedUsers`.
      * @param {string} notificationType
@@ -581,7 +585,7 @@ class UserService {
                     'SELECT TOP @pageSize u.id, u.displayName, u.isSubscribed, u.membershipId, ' +
                     'u.membershipType, u.phoneNumber FROM Users u JOIN n IN u.notifications ' +
                     'WHERE n.type = @type AND n.enabled = @enabled ' +
-                    'AND NOT IS_DEFINED(u.movedTo) AND u.id > @after ' +
+                    'AND u.id > @after ' +
                     'ORDER BY u.id',
                 parameters: [
                     { name: '@pageSize', value: SUBSCRIBED_USERS_PAGE_SIZE },
@@ -591,8 +595,16 @@ class UserService {
                 ],
             })
         );
-        const users = items.filter(user => user.isSubscribed !== false);
-        const next = items.length === SUBSCRIBED_USERS_PAGE_SIZE ? items.at(-1)?.id : undefined;
+        const full = items.length === SUBSCRIBED_USERS_PAGE_SIZE;
+        const lastId = items.at(-1)?.id;
+        const held = full ? items.filter(({ id }) => id !== lastId) : items;
+        const users = held.filter(user => user.isSubscribed !== false);
+        /**
+         * The fallback to `lastId` is for a page made of one id alone, which
+         * two copies at most cannot fill; it keeps the cursor moving rather
+         * than reading the same page forever.
+         */
+        const next = full ? (held.at(-1)?.id ?? lastId) : undefined;
 
         return { users, cursor: next };
     }

@@ -70,10 +70,21 @@ describe('idempotency-keys', () => {
         it.each([
             ['caller', { caller: 'notification-headers' }],
             ['key', { key: 'xur-2026-10-16' }],
-            ['fingerprint', { fingerprint: 'POST /notifications/Banshee-44' }],
             ['boundary between fields', { caller: 'x-api-keyx', key: 'ur-2026-10-09' }],
         ])('should name a different operation when the %s differs', (_label, change) => {
             expect(operationIdFor({ ...request, ...change })).not.toBe(operationIdFor(request));
+        });
+
+        /**
+         * A key reused for a different request names the same operation, so
+         * whoever records the work finds the earlier one and refuses the
+         * reuse, instead of it becoming a second operation once the key's
+         * reservation has lapsed.
+         */
+        it('should name the same operation for the same key, whatever the request asks for', () => {
+            expect(
+                operationIdFor({ ...request, fingerprint: 'POST /notifications/Banshee-44' }),
+            ).toBe(operationIdFor(request));
         });
 
         it('should make an id BullMQ accepts as a job id', () => {
@@ -87,7 +98,7 @@ describe('idempotency-keys', () => {
          * not a plain hash and not keyed with the session secret itself.
          */
         it('should be keyed with a subkey of the server secret, not computable from the request alone', () => {
-            const input = `${request.caller}\n${request.key}\n${request.fingerprint}`;
+            const input = `${request.caller}\n${request.key}`;
             const subkey = Buffer.from(
                 hkdfSync('sha256', 'test-session-secret', '', 'idempotency-operation-id', 32),
             );

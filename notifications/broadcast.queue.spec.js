@@ -37,7 +37,12 @@ vi.mock('../helpers/async-context.js', () => ({
     },
 }));
 
-import { enqueueBroadcast, getBroadcast, QUEUE_NAME } from './broadcast.queue.js';
+import {
+    BroadcastConflictError,
+    enqueueBroadcast,
+    getBroadcast,
+    QUEUE_NAME,
+} from './broadcast.queue.js';
 
 describe('broadcast queue', () => {
     beforeEach(() => {
@@ -58,6 +63,41 @@ describe('broadcast queue', () => {
         expect(defaultJobOptions.attempts).toBe(5);
         expect(defaultJobOptions.removeOnComplete).toEqual({ age: 86_400 });
         expect(defaultJobOptions.removeOnFail).toEqual({ age: 604_800 });
+    });
+
+    describe('when the operation is already recorded', () => {
+        const recordedAs = notificationType => ({
+            id: 'op-1',
+            data: { applicationProperties: { claimCheckNumber: 'op-1', notificationType } },
+        });
+
+        it('should leave a broadcast of the same thing as it is', async () => {
+            const recorded = recordedAs('Xur');
+
+            mocks.getJob.mockResolvedValue(recorded);
+
+            await expect(
+                enqueueBroadcast({
+                    operationId: 'op-1',
+                    notificationType: 'Xur',
+                    weeklyReset: '2026-10-06',
+                }),
+            ).resolves.toBe(recorded);
+            expect(mocks.add).not.toHaveBeenCalled();
+        });
+
+        it('should refuse to record it as a broadcast of something else', async () => {
+            mocks.getJob.mockResolvedValue(recordedAs('Banshee-44'));
+
+            await expect(
+                enqueueBroadcast({
+                    operationId: 'op-1',
+                    notificationType: 'Xur',
+                    weeklyReset: '2026-10-06',
+                }),
+            ).rejects.toBeInstanceOf(BroadcastConflictError);
+            expect(mocks.add).not.toHaveBeenCalled();
+        });
     });
 
     it('should queue the broadcast under its operation id, in the envelope the worker reads', async () => {

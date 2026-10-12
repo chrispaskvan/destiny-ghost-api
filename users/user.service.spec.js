@@ -1143,9 +1143,7 @@ describe('UserService', () => {
             expect(collection).toBe('Users');
             expect(page.query).toContain(all.query.slice(all.query.indexOf(' FROM ')));
             expect(page.query).toMatch(/^SELECT TOP @pageSize u\.id, /);
-            expect(page.query).toMatch(
-                / AND NOT IS_DEFINED\(u\.movedTo\) AND u\.id > @after ORDER BY u\.id$/,
-            );
+            expect(page.query).toMatch(/ AND u\.id > @after ORDER BY u\.id$/);
             expect(parametersOf(page)).toEqual({
                 ...parametersOf(all),
                 '@pageSize': 100,
@@ -1163,16 +1161,26 @@ describe('UserService', () => {
             expect(parametersOf(page)['@after']).toBe('');
         });
 
+        it("should hold back a full page's last id for the next page, stopping the cursor before it", async () => {
+            documentService.getDocuments.mockResolvedValue(subscribers(100));
+
+            const page = await userService.getSubscribedUsersPage('Xur');
+
+            expect(page.users.map(({ id }) => id)).not.toContain('user-0099');
+            expect(page.users).toHaveLength(99);
+            expect(page.cursor).toBe('user-0098');
+        });
+
         it('should move the cursor past opted-out users, so a page ending on one does not repeat', async () => {
             const items = subscribers(100);
 
-            items[99].isSubscribed = false;
+            items[98].isSubscribed = false;
             documentService.getDocuments.mockResolvedValue(items);
 
             const page = await userService.getSubscribedUsersPage('Xur');
 
-            expect(page.users).toHaveLength(99);
-            expect(page.cursor).toBe('user-0099');
+            expect(page.users).toHaveLength(98);
+            expect(page.cursor).toBe('user-0098');
         });
 
         it('should end after a page shorter than a full one', async () => {
@@ -1184,22 +1192,20 @@ describe('UserService', () => {
         });
 
         /**
-         * `movePlatform` leaves a superseded copy, marked `movedTo`, under the
-         * same id as the live record in another partition. If the query let
-         * it in and it sorted last on a page, the cursor would move past the
-         * live twin. The fake honours the query's own exclusion, so dropping
-         * it from the query lets the superseded copy in.
+         * `movePlatform` leaves the old copy of a user, under the same id, in
+         * their old partition until it is cleaned up. Both copies are read,
+         * and a page must never end between them: here the old copy is the
+         * 100th row and the live one the 101st, so a cursor that stopped on
+         * the 100th would carry the next page past the live copy.
          */
-        it('should never skip a live subscriber because a superseded copy shares their id', async () => {
+        it('should read every copy of an id on one page, so a move cannot hide a subscriber', async () => {
             const live = subscribers(150);
             const superseded = { ...live[99], membershipType: 1, movedTo: 3 };
 
             documentService.getDocuments.mockImplementation(async (_collection, query) => {
                 const { '@pageSize': size, '@after': after } = parametersOf(query);
-                const excludesMoved = query.query.includes('NOT IS_DEFINED(u.movedTo)');
 
                 return [superseded, ...live]
-                    .filter(({ movedTo }) => !(excludesMoved && movedTo !== undefined))
                     .filter(({ id }) => id > after)
                     .sort((a, b) => a.id.localeCompare(b.id))
                     .slice(0, size);
@@ -1215,10 +1221,12 @@ describe('UserService', () => {
                 ({ cursor } = page);
             } while (cursor);
 
-            expect(seen.filter(({ movedTo }) => movedTo !== undefined)).toEqual([]);
             for (const { id } of live) {
-                expect(seen.filter(user => user.id === id)).toHaveLength(1);
+                expect(
+                    seen.filter(user => user.id === id && user.movedTo === undefined),
+                ).toHaveLength(1);
             }
+            expect(seen.filter(({ movedTo }) => movedTo !== undefined)).toHaveLength(1);
         });
 
         /**

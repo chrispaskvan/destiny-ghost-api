@@ -113,26 +113,26 @@ return 1
 /**
  * The operation a key stands for, derived from the key rather than minted.
  *
- * Every request carrying the same key for the same request names the same
- * operation, so a retry that arrives after a reservation lapsed - its accept
- * failed, say, after the work was already recorded - finds that work under
- * the same id instead of recording it a second time.
+ * Every request carrying the same key names the same operation, so a retry
+ * that arrives after a reservation lapsed - its accept failed, say, after
+ * the work was already recorded - finds that work under the same id instead
+ * of recording it a second time. What the request asked for is left out on
+ * purpose: a key reused for something else then names that same operation
+ * too, and whoever records the work refuses it there, rather than the reuse
+ * slipping through as a new operation once the reservation has lapsed.
  *
  * The id is also the claim check a caller reads progress and receipts with,
  * so it must be as hard to guess as a random one: caller and route are
  * predictable and keys can be short, so a plain hash of them could be
  * worked out by anyone else holding a credential. Keying the hash with a
  * server secret keeps it stable for a retry and unguessable without that
- * secret. Separators keep `caller`, `key` and `fingerprint` from running
- * into one another, and hex keeps the id free of the `:` BullMQ forbids in
- * job ids.
- * @param {Pick<Reservation, 'caller' | 'key' | 'fingerprint'>} reservation
+ * secret. A separator keeps `caller` and `key` from running into one
+ * another, and hex keeps the id free of the `:` BullMQ forbids in job ids.
+ * @param {Pick<Reservation, 'caller' | 'key'>} reservation
  * @returns {string}
  */
-const operationIdFor = ({ caller, key, fingerprint }) =>
-    createHmac('sha256', OPERATION_ID_KEY)
-        .update(`${caller}\n${key}\n${fingerprint}`)
-        .digest('hex');
+const operationIdFor = ({ caller, key }) =>
+    createHmac('sha256', OPERATION_ID_KEY).update(`${caller}\n${key}`).digest('hex');
 
 /** @param {Pick<Reservation, 'caller' | 'key'>} reservation */
 const keyFor = ({ caller, key }) => `idempotency:notifications:${caller}:${key}`;

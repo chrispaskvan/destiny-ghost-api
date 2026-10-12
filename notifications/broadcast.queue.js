@@ -12,6 +12,18 @@ import context from '../helpers/async-context.js';
 const QUEUE_NAME = 'broadcasts';
 
 /**
+ * The operation is already recorded as a broadcast of something else: its
+ * idempotency key was reused for a different request.
+ */
+class BroadcastConflictError extends Error {
+    /** @param {string} message */
+    constructor(message) {
+        super(message);
+        this.name = 'BroadcastConflictError';
+    }
+}
+
+/**
  * A broadcast's job is its durable record: once added, the broadcast is
  * worked through by `NotificationController`'s worker whether or not the
  * process that accepted it survives. Completed jobs are kept as long as the
@@ -53,10 +65,30 @@ const queue = new Queue(QUEUE_NAME, {
  * destructures `applicationProperties` on every job.
  * `weeklyReset` travels with the job because a broadcast that resumes after
  * Tuesday's reset still belongs to the week it was accepted in.
+ *
+ * An operation already recorded is left as it is. One recorded as a
+ * broadcast of a different notification type is refused: the operation id
+ * comes from the idempotency key alone, so this is a key reused for another
+ * request, arriving after the reservation that would have caught it lapsed.
+ * The caller holds the key's reservation, so nothing else records under this
+ * id between the look and the add.
  * @param {{ operationId: string, notificationType: string, weeklyReset: string }} broadcast
  * @returns {Promise<import('bullmq').Job>}
+ * @throws {BroadcastConflictError}
  */
 const enqueueBroadcast = async ({ operationId, notificationType, weeklyReset }) => {
+    const recorded = await queue.getJob(operationId);
+
+    if (recorded) {
+        if (recorded.data.applicationProperties.notificationType !== notificationType) {
+            throw new BroadcastConflictError(
+                `operation ${operationId} is already a broadcast of another notification type`,
+            );
+        }
+
+        return recorded;
+    }
+
     const { traceId } = context.getStore()?.get('logger')?.bindings() || {};
 
     return await queue.add(
@@ -118,4 +150,4 @@ const getBroadcast = async operationId => {
 };
 
 export default queue;
-export { enqueueBroadcast, getBroadcast, QUEUE_NAME };
+export { BroadcastConflictError, enqueueBroadcast, getBroadcast, QUEUE_NAME };

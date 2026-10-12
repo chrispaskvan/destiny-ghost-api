@@ -10,6 +10,7 @@ import {
     reserve,
 } from '../helpers/idempotency-keys.js';
 import log from '../helpers/log.js';
+import { BroadcastConflictError } from './broadcast.queue.js';
 import notificationTypes from './notification.types.js';
 import NotificationController from './notification.controller.js';
 import authorizeUser from '../authorization/authorization.middleware.js';
@@ -32,6 +33,7 @@ import authorizeUser from '../authorization/authorization.middleware.js';
  */
 
 const idempotencyKeySchema = z.string().min(1).max(255);
+const MISMATCH = 'This Idempotency-Key was already used for a different request.';
 
 /**
  * @typedef {Object} NotificationRoutesOptions
@@ -131,9 +133,7 @@ const routes = ({
         const reserved = await reserve(reservation);
 
         if (reserved.outcome === 'mismatch') {
-            res.status(StatusCodes.UNPROCESSABLE_ENTITY).send(
-                'This Idempotency-Key was already used for a different request.',
-            );
+            res.status(StatusCodes.UNPROCESSABLE_ENTITY).send(MISMATCH);
 
             return;
         }
@@ -168,6 +168,12 @@ const routes = ({
                     'Unable to release the idempotency key; it expires with its lease.',
                 ),
             );
+
+            if (err instanceof BroadcastConflictError) {
+                res.status(StatusCodes.UNPROCESSABLE_ENTITY).send(MISMATCH);
+
+                return;
+            }
 
             throw err;
         } finally {

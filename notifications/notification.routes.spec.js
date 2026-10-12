@@ -10,6 +10,7 @@ import {
     reserve,
 } from '../helpers/idempotency-keys.js';
 import log from '../helpers/log.js';
+import { BroadcastConflictError } from './broadcast.queue.js';
 import NotificationRouter from './notification.routes.js';
 
 const { controller } = vi.hoisted(() => ({
@@ -40,6 +41,9 @@ vi.mock('../authorization/authorization.middleware.js', () => ({
         res.locals.caller = 'x-api-key';
         next();
     },
+}));
+vi.mock('./broadcast.queue.js', () => ({
+    BroadcastConflictError: class BroadcastConflictError extends Error {},
 }));
 vi.mock('./notification.controller.js', () => ({
     // biome-ignore lint/complexity/useArrowFunction: function expression required — `new` ignores return value of arrow functions
@@ -202,6 +206,17 @@ describe('NotificationRouter', () => {
             expect(release).toHaveBeenCalledExactlyOnceWith(held);
             expect(accept).not.toHaveBeenCalled();
             expect(stopKeepAlive).toHaveBeenCalledOnce();
+        });
+
+        it('should refuse a key reused for another broadcast that is already recorded', async () => {
+            reserve.mockResolvedValue({ outcome: 'reserved' });
+            controller.create.mockRejectedValue(new BroadcastConflictError('already recorded'));
+
+            await expect(broadcast()).resolves.toBeUndefined();
+
+            expect(res.statusCode).toBe(StatusCodes.UNPROCESSABLE_ENTITY);
+            expect(release).toHaveBeenCalledExactlyOnceWith(held);
+            expect(accept).not.toHaveBeenCalled();
         });
 
         it('should surface the original failure when releasing the key fails too', async () => {
