@@ -72,7 +72,8 @@ const routes = ({
     /**
      * How far a broadcast has got: its job's state, how many recipients it
      * has queued and found already queued for the week, and, if it has been
-     * retrying, how many times and why.
+     * retrying, how many times and why - in a message written for the
+     * caller, never the raw error.
      */
     notificationRouter.route('/broadcasts/:claimCheck').get(authorizeUser, async (req, res) => {
         const {

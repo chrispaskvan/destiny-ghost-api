@@ -333,10 +333,30 @@ class NotificationController {
         /** @type {import('./broadcast.queue.js').BroadcastProgress} */
         let progress = { queued: 0, duplicates: 0, done: false, ...job.data.progress };
 
+        /**
+         * Whatever a step throws becomes the job's `failedReason`, which the
+         * progress endpoint shows to callers. Errors there are private by
+         * default (`adr-files/client-safe-error-messages.md`), so each step's
+         * raw error is logged here and replaced with a message written for
+         * the caller.
+         * @template T
+         * @param {string} message
+         * @param {() => Promise<T>} step
+         * @returns {Promise<T>}
+         */
+        const safely = async (message, step) => {
+            try {
+                return await step();
+            } catch (err) {
+                log.error({ err, claimCheckNumber }, message);
+
+                throw new Error(message);
+            }
+        };
+
         while (!progress.done) {
-            const { users, cursor } = await this.users.getSubscribedUsersPage(
-                notificationType,
-                progress.cursor,
+            const { users, cursor } = await safely('Subscribers could not be read.', () =>
+                this.users.getSubscribedUsersPage(notificationType, progress.cursor),
             );
             const results = await Promise.allSettled(
                 users.map(user => limit(() => queueRecipient(user))),
@@ -363,7 +383,11 @@ class NotificationController {
                 duplicates: progress.duplicates + duplicates,
                 done: !cursor,
             };
-            await job.updateData({ ...job.data, progress });
+            const saved = progress;
+
+            await safely('Progress could not be saved.', () =>
+                job.updateData({ ...job.data, progress: saved }),
+            );
         }
 
         const { cursor: _cursor, ...totals } = progress;

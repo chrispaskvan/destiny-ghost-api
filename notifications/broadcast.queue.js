@@ -74,14 +74,23 @@ const enqueueBroadcast = async ({ operationId, notificationType, weeklyReset }) 
 };
 
 /**
- * What a client can learn about a broadcast: where its job stands and how
- * far it has got. Why an attempt failed is left out - BullMQ keeps the raw
- * error, which can name Cosmos or Redis internals - and stays in the log;
- * `state` and `attemptsMade` already say that it is failing and how often.
+ * What a client can learn about a broadcast: where its job stands, how far
+ * it has got, and why its last attempt failed.
+ *
+ * A completed broadcast is reported from its return value, which only the
+ * worker holding the job's lock can set. The progress saved after each page
+ * is not guarded that way - BullMQ's `updateData` writes whoever calls it -
+ * so a worker that stalled, lost the job and woke later could leave older
+ * progress behind; while a broadcast runs, its progress is a snapshot that
+ * can briefly step back, which only means a page queued again.
+ *
+ * `failedReason` is safe to show: the broadcast worker logs each raw error
+ * and fails with a message of its own (see `NotificationController`).
  * @param {string} operationId
  * @returns {Promise<(BroadcastProgress & {
  *     state: string,
  *     attemptsMade: number,
+ *     failedReason: string | undefined,
  * }) | undefined>} undefined when there is no such broadcast, or it is
  * older than its retention
  */
@@ -92,15 +101,19 @@ const getBroadcast = async operationId => {
         return undefined;
     }
 
-    /** @type {BroadcastProgress} */
-    const { queued = 0, duplicates = 0, done = false } = job.data.progress ?? {};
+    const state = await job.getState();
+    /** @type {Partial<BroadcastProgress>} */
+    const progress =
+        state === 'completed' ? { ...job.returnvalue, done: true } : (job.data.progress ?? {});
+    const { queued = 0, duplicates = 0, done = false } = progress;
 
     return {
-        state: await job.getState(),
+        state,
         queued,
         duplicates,
         done,
         attemptsMade: job.attemptsMade,
+        failedReason: job.failedReason || undefined,
     };
 };
 

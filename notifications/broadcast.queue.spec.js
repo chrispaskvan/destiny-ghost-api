@@ -102,16 +102,17 @@ describe('broadcast queue', () => {
                 duplicates: 0,
                 done: false,
                 attemptsMade: 0,
+                failedReason: undefined,
             });
         });
 
-        it('should report the progress saved on the job, but not the raw reason it last failed', async () => {
+        it('should report the progress saved on the job, and why it last failed', async () => {
             mocks.getJob.mockResolvedValue({
                 data: {
                     progress: { cursor: 'page-3', queued: 180, duplicates: 20, done: false },
                 },
                 attemptsMade: 2,
-                failedReason: 'Redis unavailable',
+                failedReason: 'Subscribers could not be read.',
                 getState: async () => 'delayed',
             });
 
@@ -123,9 +124,35 @@ describe('broadcast queue', () => {
                 duplicates: 20,
                 done: false,
                 attemptsMade: 2,
+                failedReason: 'Subscribers could not be read.',
             });
             expect(broadcast).not.toHaveProperty('cursor');
-            expect(broadcast).not.toHaveProperty('failedReason');
+        });
+
+        /**
+         * A worker that stalled and lost the job can still write progress
+         * when it wakes, after the worker that took over has finished, so
+         * the saved progress of a completed broadcast may be older than its
+         * end. Only the lock holder can complete a job and set its return
+         * value, so that is what a completed broadcast reports.
+         */
+        it('should report a completed broadcast from its return value, not progress a stale worker left', async () => {
+            mocks.getJob.mockResolvedValue({
+                data: {
+                    progress: { cursor: 'page-2', queued: 100, duplicates: 0, done: false },
+                },
+                returnvalue: { queued: 240, duplicates: 3, done: true },
+                attemptsMade: 0,
+                failedReason: '',
+                getState: async () => 'completed',
+            });
+
+            await expect(getBroadcast('op-1')).resolves.toMatchObject({
+                state: 'completed',
+                queued: 240,
+                duplicates: 3,
+                done: true,
+            });
         });
     });
 });

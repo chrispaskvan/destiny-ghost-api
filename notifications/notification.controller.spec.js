@@ -383,6 +383,46 @@ describe('NotificationController', () => {
             expect(log.error).toHaveBeenCalledOnce();
         });
 
+        it.each([
+            [
+                'reading subscribers',
+                job => {
+                    userService.getSubscribedUsersPage.mockRejectedValueOnce(
+                        new Error('Request rate is large. ActivityId: 9f2c, Cosmos internals'),
+                    );
+
+                    return job;
+                },
+                'Subscribers could not be read.',
+            ],
+            [
+                'saving progress',
+                job => {
+                    userService.getSubscribedUsersPage.mockResolvedValueOnce({
+                        users: [mockUser],
+                        cursor: undefined,
+                    });
+                    job.updateData.mockRejectedValueOnce(
+                        new Error("READONLY You can't write against a read only replica."),
+                    );
+
+                    return job;
+                },
+                'Progress could not be saved.',
+            ],
+        ])(
+            'should fail with a message fit for the caller, logging the raw error, when %s fails',
+            async (_step, arrange, message) => {
+                const job = arrange(jobWith());
+
+                await expect(run(job)).rejects.toThrow(new Error(message));
+                expect(log.error).toHaveBeenCalledExactlyOnceWith(
+                    { err: expect.any(Error), claimCheckNumber },
+                    message,
+                );
+            },
+        );
+
         it('should count recipients already queued for this week as duplicates', async () => {
             userService.getSubscribedUsersPage.mockResolvedValueOnce({
                 users: [mockUser, otherUser],
