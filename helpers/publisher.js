@@ -151,11 +151,13 @@ class Publisher {
      * `deduplicationId`. A job carrying an id that is already queued, or was
      * in the last week, is not added: BullMQ hands back the job that holds the
      * id instead, so a returned id other than this job's own means it was
-     * deduplicated.
+     * deduplicated. Job ids begin with the claim check, so the returned one
+     * also says whether the job holding the id is this operation's own - the
+     * same recipient queued twice by one operation - or another's.
      *
      * @param {QueuedUser} user
      * @param {{ notificationType: string, claimCheckNumber: string, deduplicationId: string }} param1
-     * @returns {Promise<{ deduplicated: boolean }>}
+     * @returns {Promise<{ deduplicated: boolean, ownOperation: boolean }>}
      */
     async sendNotification(
         user,
@@ -200,6 +202,7 @@ class Publisher {
             },
         });
         const deduplicated = result.id !== jobId;
+        const ownOperation = deduplicated && String(result.id).startsWith(`${claimCheckNumber}-`);
 
         log.info(
             {
@@ -212,7 +215,7 @@ class Publisher {
             'Message published to queue',
         );
 
-        return { deduplicated };
+        return { deduplicated, ownOperation };
     }
 
     /**

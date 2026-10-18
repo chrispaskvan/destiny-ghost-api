@@ -476,6 +476,27 @@ describe('NotificationController', () => {
             );
         });
 
+        /**
+         * Two documents sharing a number, or a membership id that changed
+         * across a resume: the second is deduplicated against this
+         * operation's own job, whose outcome - delivered, skipped or failed -
+         * is the one the receipt must show.
+         */
+        it("should not mark a recipient a duplicate of this broadcast's own job", async () => {
+            userService.getSubscribedUsersPage.mockResolvedValueOnce({
+                users: [mockUser],
+                cursor: undefined,
+            });
+            publisher.sendNotification.mockResolvedValueOnce({
+                deduplicated: true,
+                ownOperation: true,
+            });
+
+            await run(jobWith());
+
+            expect(ClaimCheck.advance).not.toHaveBeenCalled();
+        });
+
         it('should record each recipient before queueing them, so their worker finds an entry', async () => {
             userService.getSubscribedUsersPage.mockResolvedValueOnce({
                 users: [mockUser],

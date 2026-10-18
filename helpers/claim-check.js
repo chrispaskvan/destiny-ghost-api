@@ -1,5 +1,4 @@
 // @ts-check
-import { createHash } from 'node:crypto';
 import { createId } from '@paralleldrive/cuid2';
 import cache from './cache.js';
 
@@ -108,13 +107,14 @@ const toLua = table =>
  * Twilio has the last word over this service's own outcomes, never the
  * reverse. A skip, an error or a duplicate records that no message of this
  * operation's went out, so once Twilio holds one it is not recorded over that
- * message, and a report for it replaces one recorded first. That covers a
- * client timeout on a send Twilio had in fact accepted, and a recipient
- * deduplicated against this operation's own job - one recipient twice in a
- * broadcast, or a job id that changed across a resume - which would
- * otherwise have its own message marked as someone else's.
+ * message, and a report for it replaces one recorded first - a client timeout
+ * on a send Twilio had in fact accepted, say.
  *
- * An entry written before entries were JSON is read as its bare status.
+ * An entry written before entries were JSON is read as its bare status, but
+ * for `queued`, which then meant both our queue and Twilio's and is read as
+ * the former: a receipt that under-reports corrects itself on the next
+ * report, while one that over-reports says Twilio has a message it may never
+ * have been sent.
  *
  * KEYS[1] claim check; ARGV[1] phone number, ARGV[2] entry as JSON, ARGV[3]
  * expiry in seconds. Returns 1 when written, 0 when not.
@@ -131,7 +131,7 @@ end
 local ok, current = pcall(cjson.decode, stored)
 
 if not ok or type(current) ~= 'table' then
-    current = { status = stored }
+    current = { status = stored == 'queued' and '${PENDING}' or stored }
 end
 
 local entry = cjson.decode(ARGV[2])
@@ -177,13 +177,6 @@ return 1
 `;
 
 /**
- * What Redis caches `ADVANCE` under, so a call sends 40 bytes rather than the
- * script. node-redis does the same for scripts defined on the client; this
- * one is kept here rather than on the shared client in `cache.js`.
- */
-const ADVANCE_SHA = createHash('sha1').update(ADVANCE).digest('hex');
-
-/**
  * One recipient's progress.
  * @typedef {Object} ClaimCheckEntry
  * @property {string} status - `pending`, one of Twilio's message statuses, or
@@ -202,10 +195,10 @@ const parse = stored => {
 
         if (entry && typeof entry === 'object') return entry;
     } catch {
-        // Written before entries were JSON: the bare status.
+        // Written before entries were JSON: the bare status, read as `ADVANCE` reads it.
     }
 
-    return { status: stored };
+    return { status: stored === 'queued' ? PENDING : stored };
 };
 
 class ClaimCheck {
@@ -265,20 +258,10 @@ class ClaimCheck {
      * @returns {Promise<boolean>} whether the entry was written
      */
     static async advance(claimCheckNumber, phoneNumber, entry) {
-        const options = {
+        const written = await cache.eval(ADVANCE, {
             keys: [claimCheckNumber],
             arguments: [phoneNumber, JSON.stringify(entry), String(claimCheckExpiration)],
-        };
-        let written;
-
-        try {
-            written = await cache.evalSha(ADVANCE_SHA, options);
-        } catch (err) {
-            // Not cached yet, or flushed since: sending it caches it.
-            if (!(err instanceof Error && err.message.startsWith('NOSCRIPT'))) throw err;
-
-            written = await cache.eval(ADVANCE, options);
-        }
+        });
 
         return written === 1;
     }
@@ -287,7 +270,6 @@ class ClaimCheck {
 export {
     ClaimCheck as default,
     ADVANCE,
-    ADVANCE_SHA,
     claimCheckExpiration,
     DUPLICATE,
     ERROR,

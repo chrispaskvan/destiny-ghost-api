@@ -421,18 +421,22 @@ class NotificationController {
          * finds an entry to move on. A failure between the two leaves the
          * recipient pending, and the page's retry queues them under the same
          * entry.
+         *
+         * Marked a duplicate only when another operation holds them. One
+         * deduplicated against this operation's own job is already on this
+         * receipt, and that job's outcome is the one to report.
          * @param {import('../users/user.service.js').SubscribedUser} user
          */
         const queueRecipient = async user => {
             await claimCheck.addPhoneNumber(user.phoneNumber);
 
-            const { deduplicated } = await this.publisher.sendNotification(user, {
+            const { deduplicated, ownOperation } = await this.publisher.sendNotification(user, {
                 notificationType,
                 claimCheckNumber,
                 deduplicationId: `${notificationType}-${weeklyReset}-${user.phoneNumber}`,
             });
 
-            if (deduplicated) {
+            if (deduplicated && !ownOperation) {
                 await ClaimCheck.advance(claimCheckNumber, user.phoneNumber, { status: DUPLICATE });
             }
 

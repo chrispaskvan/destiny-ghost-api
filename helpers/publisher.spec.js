@@ -92,7 +92,7 @@ describe('Publisher', () => {
                 deduplication: { id: 'Xur-2026-10-06-+12085550123', ttl: 604_800_000 },
             });
             expect(options.jobId).not.toContain(':');
-            expect(result).toEqual({ deduplicated: false });
+            expect(result).toEqual({ deduplicated: false, ownOperation: false });
         });
 
         it('should report a job BullMQ deduplicated into another', async () => {
@@ -107,7 +107,26 @@ describe('Publisher', () => {
                 },
             );
 
-            expect(result).toEqual({ deduplicated: true });
+            expect(result).toEqual({ deduplicated: true, ownOperation: false });
+        });
+
+        /**
+         * One recipient queued twice by the same operation - two documents
+         * sharing a number, or a membership id that changed across a resume.
+         */
+        it("should say when the job holding the id is this operation's own", async () => {
+            mocks.add.mockResolvedValueOnce({ id: 'op1-4611686099' });
+
+            const result = await publisher.sendNotification(
+                { membershipId: '4611686018', membershipType: 2, phoneNumber: '+12085550123' },
+                {
+                    notificationType: 'Xur',
+                    claimCheckNumber: 'op1',
+                    deduplicationId: 'Xur-2026-10-06-+12085550123',
+                },
+            );
+
+            expect(result).toEqual({ deduplicated: true, ownOperation: true });
         });
 
         it('should require a deduplication id', async () => {

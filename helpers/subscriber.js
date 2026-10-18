@@ -141,25 +141,7 @@ class Subscriber {
              * that next picks it up, without the callback running at all.
              */
             if (onGiveUp && job?.finishedOn) {
-                const {
-                    body,
-                    applicationProperties: { claimCheckNumber, notificationType },
-                } = job.data;
-
-                const givingUp = Promise.resolve()
-                    .then(() =>
-                        onGiveUp(
-                            JSON.parse(body, safeReviver),
-                            { claimCheckNumber, notificationType },
-                            job,
-                        ),
-                    )
-                    .catch(handlerErr =>
-                        log.error({ jobId: job.id, err: handlerErr }, 'Give-up handler failed'),
-                    )
-                    .finally(() => this.#givingUp.delete(givingUp));
-
-                this.#givingUp.add(givingUp);
+                this.#giveUp(onGiveUp, job);
             }
         });
         worker.on('error', err => {
@@ -172,16 +154,52 @@ class Subscriber {
     }
 
     /**
+     * Run a give-up handler where `close` can wait for it, and where nothing
+     * it throws - a payload too malformed to read included - escapes into
+     * BullMQ's failure handling, which would report it without the job.
+     * @param {(body: *, options: { claimCheckNumber: string, notificationType: string }, job: import('bullmq').Job) => Promise<void>} onGiveUp
+     * @param {import('bullmq').Job} job
+     * @returns {Promise<void>}
+     */
+    async #giveUp(onGiveUp, job) {
+        const { promise, resolve } = Promise.withResolvers();
+
+        this.#givingUp.add(promise);
+
+        try {
+            const {
+                body,
+                applicationProperties: { claimCheckNumber, notificationType },
+            } = job.data;
+
+            await onGiveUp(
+                JSON.parse(body, safeReviver),
+                { claimCheckNumber, notificationType },
+                job,
+            );
+        } catch (err) {
+            log.error({ jobId: job.id, err }, 'Give-up handler failed');
+        } finally {
+            this.#givingUp.delete(promise);
+            resolve(undefined);
+        }
+    }
+
+    /**
      * Clean up resources. Each worker finishes its active jobs first, and a
      * worker that fails to close does not cut the others' drain short.
      */
     async close() {
-        await closeAll(
-            this.#workers.map(worker => worker.close()),
-            'Subscriber failed to close',
-        );
-        // Settled rather than rejected: each one logs its own failure.
-        await Promise.all(this.#givingUp);
+        try {
+            await closeAll(
+                this.#workers.map(worker => worker.close()),
+                'Subscriber failed to close',
+            );
+        } finally {
+            // Waited for even when a worker fails to close: they never
+            // reject, and what follows a close is Redis going away.
+            await Promise.all(this.#givingUp);
+        }
     }
 }
 

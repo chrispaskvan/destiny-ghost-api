@@ -721,22 +721,6 @@ describe('TwilioController', () => {
             });
         });
 
-        it("should read the message's sid from the legacy field when that is all there is", async () => {
-            const sid = `SM${'c'.repeat(32)}`;
-
-            await twilioController.statusCallback({
-                To: phoneNumber,
-                SmsSid: sid,
-                SmsStatus: 'delivered',
-                ClaimCheck: 'cc1',
-            });
-
-            expect(ClaimCheck.advance).toHaveBeenCalledWith('cc1', phoneNumber, {
-                status: 'delivered',
-                sid,
-            });
-        });
-
         /**
          * The receipt only moves forward, but the audit trail is every report
          * as it arrived (`adr-files/twilio-message-status.md`) - including the
