@@ -286,4 +286,41 @@ describe('NotificationRouter', () => {
             expect(res.statusCode).toBe(StatusCodes.NOT_FOUND);
         });
     });
+
+    describe('GET /claimChecks/:claimCheck', () => {
+        const receipt = (url = '/claimChecks/op-1') =>
+            new Promise(resolve => {
+                res.on('end', resolve);
+                router(createRequest({ method: 'GET', url }), res, resolve);
+            });
+
+        it("should report each recipient's progress", async () => {
+            const entries = {
+                '+15551234567': { status: 'delivered', sid: `SM${'a'.repeat(32)}` },
+                '+15557654321': { status: 'skipped', reason: 'unauthenticated' },
+            };
+
+            controller.getClaimCheck.mockResolvedValue(entries);
+
+            await receipt();
+
+            expect(controller.getClaimCheck).toHaveBeenCalledExactlyOnceWith('op-1');
+            expect(res.statusCode).toBe(StatusCodes.OK);
+            expect(res._getJSONData()).toEqual(entries);
+        });
+
+        /**
+         * A broadcast's claim check is handed out before its first page is
+         * queued, so a caller polling straight away must not be told it
+         * does not exist.
+         */
+        it('should report an empty receipt for an operation with no recipients yet', async () => {
+            controller.getClaimCheck.mockResolvedValue({});
+
+            await receipt();
+
+            expect(res.statusCode).toBe(StatusCodes.OK);
+            expect(res._getJSONData()).toEqual({});
+        });
+    });
 });

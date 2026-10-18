@@ -26,7 +26,7 @@ import {
 
 vi.mock('../helpers/bitly.js', () => ({ default: vi.fn() }));
 vi.mock('../helpers/claim-check.js', () => ({
-    default: { updatePhoneNumber: vi.fn() },
+    default: { advance: vi.fn() },
 }));
 vi.mock('../helpers/consent-marker.js', () => ({ recordConsent: vi.fn() }));
 vi.mock('../helpers/subscriber.js', () => ({ default: { listen: vi.fn() } }));
@@ -705,18 +705,42 @@ describe('TwilioController', () => {
             );
         });
 
-        it('should update the claim check when the callback carries one', async () => {
+        it('should advance the claim check for the message the callback reports on', async () => {
+            const sid = `SM${'a'.repeat(32)}`;
+
             await twilioController.statusCallback({
                 To: phoneNumber,
+                MessageSid: sid,
                 MessageStatus: 'delivered',
                 ClaimCheck: 'cc1',
             });
 
-            expect(ClaimCheck.updatePhoneNumber).toHaveBeenCalledWith(
-                'cc1',
-                phoneNumber,
-                'delivered',
+            expect(ClaimCheck.advance).toHaveBeenCalledWith('cc1', phoneNumber, {
+                status: 'delivered',
+                sid,
+            });
+        });
+
+        /**
+         * The receipt only moves forward, but the audit trail is every report
+         * as it arrived (`adr-files/twilio-message-status.md`) - including the
+         * late ones the receipt ignores.
+         */
+        it('should keep every report, even one the claim check ignores', async () => {
+            ClaimCheck.advance.mockResolvedValue(false);
+
+            await twilioController.statusCallback({
+                To: phoneNumber,
+                MessageStatus: 'sent',
+                ClaimCheck: 'cc1',
+            });
+
+            expect(userService.addUserMessage).toHaveBeenCalledWith(
+                expect.objectContaining({ SmsStatus: 'sent' }),
             );
+            expect(ClaimCheck.advance).toHaveBeenCalledWith('cc1', phoneNumber, {
+                status: 'sent',
+            });
         });
 
         it('should leave the claim check alone when none is given', async () => {
@@ -725,7 +749,7 @@ describe('TwilioController', () => {
                 MessageStatus: 'delivered',
             });
 
-            expect(ClaimCheck.updatePhoneNumber).not.toHaveBeenCalled();
+            expect(ClaimCheck.advance).not.toHaveBeenCalled();
         });
     });
 

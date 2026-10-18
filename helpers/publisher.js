@@ -12,6 +12,7 @@ import applicationInsights from './application-insights.js';
 import closeAll from './close-all.js';
 import client from './jobs.js';
 import context from './async-context.js';
+import { isExhausted } from './job-attempts.js';
 import log from './log.js';
 
 class PublisherError extends Error {
@@ -91,7 +92,7 @@ class Publisher {
             try {
                 const job = await this.#queue.getJob(jobId);
 
-                if (job?.opts?.attempts && job.attemptsMade >= job.opts.attempts) {
+                if (job && isExhausted(job)) {
                     log.error(
                         {
                             jobId,
@@ -151,11 +152,13 @@ class Publisher {
      * `deduplicationId`. A job carrying an id that is already queued, or was
      * in the last week, is not added: BullMQ hands back the job that holds the
      * id instead, so a returned id other than this job's own means it was
-     * deduplicated.
+     * deduplicated. Job ids begin with the claim check, so the returned one
+     * also says whether the job holding the id is this operation's own - the
+     * same recipient queued twice by one operation - or another's.
      *
      * @param {QueuedUser} user
      * @param {{ notificationType: string, claimCheckNumber: string, deduplicationId: string }} param1
-     * @returns {Promise<{ deduplicated: boolean }>}
+     * @returns {Promise<{ deduplicated: boolean, ownOperation: boolean }>}
      */
     async sendNotification(
         user,
@@ -182,8 +185,7 @@ class Publisher {
             },
         };
 
-        // BullMQ refuses a custom id containing ':'; neither part can.
-        const jobId = `${claimCheckNumber}-${membershipId}`;
+        const jobId = Publisher.#jobIdFor(claimCheckNumber, membershipId);
         /**
          * The deduplication key outlives the job it came from. BullMQ's own
          * pruning (`removeOnComplete`/`removeOnFail`, by count or age)
@@ -200,6 +202,7 @@ class Publisher {
             },
         });
         const deduplicated = result.id !== jobId;
+        const ownOperation = deduplicated && Publisher.#queuedBy(result.id, claimCheckNumber);
 
         log.info(
             {
@@ -212,7 +215,50 @@ class Publisher {
             'Message published to queue',
         );
 
-        return { deduplicated };
+        return { deduplicated, ownOperation };
+    }
+
+    /**
+     * Whether a notification was queued under a deduplication id, and if so
+     * whether by this operation - what `sendNotification` would have said
+     * had its reply not been lost. A rejected `sendNotification` does not
+     * prove nothing was queued: the add can land in Redis and its reply be
+     * lost.
+     *
+     * Asked of the deduplication id rather than of this user's job id, since
+     * that is what a recipient is queued once under: another document
+     * sharing their phone number can hold it. It also outlives the job it
+     * came from, so a job that has already run and been pruned still counts
+     * as queued. Rejects when Redis does, so a caller can tell "not queued"
+     * from "could not tell".
+     * @param {string} deduplicationId
+     * @param {string} claimCheckNumber
+     * @returns {Promise<{ queued: boolean, ownOperation: boolean }>}
+     */
+    async findNotification(deduplicationId, claimCheckNumber) {
+        const jobId = await this.#queue.getDeduplicationJobId(deduplicationId);
+
+        if (!jobId) return { queued: false, ownOperation: false };
+
+        return { queued: true, ownOperation: Publisher.#queuedBy(jobId, claimCheckNumber) };
+    }
+
+    /**
+     * Job ids begin with the claim check they were queued under.
+     * @param {string | undefined} jobId
+     * @param {string} claimCheckNumber
+     */
+    static #queuedBy(jobId, claimCheckNumber) {
+        return String(jobId).startsWith(`${claimCheckNumber}-`);
+    }
+
+    /**
+     * BullMQ refuses a custom id containing ':'; neither part can.
+     * @param {string} claimCheckNumber
+     * @param {string} membershipId
+     */
+    static #jobIdFor(claimCheckNumber, membershipId) {
+        return `${claimCheckNumber}-${membershipId}`;
     }
 
     /**

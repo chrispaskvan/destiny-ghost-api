@@ -248,6 +248,30 @@ describe('Subscriber', () => {
             await expect(jobProcessor(mockJob)).rejects.toThrow('Processing failed');
         });
 
+        it('should log a rejection that is not an Error as its string form', async () => {
+            const callback = vi.fn().mockRejectedValue('gave up');
+            const mockJob = {
+                id: 'job-123',
+                data: {
+                    body: JSON.stringify({ name: 'Test User' }),
+                    applicationProperties: {
+                        claimCheckNumber: 'claim-456',
+                        notificationType: 'Xur',
+                    },
+                },
+            };
+
+            subscriber.listen(callback);
+
+            const jobProcessor = MockWorkerConstructor.mock.calls[0][1];
+
+            await expect(jobProcessor(mockJob)).rejects.toBe('gave up');
+            expect(log.error).toHaveBeenCalledWith(
+                { jobId: 'job-123', error: 'gave up', stack: undefined },
+                'Failed to process job',
+            );
+        });
+
         it('should handle malformed JSON in job body', async () => {
             const callback = vi.fn();
             const mockJob = {
@@ -267,6 +291,135 @@ describe('Subscriber', () => {
             const jobProcessor = MockWorkerConstructor.mock.calls[0][1];
 
             await expect(jobProcessor(mockJob)).rejects.toThrow();
+        });
+    });
+
+    describe('when a worker reports', () => {
+        const handlerFor = event =>
+            mockWorkerInstance.on.mock.calls.find(([name]) => name === event)[1];
+
+        it('should log a job that completed', () => {
+            subscriber.listen(vi.fn());
+            handlerFor('completed')({ id: 'job-1' });
+
+            expect(log.info).toHaveBeenCalledWith({ jobId: 'job-1' }, 'Job completed');
+        });
+
+        it('should log a worker error', () => {
+            subscriber.listen(vi.fn());
+            handlerFor('error')(new Error('connection lost'));
+
+            expect(log.error).toHaveBeenCalledWith({ error: 'connection lost' }, 'Worker error');
+        });
+    });
+
+    describe('when BullMQ gives up on a job', () => {
+        const job = finishedOn => ({
+            id: 'job-1',
+            ...(finishedOn && { finishedOn }),
+            data: {
+                body: JSON.stringify({ phoneNumber: '+15551234567' }),
+                applicationProperties: { claimCheckNumber: 'cc1', notificationType: 'xur' },
+            },
+        });
+        const failedHandler = () =>
+            mockWorkerInstance.on.mock.calls.find(([event]) => event === 'failed')[1];
+
+        it('should hand the job to the give-up handler once it will not be retried', async () => {
+            const onGiveUp = vi.fn().mockResolvedValue();
+            const failed = job(Date.now());
+            const err = new Error('no more');
+
+            subscriber.listen(vi.fn(), 'notifications', { onGiveUp });
+            failedHandler()(failed, err);
+            await subscriber.close();
+
+            expect(onGiveUp).toHaveBeenCalledExactlyOnceWith(
+                { phoneNumber: '+15551234567' },
+                { claimCheckNumber: 'cc1', notificationType: 'xur' },
+                failed,
+                err,
+            );
+        });
+
+        it('should not call it for an attempt BullMQ will retry', async () => {
+            const onGiveUp = vi.fn();
+
+            subscriber.listen(vi.fn(), 'notifications', { onGiveUp });
+            failedHandler()(job(), new Error('try again'));
+            await subscriber.close();
+
+            expect(onGiveUp).not.toHaveBeenCalled();
+        });
+
+        it('should log a handler that fails rather than let it reject unhandled', async () => {
+            const err = new Error('Redis is down');
+
+            subscriber.listen(vi.fn(), 'notifications', {
+                onGiveUp: vi.fn().mockRejectedValue(err),
+            });
+            failedHandler()(job(Date.now()), new Error('no more'));
+            await subscriber.close();
+
+            expect(log.error).toHaveBeenCalledWith(
+                { jobId: 'job-1', err },
+                'Give-up handler failed',
+            );
+        });
+
+        it('should log a job too malformed to read rather than throw into BullMQ', async () => {
+            const onGiveUp = vi.fn();
+            const listener = () => {
+                subscriber.listen(vi.fn(), 'notifications', { onGiveUp });
+                failedHandler()({ id: 'job-1', finishedOn: Date.now(), data: {} }, new Error('x'));
+            };
+
+            expect(listener).not.toThrow();
+            await subscriber.close();
+
+            expect(onGiveUp).not.toHaveBeenCalled();
+            expect(log.error).toHaveBeenCalledWith(
+                { jobId: 'job-1', err: expect.any(TypeError) },
+                'Give-up handler failed',
+            );
+        });
+
+        it('should still wait for a handler when a worker fails to close', async () => {
+            const handling = Promise.withResolvers();
+            let settled = false;
+
+            mockWorkerInstance.close.mockRejectedValueOnce(new Error('close failed'));
+            subscriber.listen(vi.fn(), 'notifications', { onGiveUp: () => handling.promise });
+            failedHandler()(job(Date.now()), new Error('no more'));
+
+            const closing = subscriber.close().finally(() => {
+                settled = true;
+            });
+
+            await new Promise(resolve => setImmediate(resolve));
+            expect(settled).toBe(false);
+
+            handling.resolve();
+            await expect(closing).rejects.toThrow();
+        });
+
+        it('should not finish closing while a handler is still running', async () => {
+            const handling = Promise.withResolvers();
+            let closed = false;
+
+            subscriber.listen(vi.fn(), 'notifications', { onGiveUp: () => handling.promise });
+            failedHandler()(job(Date.now()), new Error('no more'));
+
+            const closing = subscriber.close().then(() => {
+                closed = true;
+            });
+
+            await new Promise(resolve => setImmediate(resolve));
+            expect(closed).toBe(false);
+
+            handling.resolve();
+            await closing;
+            expect(closed).toBe(true);
         });
     });
 

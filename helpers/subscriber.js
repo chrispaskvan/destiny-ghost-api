@@ -20,27 +20,44 @@ class Subscriber {
     #workers = [];
 
     /**
+     * Give-up handlers still running. The worker's `failed` event does not
+     * wait for them, so `close` has to, or one could reach Redis after the
+     * shutdown that follows has closed it.
+     * @type {Set<Promise<void>>}
+     */
+    #givingUp = new Set();
+
+    /**
      * @constructor
      * @param {(body: *, options: { claimCheckNumber: string, notificationType: string }, job: import('bullmq').Job) => Promise<*>} callback -
      * handed the job itself too, for a handler that records progress on it
      * @param {string} [queueName] - The queue name to subscribe to.
-     * @param {{ concurrency?: number, maxStalledCount?: number }} [options] -
+     * @param {{
+     *   concurrency?: number,
+     *   maxStalledCount?: number,
+     *   onGiveUp?: (body: *, options: { claimCheckNumber: string, notificationType: string }, job: import('bullmq').Job, err: Error) => Promise<void>,
+     * }} [options] -
      * Concurrency defaults to 5, which suits independent notification sends.
      * A queue whose jobs must be applied in the order they were enqueued
      * needs 1. `maxStalledCount` is how many times a job whose worker died
      * is picked up again before it is failed; BullMQ's default is 1.
+     * `onGiveUp` is handed a job as `callback` is, and the error its last
+     * attempt failed with, once BullMQ has failed it for good.
      */
-    listen(callback, queueName = 'notifications', { concurrency = 5, maxStalledCount } = {}) {
+    listen(
+        callback,
+        queueName = 'notifications',
+        { concurrency = 5, maxStalledCount, onGiveUp } = {},
+    ) {
         const worker = new Worker(
             queueName,
             async job => {
                 try {
-                    const { data } = job;
                     const {
-                        body,
-                        applicationProperties: { claimCheckNumber, notificationType, traceId },
-                    } = data;
-                    const user = JSON.parse(body, safeReviver);
+                        body: user,
+                        properties: { claimCheckNumber, notificationType },
+                        traceId,
+                    } = Subscriber.#unpack(job);
 
                     /**
                      * The payload is deliberately absent. Spreading it here
@@ -114,6 +131,17 @@ class Subscriber {
                 },
                 'Job failed',
             );
+
+            /**
+             * BullMQ stamps `finishedOn` only on a job it will not retry, so
+             * this is its own decision rather than a guess at it from the
+             * error. It also covers the failures no processor sees: a job
+             * failed for stalling too often is failed here, by the worker
+             * that next picks it up, without the callback running at all.
+             */
+            if (onGiveUp && job?.finishedOn) {
+                this.#giveUp(onGiveUp, job, err);
+            }
         });
         worker.on('error', err => {
             log.error({ error: err.message }, 'Worker error');
@@ -125,14 +153,65 @@ class Subscriber {
     }
 
     /**
+     * Read a job's payload as the publisher wrote it: the parsed body, and
+     * the properties a handler is given alongside it.
+     * @param {import('bullmq').Job} job
+     * @returns {{ body: *, properties: { claimCheckNumber: string, notificationType: string }, traceId?: string }}
+     */
+    static #unpack(job) {
+        const {
+            body,
+            applicationProperties: { claimCheckNumber, notificationType, traceId },
+        } = job.data;
+
+        return {
+            body: JSON.parse(body, safeReviver),
+            properties: { claimCheckNumber, notificationType },
+            traceId,
+        };
+    }
+
+    /**
+     * Run a give-up handler where `close` can wait for it, and where nothing
+     * it throws - a payload too malformed to read included - escapes into
+     * BullMQ's failure handling, which would report it without the job.
+     * @param {(body: *, options: { claimCheckNumber: string, notificationType: string }, job: import('bullmq').Job, err: Error) => Promise<void>} onGiveUp
+     * @param {import('bullmq').Job} job
+     * @param {Error} err
+     * @returns {Promise<void>}
+     */
+    async #giveUp(onGiveUp, job, err) {
+        const { promise, resolve } = Promise.withResolvers();
+
+        this.#givingUp.add(promise);
+
+        try {
+            const { body, properties } = Subscriber.#unpack(job);
+
+            await onGiveUp(body, properties, job, err);
+        } catch (handlerErr) {
+            log.error({ jobId: job.id, err: handlerErr }, 'Give-up handler failed');
+        } finally {
+            this.#givingUp.delete(promise);
+            resolve(undefined);
+        }
+    }
+
+    /**
      * Clean up resources. Each worker finishes its active jobs first, and a
      * worker that fails to close does not cut the others' drain short.
      */
     async close() {
-        await closeAll(
-            this.#workers.map(worker => worker.close()),
-            'Subscriber failed to close',
-        );
+        try {
+            await closeAll(
+                this.#workers.map(worker => worker.close()),
+                'Subscriber failed to close',
+            );
+        } finally {
+            // Waited for even when a worker fails to close: they never
+            // reject, and what follows a close is Redis going away.
+            await Promise.all(this.#givingUp);
+        }
     }
 }
 

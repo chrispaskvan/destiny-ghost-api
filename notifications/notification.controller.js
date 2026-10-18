@@ -8,8 +8,9 @@ import NotificationError from './notification.error.js';
 import notificationTypes from './notification.types.js';
 import DestinyError from '../destiny/destiny.error.js';
 import XurUnavailableError from './xur-unavailable.error.js';
-import ClaimCheck, { DUPLICATE, SKIPPED } from '../helpers/claim-check.js';
+import ClaimCheck, { DUPLICATE, ERROR, SKIPPED } from '../helpers/claim-check.js';
 import mayDeliver from '../helpers/consent.js';
+import { isExhausted, isLastAttempt } from '../helpers/job-attempts.js';
 import log from '../helpers/log.js';
 import currentWeeklyReset from '../helpers/weekly-reset.js';
 import {
@@ -63,7 +64,9 @@ class NotificationController {
         this.users = options.userService;
         this.world = options.worldRepository;
 
-        subscriber.listen(this.#send.bind(this));
+        subscriber.listen(this.#send.bind(this), undefined, {
+            onGiveUp: this.#gaveUp.bind(this),
+        });
         /**
          * One broadcast at a time, and one whose worker died is picked up
          * again from its saved page up to five times rather than BullMQ's
@@ -77,31 +80,15 @@ class NotificationController {
     }
 
     /**
-     * Record a claim-check outcome without letting the receipt fail the job.
-     *
-     * The hash lives in Redis, so these writes reject when Redis does. Letting
-     * that propagate would hand the job back to BullMQ *after* Twilio had
-     * already accepted the message, and the retry would send it a second time
-     * - trading a lost receipt for a duplicate SMS, which is much the worse of
-     * the two. The suppression path has the same problem in a quieter form: a
-     * failed receipt would retry a job that is only going to suppress again.
-     *
-     * Ordering and terminal-state semantics for this hash are #717's; this
-     * only stops a receipt failure from causing a send.
-     * @param {string} claimCheckNumber
-     * @param {string} phoneNumber
-     * @param {string} status
-     * @returns {Promise<void>}
+     * What Twilio said when it accepted a message, or the skip recorded when
+     * the final consent check withheld it.
+     * @param {{ sid: string, status: string } | undefined} sent
+     * @returns {import('../helpers/claim-check.js').ClaimCheckEntry}
      */
-    static async #recordOutcome(claimCheckNumber, phoneNumber, status) {
-        try {
-            await ClaimCheck.updatePhoneNumber(claimCheckNumber, phoneNumber, status);
-        } catch (err) {
-            log.warn(
-                { err, claimCheckNumber, phoneNumber, status },
-                'Unable to record the claim-check outcome.',
-            );
-        }
+    static #sentOutcome(sent) {
+        return sent
+            ? { status: sent.status, sid: sent.sid }
+            : { status: SKIPPED, reason: 'opted-out' };
     }
 
     /**
@@ -149,9 +136,38 @@ class NotificationController {
             return true;
         }
 
-        await NotificationController.#recordOutcome(claimCheckNumber, phoneNumber, SKIPPED);
+        await ClaimCheck.advance(claimCheckNumber, phoneNumber, {
+            status: SKIPPED,
+            reason: 'opted-out',
+        });
 
         return false;
+    }
+
+    /**
+     * Record an error on the receipt of a recipient whose job BullMQ has
+     * failed for good. Every attempt short of that records nothing, since
+     * the retry may yet send.
+     *
+     * The reason is why BullMQ stopped, not how far it got: an
+     * `UnrecoverableError` - which is also how BullMQ fails a job for
+     * stalling more often than the worker allows - is permanent on whichever
+     * attempt it lands, and only a job that failed every attempt otherwise
+     * ran out of retries. Matched by name as well, as BullMQ does, so one
+     * from another copy of the library is not missed.
+     * @param {QueuedUser} user
+     * @param {{ claimCheckNumber: string }} properties
+     * @param {import('bullmq').Job} job
+     * @param {Error} err - what the last attempt failed with
+     * @returns {Promise<void>}
+     */
+    async #gaveUp({ phoneNumber }, { claimCheckNumber }, job, err) {
+        const permanent = err instanceof UnrecoverableError || err?.name === 'UnrecoverableError';
+
+        await ClaimCheck.advance(claimCheckNumber, phoneNumber, {
+            status: ERROR,
+            reason: permanent || !isExhausted(job) ? 'permanent' : 'retries-exhausted',
+        });
     }
 
     /**
@@ -193,6 +209,10 @@ class NotificationController {
                         { membershipId, membershipType },
                         'Skipping Xur notification: user could not be authenticated.',
                     );
+                    await ClaimCheck.advance(claimCheckNumber, phoneNumber, {
+                        status: SKIPPED,
+                        reason: 'unauthenticated',
+                    });
 
                     return;
                 }
@@ -276,11 +296,16 @@ class NotificationController {
                         },
                     );
 
-                    await NotificationController.#recordOutcome(
+                    await ClaimCheck.advance(
                         claimCheckNumber,
                         phoneNumber,
-                        sent ? sent.status : SKIPPED,
+                        NotificationController.#sentOutcome(sent),
                     );
+                } else {
+                    await ClaimCheck.advance(claimCheckNumber, phoneNumber, {
+                        status: SKIPPED,
+                        reason: 'no-characters',
+                    });
                 }
             } catch (err) {
                 if (err instanceof XurUnavailableError) {
@@ -300,10 +325,10 @@ class NotificationController {
                     );
 
                     log.info(JSON.stringify(sent?.status));
-                    await NotificationController.#recordOutcome(
+                    await ClaimCheck.advance(
                         claimCheckNumber,
                         phoneNumber,
-                        sent ? sent.status : SKIPPED,
+                        NotificationController.#sentOutcome(sent),
                     );
 
                     return;
@@ -331,6 +356,16 @@ class NotificationController {
 
                 throw unrecoverableError;
             }
+        } else {
+            /**
+             * No other type has a sender yet (#722). Recorded rather than
+             * left pending, so the receipt says nothing was sent instead of
+             * looking like a job still waiting to run.
+             */
+            await ClaimCheck.advance(claimCheckNumber, phoneNumber, {
+                status: SKIPPED,
+                reason: 'unsupported-type',
+            });
         }
     }
 
@@ -358,15 +393,35 @@ class NotificationController {
     async #broadcast({ weeklyReset }, { claimCheckNumber, notificationType }, job) {
         const claimCheck = new ClaimCheck(claimCheckNumber);
         const limit = pLimit(20);
-        /** @param {import('../users/user.service.js').SubscribedUser} user */
+        /** @param {{ phoneNumber: string }} user */
+        const deduplicationIdFor = ({ phoneNumber }) =>
+            `${notificationType}-${weeklyReset}-${phoneNumber}`;
+        /**
+         * Recorded before it is queued, so the worker that sends it finds an
+         * entry to move on. A queueing failure after that leaves the
+         * recipient pending, and the page's retry queues them under the same
+         * entry. A recipient who cannot be recorded is queued anyway.
+         *
+         * Marked a duplicate only when another operation holds them. One
+         * deduplicated against this operation's own job is already on this
+         * receipt, and that job's outcome is the one to report. Neither write
+         * fails the page: the receipt never decides who is sent to.
+         * @param {import('../users/user.service.js').SubscribedUser} user
+         */
         const queueRecipient = async user => {
-            const { deduplicated } = await this.publisher.sendNotification(user, {
+            await claimCheck.addPhoneNumber(user.phoneNumber);
+
+            const { deduplicated, ownOperation } = await this.publisher.sendNotification(user, {
                 notificationType,
                 claimCheckNumber,
-                deduplicationId: `${notificationType}-${weeklyReset}-${user.phoneNumber}`,
+                deduplicationId: deduplicationIdFor(user),
             });
 
-            await claimCheck.addPhoneNumber(user.phoneNumber, deduplicated ? DUPLICATE : undefined);
+            if (deduplicated && !ownOperation) {
+                await ClaimCheck.advance(claimCheckNumber, user.phoneNumber, {
+                    status: DUPLICATE,
+                });
+            }
 
             return deduplicated;
         };
@@ -408,6 +463,30 @@ class NotificationController {
                     log.error({ err, claimCheckNumber }, 'Unable to queue a notification.');
                 }
 
+                /**
+                 * On the last attempt there is no retry to queue them, so
+                 * the recipients that could not be queued are told so rather
+                 * than left pending for a job that will never exist. Those
+                 * that were queued keep their entry: their job does exist.
+                 * Throttled like the queueing, since the Redis that failed
+                 * it is the one asked.
+                 */
+                if (isLastAttempt(job)) {
+                    const unqueued = users.filter((_, i) => results[i].status === 'rejected');
+
+                    await Promise.all(
+                        unqueued.map(user =>
+                            limit(() =>
+                                this.#markIfNeverQueued(
+                                    user.phoneNumber,
+                                    claimCheckNumber,
+                                    deduplicationIdFor(user),
+                                ),
+                            ),
+                        ),
+                    );
+                }
+
                 throw new Error(recipientsNotQueued(failures.length, users.length));
             }
 
@@ -429,6 +508,44 @@ class NotificationController {
         const { cursor: _cursor, ...totals } = progress;
 
         return totals;
+    }
+
+    /**
+     * Record a recipient as never queued, once nothing more will try - but
+     * only if nothing was queued for them, asked of the deduplication id
+     * their add would have claimed. A failed add can still have landed, and
+     * another document sharing their phone number can have queued them under
+     * its own job; either job reports for itself, and an outcome of ours
+     * recorded first would hold the receipt at `not-queued` against a skip
+     * or failure of its own. Held by another operation, they are a duplicate,
+     * as `queueRecipient` would have recorded. A lookup that fails leaves
+     * the entry pending rather than guessing.
+     * @param {string} phoneNumber
+     * @param {string} claimCheckNumber
+     * @param {string} deduplicationId
+     * @returns {Promise<void>}
+     */
+    async #markIfNeverQueued(phoneNumber, claimCheckNumber, deduplicationId) {
+        let found;
+
+        try {
+            found = await this.publisher.findNotification(deduplicationId, claimCheckNumber);
+        } catch (err) {
+            log.warn(
+                { err, claimCheckNumber, phoneNumber },
+                'Unable to tell whether a recipient was queued; leaving them pending.',
+            );
+
+            return;
+        }
+
+        if (found.ownOperation) return;
+
+        await ClaimCheck.advance(
+            claimCheckNumber,
+            phoneNumber,
+            found.queued ? { status: DUPLICATE } : { status: ERROR, reason: 'not-queued' },
+        );
     }
 
     /**
@@ -459,12 +576,19 @@ class NotificationController {
                     throw new NotificationError('user has opted out of notifications');
                 }
 
+                /**
+                 * Recorded before it is queued, so a worker that finishes
+                 * before this request returns finds an entry to move on. If
+                 * the queueing fails, the entry stays pending under an id the
+                 * caller was never given, and expires with it. If recording
+                 * fails, the job is queued anyway.
+                 */
+                await claimCheck.addPhoneNumber(phoneNumber);
                 await this.publisher.sendNotification(user, {
                     notificationType: subscription,
                     claimCheckNumber,
                     deduplicationId: `${claimCheckNumber}-${user.phoneNumber}`,
                 });
-                await claimCheck.addPhoneNumber(phoneNumber);
 
                 return { claimCheckNumber };
             }
