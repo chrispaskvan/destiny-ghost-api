@@ -46,37 +46,37 @@ const ERROR = 'error';
  * rank, so a delivery report that arrives late or twice, or a worker that
  * finishes before the request that queued it, cannot move a receipt back.
  *
- * Every terminal status shares a rank, so one cannot replace another: a
- * `delivered` followed by a stray `failed` keeps `delivered`. `read` ranks
+ * This service's own outcomes - `skipped`, `duplicate`, `error` - rank just
+ * above `pending` and below everything Twilio reports. They record that no
+ * message of this operation's went out, so they replace only `pending`, and
+ * anything Twilio says about a message replaces them: a client timeout on a
+ * send Twilio had in fact accepted is corrected by Twilio's first report.
+ * Sharing a rank, the first of them recorded stands.
+ *
+ * Twilio's terminal statuses share a rank too, so one cannot replace another:
+ * a `delivered` followed by a stray `failed` keeps `delivered`. `read` ranks
  * above them as a delivery confirmed further, and `ADVANCE` lets it replace
- * `delivered` and nothing else terminal.
+ * `delivered` and nothing else.
  *
  * Twilio's own statuses: https://www.twilio.com/docs/messaging/api/message-resource#message-status-values
  */
 const ranks = {
     [PENDING]: 0,
-    accepted: 1,
-    scheduled: 1,
-    queued: 1,
-    sending: 2,
-    sent: 3,
-    delivered: 4,
-    undelivered: 4,
-    failed: 4,
-    canceled: 4,
-    partially_delivered: 4,
-    [SKIPPED]: 4,
-    [DUPLICATE]: 4,
-    [ERROR]: 4,
-    read: 5,
+    [SKIPPED]: 1,
+    [DUPLICATE]: 1,
+    [ERROR]: 1,
+    accepted: 2,
+    scheduled: 2,
+    queued: 2,
+    sending: 3,
+    sent: 4,
+    delivered: 5,
+    undelivered: 5,
+    failed: 5,
+    canceled: 5,
+    partially_delivered: 5,
+    read: 6,
 };
-
-/**
- * The terminal statuses this service records itself, each meaning no message
- * of this operation's reached Twilio - as opposed to Twilio's, which report
- * on one that did.
- */
-const ours = [SKIPPED, DUPLICATE, ERROR];
 
 /**
  * How a bare status, written before entries were JSON, is read - by `parse`
@@ -116,13 +116,6 @@ const toLua = table =>
  * A report that arrives before the sid was stored is judged on rank alone,
  * and its sid is kept.
  *
- * Twilio has the last word over this service's own outcomes, never the
- * reverse. A skip, an error or a duplicate records that no message of this
- * operation's went out, so it only ever replaces `pending`: once Twilio has
- * reported on a message it is not recorded over that report, and a report
- * for one replaces it if recorded first - a client timeout on a send Twilio
- * had in fact accepted, say.
- *
  * An entry written before entries were JSON is read through `legacy`.
  *
  * KEYS[1] claim check; ARGV[1] phone number, ARGV[2] entry as JSON, ARGV[3]
@@ -131,7 +124,6 @@ const toLua = table =>
 const ADVANCE = `
 local ranks = ${toLua(ranks)}
 local legacy = ${toLua(legacy)}
-local ours = ${toLua(Object.fromEntries(ours.map(status => [status, true])))}
 local stored = redis.call('HGET', KEYS[1], ARGV[1])
 
 if not stored then
@@ -155,15 +147,7 @@ if current.sid and entry.sid and current.sid ~= entry.sid then
     return 0
 end
 
-if ours[entry.status] and current.status ~= '${PENDING}' then
-    return 0
-end
-
 local currentRank = ranks[current.status] or -1
-
-if ours[current.status] and entry.sid then
-    currentRank = -1
-end
 
 if entry.status == 'read' and currentRank == ranks.delivered and current.status ~= 'delivered' then
     return 0
@@ -288,7 +272,6 @@ export {
     DUPLICATE,
     ERROR,
     legacy,
-    ours,
     PENDING,
     ranks,
     SKIPPED,

@@ -328,15 +328,17 @@ describe('Subscriber', () => {
         it('should hand the job to the give-up handler once it will not be retried', async () => {
             const onGiveUp = vi.fn().mockResolvedValue();
             const failed = job(Date.now());
+            const err = new Error('no more');
 
             subscriber.listen(vi.fn(), 'notifications', { onGiveUp });
-            failedHandler()(failed, new Error('no more'));
+            failedHandler()(failed, err);
             await subscriber.close();
 
             expect(onGiveUp).toHaveBeenCalledExactlyOnceWith(
                 { phoneNumber: '+15551234567' },
                 { claimCheckNumber: 'cc1', notificationType: 'xur' },
                 failed,
+                err,
             );
         });
 

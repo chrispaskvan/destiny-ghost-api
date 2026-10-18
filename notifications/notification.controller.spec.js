@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Chance from 'chance';
+import { UnrecoverableError } from 'bullmq';
 import publisher from '../helpers/publisher.js';
 import subscriber from '../helpers/subscriber.js';
 import NotificationController from './notification.controller.js';
@@ -411,6 +412,76 @@ describe('NotificationController', () => {
             expect(job.updateData).toHaveBeenCalledOnce();
             expect(job.data.progress.cursor).toBe('page-2');
             expect(log.error).toHaveBeenCalledOnce();
+            // Not the last attempt: the retry may yet queue them.
+            expect(ClaimCheck.advance).not.toHaveBeenCalled();
+        });
+
+        /**
+         * With no retry to come, a recipient who could not be queued would
+         * otherwise read as pending for a job that will never exist. The one
+         * who was queued keeps their entry: their job does exist.
+         */
+        it('should record recipients it could not queue on the last attempt', async () => {
+            const job = { ...jobWith(), attemptsMade: 4, opts: { attempts: 5 } };
+
+            userService.getSubscribedUsersPage.mockResolvedValueOnce({
+                users: [mockUser, otherUser],
+                cursor: undefined,
+            });
+            publisher.sendNotification
+                .mockResolvedValueOnce({ deduplicated: false })
+                .mockRejectedValueOnce(new Error('Redis unavailable'));
+            publisher.hasNotification.mockResolvedValueOnce(false);
+
+            await expect(run(job)).rejects.toThrow('1 of 2 recipients');
+
+            expect(publisher.hasNotification).toHaveBeenCalledExactlyOnceWith(
+                otherUser,
+                claimCheckNumber,
+            );
+            expect(ClaimCheck.advance).toHaveBeenCalledExactlyOnceWith(
+                claimCheckNumber,
+                otherUser.phoneNumber,
+                { status: ERROR, reason: 'not-queued' },
+            );
+        });
+
+        /**
+         * The add landed and only its reply was lost: the job exists and
+         * will report for itself, so nothing is recorded over it.
+         */
+        it('should leave a recipient whose job exists despite the failed add', async () => {
+            const job = { ...jobWith(), attemptsMade: 4, opts: { attempts: 5 } };
+
+            userService.getSubscribedUsersPage.mockResolvedValueOnce({
+                users: [mockUser],
+                cursor: undefined,
+            });
+            publisher.sendNotification.mockRejectedValueOnce(new Error('Socket closed'));
+            publisher.hasNotification.mockResolvedValueOnce(true);
+
+            await expect(run(job)).rejects.toThrow('1 of 1 recipients');
+
+            expect(ClaimCheck.advance).not.toHaveBeenCalled();
+        });
+
+        it('should leave a recipient pending when it cannot tell whether they were queued', async () => {
+            const job = { ...jobWith(), attemptsMade: 4, opts: { attempts: 5 } };
+
+            userService.getSubscribedUsersPage.mockResolvedValueOnce({
+                users: [mockUser],
+                cursor: undefined,
+            });
+            publisher.sendNotification.mockRejectedValueOnce(new Error('Redis unavailable'));
+            publisher.hasNotification.mockRejectedValueOnce(new Error('Redis unavailable'));
+
+            await expect(run(job)).rejects.toThrow('1 of 1 recipients');
+
+            expect(ClaimCheck.advance).not.toHaveBeenCalled();
+            expect(log.warn).toHaveBeenCalledWith(
+                expect.objectContaining({ claimCheckNumber, phoneNumber }),
+                'Unable to tell whether a recipient was queued; leaving them pending.',
+            );
         });
 
         it.each([
@@ -1272,6 +1343,7 @@ describe('NotificationController', () => {
                 mockUser,
                 { claimCheckNumber, notificationType: notificationTypes.Xur },
                 { attemptsMade: 3, opts: { attempts: 3 } },
+                new Error('Service Unavailable'),
             );
 
             expect(ClaimCheck.advance).toHaveBeenCalledExactlyOnceWith(
@@ -1286,6 +1358,36 @@ describe('NotificationController', () => {
                 mockUser,
                 { claimCheckNumber, notificationType: notificationTypes.Xur },
                 { attemptsMade: 1, opts: { attempts: 3 } },
+                new UnrecoverableError('Invalid credentials'),
+            );
+
+            expect(ClaimCheck.advance).toHaveBeenCalledExactlyOnceWith(
+                claimCheckNumber,
+                phoneNumber,
+                { status: ERROR, reason: 'permanent' },
+            );
+        });
+
+        /**
+         * Two transient failures and then a permanent one: the job has used
+         * every attempt, but it stopped because it was refused, not because
+         * it ran out.
+         */
+        it.each([
+            ['an UnrecoverableError', () => new UnrecoverableError('Account not found')],
+            [
+                'one from another copy of BullMQ, by name',
+                () =>
+                    Object.assign(new Error('job stalled more than allowable limit'), {
+                        name: 'UnrecoverableError',
+                    }),
+            ],
+        ])('should record a permanent failure for %s on the last attempt', async (_, err) => {
+            await gaveUp(
+                mockUser,
+                { claimCheckNumber, notificationType: notificationTypes.Xur },
+                { attemptsMade: 3, opts: { attempts: 3 } },
+                err(),
             );
 
             expect(ClaimCheck.advance).toHaveBeenCalledExactlyOnceWith(
@@ -1303,6 +1405,7 @@ describe('NotificationController', () => {
                     mockUser,
                     { claimCheckNumber, notificationType: notificationTypes.Xur },
                     { attemptsMade: 3, opts: { attempts: 3 } },
+                    new Error('Service Unavailable'),
                 ),
             ).resolves.toBeUndefined();
         });

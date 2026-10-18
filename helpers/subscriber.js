@@ -35,14 +35,14 @@ class Subscriber {
      * @param {{
      *   concurrency?: number,
      *   maxStalledCount?: number,
-     *   onGiveUp?: (body: *, options: { claimCheckNumber: string, notificationType: string }, job: import('bullmq').Job) => Promise<void>,
+     *   onGiveUp?: (body: *, options: { claimCheckNumber: string, notificationType: string }, job: import('bullmq').Job, err: Error) => Promise<void>,
      * }} [options] -
      * Concurrency defaults to 5, which suits independent notification sends.
      * A queue whose jobs must be applied in the order they were enqueued
      * needs 1. `maxStalledCount` is how many times a job whose worker died
      * is picked up again before it is failed; BullMQ's default is 1.
-     * `onGiveUp` is handed a job as `callback` is, once BullMQ has failed it
-     * for good.
+     * `onGiveUp` is handed a job as `callback` is, and the error its last
+     * attempt failed with, once BullMQ has failed it for good.
      */
     listen(
         callback,
@@ -140,7 +140,7 @@ class Subscriber {
              * that next picks it up, without the callback running at all.
              */
             if (onGiveUp && job?.finishedOn) {
-                this.#giveUp(onGiveUp, job);
+                this.#giveUp(onGiveUp, job, err);
             }
         });
         worker.on('error', err => {
@@ -175,11 +175,12 @@ class Subscriber {
      * Run a give-up handler where `close` can wait for it, and where nothing
      * it throws - a payload too malformed to read included - escapes into
      * BullMQ's failure handling, which would report it without the job.
-     * @param {(body: *, options: { claimCheckNumber: string, notificationType: string }, job: import('bullmq').Job) => Promise<void>} onGiveUp
+     * @param {(body: *, options: { claimCheckNumber: string, notificationType: string }, job: import('bullmq').Job, err: Error) => Promise<void>} onGiveUp
      * @param {import('bullmq').Job} job
+     * @param {Error} err
      * @returns {Promise<void>}
      */
-    async #giveUp(onGiveUp, job) {
+    async #giveUp(onGiveUp, job, err) {
         const { promise, resolve } = Promise.withResolvers();
 
         this.#givingUp.add(promise);
@@ -187,9 +188,9 @@ class Subscriber {
         try {
             const { body, properties } = Subscriber.#unpack(job);
 
-            await onGiveUp(body, properties, job);
-        } catch (err) {
-            log.error({ jobId: job.id, err }, 'Give-up handler failed');
+            await onGiveUp(body, properties, job, err);
+        } catch (handlerErr) {
+            log.error({ jobId: job.id, err: handlerErr }, 'Give-up handler failed');
         } finally {
             this.#givingUp.delete(promise);
             resolve(undefined);

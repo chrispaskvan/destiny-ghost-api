@@ -10,6 +10,7 @@ import DestinyError from '../destiny/destiny.error.js';
 import XurUnavailableError from './xur-unavailable.error.js';
 import ClaimCheck, { DUPLICATE, ERROR, SKIPPED } from '../helpers/claim-check.js';
 import mayDeliver from '../helpers/consent.js';
+import { isExhausted, isLastAttempt } from '../helpers/job-attempts.js';
 import log from '../helpers/log.js';
 import currentWeeklyReset from '../helpers/weekly-reset.js';
 import {
@@ -176,20 +177,24 @@ class NotificationController {
      * failed for good. Every attempt short of that records nothing, since
      * the retry may yet send.
      *
-     * A job that used all its attempts ran out of retries; one that failed
-     * with attempts to spare was refused them - an `UnrecoverableError`, or
-     * stalling more often than the worker allows.
+     * The reason is why BullMQ stopped, not how far it got: an
+     * `UnrecoverableError` - which is also how BullMQ fails a job for
+     * stalling more often than the worker allows - is permanent on whichever
+     * attempt it lands, and only a job that failed every attempt otherwise
+     * ran out of retries. Matched by name as well, as BullMQ does, so one
+     * from another copy of the library is not missed.
      * @param {QueuedUser} user
      * @param {{ claimCheckNumber: string }} properties
      * @param {import('bullmq').Job} job
+     * @param {Error} err - what the last attempt failed with
      * @returns {Promise<void>}
      */
-    async #gaveUp({ phoneNumber }, { claimCheckNumber }, job) {
-        const exhausted = job.attemptsMade >= (job.opts.attempts ?? 1);
+    async #gaveUp({ phoneNumber }, { claimCheckNumber }, job, err) {
+        const permanent = err instanceof UnrecoverableError || err?.name === 'UnrecoverableError';
 
         await NotificationController.#recordOutcome(claimCheckNumber, phoneNumber, {
             status: ERROR,
-            reason: exhausted ? 'retries-exhausted' : 'permanent',
+            reason: permanent || !isExhausted(job) ? 'permanent' : 'retries-exhausted',
         });
     }
 
@@ -485,6 +490,22 @@ class NotificationController {
                     log.error({ err, claimCheckNumber }, 'Unable to queue a notification.');
                 }
 
+                /**
+                 * On the last attempt there is no retry to queue them, so
+                 * the recipients that could not be queued are told so rather
+                 * than left pending for a job that will never exist. Those
+                 * that were queued keep their entry: their job does exist.
+                 */
+                if (isLastAttempt(job)) {
+                    await Promise.all(
+                        results.flatMap((result, i) =>
+                            result.status === 'rejected'
+                                ? [this.#markIfNeverQueued(users[i], claimCheckNumber)]
+                                : [],
+                        ),
+                    );
+                }
+
                 throw new Error(recipientsNotQueued(failures.length, users.length));
             }
 
@@ -506,6 +527,37 @@ class NotificationController {
         const { cursor: _cursor, ...totals } = progress;
 
         return totals;
+    }
+
+    /**
+     * Record a recipient as never queued, once nothing more will try - but
+     * only if their job is in fact absent. A failed add can still have
+     * landed, and that job will report for itself; an outcome of ours
+     * recorded first would hold the receipt at `not-queued` against a skip
+     * or failure of its own. A lookup that fails leaves the entry pending
+     * rather than guessing.
+     * @param {import('../users/user.service.js').SubscribedUser} user
+     * @param {string} claimCheckNumber
+     * @returns {Promise<void>}
+     */
+    async #markIfNeverQueued(user, claimCheckNumber) {
+        const { phoneNumber } = user;
+
+        try {
+            if (await this.publisher.hasNotification(user, claimCheckNumber)) return;
+        } catch (err) {
+            log.warn(
+                { err, claimCheckNumber, phoneNumber },
+                'Unable to tell whether a recipient was queued; leaving them pending.',
+            );
+
+            return;
+        }
+
+        await NotificationController.#recordOutcome(claimCheckNumber, phoneNumber, {
+            status: ERROR,
+            reason: 'not-queued',
+        });
     }
 
     /**

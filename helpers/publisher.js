@@ -12,6 +12,7 @@ import applicationInsights from './application-insights.js';
 import closeAll from './close-all.js';
 import client from './jobs.js';
 import context from './async-context.js';
+import { isExhausted } from './job-attempts.js';
 import log from './log.js';
 
 class PublisherError extends Error {
@@ -91,7 +92,7 @@ class Publisher {
             try {
                 const job = await this.#queue.getJob(jobId);
 
-                if (job?.opts?.attempts && job.attemptsMade >= job.opts.attempts) {
+                if (job && isExhausted(job)) {
                     log.error(
                         {
                             jobId,
@@ -184,8 +185,7 @@ class Publisher {
             },
         };
 
-        // BullMQ refuses a custom id containing ':'; neither part can.
-        const jobId = `${claimCheckNumber}-${membershipId}`;
+        const jobId = Publisher.#jobIdFor(claimCheckNumber, membershipId);
         /**
          * The deduplication key outlives the job it came from. BullMQ's own
          * pruning (`removeOnComplete`/`removeOnFail`, by count or age)
@@ -216,6 +216,30 @@ class Publisher {
         );
 
         return { deduplicated, ownOperation };
+    }
+
+    /**
+     * Whether a recipient's job for an operation exists. A rejected
+     * `sendNotification` does not prove it does not: the add can land in
+     * Redis and its reply be lost. Rejects when Redis does, so a caller can
+     * tell "not there" from "could not tell".
+     * @param {QueuedUser} user
+     * @param {string} claimCheckNumber
+     * @returns {Promise<boolean>}
+     */
+    async hasNotification({ membershipId }, claimCheckNumber) {
+        return Boolean(
+            await this.#queue.getJob(Publisher.#jobIdFor(claimCheckNumber, membershipId)),
+        );
+    }
+
+    /**
+     * BullMQ refuses a custom id containing ':'; neither part can.
+     * @param {string} claimCheckNumber
+     * @param {string} membershipId
+     */
+    static #jobIdFor(claimCheckNumber, membershipId) {
+        return `${claimCheckNumber}-${membershipId}`;
     }
 
     /**

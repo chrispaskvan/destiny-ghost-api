@@ -5,7 +5,6 @@ import ClaimCheck, {
     DUPLICATE,
     ERROR,
     legacy,
-    ours,
     PENDING,
     ranks,
     SKIPPED,
@@ -103,11 +102,8 @@ const fakeRedis = () => {
         if (rank === undefined) return 0;
         if (current.sid && entry.sid && current.sid !== entry.sid) return 0;
 
-        if (ours.includes(entry.status) && current.status !== PENDING) return 0;
+        const currentRank = ranks[current.status] ?? -1;
 
-        let currentRank = ranks[current.status] ?? -1;
-
-        if (ours.includes(current.status) && entry.sid) currentRank = -1;
         if (
             entry.status === 'read' &&
             currentRank === ranks.delivered &&

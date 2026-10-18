@@ -177,6 +177,31 @@ describe('Publisher', () => {
         });
     });
 
+    describe('hasNotification', () => {
+        const user = { membershipId: '4611686018', membershipType: 2, phoneNumber: '+12085550123' };
+
+        it("should look the recipient's job up under the id it was queued with", async () => {
+            mocks.getJob.mockResolvedValueOnce({ id: 'op1-4611686018' });
+
+            await expect(publisher.hasNotification(user, 'op1')).resolves.toBe(true);
+            expect(mocks.getJob).toHaveBeenCalledWith('op1-4611686018');
+        });
+
+        it('should say so when there is no such job', async () => {
+            mocks.getJob.mockResolvedValueOnce(undefined);
+
+            await expect(publisher.hasNotification(user, 'op1')).resolves.toBe(false);
+        });
+
+        it('should reject when Redis does, rather than answer no', async () => {
+            mocks.getJob.mockRejectedValueOnce(new Error('Redis connection lost'));
+
+            await expect(publisher.hasNotification(user, 'op1')).rejects.toThrow(
+                'Redis connection lost',
+            );
+        });
+    });
+
     describe('close', () => {
         it.each([
             ['Queue', mocks.queueClose, mocks.queueEventsClose],
@@ -280,9 +305,13 @@ describe('Publisher', () => {
             expect(applicationInsights.trackMetric).not.toHaveBeenCalled();
         });
 
-        it('should not emit metric when opts is missing', async () => {
+        /**
+         * BullMQ tries a job with no attempts of its own once, so one that
+         * failed has nothing left - the same rule the claim check applies.
+         */
+        it('should emit metric for a failed job with no attempts of its own', async () => {
             mocks.getJob.mockResolvedValue({
-                attemptsMade: 3,
+                attemptsMade: 1,
                 opts: undefined,
             });
 
@@ -290,7 +319,10 @@ describe('Publisher', () => {
                 failedHandler({ jobId: 'job-1', failedReason: 'Some error' }),
             ).resolves.toBeUndefined();
 
-            expect(applicationInsights.trackMetric).not.toHaveBeenCalled();
+            expect(applicationInsights.trackMetric).toHaveBeenCalledWith({
+                name: 'notification-job-exhausted',
+                value: 1,
+            });
         });
     });
 });
