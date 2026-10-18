@@ -1713,5 +1713,31 @@ describe('UserService', () => {
 
             expect(cacheService.setUser).toHaveBeenCalledWith(userDocument);
         });
+
+        it('publishes nothing from updateUser when its write fails', async () => {
+            mockCosmosEtags('etag-2');
+            userService.getUserByDisplayName = vi
+                .fn()
+                .mockResolvedValue({ ...structuredClone(user), _etag: 'etag-1' });
+
+            await expect(
+                userService.updateUser({ ...structuredClone(user), firstName: 'first' }),
+            ).rejects.toMatchObject({ code: 412 });
+
+            expect(cacheService.setUser).not.toHaveBeenCalled();
+        });
+
+        it('publishes nothing from updateAnonymousUser when its write fails', async () => {
+            mockCosmosEtags('etag-2');
+            userService.getUserByDisplayName = vi
+                .fn()
+                .mockResolvedValue({ ...structuredClone(user), _etag: 'etag-1' });
+
+            await expect(
+                userService.updateAnonymousUser(structuredClone(anonymousUser)),
+            ).rejects.toMatchObject({ code: 412 });
+
+            expect(cacheService.setUser).not.toHaveBeenCalled();
+        });
     });
 });
