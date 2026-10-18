@@ -50,6 +50,7 @@ vi.mock('../helpers/retry.js', async importOriginal => {
     };
 });
 import { isTransientError } from '../helpers/retry.js';
+import SendOutcomeUnknownError from './send-outcome-unknown.error.js';
 import DestinyError from '../destiny/destiny.error.js';
 
 const chance = new Chance();
@@ -1177,6 +1178,30 @@ describe('NotificationController', () => {
         });
 
         describe('when a transient error occurs', () => {
+            /**
+             * It carries no status or code, so the transient check does not
+             * know it; made permanent, the job would never get the attempt
+             * that looks the message up.
+             */
+            it('should re-throw a send Twilio may have taken, for the retry to look up', async () => {
+                const unknown = new SendOutcomeUnknownError('Twilio may have accepted it');
+
+                authenticationService.authenticate.mockResolvedValue({
+                    bungie: { access_token: accessToken },
+                });
+                destinyService.getProfile.mockResolvedValue([mockCharacter]);
+                destinyService.getXur.mockResolvedValue([]);
+                notificationService.sendMessage.mockRejectedValue(unknown);
+
+                await expect(
+                    sendMethod(mockUser, {
+                        claimCheckNumber,
+                        notificationType: notificationTypes.Xur,
+                    }),
+                ).rejects.toBe(unknown);
+                expect(ClaimCheck.advance).not.toHaveBeenCalled();
+            });
+
             it('should re-throw transient getXur error for BullMQ retry', async () => {
                 const transientError = new Error('Service Unavailable');
                 transientError.status = 503;
@@ -1376,6 +1401,47 @@ describe('NotificationController', () => {
                 phoneNumber,
                 { status: ERROR, reason: 'permanent' },
             );
+        });
+
+        it.each([
+            ['a SendOutcomeUnknownError', () => new SendOutcomeUnknownError('lost answer')],
+            [
+                'one matched by name',
+                () => Object.assign(new Error('lost answer'), { name: 'SendOutcomeUnknownError' }),
+            ],
+        ])(
+            'should record an unknown outcome for %s, and log it for an operator',
+            async (_, err) => {
+                const lastErr = err();
+
+                await gaveUp(
+                    mockUser,
+                    { claimCheckNumber, notificationType: notificationTypes.Xur },
+                    { id: 'job-1', attemptsMade: 3, opts: { attempts: 3 } },
+                    lastErr,
+                );
+
+                expect(ClaimCheck.advance).toHaveBeenCalledExactlyOnceWith(
+                    claimCheckNumber,
+                    phoneNumber,
+                    { status: ERROR, reason: 'unknown-outcome' },
+                );
+                expect(log.error).toHaveBeenCalledWith(
+                    expect.objectContaining({ err: lastErr, claimCheckNumber, phoneNumber }),
+                    expect.any(String),
+                );
+            },
+        );
+
+        it('should log nothing for an operator when the outcome is known', async () => {
+            await gaveUp(
+                mockUser,
+                { claimCheckNumber, notificationType: notificationTypes.Xur },
+                { attemptsMade: 3, opts: { attempts: 3 } },
+                new Error('Service Unavailable'),
+            );
+
+            expect(log.error).not.toHaveBeenCalled();
         });
     });
 });

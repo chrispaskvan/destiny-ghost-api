@@ -8,6 +8,7 @@ import NotificationError from './notification.error.js';
 import notificationTypes from './notification.types.js';
 import DestinyError from '../destiny/destiny.error.js';
 import XurUnavailableError from './xur-unavailable.error.js';
+import SendOutcomeUnknownError from './send-outcome-unknown.error.js';
 import ClaimCheck, { DUPLICATE, ERROR, SKIPPED } from '../helpers/claim-check.js';
 import mayDeliver from '../helpers/consent.js';
 import { isExhausted, isLastAttempt } from '../helpers/job-attempts.js';
@@ -77,6 +78,18 @@ class NotificationController {
             concurrency: 1,
             maxStalledCount: 5,
         });
+    }
+
+    /**
+     * @param {boolean} permanent - the job failed with an `UnrecoverableError`
+     * @param {boolean} unknown - the job failed with a `SendOutcomeUnknownError`
+     * @param {import('bullmq').Job} job
+     * @returns {'unknown-outcome' | 'permanent' | 'retries-exhausted'}
+     */
+    static #givenUpBecause(permanent, unknown, job) {
+        if (unknown) return 'unknown-outcome';
+
+        return permanent || !isExhausted(job) ? 'permanent' : 'retries-exhausted';
     }
 
     /**
@@ -155,6 +168,11 @@ class NotificationController {
      * attempt it lands, and only a job that failed every attempt otherwise
      * ran out of retries. Matched by name as well, as BullMQ does, so one
      * from another copy of the library is not missed.
+     *
+     * A job that ends still not knowing whether Twilio took its message
+     * (#719) says so, rather than calling it an error the recipient was
+     * spared: they may well have the text. It is logged as an error too,
+     * since only someone checking Twilio's console can settle it now.
      * @param {QueuedUser} user
      * @param {{ claimCheckNumber: string }} properties
      * @param {import('bullmq').Job} job
@@ -163,10 +181,19 @@ class NotificationController {
      */
     async #gaveUp({ phoneNumber }, { claimCheckNumber }, job, err) {
         const permanent = err instanceof UnrecoverableError || err?.name === 'UnrecoverableError';
+        const unknown =
+            err instanceof SendOutcomeUnknownError || err?.name === 'SendOutcomeUnknownError';
+
+        if (unknown) {
+            log.error(
+                { err, claimCheckNumber, phoneNumber, jobId: job.id },
+                'Gave up not knowing whether Twilio sent the message.',
+            );
+        }
 
         await ClaimCheck.advance(claimCheckNumber, phoneNumber, {
             status: ERROR,
-            reason: permanent || !isExhausted(job) ? 'permanent' : 'retries-exhausted',
+            reason: NotificationController.#givenUpBecause(permanent, unknown, job),
         });
     }
 
@@ -335,6 +362,14 @@ class NotificationController {
                 }
 
                 if (err instanceof Error && isTransientError(err)) {
+                    throw err;
+                }
+
+                /**
+                 * Retried, never made permanent: the next attempt is the one
+                 * that finds out whether Twilio took the message.
+                 */
+                if (err instanceof SendOutcomeUnknownError) {
                     throw err;
                 }
 
