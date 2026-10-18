@@ -4,6 +4,7 @@ import { StatusCodes } from 'http-status-codes';
 import Chance from 'chance';
 import { createResponse, createRequest } from 'node-mocks-http';
 import UserRouter from './user.routes.js';
+import UserService from './user.service.js';
 
 /**
  * Hoisted rather than instance fields so the sign-up tests have a stable
@@ -836,6 +837,117 @@ describe('UserRouter', () => {
 
                         userRouter(req, res, next);
                     }));
+            });
+        });
+
+        describe('through the real UserService', () => {
+            /**
+             * The tests above stub `userService`, so the ETag a client is
+             * handed never comes from the cache that `updateUser` refreshes.
+             * This wires a real `UserService` over an in-memory Cosmos that
+             * enforces IfMatch and an in-memory cache, so the profile read
+             * returns whatever the previous write left behind - which, before
+             * the cache held the document Cosmos returned, was a superseded
+             * etag.
+             */
+            function wireRouter() {
+                let stored = {
+                    _etag: 'etag-1',
+                    bungie: { access_token: 'access-token' },
+                    displayName,
+                    emailAddress: 'guardian@example.com',
+                    firstName: 'zero',
+                    id: 'user-1',
+                    lastName: 'last',
+                    membershipId: '11',
+                    membershipType,
+                    phoneNumber: '+15555550100',
+                };
+                let cached;
+                const documentService = {
+                    getDocuments: vi.fn(async () => [structuredClone(stored)]),
+                    updateDocument: vi.fn(async (_collection, document) => {
+                        if (document._etag !== stored._etag) {
+                            throw Object.assign(new Error('precondition failed'), { code: 412 });
+                        }
+
+                        stored = { ...structuredClone(document), _etag: `${stored._etag}+1` };
+
+                        return structuredClone(stored);
+                    }),
+                };
+                const cacheService = {
+                    getUser: vi.fn(async () => cached && structuredClone(cached)),
+                    setUser: vi.fn(async document => {
+                        cached = structuredClone(document);
+                    }),
+                };
+                const router = UserRouter({
+                    authenticationController,
+                    destinyService,
+                    notificationService,
+                    userService: new UserService({ cacheService, client: {}, documentService }),
+                    worldRepository,
+                });
+
+                return { documentService, router };
+            }
+
+            function send(router, { body, headers, method, url }) {
+                const response = createResponse({ eventEmitter: EventEmitter });
+                const request = createRequest({
+                    body,
+                    headers: { 'x-csrf-token': csrfToken, ...headers },
+                    method,
+                    url,
+                    session: { csrfToken, displayName, membershipType },
+                });
+
+                return new Promise((resolve, reject) => {
+                    response.on('end', () => resolve(response));
+                    Promise.resolve(router(request, response, reject)).catch(reject);
+                });
+            }
+
+            function patchFirstName(router, ETag, value) {
+                return send(router, {
+                    body: [{ op: 'replace', path: '/firstName', value }],
+                    headers: { 'if-match': ETag },
+                    method: 'PATCH',
+                    url: '/',
+                });
+            }
+
+            beforeEach(() => {
+                destinyService.getCurrentUser.mockResolvedValue({ displayName, membershipType });
+            });
+
+            it('accepts a PATCH that uses the ETag the profile returned after a PATCH', async () => {
+                const { documentService, router } = wireRouter();
+
+                const first = await patchFirstName(router, 'etag-1', 'first');
+                const profile = await send(router, { method: 'GET', url: '/current' });
+                const second = await patchFirstName(router, profile.getHeader('ETag'), 'second');
+
+                expect(first.statusCode).toEqual(StatusCodes.NO_CONTENT);
+                expect(profile.statusCode).toEqual(StatusCodes.OK);
+                expect(profile.getHeader('ETag')).toEqual('etag-1+1');
+                expect(second.statusCode).toEqual(StatusCodes.NO_CONTENT);
+                expect(documentService.updateDocument).toHaveBeenLastCalledWith(
+                    expect.anything(),
+                    expect.objectContaining({ _etag: 'etag-1+1', firstName: 'second' }),
+                    membershipType,
+                );
+            });
+
+            it('still rejects a writer holding an ETag another write superseded', async () => {
+                const { documentService, router } = wireRouter();
+
+                await patchFirstName(router, 'etag-1', 'first');
+                const stale = await patchFirstName(router, 'etag-1', 'stale');
+
+                expect(stale.statusCode).toEqual(StatusCodes.PRECONDITION_FAILED);
+                expect(documentService.updateDocument).toHaveBeenCalledOnce();
             });
         });
     });
