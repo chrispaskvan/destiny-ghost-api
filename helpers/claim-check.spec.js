@@ -4,6 +4,8 @@ import ClaimCheck, {
     claimCheckExpiration,
     DUPLICATE,
     ERROR,
+    legacy,
+    ours,
     PENDING,
     ranks,
     SKIPPED,
@@ -13,9 +15,8 @@ import cache from './cache.js';
 vi.mock('./cache.js', () => ({
     default: {
         eval: vi.fn(),
-        hSetNX: vi.fn(),
+        multi: vi.fn(),
         hGetAll: vi.fn(),
-        expire: vi.fn(),
     },
 }));
 vi.mock('@paralleldrive/cuid2', () => ({
@@ -43,13 +44,41 @@ const fakeRedis = () => {
     const store = new Map();
     const hash = key => store.get(key) ?? store.set(key, new Map()).get(key);
 
-    return {
-        store,
-        hSetNX: vi.fn(async (key, field, value) => {
+    /** Each transaction's commands, as sent. */
+    const transactions = [];
+    const commands = {
+        hSetNX: (key, field, value) => {
             if (hash(key).has(field)) return 0;
             hash(key).set(field, value);
 
             return 1;
+        },
+        expire: () => 1,
+    };
+
+    return {
+        store,
+        transactions,
+        multi: vi.fn(() => {
+            const queued = [];
+            const queue =
+                name =>
+                (...args) => {
+                    queued.push([name, ...args]);
+
+                    return transaction;
+                };
+            const transaction = {
+                hSetNX: queue('hSetNX'),
+                expire: queue('expire'),
+                exec: vi.fn(async () => {
+                    transactions.push(queued);
+
+                    return queued.map(([name, ...args]) => commands[name](...args));
+                }),
+            };
+
+            return transaction;
         }),
         hGetAll: vi.fn(async key => Object.fromEntries(store.get(key) ?? [])),
         eval: vi.fn(async (_script, options) => advance(options)),
@@ -65,7 +94,7 @@ const fakeRedis = () => {
         try {
             current = JSON.parse(stored);
         } catch {
-            current = { status: stored === 'queued' ? PENDING : stored };
+            current = { status: legacy[stored] ?? stored };
         }
 
         let entry = JSON.parse(json);
@@ -74,7 +103,7 @@ const fakeRedis = () => {
         if (rank === undefined) return 0;
         if (current.sid && entry.sid && current.sid !== entry.sid) return 0;
 
-        if (ours.includes(entry.status) && current.sid) return 0;
+        if (ours.includes(entry.status) && current.status !== PENDING) return 0;
 
         let currentRank = ranks[current.status] ?? -1;
 
@@ -99,7 +128,6 @@ const fakeRedis = () => {
         return 1;
     }
 };
-const ours = [SKIPPED, DUPLICATE, ERROR];
 
 describe('ClaimCheck', () => {
     /** @type {ClaimCheck} */
@@ -114,7 +142,7 @@ describe('ClaimCheck', () => {
         vi.clearAllMocks();
         redis = fakeRedis();
         cache.eval.mockImplementation(redis.eval);
-        cache.hSetNX.mockImplementation(redis.hSetNX);
+        cache.multi.mockImplementation(redis.multi);
         cache.hGetAll.mockImplementation(redis.hGetAll);
         claimCheck = new ClaimCheck();
     });
@@ -148,12 +176,17 @@ describe('ClaimCheck', () => {
         it('should record a recipient as pending and set the expiry', async () => {
             await claimCheck.addPhoneNumber(testPhoneNumber);
 
-            expect(cache.hSetNX).toHaveBeenCalledWith(
-                testClaimCheckId,
-                testPhoneNumber,
-                JSON.stringify({ status: PENDING }),
-            );
-            expect(cache.expire).toHaveBeenCalledWith(testClaimCheckId, claimCheckExpiration);
+            expect(redis.transactions).toEqual([
+                [
+                    [
+                        'hSetNX',
+                        testClaimCheckId,
+                        testPhoneNumber,
+                        JSON.stringify({ status: PENDING }),
+                    ],
+                    ['expire', testClaimCheckId, claimCheckExpiration],
+                ],
+            ]);
             await expect(entryOf(testPhoneNumber)).resolves.toEqual({ status: PENDING });
         });
 
@@ -172,7 +205,15 @@ describe('ClaimCheck', () => {
         });
 
         it('should reject when Redis does', async () => {
-            cache.hSetNX.mockRejectedValueOnce(new Error('Cache connection failed'));
+            cache.multi.mockReturnValueOnce({
+                hSetNX() {
+                    return this;
+                },
+                expire() {
+                    return this;
+                },
+                exec: vi.fn().mockRejectedValue(new Error('Cache connection failed')),
+            });
 
             await expect(claimCheck.addPhoneNumber(testPhoneNumber)).rejects.toThrow(
                 'Cache connection failed',
@@ -405,6 +446,36 @@ describe('ClaimCheck', () => {
             ).resolves.toBe(true);
             await expect(entryOf(testPhoneNumber)).resolves.toEqual({ status: 'sent', sid });
         });
+
+        it('should take a partial delivery as a final status', async () => {
+            await ClaimCheck.advance(testClaimCheckId, testPhoneNumber, { status: 'sent', sid });
+
+            await expect(
+                ClaimCheck.advance(testClaimCheckId, testPhoneNumber, {
+                    status: 'partially_delivered',
+                    sid,
+                }),
+            ).resolves.toBe(true);
+            await expect(
+                ClaimCheck.advance(testClaimCheckId, testPhoneNumber, { status: 'sent', sid }),
+            ).resolves.toBe(false);
+        });
+
+        /**
+         * Written before entries carried a sid: Twilio's status is all there
+         * is to say a message went out, and that is enough.
+         */
+        it.each([SKIPPED, ERROR, DUPLICATE])(
+            'should not record %s over a Twilio status from before entries were JSON',
+            async status => {
+                redis.store.get(testClaimCheckId).set(testPhoneNumber, 'sent');
+
+                await expect(
+                    ClaimCheck.advance(testClaimCheckId, testPhoneNumber, { status }),
+                ).resolves.toBe(false);
+                await expect(entryOf(testPhoneNumber)).resolves.toEqual({ status: 'sent' });
+            },
+        );
 
         it('should let read replace delivered', async () => {
             await ClaimCheck.advance(testClaimCheckId, testPhoneNumber, {

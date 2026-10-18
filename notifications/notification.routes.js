@@ -95,13 +95,12 @@ const routes = ({
             params: { claimCheck: number },
         } = req;
 
-        const claimCheck = await notificationController.getClaimCheck(number);
-
-        if (claimCheck) {
-            res.status(StatusCodes.OK).json(claimCheck);
-        } else {
-            res.status(StatusCodes.NOT_FOUND).end();
-        }
+        /**
+         * Always 200: an empty receipt is as likely to be a broadcast that
+         * has not queued its first page as one that has expired, and Redis
+         * cannot tell them apart.
+         */
+        res.status(StatusCodes.OK).json(await notificationController.getClaimCheck(number));
     });
 
     /**

@@ -64,6 +64,7 @@ const ranks = {
     undelivered: 4,
     failed: 4,
     canceled: 4,
+    partially_delivered: 4,
     [SKIPPED]: 4,
     [DUPLICATE]: 4,
     [ERROR]: 4,
@@ -78,13 +79,24 @@ const ranks = {
 const ours = [SKIPPED, DUPLICATE, ERROR];
 
 /**
- * @param {Record<string, number | boolean>} table
+ * How a bare status, written before entries were JSON, is read - by `parse`
+ * and `ADVANCE` alike, so a receipt reports the status it is ordered by. Only
+ * `queued` is remapped: it then meant both our queue and Twilio's, and is read
+ * as the former, since a receipt that under-reports corrects itself on the
+ * next report while one that over-reports says Twilio has a message it may
+ * never have been sent. Any other bare status is read as itself.
+ */
+/** @type {Record<string, string>} */
+const legacy = { queued: PENDING };
+
+/**
+ * @param {Record<string, number | boolean | string>} table
  * @returns {string} the same table as a Lua literal, so the script holds it
  * as code rather than decoding it on every call
  */
 const toLua = table =>
     `{ ${Object.entries(table)
-        .map(([key, value]) => `[${JSON.stringify(key)}] = ${value}`)
+        .map(([key, value]) => `[${JSON.stringify(key)}] = ${JSON.stringify(value)}`)
         .join(', ')} }`;
 
 /**
@@ -106,21 +118,19 @@ const toLua = table =>
  *
  * Twilio has the last word over this service's own outcomes, never the
  * reverse. A skip, an error or a duplicate records that no message of this
- * operation's went out, so once Twilio holds one it is not recorded over that
- * message, and a report for it replaces one recorded first - a client timeout
- * on a send Twilio had in fact accepted, say.
+ * operation's went out, so it only ever replaces `pending`: once Twilio has
+ * reported on a message it is not recorded over that report, and a report
+ * for one replaces it if recorded first - a client timeout on a send Twilio
+ * had in fact accepted, say.
  *
- * An entry written before entries were JSON is read as its bare status, but
- * for `queued`, which then meant both our queue and Twilio's and is read as
- * the former: a receipt that under-reports corrects itself on the next
- * report, while one that over-reports says Twilio has a message it may never
- * have been sent.
+ * An entry written before entries were JSON is read through `legacy`.
  *
  * KEYS[1] claim check; ARGV[1] phone number, ARGV[2] entry as JSON, ARGV[3]
  * expiry in seconds. Returns 1 when written, 0 when not.
  */
 const ADVANCE = `
 local ranks = ${toLua(ranks)}
+local legacy = ${toLua(legacy)}
 local ours = ${toLua(Object.fromEntries(ours.map(status => [status, true])))}
 local stored = redis.call('HGET', KEYS[1], ARGV[1])
 
@@ -131,7 +141,7 @@ end
 local ok, current = pcall(cjson.decode, stored)
 
 if not ok or type(current) ~= 'table' then
-    current = { status = stored == 'queued' and '${PENDING}' or stored }
+    current = { status = legacy[stored] or stored }
 end
 
 local entry = cjson.decode(ARGV[2])
@@ -145,7 +155,7 @@ if current.sid and entry.sid and current.sid ~= entry.sid then
     return 0
 end
 
-if ours[entry.status] and current.sid then
+if ours[entry.status] and current.status ~= '${PENDING}' then
     return 0
 end
 
@@ -195,10 +205,10 @@ const parse = stored => {
 
         if (entry && typeof entry === 'object') return entry;
     } catch {
-        // Written before entries were JSON: the bare status, read as `ADVANCE` reads it.
+        // Written before entries were JSON: a bare status.
     }
 
-    return { status: stored === 'queued' ? PENDING : stored };
+    return { status: legacy[stored] ?? stored };
 };
 
 class ClaimCheck {
@@ -230,8 +240,12 @@ class ClaimCheck {
      * @param {string} phoneNumber
      */
     async addPhoneNumber(phoneNumber) {
-        await cache.hSetNX(this.#number, phoneNumber, JSON.stringify({ status: PENDING }));
-        await cache.expire(this.#number, claimCheckExpiration);
+        // One round trip, and no hash left without its expiry between the two.
+        await cache
+            .multi()
+            .hSetNX(this.#number, phoneNumber, JSON.stringify({ status: PENDING }))
+            .expire(this.#number, claimCheckExpiration)
+            .exec();
     }
 
     /**
@@ -273,6 +287,8 @@ export {
     claimCheckExpiration,
     DUPLICATE,
     ERROR,
+    legacy,
+    ours,
     PENDING,
     ranks,
     SKIPPED,

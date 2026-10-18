@@ -497,6 +497,28 @@ describe('NotificationController', () => {
             expect(ClaimCheck.advance).not.toHaveBeenCalled();
         });
 
+        it('should not fail the page when a duplicate cannot be marked', async () => {
+            userService.getSubscribedUsersPage.mockResolvedValueOnce({
+                users: [mockUser],
+                cursor: undefined,
+            });
+            publisher.sendNotification.mockResolvedValueOnce({
+                deduplicated: true,
+                ownOperation: false,
+            });
+            ClaimCheck.advance.mockRejectedValue(new Error('Redis is down'));
+
+            await expect(run(jobWith())).resolves.toEqual({
+                queued: 0,
+                duplicates: 1,
+                done: true,
+            });
+            expect(log.warn).toHaveBeenCalledWith(
+                expect.objectContaining({ phoneNumber, outcome: { status: DUPLICATE } }),
+                'Unable to record the claim-check outcome.',
+            );
+        });
+
         it('should record each recipient before queueing them, so their worker finds an entry', async () => {
             userService.getSubscribedUsersPage.mockResolvedValueOnce({
                 users: [mockUser],

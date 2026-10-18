@@ -53,12 +53,11 @@ class Subscriber {
             queueName,
             async job => {
                 try {
-                    const { data } = job;
                     const {
-                        body,
-                        applicationProperties: { claimCheckNumber, notificationType, traceId },
-                    } = data;
-                    const user = JSON.parse(body, safeReviver);
+                        body: user,
+                        properties: { claimCheckNumber, notificationType },
+                        traceId,
+                    } = Subscriber.#unpack(job);
 
                     /**
                      * The payload is deliberately absent. Spreading it here
@@ -154,6 +153,25 @@ class Subscriber {
     }
 
     /**
+     * Read a job's payload as the publisher wrote it: the parsed body, and
+     * the properties a handler is given alongside it.
+     * @param {import('bullmq').Job} job
+     * @returns {{ body: *, properties: { claimCheckNumber: string, notificationType: string }, traceId?: string }}
+     */
+    static #unpack(job) {
+        const {
+            body,
+            applicationProperties: { claimCheckNumber, notificationType, traceId },
+        } = job.data;
+
+        return {
+            body: JSON.parse(body, safeReviver),
+            properties: { claimCheckNumber, notificationType },
+            traceId,
+        };
+    }
+
+    /**
      * Run a give-up handler where `close` can wait for it, and where nothing
      * it throws - a payload too malformed to read included - escapes into
      * BullMQ's failure handling, which would report it without the job.
@@ -167,16 +185,9 @@ class Subscriber {
         this.#givingUp.add(promise);
 
         try {
-            const {
-                body,
-                applicationProperties: { claimCheckNumber, notificationType },
-            } = job.data;
+            const { body, properties } = Subscriber.#unpack(job);
 
-            await onGiveUp(
-                JSON.parse(body, safeReviver),
-                { claimCheckNumber, notificationType },
-                job,
-            );
+            await onGiveUp(body, properties, job);
         } catch (err) {
             log.error({ jobId: job.id, err }, 'Give-up handler failed');
         } finally {

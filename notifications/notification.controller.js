@@ -424,7 +424,10 @@ class NotificationController {
          *
          * Marked a duplicate only when another operation holds them. One
          * deduplicated against this operation's own job is already on this
-         * receipt, and that job's outcome is the one to report.
+         * receipt, and that job's outcome is the one to report. The mark is
+         * an outcome like any other, so failing to write it fails nothing;
+         * failing to record the recipient at all fails the page, since their
+         * worker would then have no entry to move on.
          * @param {import('../users/user.service.js').SubscribedUser} user
          */
         const queueRecipient = async user => {
@@ -437,7 +440,9 @@ class NotificationController {
             });
 
             if (deduplicated && !ownOperation) {
-                await ClaimCheck.advance(claimCheckNumber, user.phoneNumber, { status: DUPLICATE });
+                await NotificationController.#recordOutcome(claimCheckNumber, user.phoneNumber, {
+                    status: DUPLICATE,
+                });
             }
 
             return deduplicated;
