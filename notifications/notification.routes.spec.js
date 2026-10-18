@@ -309,12 +309,18 @@ describe('NotificationRouter', () => {
             expect(res._getJSONData()).toEqual(entries);
         });
 
-        it('should 404 a claim check that does not exist or has expired', async () => {
-            controller.getClaimCheck.mockResolvedValue(undefined);
+        /**
+         * A broadcast's claim check is handed out before its first page is
+         * queued, so a caller polling straight away must not be told it
+         * does not exist.
+         */
+        it('should report an empty receipt for an operation with no recipients yet', async () => {
+            controller.getClaimCheck.mockResolvedValue({});
 
             await receipt();
 
-            expect(res.statusCode).toBe(StatusCodes.NOT_FOUND);
+            expect(res.statusCode).toBe(StatusCodes.OK);
+            expect(res._getJSONData()).toEqual({});
         });
     });
 });

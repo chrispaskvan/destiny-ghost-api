@@ -20,17 +20,35 @@ class Subscriber {
     #workers = [];
 
     /**
+     * Give-up handlers still running. The worker's `failed` event does not
+     * wait for them, so `close` has to, or one could reach Redis after the
+     * shutdown that follows has closed it.
+     * @type {Set<Promise<void>>}
+     */
+    #givingUp = new Set();
+
+    /**
      * @constructor
      * @param {(body: *, options: { claimCheckNumber: string, notificationType: string }, job: import('bullmq').Job) => Promise<*>} callback -
      * handed the job itself too, for a handler that records progress on it
      * @param {string} [queueName] - The queue name to subscribe to.
-     * @param {{ concurrency?: number, maxStalledCount?: number }} [options] -
+     * @param {{
+     *   concurrency?: number,
+     *   maxStalledCount?: number,
+     *   onGiveUp?: (body: *, options: { claimCheckNumber: string, notificationType: string }, job: import('bullmq').Job) => Promise<void>,
+     * }} [options] -
      * Concurrency defaults to 5, which suits independent notification sends.
      * A queue whose jobs must be applied in the order they were enqueued
      * needs 1. `maxStalledCount` is how many times a job whose worker died
      * is picked up again before it is failed; BullMQ's default is 1.
+     * `onGiveUp` is handed a job as `callback` is, once BullMQ has failed it
+     * for good.
      */
-    listen(callback, queueName = 'notifications', { concurrency = 5, maxStalledCount } = {}) {
+    listen(
+        callback,
+        queueName = 'notifications',
+        { concurrency = 5, maxStalledCount, onGiveUp } = {},
+    ) {
         const worker = new Worker(
             queueName,
             async job => {
@@ -114,6 +132,35 @@ class Subscriber {
                 },
                 'Job failed',
             );
+
+            /**
+             * BullMQ stamps `finishedOn` only on a job it will not retry, so
+             * this is its own decision rather than a guess at it from the
+             * error. It also covers the failures no processor sees: a job
+             * failed for stalling too often is failed here, by the worker
+             * that next picks it up, without the callback running at all.
+             */
+            if (onGiveUp && job?.finishedOn) {
+                const {
+                    body,
+                    applicationProperties: { claimCheckNumber, notificationType },
+                } = job.data;
+
+                const givingUp = Promise.resolve()
+                    .then(() =>
+                        onGiveUp(
+                            JSON.parse(body, safeReviver),
+                            { claimCheckNumber, notificationType },
+                            job,
+                        ),
+                    )
+                    .catch(handlerErr =>
+                        log.error({ jobId: job.id, err: handlerErr }, 'Give-up handler failed'),
+                    )
+                    .finally(() => this.#givingUp.delete(givingUp));
+
+                this.#givingUp.add(givingUp);
+            }
         });
         worker.on('error', err => {
             log.error({ error: err.message }, 'Worker error');
@@ -133,6 +180,8 @@ class Subscriber {
             this.#workers.map(worker => worker.close()),
             'Subscriber failed to close',
         );
+        // Settled rather than rejected: each one logs its own failure.
+        await Promise.all(this.#givingUp);
     }
 }
 

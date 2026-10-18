@@ -113,12 +113,6 @@ const worldRepository = {
 
 let notificationController;
 
-/**
- * The BullMQ job a send runs as, on attempt `n` of three.
- * @param {number} n
- */
-const attempt = n => ({ attemptsMade: n - 1, opts: { attempts: 3 } });
-
 beforeEach(() => {
     vi.clearAllMocks();
 
@@ -525,12 +519,8 @@ describe('NotificationController', () => {
         let sendMethod;
 
         beforeEach(() => {
-            // Extract the bound send method from the subscriber.listen call,
-            // run as a first attempt of BullMQ's three unless a test says
-            // otherwise.
-            const [[listened]] = subscriber.listen.mock.calls;
-
-            sendMethod = (user, properties, job = attempt(1)) => listened(user, properties, job);
+            // Extract the bound send method from the subscriber.listen call
+            sendMethod = subscriber.listen.mock.calls[0][0];
         });
 
         describe('when consent changed between enqueue and execution', () => {
@@ -1189,101 +1179,23 @@ describe('NotificationController', () => {
             });
         });
 
-        describe('when the job gives up', () => {
-            const transient = () => {
-                const transientError = new Error('Service Unavailable');
+        /**
+         * A failure the retry may yet recover from records nothing; BullMQ's
+         * decision that there will be no retry is what records the error, so
+         * the receipt and the queue cannot disagree about it.
+         */
+        it('should record nothing itself when a send fails', async () => {
+            isTransientError.mockReturnValue(true);
+            authenticationService.authenticate.mockRejectedValue(new Error('Service Unavailable'));
 
-                isTransientError.mockReturnValue(true);
-                authenticationService.authenticate.mockRejectedValue(transientError);
-
-                return transientError;
-            };
-
-            it('should record nothing on an attempt BullMQ will retry', async () => {
-                const transientError = transient();
-
-                for (const n of [1, 2]) {
-                    await expect(
-                        sendMethod(
-                            mockUser,
-                            { claimCheckNumber, notificationType: notificationTypes.Xur },
-                            attempt(n),
-                        ),
-                    ).rejects.toBe(transientError);
-                }
-
-                expect(ClaimCheck.advance).not.toHaveBeenCalled();
-            });
-
-            it('should record an error on the last attempt', async () => {
-                const transientError = transient();
-
-                await expect(
-                    sendMethod(
-                        mockUser,
-                        { claimCheckNumber, notificationType: notificationTypes.Xur },
-                        attempt(3),
-                    ),
-                ).rejects.toBe(transientError);
-
-                expect(ClaimCheck.advance).toHaveBeenCalledExactlyOnceWith(
+            await expect(
+                sendMethod(mockUser, {
                     claimCheckNumber,
-                    phoneNumber,
-                    { status: ERROR, reason: 'retries-exhausted' },
-                );
-            });
+                    notificationType: notificationTypes.Xur,
+                }),
+            ).rejects.toThrow('Service Unavailable');
 
-            it('should record an error for a move that never lands', async () => {
-                userService.getConsentByPhoneNumber.mockResolvedValue(undefined);
-                userService.isMovingPlatforms.mockResolvedValue(true);
-
-                await expect(
-                    sendMethod(
-                        mockUser,
-                        { claimCheckNumber, notificationType: notificationTypes.Xur },
-                        attempt(3),
-                    ),
-                ).rejects.toThrow('moving platforms');
-
-                expect(ClaimCheck.advance).toHaveBeenCalledExactlyOnceWith(
-                    claimCheckNumber,
-                    phoneNumber,
-                    { status: ERROR, reason: 'retries-exhausted' },
-                );
-            });
-
-            it('should record an error on the first attempt of a permanent failure', async () => {
-                authenticationService.authenticate.mockRejectedValue(
-                    new Error('Invalid credentials'),
-                );
-
-                await expect(
-                    sendMethod(mockUser, {
-                        claimCheckNumber,
-                        notificationType: notificationTypes.Xur,
-                    }),
-                ).rejects.toThrow('Invalid credentials');
-
-                expect(ClaimCheck.advance).toHaveBeenCalledExactlyOnceWith(
-                    claimCheckNumber,
-                    phoneNumber,
-                    { status: ERROR, reason: 'permanent' },
-                );
-            });
-
-            it("should fail with the job's own error when the receipt cannot be written", async () => {
-                const transientError = transient();
-
-                ClaimCheck.advance.mockRejectedValue(new Error('Redis is down'));
-
-                await expect(
-                    sendMethod(
-                        mockUser,
-                        { claimCheckNumber, notificationType: notificationTypes.Xur },
-                        attempt(3),
-                    ),
-                ).rejects.toBe(transientError);
-            });
+            expect(ClaimCheck.advance).not.toHaveBeenCalled();
         });
 
         describe('when notification type is not Xur', () => {
@@ -1302,6 +1214,54 @@ describe('NotificationController', () => {
                     { status: SKIPPED, reason: 'unsupported-type' },
                 );
             });
+        });
+    });
+
+    describe('when BullMQ gives up on a send', () => {
+        let gaveUp;
+
+        beforeEach(() => {
+            gaveUp = subscriber.listen.mock.calls[0][2].onGiveUp;
+        });
+
+        it('should record retries exhausted for a job that used every attempt', async () => {
+            await gaveUp(
+                mockUser,
+                { claimCheckNumber, notificationType: notificationTypes.Xur },
+                { attemptsMade: 3, opts: { attempts: 3 } },
+            );
+
+            expect(ClaimCheck.advance).toHaveBeenCalledExactlyOnceWith(
+                claimCheckNumber,
+                phoneNumber,
+                { status: ERROR, reason: 'retries-exhausted' },
+            );
+        });
+
+        it('should record a permanent failure for one refused its remaining attempts', async () => {
+            await gaveUp(
+                mockUser,
+                { claimCheckNumber, notificationType: notificationTypes.Xur },
+                { attemptsMade: 1, opts: { attempts: 3 } },
+            );
+
+            expect(ClaimCheck.advance).toHaveBeenCalledExactlyOnceWith(
+                claimCheckNumber,
+                phoneNumber,
+                { status: ERROR, reason: 'permanent' },
+            );
+        });
+
+        it('should not throw when the receipt cannot be written', async () => {
+            ClaimCheck.advance.mockRejectedValue(new Error('Redis is down'));
+
+            await expect(
+                gaveUp(
+                    mockUser,
+                    { claimCheckNumber, notificationType: notificationTypes.Xur },
+                    { attemptsMade: 3, opts: { attempts: 3 } },
+                ),
+            ).resolves.toBeUndefined();
         });
     });
 });

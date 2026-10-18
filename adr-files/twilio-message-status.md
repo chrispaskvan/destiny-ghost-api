@@ -18,7 +18,7 @@ Storage in the database will grow 3 times more since all statuses are persisted 
 
 ## Addendum: the claim-check receipt (#717)
 
-The decision above still governs the audit trail: every callback is persisted as it arrives, unordered. The claim check a notification's caller reads is a separate current-state projection over the same callbacks, and that one is ordered. A Lua script in `helpers/claim-check.js` moves a recipient's entry forward only (`pending` → provider accepted → `sending` → `sent` → terminal), never between terminal statuses except `read` over `delivered`, and only for the message sid the entry is tracking. The projection can afford the ordering the audit trail could not: it is one small Redis hash per operation, not a Cosmos document per callback, and a report it ignores is still kept in full above.
+The decision above still governs the audit trail: every callback is persisted as it arrives, unordered. The claim check a notification's caller reads is a separate current-state projection over the same callbacks, and that one is ordered. A Lua script in `helpers/claim-check.js` moves a recipient's entry forward only (`pending` → provider accepted → `sending` → `sent` → terminal), never between terminal statuses except `read` over `delivered`, and only for the message sid the entry is tracking. Twilio's reports also have the last word over the service's own outcomes (`skipped`, `duplicate`, `error`): those mean no message went out, so they are never recorded over a message Twilio holds, and a report for one replaces them. The projection can afford the ordering the audit trail could not: it is one small Redis hash per operation, not a Cosmos document per callback, and a report it ignores is still kept in full above.
 
 ## References
 

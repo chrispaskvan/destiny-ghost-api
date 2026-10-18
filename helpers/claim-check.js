@@ -1,4 +1,5 @@
 // @ts-check
+import { createHash } from 'node:crypto';
 import { createId } from '@paralleldrive/cuid2';
 import cache from './cache.js';
 
@@ -47,8 +48,9 @@ const ERROR = 'error';
  * finishes before the request that queued it, cannot move a receipt back.
  *
  * Every terminal status shares a rank, so one cannot replace another: a
- * `delivered` followed by a stray `failed` keeps `delivered`. `read` is the
- * exception, being a delivery confirmed further.
+ * `delivered` followed by a stray `failed` keeps `delivered`. `read` ranks
+ * above them as a delivery confirmed further, and `ADVANCE` lets it replace
+ * `delivered` and nothing else terminal.
  *
  * Twilio's own statuses: https://www.twilio.com/docs/messaging/api/message-resource#message-status-values
  */
@@ -70,6 +72,23 @@ const ranks = {
 };
 
 /**
+ * The terminal statuses this service records itself, each meaning no message
+ * of this operation's reached Twilio - as opposed to Twilio's, which report
+ * on one that did.
+ */
+const ours = [SKIPPED, DUPLICATE, ERROR];
+
+/**
+ * @param {Record<string, number | boolean>} table
+ * @returns {string} the same table as a Lua literal, so the script holds it
+ * as code rather than decoding it on every call
+ */
+const toLua = table =>
+    `{ ${Object.entries(table)
+        .map(([key, value]) => `[${JSON.stringify(key)}] = ${value}`)
+        .join(', ')} }`;
+
+/**
  * Move one recipient's entry forward, or leave it alone.
  *
  * Atomic because the entry is written from three places nothing orders - the
@@ -86,13 +105,23 @@ const ranks = {
  * A report that arrives before the sid was stored is judged on rank alone,
  * and its sid is kept.
  *
+ * Twilio has the last word over this service's own outcomes, never the
+ * reverse. A skip, an error or a duplicate records that no message of this
+ * operation's went out, so once Twilio holds one it is not recorded over that
+ * message, and a report for it replaces one recorded first. That covers a
+ * client timeout on a send Twilio had in fact accepted, and a recipient
+ * deduplicated against this operation's own job - one recipient twice in a
+ * broadcast, or a job id that changed across a resume - which would
+ * otherwise have its own message marked as someone else's.
+ *
  * An entry written before entries were JSON is read as its bare status.
  *
  * KEYS[1] claim check; ARGV[1] phone number, ARGV[2] entry as JSON, ARGV[3]
  * expiry in seconds. Returns 1 when written, 0 when not.
  */
 const ADVANCE = `
-local ranks = cjson.decode('${JSON.stringify(ranks)}')
+local ranks = ${toLua(ranks)}
+local ours = ${toLua(Object.fromEntries(ours.map(status => [status, true])))}
 local stored = redis.call('HGET', KEYS[1], ARGV[1])
 
 if not stored then
@@ -116,7 +145,21 @@ if current.sid and entry.sid and current.sid ~= entry.sid then
     return 0
 end
 
-if rank <= (ranks[current.status] or -1) then
+if ours[entry.status] and current.sid then
+    return 0
+end
+
+local currentRank = ranks[current.status] or -1
+
+if ours[current.status] and entry.sid then
+    currentRank = -1
+end
+
+if entry.status == 'read' and currentRank == ranks.delivered and current.status ~= 'delivered' then
+    return 0
+end
+
+if rank <= currentRank then
     if current.sid or not entry.sid then
         return 0
     end
@@ -132,6 +175,13 @@ redis.call('EXPIRE', KEYS[1], ARGV[3])
 
 return 1
 `;
+
+/**
+ * What Redis caches `ADVANCE` under, so a call sends 40 bytes rather than the
+ * script. node-redis does the same for scripts defined on the client; this
+ * one is kept here rather than on the shared client in `cache.js`.
+ */
+const ADVANCE_SHA = createHash('sha1').update(ADVANCE).digest('hex');
 
 /**
  * One recipient's progress.
@@ -192,15 +242,15 @@ class ClaimCheck {
     }
 
     /**
-     * Every recipient's progress, or `undefined` when the claim check has
-     * expired or was never issued.
+     * Every recipient's progress. Empty for a broadcast that has not queued
+     * its first page yet, or has nobody to queue, as much as for a claim
+     * check that has expired: Redis cannot tell an empty hash from a missing
+     * one, and only the first two are worth a caller polling.
      * @param {string} number
-     * @returns {Promise<Record<string, ClaimCheckEntry> | undefined>}
+     * @returns {Promise<Record<string, ClaimCheckEntry>>}
      */
     static async getClaimCheck(number) {
         const entries = Object.entries(await cache.hGetAll(number));
-
-        if (!entries.length) return undefined;
 
         return Object.fromEntries(
             entries.map(([phoneNumber, stored]) => [phoneNumber, parse(stored)]),
@@ -215,10 +265,20 @@ class ClaimCheck {
      * @returns {Promise<boolean>} whether the entry was written
      */
     static async advance(claimCheckNumber, phoneNumber, entry) {
-        const written = await cache.eval(ADVANCE, {
+        const options = {
             keys: [claimCheckNumber],
             arguments: [phoneNumber, JSON.stringify(entry), String(claimCheckExpiration)],
-        });
+        };
+        let written;
+
+        try {
+            written = await cache.evalSha(ADVANCE_SHA, options);
+        } catch (err) {
+            // Not cached yet, or flushed since: sending it caches it.
+            if (!(err instanceof Error && err.message.startsWith('NOSCRIPT'))) throw err;
+
+            written = await cache.eval(ADVANCE, options);
+        }
 
         return written === 1;
     }
@@ -227,6 +287,7 @@ class ClaimCheck {
 export {
     ClaimCheck as default,
     ADVANCE,
+    ADVANCE_SHA,
     claimCheckExpiration,
     DUPLICATE,
     ERROR,

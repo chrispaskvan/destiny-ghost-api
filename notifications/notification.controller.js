@@ -63,7 +63,9 @@ class NotificationController {
         this.users = options.userService;
         this.world = options.worldRepository;
 
-        subscriber.listen(this.#send.bind(this));
+        subscriber.listen(this.#send.bind(this), undefined, {
+            onGiveUp: this.#gaveUp.bind(this),
+        });
         /**
          * One broadcast at a time, and one whose worker died is picked up
          * again from its saved page up to five times rather than BullMQ's
@@ -170,31 +172,25 @@ class NotificationController {
     }
 
     /**
-     * Send one recipient's notification, recording an error on their receipt
-     * when this is the attempt BullMQ will not retry: a permanent failure, or
-     * the last of their attempts. An earlier attempt's failure records nothing,
-     * since the retry may yet send.
+     * Record an error on the receipt of a recipient whose job BullMQ has
+     * failed for good. Every attempt short of that records nothing, since
+     * the retry may yet send.
+     *
+     * A job that used all its attempts ran out of retries; one that failed
+     * with attempts to spare was refused them - an `UnrecoverableError`, or
+     * stalling more often than the worker allows.
      * @param {QueuedUser} user
-     * @param {{ claimCheckNumber: string, notificationType: string }} properties
+     * @param {{ claimCheckNumber: string }} properties
      * @param {import('bullmq').Job} job
      * @returns {Promise<void>}
      */
-    async #send(user, properties, job) {
-        try {
-            await this.#deliver(user, properties);
-        } catch (err) {
-            const permanent = err instanceof UnrecoverableError;
+    async #gaveUp({ phoneNumber }, { claimCheckNumber }, job) {
+        const exhausted = job.attemptsMade >= (job.opts.attempts ?? 1);
 
-            if (permanent || job.attemptsMade + 1 >= (job.opts.attempts ?? 1)) {
-                await NotificationController.#recordOutcome(
-                    properties.claimCheckNumber,
-                    user.phoneNumber,
-                    { status: ERROR, reason: permanent ? 'permanent' : 'retries-exhausted' },
-                );
-            }
-
-            throw err;
-        }
+        await NotificationController.#recordOutcome(claimCheckNumber, phoneNumber, {
+            status: ERROR,
+            reason: exhausted ? 'retries-exhausted' : 'permanent',
+        });
     }
 
     /**
@@ -202,7 +198,7 @@ class NotificationController {
      * @param {{ claimCheckNumber: string, notificationType: string }} param1
      * @returns {Promise<void>}
      */
-    async #deliver(user, { claimCheckNumber, notificationType }) {
+    async #send(user, { claimCheckNumber, notificationType }) {
         const { membershipId, membershipType, phoneNumber } = user;
 
         /**

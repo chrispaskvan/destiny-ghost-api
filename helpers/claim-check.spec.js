@@ -1,16 +1,20 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import ClaimCheck, {
     ADVANCE,
+    ADVANCE_SHA,
     claimCheckExpiration,
     DUPLICATE,
+    ERROR,
     PENDING,
     ranks,
+    SKIPPED,
 } from './claim-check.js';
 import cache from './cache.js';
 
 vi.mock('./cache.js', () => ({
     default: {
         eval: vi.fn(),
+        evalSha: vi.fn(),
         hSetNX: vi.fn(),
         hGetAll: vi.fn(),
         expire: vi.fn(),
@@ -50,38 +54,55 @@ const fakeRedis = () => {
             return 1;
         }),
         hGetAll: vi.fn(async key => Object.fromEntries(store.get(key) ?? [])),
-        eval: vi.fn(async (_script, { keys: [key], arguments: [field, json] }) => {
-            const stored = store.get(key)?.get(field);
-
-            if (stored === undefined) return 0;
-
-            let current;
-
-            try {
-                current = JSON.parse(stored);
-            } catch {
-                current = { status: stored };
-            }
-
-            let entry = JSON.parse(json);
-            const rank = ranks[entry.status];
-
-            if (rank === undefined) return 0;
-            if (current.sid && entry.sid && current.sid !== entry.sid) return 0;
-
-            if (rank <= (ranks[current.status] ?? -1)) {
-                if (current.sid || !entry.sid) return 0;
-                entry = { ...current, sid: entry.sid };
-            } else if (!entry.sid && current.sid) {
-                entry.sid = current.sid;
-            }
-
-            hash(key).set(field, JSON.stringify(entry));
-
-            return 1;
-        }),
+        eval: vi.fn(async (_script, options) => advance(options)),
+        evalSha: vi.fn(async (_sha, options) => advance(options)),
     };
+
+    function advance({ keys: [key], arguments: [field, json] }) {
+        const stored = store.get(key)?.get(field);
+
+        if (stored === undefined) return 0;
+
+        let current;
+
+        try {
+            current = JSON.parse(stored);
+        } catch {
+            current = { status: stored };
+        }
+
+        let entry = JSON.parse(json);
+        const rank = ranks[entry.status];
+
+        if (rank === undefined) return 0;
+        if (current.sid && entry.sid && current.sid !== entry.sid) return 0;
+
+        if (ours.includes(entry.status) && current.sid) return 0;
+
+        let currentRank = ranks[current.status] ?? -1;
+
+        if (ours.includes(current.status) && entry.sid) currentRank = -1;
+        if (
+            entry.status === 'read' &&
+            currentRank === ranks.delivered &&
+            current.status !== 'delivered'
+        ) {
+            return 0;
+        }
+
+        if (rank <= currentRank) {
+            if (current.sid || !entry.sid) return 0;
+            entry = { ...current, sid: entry.sid };
+        } else if (!entry.sid && current.sid) {
+            entry.sid = current.sid;
+        }
+
+        hash(key).set(field, JSON.stringify(entry));
+
+        return 1;
+    }
 };
+const ours = [SKIPPED, DUPLICATE, ERROR];
 
 describe('ClaimCheck', () => {
     /** @type {ClaimCheck} */
@@ -96,6 +117,7 @@ describe('ClaimCheck', () => {
         vi.clearAllMocks();
         redis = fakeRedis();
         cache.eval.mockImplementation(redis.eval);
+        cache.evalSha.mockImplementation(redis.evalSha);
         cache.hSetNX.mockImplementation(redis.hSetNX);
         cache.hGetAll.mockImplementation(redis.hGetAll);
         claimCheck = new ClaimCheck();
@@ -177,8 +199,13 @@ describe('ClaimCheck', () => {
             });
         });
 
-        it('should return undefined for a claim check that expired or was never issued', async () => {
-            await expect(ClaimCheck.getClaimCheck('non-existent-id')).resolves.toBeUndefined();
+        /**
+         * A broadcast's claim check is handed out before its first page is
+         * queued, so an empty one is usually one a caller should keep
+         * polling, not one that does not exist.
+         */
+        it('should return an empty receipt for a claim check with no recipients yet', async () => {
+            await expect(ClaimCheck.getClaimCheck('no-recipients-yet')).resolves.toEqual({});
         });
 
         it('should read an entry written before entries were JSON as its bare status', async () => {
@@ -201,17 +228,40 @@ describe('ClaimCheck', () => {
             await claimCheck.addPhoneNumber(testPhoneNumber);
         });
 
-        it('should hand the script the entry and the expiry', async () => {
+        const options = {
+            keys: [testClaimCheckId],
+            arguments: [
+                testPhoneNumber,
+                JSON.stringify({ status: 'sent', sid }),
+                String(claimCheckExpiration),
+            ],
+        };
+
+        it('should run the cached script, handing it the entry and the expiry', async () => {
             await ClaimCheck.advance(testClaimCheckId, testPhoneNumber, { status: 'sent', sid });
 
-            expect(cache.eval).toHaveBeenCalledWith(ADVANCE, {
-                keys: [testClaimCheckId],
-                arguments: [
-                    testPhoneNumber,
-                    JSON.stringify({ status: 'sent', sid }),
-                    String(claimCheckExpiration),
-                ],
-            });
+            expect(cache.evalSha).toHaveBeenCalledExactlyOnceWith(ADVANCE_SHA, options);
+            expect(cache.eval).not.toHaveBeenCalled();
+        });
+
+        it('should send the script when Redis has not cached it', async () => {
+            cache.evalSha.mockRejectedValueOnce(
+                new Error('NOSCRIPT No matching script. Please use EVAL.'),
+            );
+
+            await expect(
+                ClaimCheck.advance(testClaimCheckId, testPhoneNumber, { status: 'sent', sid }),
+            ).resolves.toBe(true);
+            expect(cache.eval).toHaveBeenCalledExactlyOnceWith(ADVANCE, options);
+        });
+
+        it('should not resend the script for any other failure', async () => {
+            cache.evalSha.mockRejectedValueOnce(new Error('Cache write failed'));
+
+            await expect(
+                ClaimCheck.advance(testClaimCheckId, testPhoneNumber, { status: 'sent', sid }),
+            ).rejects.toThrow('Cache write failed');
+            expect(cache.eval).not.toHaveBeenCalled();
         });
 
         it('should move a recipient through every stage in order', async () => {
@@ -316,6 +366,78 @@ describe('ClaimCheck', () => {
             ).resolves.toBe(true);
         });
 
+        /**
+         * One recipient twice in a broadcast, or a job id that changed
+         * across a resume: the second queueing is deduplicated against this
+         * operation's own job, which is not a duplicate of anything.
+         */
+        it("should not mark this operation's own message a duplicate", async () => {
+            await ClaimCheck.advance(testClaimCheckId, testPhoneNumber, { status: 'queued', sid });
+
+            await expect(
+                ClaimCheck.advance(testClaimCheckId, testPhoneNumber, { status: DUPLICATE }),
+            ).resolves.toBe(false);
+
+            // ...so its delivery report still lands.
+            await ClaimCheck.advance(testClaimCheckId, testPhoneNumber, {
+                status: 'delivered',
+                sid,
+            });
+            await expect(entryOf(testPhoneNumber)).resolves.toEqual({
+                status: 'delivered',
+                sid,
+            });
+        });
+
+        it.each([
+            [SKIPPED, 'opted-out'],
+            [ERROR, 'retries-exhausted'],
+        ])('should not record %s over a message Twilio holds', async (status, reason) => {
+            // Twilio accepted the send, but the client timed out waiting.
+            await ClaimCheck.advance(testClaimCheckId, testPhoneNumber, { status: 'sent', sid });
+
+            await expect(
+                ClaimCheck.advance(testClaimCheckId, testPhoneNumber, { status, reason }),
+            ).resolves.toBe(false);
+            await expect(entryOf(testPhoneNumber)).resolves.toEqual({ status: 'sent', sid });
+        });
+
+        it.each([
+            [SKIPPED, 'opted-out'],
+            [ERROR, 'retries-exhausted'],
+            [DUPLICATE, undefined],
+        ])("should let Twilio's report replace a %s recorded first", async (status, reason) => {
+            await ClaimCheck.advance(testClaimCheckId, testPhoneNumber, { status, reason });
+
+            await expect(
+                ClaimCheck.advance(testClaimCheckId, testPhoneNumber, { status: 'sent', sid }),
+            ).resolves.toBe(true);
+            await expect(entryOf(testPhoneNumber)).resolves.toEqual({ status: 'sent', sid });
+        });
+
+        it('should let read replace delivered', async () => {
+            await ClaimCheck.advance(testClaimCheckId, testPhoneNumber, {
+                status: 'delivered',
+                sid,
+            });
+
+            await expect(
+                ClaimCheck.advance(testClaimCheckId, testPhoneNumber, { status: 'read', sid }),
+            ).resolves.toBe(true);
+        });
+
+        it.each(['undelivered', 'failed', 'canceled'])(
+            'should not let read replace %s',
+            async status => {
+                await ClaimCheck.advance(testClaimCheckId, testPhoneNumber, { status, sid });
+
+                await expect(
+                    ClaimCheck.advance(testClaimCheckId, testPhoneNumber, { status: 'read', sid }),
+                ).resolves.toBe(false);
+                await expect(entryOf(testPhoneNumber)).resolves.toEqual({ status, sid });
+            },
+        );
+
         it('should not create an entry for a recipient it never recorded', async () => {
             await expect(
                 ClaimCheck.advance(testClaimCheckId, testPhoneNumber2, {
@@ -340,14 +462,6 @@ describe('ClaimCheck', () => {
                 ClaimCheck.advance(testClaimCheckId, testPhoneNumber, { status: 'queued', sid }),
             ).resolves.toBe(true);
             await expect(entryOf(testPhoneNumber)).resolves.toEqual({ status: 'sent', sid });
-        });
-
-        it('should reject when Redis does', async () => {
-            cache.eval.mockRejectedValueOnce(new Error('Cache write failed'));
-
-            await expect(
-                ClaimCheck.advance(testClaimCheckId, testPhoneNumber, { status: 'sent' }),
-            ).rejects.toThrow('Cache write failed');
         });
     });
 });

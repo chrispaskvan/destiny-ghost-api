@@ -270,6 +270,78 @@ describe('Subscriber', () => {
         });
     });
 
+    describe('when BullMQ gives up on a job', () => {
+        const job = finishedOn => ({
+            id: 'job-1',
+            ...(finishedOn && { finishedOn }),
+            data: {
+                body: JSON.stringify({ phoneNumber: '+15551234567' }),
+                applicationProperties: { claimCheckNumber: 'cc1', notificationType: 'xur' },
+            },
+        });
+        const failedHandler = () =>
+            mockWorkerInstance.on.mock.calls.find(([event]) => event === 'failed')[1];
+
+        it('should hand the job to the give-up handler once it will not be retried', async () => {
+            const onGiveUp = vi.fn().mockResolvedValue();
+            const failed = job(Date.now());
+
+            subscriber.listen(vi.fn(), 'notifications', { onGiveUp });
+            failedHandler()(failed, new Error('no more'));
+            await subscriber.close();
+
+            expect(onGiveUp).toHaveBeenCalledExactlyOnceWith(
+                { phoneNumber: '+15551234567' },
+                { claimCheckNumber: 'cc1', notificationType: 'xur' },
+                failed,
+            );
+        });
+
+        it('should not call it for an attempt BullMQ will retry', async () => {
+            const onGiveUp = vi.fn();
+
+            subscriber.listen(vi.fn(), 'notifications', { onGiveUp });
+            failedHandler()(job(), new Error('try again'));
+            await subscriber.close();
+
+            expect(onGiveUp).not.toHaveBeenCalled();
+        });
+
+        it('should log a handler that fails rather than let it reject unhandled', async () => {
+            const err = new Error('Redis is down');
+
+            subscriber.listen(vi.fn(), 'notifications', {
+                onGiveUp: vi.fn().mockRejectedValue(err),
+            });
+            failedHandler()(job(Date.now()), new Error('no more'));
+            await subscriber.close();
+
+            expect(log.error).toHaveBeenCalledWith(
+                { jobId: 'job-1', err },
+                'Give-up handler failed',
+            );
+        });
+
+        it('should not finish closing while a handler is still running', async () => {
+            const handling = Promise.withResolvers();
+            let closed = false;
+
+            subscriber.listen(vi.fn(), 'notifications', { onGiveUp: () => handling.promise });
+            failedHandler()(job(Date.now()), new Error('no more'));
+
+            const closing = subscriber.close().then(() => {
+                closed = true;
+            });
+
+            await new Promise(resolve => setImmediate(resolve));
+            expect(closed).toBe(false);
+
+            handling.resolve();
+            await closing;
+            expect(closed).toBe(true);
+        });
+    });
+
     describe('when closing', () => {
         it('should close all workers', async () => {
             const callback = vi.fn();

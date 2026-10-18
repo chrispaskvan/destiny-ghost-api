@@ -703,11 +703,16 @@ class TwilioController {
     async statusCallback(message) {
         const {
             ClaimCheck: claimCheck,
-            MessageSid: sid,
+            MessageSid: messageSid,
             MessageStatus: messageStatus,
+            SmsSid: smsSid,
             SmsStatus: smsStatus,
             To: phoneNumber,
         } = message;
+        // Read from the same legacy spelling as the status, or a report
+        // carrying only that would reach the claim check with no sid at all
+        // and be judged on rank alone, whichever message it was about.
+        const sid = messageSid ?? smsSid;
         // This webhook's payload carries MessageStatus, not SmsStatus - fall
         // back to a legacy SmsStatus field if Twilio ever sends one instead.
         const status = messageStatus ?? smsStatus;
