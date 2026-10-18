@@ -29,6 +29,14 @@ const claimCheckExpiration = 86400; // 1 day in seconds
 const CLAIM_CHECK_TIMEOUT_MS = 1000;
 
 /**
+ * Bounds a read of a whole receipt, for the same reason as above. Longer
+ * than a write's, which touches one entry: a read returns every recipient,
+ * and a broadcast's can run to tens of thousands, so a Redis that is slow
+ * but answering should still be able to hand it over.
+ */
+const CLAIM_CHECK_READ_TIMEOUT_MS = 10_000;
+
+/**
  * The cache client, with every command dropped if it is still waiting to be
  * sent when the timeout passes.
  *
@@ -39,23 +47,25 @@ const CLAIM_CHECK_TIMEOUT_MS = 1000;
  * command only until it is written, so `bounded` still bounds the wait for
  * the reply; a command written to a Redis that is slow but connected runs
  * when it gets there, as any command would.
+ * @param {number} [timeout]
  */
-const timedCache = () => cache.withCommandOptions({ timeout: CLAIM_CHECK_TIMEOUT_MS });
+const timedCache = (timeout = CLAIM_CHECK_TIMEOUT_MS) => cache.withCommandOptions({ timeout });
 
 /**
- * Await a receipt command, but no longer than the timeout above.
+ * Await a receipt command, but no longer than the timeout.
  * @template T
  * @param {Promise<T>} command
+ * @param {number} [timeout]
  * @returns {Promise<T>} what the command resolved with; rejects with its
  * error, or with one of its own when it timed out
  */
-const bounded = async command => {
-    const [result] = await processExternalPromisesWithTimeout([command], CLAIM_CHECK_TIMEOUT_MS);
+const bounded = async (command, timeout = CLAIM_CHECK_TIMEOUT_MS) => {
+    const [result] = await processExternalPromisesWithTimeout([command], timeout);
 
     if (result.status === 'fulfilled') return result.value;
     if (result.status === 'rejected') throw result.reason;
 
-    throw new Error(`The claim check did not answer within ${CLAIM_CHECK_TIMEOUT_MS}ms.`);
+    throw new Error(`The claim check did not answer within ${timeout}ms.`);
 };
 
 /**
@@ -354,7 +364,12 @@ class ClaimCheck {
      * @returns {Promise<Record<string, ClaimCheckEntry>>}
      */
     static async getClaimCheck(number) {
-        const entries = Object.entries(await bounded(timedCache().hGetAll(number)));
+        const entries = Object.entries(
+            await bounded(
+                timedCache(CLAIM_CHECK_READ_TIMEOUT_MS).hGetAll(number),
+                CLAIM_CHECK_READ_TIMEOUT_MS,
+            ),
+        );
 
         return Object.fromEntries(
             entries.map(([phoneNumber, stored]) => [phoneNumber, parse(stored)]),
@@ -387,6 +402,7 @@ class ClaimCheck {
 export {
     ClaimCheck as default,
     ADVANCE,
+    CLAIM_CHECK_READ_TIMEOUT_MS,
     CLAIM_CHECK_TIMEOUT_MS,
     claimCheckExpiration,
     DUPLICATE,

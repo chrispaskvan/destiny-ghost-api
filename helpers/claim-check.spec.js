@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, beforeEach, vi } from 'vitest';
 import ClaimCheck, {
     ADVANCE,
+    CLAIM_CHECK_READ_TIMEOUT_MS,
     CLAIM_CHECK_TIMEOUT_MS,
     claimCheckExpiration,
     DUPLICATE,
@@ -294,28 +295,49 @@ describe('ClaimCheck', () => {
             await expect(entryOf(testPhoneNumber)).resolves.toEqual({ status: PENDING });
         });
 
-        /**
-         * Unlike a write, a read that failed cannot stand in for one that
-         * worked: an empty receipt would say nobody was queued.
-         */
         it('should send with a timeout that drops it if still unsent', async () => {
             await ClaimCheck.getClaimCheck(testClaimCheckId);
 
             expect(cache.hGetAll.mock.contexts[0]).toMatchObject({
-                options: { timeout: CLAIM_CHECK_TIMEOUT_MS },
+                options: { timeout: CLAIM_CHECK_READ_TIMEOUT_MS },
             });
         });
 
+        /**
+         * Unlike a write, a read that failed cannot stand in for one that
+         * worked: an empty receipt would say nobody was queued.
+         */
         it('should give up on a read Redis does not answer in time', async () => {
             vi.useFakeTimers();
             cache.hGetAll.mockReturnValueOnce(new Promise(() => {}));
 
             const reading = expect(ClaimCheck.getClaimCheck(testClaimCheckId)).rejects.toThrow(
-                `did not answer within ${CLAIM_CHECK_TIMEOUT_MS}ms`,
+                `did not answer within ${CLAIM_CHECK_READ_TIMEOUT_MS}ms`,
             );
 
-            await vi.advanceTimersByTimeAsync(CLAIM_CHECK_TIMEOUT_MS);
+            await vi.advanceTimersByTimeAsync(CLAIM_CHECK_READ_TIMEOUT_MS);
             await reading;
+        });
+
+        /**
+         * A broadcast's receipt holds every recipient, so it can take longer
+         * to hand over than a write to one of them is given.
+         */
+        it('should wait longer for a whole receipt than for a write', async () => {
+            vi.useFakeTimers();
+            cache.hGetAll.mockReturnValueOnce(
+                new Promise(resolve => {
+                    setTimeout(
+                        () => resolve({ [testPhoneNumber]: JSON.stringify({ status: PENDING }) }),
+                        CLAIM_CHECK_TIMEOUT_MS * 2,
+                    );
+                }),
+            );
+
+            const reading = ClaimCheck.getClaimCheck(testClaimCheckId);
+
+            await vi.advanceTimersByTimeAsync(CLAIM_CHECK_TIMEOUT_MS * 2);
+            await expect(reading).resolves.toEqual({ [testPhoneNumber]: { status: PENDING } });
         });
 
         it('should reject when Redis does', async () => {
