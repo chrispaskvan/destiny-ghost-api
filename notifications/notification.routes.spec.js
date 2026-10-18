@@ -286,4 +286,35 @@ describe('NotificationRouter', () => {
             expect(res.statusCode).toBe(StatusCodes.NOT_FOUND);
         });
     });
+
+    describe('GET /claimChecks/:claimCheck', () => {
+        const receipt = (url = '/claimChecks/op-1') =>
+            new Promise(resolve => {
+                res.on('end', resolve);
+                router(createRequest({ method: 'GET', url }), res, resolve);
+            });
+
+        it("should report each recipient's progress", async () => {
+            const entries = {
+                '+15551234567': { status: 'delivered', sid: `SM${'a'.repeat(32)}` },
+                '+15557654321': { status: 'skipped', reason: 'unauthenticated' },
+            };
+
+            controller.getClaimCheck.mockResolvedValue(entries);
+
+            await receipt();
+
+            expect(controller.getClaimCheck).toHaveBeenCalledExactlyOnceWith('op-1');
+            expect(res.statusCode).toBe(StatusCodes.OK);
+            expect(res._getJSONData()).toEqual(entries);
+        });
+
+        it('should 404 a claim check that does not exist or has expired', async () => {
+            controller.getClaimCheck.mockResolvedValue(undefined);
+
+            await receipt();
+
+            expect(res.statusCode).toBe(StatusCodes.NOT_FOUND);
+        });
+    });
 });

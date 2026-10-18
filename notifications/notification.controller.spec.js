@@ -5,7 +5,7 @@ import subscriber from '../helpers/subscriber.js';
 import NotificationController from './notification.controller.js';
 import NotificationError from './notification.error.js';
 import notificationTypes from './notification.types.js';
-import ClaimCheck, { DUPLICATE, SKIPPED } from '../helpers/claim-check.js';
+import ClaimCheck, { DUPLICATE, ERROR, SKIPPED } from '../helpers/claim-check.js';
 import log from '../helpers/log.js';
 import { enqueueBroadcast } from './broadcast.queue.js';
 
@@ -58,6 +58,7 @@ const membershipType = 2;
 const claimCheckNumber = chance.string({ length: 10 });
 const accessToken = chance.string({ length: 20 });
 const characterId = chance.guid();
+const messageSid = `SM${chance.string({ length: 32, alpha: true, numeric: true })}`;
 const mockUser = {
     phoneNumber,
     membershipId,
@@ -75,7 +76,7 @@ const mockItem = {
 const mockClaimCheck = {
     number: claimCheckNumber,
     addPhoneNumber: vi.fn(),
-    updatePhoneNumber: vi.fn(),
+    advance: vi.fn(),
 };
 const authenticationService = {
     authenticate: vi.fn(),
@@ -99,10 +100,10 @@ const userService = {
  * `sendMessage` checks its `guard` inside the rate limiter's slot, so a double
  * that ignores it would let every suppression test pass on a send that the
  * real service would have withheld.
- * @param {{ status?: string }} [response]
+ * @param {{ sid?: string, status?: string }} [response]
  */
 const sendMessageHonouringGuard =
-    (response = { status: 'sent' }) =>
+    (response = { sid: messageSid, status: 'sent' }) =>
     async (_body, _to, _mediaUrl, { guard } = {}) =>
         guard && !(await guard()) ? undefined : response;
 const worldRepository = {
@@ -111,6 +112,12 @@ const worldRepository = {
 };
 
 let notificationController;
+
+/**
+ * The BullMQ job a send runs as, on attempt `n` of three.
+ * @param {number} n
+ */
+const attempt = n => ({ attemptsMade: n - 1, opts: { attempts: 3 } });
 
 beforeEach(() => {
     vi.clearAllMocks();
@@ -121,7 +128,7 @@ beforeEach(() => {
         return mockClaimCheck;
     });
     ClaimCheck.getClaimCheck = vi.fn();
-    ClaimCheck.updatePhoneNumber = vi.fn();
+    ClaimCheck.advance = vi.fn();
 
     // Setup subscriber mock
     subscriber.listen = vi.fn();
@@ -162,6 +169,34 @@ describe('NotificationController', () => {
                 });
                 expect(mockClaimCheck.addPhoneNumber).toHaveBeenCalledWith(phoneNumber);
                 expect(result).toEqual({ claimCheckNumber });
+            });
+
+            /**
+             * A worker can pick the job up and finish it before this request
+             * returns. Were the receipt written after the job was queued, the
+             * worker's outcome would find no entry to move on, and the late
+             * write would then leave it pending for good.
+             */
+            it('should record the recipient before queueing their job', async () => {
+                userService.getUserByPhoneNumber.mockResolvedValue(mockUser);
+                publisher.sendNotification.mockResolvedValue({ deduplicated: false });
+                mockClaimCheck.addPhoneNumber.mockResolvedValue();
+
+                await notificationController.create(notificationTypes.Xur, { phoneNumber });
+
+                expect(mockClaimCheck.addPhoneNumber.mock.invocationCallOrder[0]).toBeLessThan(
+                    publisher.sendNotification.mock.invocationCallOrder[0],
+                );
+            });
+
+            it('should queue nothing when the recipient cannot be recorded', async () => {
+                userService.getUserByPhoneNumber.mockResolvedValue(mockUser);
+                mockClaimCheck.addPhoneNumber.mockRejectedValue(new Error('Redis is down'));
+
+                await expect(
+                    notificationController.create(notificationTypes.Xur, { phoneNumber }),
+                ).rejects.toThrow('Redis is down');
+                expect(publisher.sendNotification).not.toHaveBeenCalled();
             });
 
             it('should throw NotificationError when user is not found', async () => {
@@ -438,11 +473,38 @@ describe('NotificationController', () => {
                 duplicates: 1,
                 done: true,
             });
-            expect(mockClaimCheck.addPhoneNumber).toHaveBeenCalledWith(phoneNumber, DUPLICATE);
-            expect(mockClaimCheck.addPhoneNumber).toHaveBeenCalledWith(
-                otherUser.phoneNumber,
-                undefined,
+            expect(mockClaimCheck.addPhoneNumber).toHaveBeenCalledWith(phoneNumber);
+            expect(mockClaimCheck.addPhoneNumber).toHaveBeenCalledWith(otherUser.phoneNumber);
+            expect(ClaimCheck.advance).toHaveBeenCalledExactlyOnceWith(
+                claimCheckNumber,
+                phoneNumber,
+                { status: DUPLICATE },
             );
+        });
+
+        it('should record each recipient before queueing them, so their worker finds an entry', async () => {
+            userService.getSubscribedUsersPage.mockResolvedValueOnce({
+                users: [mockUser],
+                cursor: undefined,
+            });
+            publisher.sendNotification.mockResolvedValue({ deduplicated: false });
+
+            await run(jobWith());
+
+            expect(mockClaimCheck.addPhoneNumber.mock.invocationCallOrder[0]).toBeLessThan(
+                publisher.sendNotification.mock.invocationCallOrder[0],
+            );
+        });
+
+        it('should not queue a recipient it could not record', async () => {
+            userService.getSubscribedUsersPage.mockResolvedValueOnce({
+                users: [mockUser],
+                cursor: undefined,
+            });
+            mockClaimCheck.addPhoneNumber.mockRejectedValue(new Error('Redis is down'));
+
+            await expect(run(jobWith())).rejects.toThrow();
+            expect(publisher.sendNotification).not.toHaveBeenCalled();
         });
     });
 
@@ -463,8 +525,12 @@ describe('NotificationController', () => {
         let sendMethod;
 
         beforeEach(() => {
-            // Extract the bound send method from the subscriber.listen call
-            sendMethod = subscriber.listen.mock.calls[0][0];
+            // Extract the bound send method from the subscriber.listen call,
+            // run as a first attempt of BullMQ's three unless a test says
+            // otherwise.
+            const [[listened]] = subscriber.listen.mock.calls;
+
+            sendMethod = (user, properties, job = attempt(1)) => listened(user, properties, job);
         });
 
         describe('when consent changed between enqueue and execution', () => {
@@ -477,11 +543,10 @@ describe('NotificationController', () => {
                 });
 
                 expect(notificationService.sendMessage).not.toHaveBeenCalled();
-                expect(ClaimCheck.updatePhoneNumber).toHaveBeenCalledWith(
-                    claimCheckNumber,
-                    phoneNumber,
-                    SKIPPED,
-                );
+                expect(ClaimCheck.advance).toHaveBeenCalledWith(claimCheckNumber, phoneNumber, {
+                    status: SKIPPED,
+                    reason: 'opted-out',
+                });
             });
 
             /**
@@ -503,7 +568,7 @@ describe('NotificationController', () => {
 
                 expect(userService.isMovingPlatforms).toHaveBeenCalledWith(phoneNumber);
                 expect(notificationService.sendMessage).not.toHaveBeenCalled();
-                expect(ClaimCheck.updatePhoneNumber).not.toHaveBeenCalled();
+                expect(ClaimCheck.advance).not.toHaveBeenCalled();
             });
 
             it('should go ahead if the move lands between the consent read and the move check', async () => {
@@ -519,11 +584,10 @@ describe('NotificationController', () => {
                 });
 
                 expect(authenticationService.authenticate).toHaveBeenCalled();
-                expect(ClaimCheck.updatePhoneNumber).not.toHaveBeenCalledWith(
-                    claimCheckNumber,
-                    phoneNumber,
-                    SKIPPED,
-                );
+                expect(ClaimCheck.advance).not.toHaveBeenCalledWith(claimCheckNumber, phoneNumber, {
+                    status: SKIPPED,
+                    reason: 'opted-out',
+                });
             });
 
             /**
@@ -567,11 +631,10 @@ describe('NotificationController', () => {
                     notificationType: notificationTypes.Xur,
                 });
 
-                expect(ClaimCheck.updatePhoneNumber).toHaveBeenCalledWith(
-                    claimCheckNumber,
-                    phoneNumber,
-                    SKIPPED,
-                );
+                expect(ClaimCheck.advance).toHaveBeenCalledWith(claimCheckNumber, phoneNumber, {
+                    status: SKIPPED,
+                    reason: 'opted-out',
+                });
             });
 
             it('should not authenticate or call Bungie for a suppressed send', async () => {
@@ -613,11 +676,10 @@ describe('NotificationController', () => {
                 });
 
                 expect(notificationService.sendMessage).not.toHaveBeenCalled();
-                expect(ClaimCheck.updatePhoneNumber).toHaveBeenCalledWith(
-                    claimCheckNumber,
-                    phoneNumber,
-                    SKIPPED,
-                );
+                expect(ClaimCheck.advance).toHaveBeenCalledWith(claimCheckNumber, phoneNumber, {
+                    status: SKIPPED,
+                    reason: 'opted-out',
+                });
             });
 
             it('should still send when a different vendor is the disabled one', async () => {
@@ -658,11 +720,10 @@ describe('NotificationController', () => {
                 ).resolves.toBeUndefined();
 
                 expect(notificationService.sendMessage).not.toHaveBeenCalled();
-                expect(ClaimCheck.updatePhoneNumber).toHaveBeenCalledWith(
-                    claimCheckNumber,
-                    phoneNumber,
-                    SKIPPED,
-                );
+                expect(ClaimCheck.advance).toHaveBeenCalledWith(claimCheckNumber, phoneNumber, {
+                    status: SKIPPED,
+                    reason: 'opted-out',
+                });
             });
         });
 
@@ -700,11 +761,10 @@ describe('NotificationController', () => {
                     undefined,
                     expect.objectContaining({ guard: expect.any(Function) }),
                 );
-                expect(ClaimCheck.updatePhoneNumber).toHaveBeenCalledWith(
-                    claimCheckNumber,
-                    phoneNumber,
-                    SKIPPED,
-                );
+                expect(ClaimCheck.advance).toHaveBeenCalledWith(claimCheckNumber, phoneNumber, {
+                    status: SKIPPED,
+                    reason: 'opted-out',
+                });
             });
 
             it('should not send the Xur-unavailable fallback', async () => {
@@ -728,18 +788,17 @@ describe('NotificationController', () => {
                     undefined,
                     expect.objectContaining({ guard: expect.any(Function) }),
                 );
-                expect(ClaimCheck.updatePhoneNumber).toHaveBeenCalledWith(
-                    claimCheckNumber,
-                    phoneNumber,
-                    SKIPPED,
-                );
+                expect(ClaimCheck.advance).toHaveBeenCalledWith(claimCheckNumber, phoneNumber, {
+                    status: SKIPPED,
+                    reason: 'opted-out',
+                });
             });
         });
 
         describe('when the claim check cannot be written', () => {
             it('should not fail a suppressed job, which would retry it', async () => {
                 userService.getConsentByPhoneNumber.mockResolvedValue({ isSubscribed: false });
-                ClaimCheck.updatePhoneNumber.mockRejectedValue(new Error('Redis is down'));
+                ClaimCheck.advance.mockRejectedValue(new Error('Redis is down'));
 
                 await expect(
                     sendMethod(mockUser, {
@@ -762,7 +821,7 @@ describe('NotificationController', () => {
                 worldRepository.getWeaponCategory.mockResolvedValue(weaponCategoryHash);
                 worldRepository.getItemByHash.mockResolvedValue(mockItem);
                 notificationService.sendMessage.mockImplementation(sendMessageHonouringGuard());
-                ClaimCheck.updatePhoneNumber.mockRejectedValue(new Error('Redis is down'));
+                ClaimCheck.advance.mockRejectedValue(new Error('Redis is down'));
 
                 await expect(
                     sendMethod(mockUser, {
@@ -783,7 +842,7 @@ describe('NotificationController', () => {
                     new DestinyError(1627, 'Xur is not around.', 'DestinyVendorNotFound'),
                 );
                 notificationService.sendMessage.mockImplementation(sendMessageHonouringGuard());
-                ClaimCheck.updatePhoneNumber.mockRejectedValue(new Error('Redis is down'));
+                ClaimCheck.advance.mockRejectedValue(new Error('Redis is down'));
 
                 await expect(
                     sendMethod(mockUser, {
@@ -809,7 +868,7 @@ describe('NotificationController', () => {
                 worldRepository.getWeaponCategory.mockResolvedValue(weaponCategoryHash);
                 worldRepository.getItemByHash.mockResolvedValue(mockItem);
                 notificationService.sendMessage.mockImplementation(sendMessageHonouringGuard());
-                ClaimCheck.updatePhoneNumber.mockResolvedValue();
+                ClaimCheck.advance.mockResolvedValue();
 
                 await sendMethod(mockUser, {
                     claimCheckNumber,
@@ -839,11 +898,10 @@ describe('NotificationController', () => {
                         guard: expect.any(Function),
                     },
                 );
-                expect(ClaimCheck.updatePhoneNumber).toHaveBeenCalledWith(
-                    claimCheckNumber,
-                    phoneNumber,
-                    'sent',
-                );
+                expect(ClaimCheck.advance).toHaveBeenCalledWith(claimCheckNumber, phoneNumber, {
+                    status: 'sent',
+                    sid: messageSid,
+                });
             });
 
             it('should filter out non-weapon items from Xur inventory', async () => {
@@ -896,7 +954,7 @@ describe('NotificationController', () => {
                     Promise.resolve(itemHash === missingItemHash ? undefined : mockItem),
                 );
                 notificationService.sendMessage.mockImplementation(sendMessageHonouringGuard());
-                ClaimCheck.updatePhoneNumber.mockResolvedValue();
+                ClaimCheck.advance.mockResolvedValue();
 
                 await sendMethod(mockUser, {
                     claimCheckNumber,
@@ -915,7 +973,7 @@ describe('NotificationController', () => {
                 );
             });
 
-            it('should not send any message when no characters found', async () => {
+            it('should record a skip, sending nothing, when no characters found', async () => {
                 authenticationService.authenticate.mockResolvedValue({
                     bungie: { access_token: accessToken },
                 });
@@ -927,10 +985,14 @@ describe('NotificationController', () => {
                 });
 
                 expect(notificationService.sendMessage).not.toHaveBeenCalled();
-                expect(ClaimCheck.updatePhoneNumber).not.toHaveBeenCalled();
+                expect(ClaimCheck.advance).toHaveBeenCalledExactlyOnceWith(
+                    claimCheckNumber,
+                    phoneNumber,
+                    { status: SKIPPED, reason: 'no-characters' },
+                );
             });
 
-            it('should not send any message when characters is null', async () => {
+            it('should record a skip, sending nothing, when characters is null', async () => {
                 authenticationService.authenticate.mockResolvedValue({
                     bungie: { access_token: accessToken },
                 });
@@ -942,7 +1004,11 @@ describe('NotificationController', () => {
                 });
 
                 expect(notificationService.sendMessage).not.toHaveBeenCalled();
-                expect(ClaimCheck.updatePhoneNumber).not.toHaveBeenCalled();
+                expect(ClaimCheck.advance).toHaveBeenCalledExactlyOnceWith(
+                    claimCheckNumber,
+                    phoneNumber,
+                    { status: SKIPPED, reason: 'no-characters' },
+                );
             });
 
             it('should skip and log a warning when authentication finds no user', async () => {
@@ -959,6 +1025,11 @@ describe('NotificationController', () => {
                 );
                 expect(destinyService.getProfile).not.toHaveBeenCalled();
                 expect(notificationService.sendMessage).not.toHaveBeenCalled();
+                expect(ClaimCheck.advance).toHaveBeenCalledExactlyOnceWith(
+                    claimCheckNumber,
+                    phoneNumber,
+                    { status: SKIPPED, reason: 'unauthenticated' },
+                );
             });
 
             it('should skip and log a warning when the authenticated user has no Bungie access token', async () => {
@@ -975,6 +1046,11 @@ describe('NotificationController', () => {
                 );
                 expect(destinyService.getProfile).not.toHaveBeenCalled();
                 expect(notificationService.sendMessage).not.toHaveBeenCalled();
+                expect(ClaimCheck.advance).toHaveBeenCalledExactlyOnceWith(
+                    claimCheckNumber,
+                    phoneNumber,
+                    { status: SKIPPED, reason: 'unauthenticated' },
+                );
             });
 
             it('should send fallback SMS when Xur vendor is unavailable', async () => {
@@ -990,7 +1066,7 @@ describe('NotificationController', () => {
                 destinyService.getProfile.mockResolvedValue([mockCharacter]);
                 destinyService.getXur.mockRejectedValue(xurNotFoundErr);
                 notificationService.sendMessage.mockImplementation(sendMessageHonouringGuard());
-                ClaimCheck.updatePhoneNumber.mockResolvedValue();
+                ClaimCheck.advance.mockResolvedValue();
 
                 await sendMethod(mockUser, {
                     claimCheckNumber,
@@ -1008,11 +1084,10 @@ describe('NotificationController', () => {
                     },
                 );
                 expect(log.info).toHaveBeenCalledWith(JSON.stringify('sent'));
-                expect(ClaimCheck.updatePhoneNumber).toHaveBeenCalledWith(
-                    claimCheckNumber,
-                    phoneNumber,
-                    'sent',
-                );
+                expect(ClaimCheck.advance).toHaveBeenCalledWith(claimCheckNumber, phoneNumber, {
+                    status: 'sent',
+                    sid: messageSid,
+                });
             });
         });
 
@@ -1114,8 +1189,105 @@ describe('NotificationController', () => {
             });
         });
 
+        describe('when the job gives up', () => {
+            const transient = () => {
+                const transientError = new Error('Service Unavailable');
+
+                isTransientError.mockReturnValue(true);
+                authenticationService.authenticate.mockRejectedValue(transientError);
+
+                return transientError;
+            };
+
+            it('should record nothing on an attempt BullMQ will retry', async () => {
+                const transientError = transient();
+
+                for (const n of [1, 2]) {
+                    await expect(
+                        sendMethod(
+                            mockUser,
+                            { claimCheckNumber, notificationType: notificationTypes.Xur },
+                            attempt(n),
+                        ),
+                    ).rejects.toBe(transientError);
+                }
+
+                expect(ClaimCheck.advance).not.toHaveBeenCalled();
+            });
+
+            it('should record an error on the last attempt', async () => {
+                const transientError = transient();
+
+                await expect(
+                    sendMethod(
+                        mockUser,
+                        { claimCheckNumber, notificationType: notificationTypes.Xur },
+                        attempt(3),
+                    ),
+                ).rejects.toBe(transientError);
+
+                expect(ClaimCheck.advance).toHaveBeenCalledExactlyOnceWith(
+                    claimCheckNumber,
+                    phoneNumber,
+                    { status: ERROR, reason: 'retries-exhausted' },
+                );
+            });
+
+            it('should record an error for a move that never lands', async () => {
+                userService.getConsentByPhoneNumber.mockResolvedValue(undefined);
+                userService.isMovingPlatforms.mockResolvedValue(true);
+
+                await expect(
+                    sendMethod(
+                        mockUser,
+                        { claimCheckNumber, notificationType: notificationTypes.Xur },
+                        attempt(3),
+                    ),
+                ).rejects.toThrow('moving platforms');
+
+                expect(ClaimCheck.advance).toHaveBeenCalledExactlyOnceWith(
+                    claimCheckNumber,
+                    phoneNumber,
+                    { status: ERROR, reason: 'retries-exhausted' },
+                );
+            });
+
+            it('should record an error on the first attempt of a permanent failure', async () => {
+                authenticationService.authenticate.mockRejectedValue(
+                    new Error('Invalid credentials'),
+                );
+
+                await expect(
+                    sendMethod(mockUser, {
+                        claimCheckNumber,
+                        notificationType: notificationTypes.Xur,
+                    }),
+                ).rejects.toThrow('Invalid credentials');
+
+                expect(ClaimCheck.advance).toHaveBeenCalledExactlyOnceWith(
+                    claimCheckNumber,
+                    phoneNumber,
+                    { status: ERROR, reason: 'permanent' },
+                );
+            });
+
+            it("should fail with the job's own error when the receipt cannot be written", async () => {
+                const transientError = transient();
+
+                ClaimCheck.advance.mockRejectedValue(new Error('Redis is down'));
+
+                await expect(
+                    sendMethod(
+                        mockUser,
+                        { claimCheckNumber, notificationType: notificationTypes.Xur },
+                        attempt(3),
+                    ),
+                ).rejects.toBe(transientError);
+            });
+        });
+
         describe('when notification type is not Xur', () => {
-            it('should not process non-Xur notifications', async () => {
+            it('should not process non-Xur notifications, recording why', async () => {
                 await sendMethod(mockUser, {
                     claimCheckNumber,
                     notificationType: notificationTypes.Gunsmith,
@@ -1124,6 +1296,11 @@ describe('NotificationController', () => {
                 expect(authenticationService.authenticate).not.toHaveBeenCalled();
                 expect(destinyService.getProfile).not.toHaveBeenCalled();
                 expect(notificationService.sendMessage).not.toHaveBeenCalled();
+                expect(ClaimCheck.advance).toHaveBeenCalledExactlyOnceWith(
+                    claimCheckNumber,
+                    phoneNumber,
+                    { status: SKIPPED, reason: 'unsupported-type' },
+                );
             });
         });
     });

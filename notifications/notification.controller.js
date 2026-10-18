@@ -8,7 +8,7 @@ import NotificationError from './notification.error.js';
 import notificationTypes from './notification.types.js';
 import DestinyError from '../destiny/destiny.error.js';
 import XurUnavailableError from './xur-unavailable.error.js';
-import ClaimCheck, { DUPLICATE, SKIPPED } from '../helpers/claim-check.js';
+import ClaimCheck, { DUPLICATE, ERROR, SKIPPED } from '../helpers/claim-check.js';
 import mayDeliver from '../helpers/consent.js';
 import log from '../helpers/log.js';
 import currentWeeklyReset from '../helpers/weekly-reset.js';
@@ -86,22 +86,34 @@ class NotificationController {
      * the two. The suppression path has the same problem in a quieter form: a
      * failed receipt would retry a job that is only going to suppress again.
      *
-     * Ordering and terminal-state semantics for this hash are #717's; this
-     * only stops a receipt failure from causing a send.
+     * The ordering rules - nothing moves a recipient backwards - are the
+     * claim check's own; see `ADVANCE`.
      * @param {string} claimCheckNumber
      * @param {string} phoneNumber
-     * @param {string} status
+     * @param {import('../helpers/claim-check.js').ClaimCheckEntry} outcome
      * @returns {Promise<void>}
      */
-    static async #recordOutcome(claimCheckNumber, phoneNumber, status) {
+    static async #recordOutcome(claimCheckNumber, phoneNumber, outcome) {
         try {
-            await ClaimCheck.updatePhoneNumber(claimCheckNumber, phoneNumber, status);
+            await ClaimCheck.advance(claimCheckNumber, phoneNumber, outcome);
         } catch (err) {
             log.warn(
-                { err, claimCheckNumber, phoneNumber, status },
+                { err, claimCheckNumber, phoneNumber, outcome },
                 'Unable to record the claim-check outcome.',
             );
         }
+    }
+
+    /**
+     * What Twilio said when it accepted a message, or the skip recorded when
+     * the final consent check withheld it.
+     * @param {{ sid: string, status: string } | undefined} sent
+     * @returns {import('../helpers/claim-check.js').ClaimCheckEntry}
+     */
+    static #sentOutcome(sent) {
+        return sent
+            ? { status: sent.status, sid: sent.sid }
+            : { status: SKIPPED, reason: 'opted-out' };
     }
 
     /**
@@ -149,9 +161,40 @@ class NotificationController {
             return true;
         }
 
-        await NotificationController.#recordOutcome(claimCheckNumber, phoneNumber, SKIPPED);
+        await NotificationController.#recordOutcome(claimCheckNumber, phoneNumber, {
+            status: SKIPPED,
+            reason: 'opted-out',
+        });
 
         return false;
+    }
+
+    /**
+     * Send one recipient's notification, recording an error on their receipt
+     * when this is the attempt BullMQ will not retry: a permanent failure, or
+     * the last of their attempts. An earlier attempt's failure records nothing,
+     * since the retry may yet send.
+     * @param {QueuedUser} user
+     * @param {{ claimCheckNumber: string, notificationType: string }} properties
+     * @param {import('bullmq').Job} job
+     * @returns {Promise<void>}
+     */
+    async #send(user, properties, job) {
+        try {
+            await this.#deliver(user, properties);
+        } catch (err) {
+            const permanent = err instanceof UnrecoverableError;
+
+            if (permanent || job.attemptsMade + 1 >= (job.opts.attempts ?? 1)) {
+                await NotificationController.#recordOutcome(
+                    properties.claimCheckNumber,
+                    user.phoneNumber,
+                    { status: ERROR, reason: permanent ? 'permanent' : 'retries-exhausted' },
+                );
+            }
+
+            throw err;
+        }
     }
 
     /**
@@ -159,7 +202,7 @@ class NotificationController {
      * @param {{ claimCheckNumber: string, notificationType: string }} param1
      * @returns {Promise<void>}
      */
-    async #send(user, { claimCheckNumber, notificationType }) {
+    async #deliver(user, { claimCheckNumber, notificationType }) {
         const { membershipId, membershipType, phoneNumber } = user;
 
         /**
@@ -193,6 +236,10 @@ class NotificationController {
                         { membershipId, membershipType },
                         'Skipping Xur notification: user could not be authenticated.',
                     );
+                    await NotificationController.#recordOutcome(claimCheckNumber, phoneNumber, {
+                        status: SKIPPED,
+                        reason: 'unauthenticated',
+                    });
 
                     return;
                 }
@@ -279,8 +326,13 @@ class NotificationController {
                     await NotificationController.#recordOutcome(
                         claimCheckNumber,
                         phoneNumber,
-                        sent ? sent.status : SKIPPED,
+                        NotificationController.#sentOutcome(sent),
                     );
+                } else {
+                    await NotificationController.#recordOutcome(claimCheckNumber, phoneNumber, {
+                        status: SKIPPED,
+                        reason: 'no-characters',
+                    });
                 }
             } catch (err) {
                 if (err instanceof XurUnavailableError) {
@@ -303,7 +355,7 @@ class NotificationController {
                     await NotificationController.#recordOutcome(
                         claimCheckNumber,
                         phoneNumber,
-                        sent ? sent.status : SKIPPED,
+                        NotificationController.#sentOutcome(sent),
                     );
 
                     return;
@@ -331,6 +383,16 @@ class NotificationController {
 
                 throw unrecoverableError;
             }
+        } else {
+            /**
+             * No other type has a sender yet (#722). Recorded rather than
+             * left pending, so the receipt says nothing was sent instead of
+             * looking like a job still waiting to run.
+             */
+            await NotificationController.#recordOutcome(claimCheckNumber, phoneNumber, {
+                status: SKIPPED,
+                reason: 'unsupported-type',
+            });
         }
     }
 
@@ -358,15 +420,25 @@ class NotificationController {
     async #broadcast({ weeklyReset }, { claimCheckNumber, notificationType }, job) {
         const claimCheck = new ClaimCheck(claimCheckNumber);
         const limit = pLimit(20);
-        /** @param {import('../users/user.service.js').SubscribedUser} user */
+        /**
+         * Recorded before it is queued, so the worker that sends it always
+         * finds an entry to move on. A failure between the two leaves the
+         * recipient pending, and the page's retry queues them under the same
+         * entry.
+         * @param {import('../users/user.service.js').SubscribedUser} user
+         */
         const queueRecipient = async user => {
+            await claimCheck.addPhoneNumber(user.phoneNumber);
+
             const { deduplicated } = await this.publisher.sendNotification(user, {
                 notificationType,
                 claimCheckNumber,
                 deduplicationId: `${notificationType}-${weeklyReset}-${user.phoneNumber}`,
             });
 
-            await claimCheck.addPhoneNumber(user.phoneNumber, deduplicated ? DUPLICATE : undefined);
+            if (deduplicated) {
+                await ClaimCheck.advance(claimCheckNumber, user.phoneNumber, { status: DUPLICATE });
+            }
 
             return deduplicated;
         };
@@ -459,12 +531,18 @@ class NotificationController {
                     throw new NotificationError('user has opted out of notifications');
                 }
 
+                /**
+                 * Recorded before it is queued, so a worker that finishes
+                 * before this request returns finds an entry to move on. If
+                 * the queueing fails, the entry stays pending under an id the
+                 * caller was never given, and expires with it.
+                 */
+                await claimCheck.addPhoneNumber(phoneNumber);
                 await this.publisher.sendNotification(user, {
                     notificationType: subscription,
                     claimCheckNumber,
                     deduplicationId: `${claimCheckNumber}-${user.phoneNumber}`,
                 });
-                await claimCheck.addPhoneNumber(phoneNumber);
 
                 return { claimCheckNumber };
             }

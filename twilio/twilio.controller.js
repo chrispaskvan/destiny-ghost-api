@@ -119,6 +119,7 @@ function isRetryableConsentError(err) {
  *   SmsSid?: string,
  *   SmsStatus?: string,
  *   To?: string,
+ *   MessageSid?: string,
  *   MessageStatus?: string,
  *   ClaimCheck?: string,
  * } & Record<string, string | undefined>} TwilioWebhookBody
@@ -702,6 +703,7 @@ class TwilioController {
     async statusCallback(message) {
         const {
             ClaimCheck: claimCheck,
+            MessageSid: sid,
             MessageStatus: messageStatus,
             SmsStatus: smsStatus,
             To: phoneNumber,
@@ -725,8 +727,17 @@ class TwilioController {
                     SmsStatus: status,
                 }),
             );
+            /**
+             * The receipt is only the latest word; every report is kept above,
+             * in arrival order (`adr-files/twilio-message-status.md`). These
+             * arrive out of order and sometimes twice, so the receipt moves
+             * forward only, and only for the message it is tracking.
+             */
             if (claimCheck) {
-                await ClaimCheck.updatePhoneNumber(claimCheck, phoneNumber, status);
+                await ClaimCheck.advance(claimCheck, phoneNumber, {
+                    status,
+                    ...(sid && { sid }),
+                });
             }
         }
     }
