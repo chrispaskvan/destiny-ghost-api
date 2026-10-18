@@ -184,14 +184,23 @@ describe('NotificationController', () => {
                 );
             });
 
-            it('should queue nothing when the recipient cannot be recorded', async () => {
+            /**
+             * The receipt never decides who is sent to: a Redis outage costs
+             * the recipient their entry, not their notification.
+             */
+            it('should still queue the job when the recipient cannot be recorded', async () => {
                 userService.getUserByPhoneNumber.mockResolvedValue(mockUser);
+                publisher.sendNotification.mockResolvedValue({ deduplicated: false });
                 mockClaimCheck.addPhoneNumber.mockRejectedValue(new Error('Redis is down'));
 
                 await expect(
                     notificationController.create(notificationTypes.Xur, { phoneNumber }),
-                ).rejects.toThrow('Redis is down');
-                expect(publisher.sendNotification).not.toHaveBeenCalled();
+                ).resolves.toEqual({ claimCheckNumber });
+                expect(publisher.sendNotification).toHaveBeenCalledOnce();
+                expect(log.warn).toHaveBeenCalledWith(
+                    expect.objectContaining({ claimCheckNumber, phoneNumber }),
+                    'Unable to record the recipient on the claim check; sending without it.',
+                );
             });
 
             it('should throw NotificationError when user is not found', async () => {
@@ -604,15 +613,19 @@ describe('NotificationController', () => {
             );
         });
 
-        it('should not queue a recipient it could not record', async () => {
+        it('should still queue a recipient it could not record, without failing the page', async () => {
             userService.getSubscribedUsersPage.mockResolvedValueOnce({
                 users: [mockUser],
                 cursor: undefined,
             });
             mockClaimCheck.addPhoneNumber.mockRejectedValue(new Error('Redis is down'));
 
-            await expect(run(jobWith())).rejects.toThrow();
-            expect(publisher.sendNotification).not.toHaveBeenCalled();
+            await expect(run(jobWith())).resolves.toEqual({
+                queued: 1,
+                duplicates: 0,
+                done: true,
+            });
+            expect(publisher.sendNotification).toHaveBeenCalledOnce();
         });
     });
 

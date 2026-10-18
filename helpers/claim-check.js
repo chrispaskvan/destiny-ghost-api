@@ -1,6 +1,7 @@
 // @ts-check
 import { createId } from '@paralleldrive/cuid2';
 import cache from './cache.js';
+import processExternalPromisesWithTimeout from './process-external-promises-with-timeout.js';
 
 /**
  * How long a receipt outlives its last write. Every write refreshes it, so a
@@ -8,6 +9,38 @@ import cache from './cache.js';
  * the receipt alive rather than racing a clock started when it was created.
  */
 const claimCheckExpiration = 86400; // 1 day in seconds
+
+/**
+ * Bounds every write to a receipt. node-redis queues commands while it
+ * reconnects rather than failing them, so an unbounded write does not fail on
+ * a dropped connection - it waits for one that may not come back, holding up
+ * whatever awaits it: a send, a Twilio webhook, a shutdown draining its last
+ * outcomes. A receipt is worth less than any of those.
+ *
+ * Longer than the consent marker's, which sits inside the rate limiter's one
+ * slot: a Redis that is slow but answering should still get its receipts.
+ *
+ * A write that times out is still sent once the client reconnects. That is
+ * safe for both: `advance` applies its rank rules whenever it lands, and
+ * `addPhoneNumber` never overwrites an entry already there.
+ */
+const CLAIM_CHECK_TIMEOUT_MS = 1000;
+
+/**
+ * Await a receipt command, but no longer than the timeout above.
+ * @template T
+ * @param {Promise<T>} command
+ * @returns {Promise<T>} what the command resolved with; rejects with its
+ * error, or with one of its own when it timed out
+ */
+const bounded = async command => {
+    const [result] = await processExternalPromisesWithTimeout([command], CLAIM_CHECK_TIMEOUT_MS);
+
+    if (result.status === 'fulfilled') return result.value;
+    if (result.status === 'rejected') throw result.reason;
+
+    throw new Error(`The claim check did not answer within ${CLAIM_CHECK_TIMEOUT_MS}ms.`);
+};
 
 /**
  * The status a recipient starts in: their job is in our queue and has not
@@ -217,7 +250,9 @@ class ClaimCheck {
      * Record a recipient as pending, unless they already have an entry.
      *
      * Called before their job is queued, never after, so the worker that
-     * sends it always finds an entry to move forward. A broadcast that
+     * sends it finds an entry to move forward. Rejects, within the timeout,
+     * when it cannot; callers send regardless, and the receipt goes without
+     * that recipient. A broadcast that
      * resumes after a crash records its last page again, and by then some of
      * those recipients may have been sent to; their entry is kept rather than
      * put back to pending.
@@ -225,11 +260,13 @@ class ClaimCheck {
      */
     async addPhoneNumber(phoneNumber) {
         // One round trip, and no hash left without its expiry between the two.
-        await cache
-            .multi()
-            .hSetNX(this.#number, phoneNumber, JSON.stringify({ status: PENDING }))
-            .expire(this.#number, claimCheckExpiration)
-            .exec();
+        await bounded(
+            cache
+                .multi()
+                .hSetNX(this.#number, phoneNumber, JSON.stringify({ status: PENDING }))
+                .expire(this.#number, claimCheckExpiration)
+                .exec(),
+        );
     }
 
     /**
@@ -256,10 +293,12 @@ class ClaimCheck {
      * @returns {Promise<boolean>} whether the entry was written
      */
     static async advance(claimCheckNumber, phoneNumber, entry) {
-        const written = await cache.eval(ADVANCE, {
-            keys: [claimCheckNumber],
-            arguments: [phoneNumber, JSON.stringify(entry), String(claimCheckExpiration)],
-        });
+        const written = await bounded(
+            cache.eval(ADVANCE, {
+                keys: [claimCheckNumber],
+                arguments: [phoneNumber, JSON.stringify(entry), String(claimCheckExpiration)],
+            }),
+        );
 
         return written === 1;
     }
@@ -268,6 +307,7 @@ class ClaimCheck {
 export {
     ClaimCheck as default,
     ADVANCE,
+    CLAIM_CHECK_TIMEOUT_MS,
     claimCheckExpiration,
     DUPLICATE,
     ERROR,

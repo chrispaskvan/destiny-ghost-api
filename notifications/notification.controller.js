@@ -108,6 +108,30 @@ class NotificationController {
     }
 
     /**
+     * Record a recipient as pending before their job is queued, without
+     * letting the receipt decide whether they are sent to.
+     *
+     * The same rule as `#recordOutcome`, from the other side: a receipt that
+     * cannot be written must not stop a send any more than it may cause one.
+     * Redis being down or slow - the write is bounded - costs this recipient
+     * their place on the receipt, and their worker's outcome then finds no
+     * entry and is dropped, as one for an expired receipt would be.
+     * @param {ClaimCheck} claimCheck
+     * @param {string} phoneNumber
+     * @returns {Promise<void>}
+     */
+    static async #recordPending(claimCheck, phoneNumber) {
+        try {
+            await claimCheck.addPhoneNumber(phoneNumber);
+        } catch (err) {
+            log.warn(
+                { err, claimCheckNumber: claimCheck.number, phoneNumber },
+                'Unable to record the recipient on the claim check; sending without it.',
+            );
+        }
+    }
+
+    /**
      * What Twilio said when it accepted a message, or the skip recorded when
      * the final consent check withheld it.
      * @param {{ sid: string, status: string } | undefined} sent
@@ -422,21 +446,19 @@ class NotificationController {
         const claimCheck = new ClaimCheck(claimCheckNumber);
         const limit = pLimit(20);
         /**
-         * Recorded before it is queued, so the worker that sends it always
-         * finds an entry to move on. A failure between the two leaves the
+         * Recorded before it is queued, so the worker that sends it finds an
+         * entry to move on. A queueing failure after that leaves the
          * recipient pending, and the page's retry queues them under the same
-         * entry.
+         * entry. A recipient who cannot be recorded is queued anyway.
          *
          * Marked a duplicate only when another operation holds them. One
          * deduplicated against this operation's own job is already on this
-         * receipt, and that job's outcome is the one to report. The mark is
-         * an outcome like any other, so failing to write it fails nothing;
-         * failing to record the recipient at all fails the page, since their
-         * worker would then have no entry to move on.
+         * receipt, and that job's outcome is the one to report. Neither write
+         * fails the page: the receipt never decides who is sent to.
          * @param {import('../users/user.service.js').SubscribedUser} user
          */
         const queueRecipient = async user => {
-            await claimCheck.addPhoneNumber(user.phoneNumber);
+            await NotificationController.#recordPending(claimCheck, user.phoneNumber);
 
             const { deduplicated, ownOperation } = await this.publisher.sendNotification(user, {
                 notificationType,
@@ -592,9 +614,10 @@ class NotificationController {
                  * Recorded before it is queued, so a worker that finishes
                  * before this request returns finds an entry to move on. If
                  * the queueing fails, the entry stays pending under an id the
-                 * caller was never given, and expires with it.
+                 * caller was never given, and expires with it. If recording
+                 * fails, the job is queued anyway.
                  */
-                await claimCheck.addPhoneNumber(phoneNumber);
+                await NotificationController.#recordPending(claimCheck, phoneNumber);
                 await this.publisher.sendNotification(user, {
                     notificationType: subscription,
                     claimCheckNumber,

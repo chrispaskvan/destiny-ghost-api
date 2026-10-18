@@ -1,6 +1,7 @@
-import { describe, expect, it, beforeEach, vi } from 'vitest';
+import { afterEach, describe, expect, it, beforeEach, vi } from 'vitest';
 import ClaimCheck, {
     ADVANCE,
+    CLAIM_CHECK_TIMEOUT_MS,
     claimCheckExpiration,
     DUPLICATE,
     ERROR,
@@ -126,6 +127,10 @@ const fakeRedis = () => {
 };
 
 describe('ClaimCheck', () => {
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
     /** @type {ClaimCheck} */
     let claimCheck;
     /** @type {ReturnType<typeof fakeRedis>} */
@@ -198,6 +203,31 @@ describe('ClaimCheck', () => {
                 status: 'delivered',
                 sid,
             });
+        });
+
+        /**
+         * node-redis queues a command while it reconnects instead of failing
+         * it, so without a bound this would wait on a connection that may
+         * never come back - and hold the send up with it.
+         */
+        it('should give up on a write Redis does not answer in time', async () => {
+            vi.useFakeTimers();
+            cache.multi.mockReturnValueOnce({
+                hSetNX() {
+                    return this;
+                },
+                expire() {
+                    return this;
+                },
+                exec: vi.fn(() => new Promise(() => {})),
+            });
+
+            const recording = expect(claimCheck.addPhoneNumber(testPhoneNumber)).rejects.toThrow(
+                `did not answer within ${CLAIM_CHECK_TIMEOUT_MS}ms`,
+            );
+
+            await vi.advanceTimersByTimeAsync(CLAIM_CHECK_TIMEOUT_MS);
+            await recording;
         });
 
         it('should reject when Redis does', async () => {
@@ -282,6 +312,18 @@ describe('ClaimCheck', () => {
                     String(claimCheckExpiration),
                 ],
             });
+        });
+
+        it('should give up on a write Redis does not answer in time', async () => {
+            vi.useFakeTimers();
+            cache.eval.mockReturnValueOnce(new Promise(() => {}));
+
+            const advancing = expect(
+                ClaimCheck.advance(testClaimCheckId, testPhoneNumber, { status: 'sent', sid }),
+            ).rejects.toThrow(`did not answer within ${CLAIM_CHECK_TIMEOUT_MS}ms`);
+
+            await vi.advanceTimersByTimeAsync(CLAIM_CHECK_TIMEOUT_MS);
+            await advancing;
         });
 
         it('should reject when Redis does', async () => {
