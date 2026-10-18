@@ -53,8 +53,10 @@ const queue = new Queue(QUEUE_NAME, {
  * @typedef {Object} BroadcastProgress
  * @property {string} [cursor] - where the next page of subscribers starts
  * @property {number} queued - recipients queued by this broadcast
- * @property {number} duplicates - recipients already queued for this event
- * by another operation
+ * @property {number} duplicates - recipients already queued for this event,
+ * by another operation or earlier in this one (two documents sharing a phone
+ * number, say). Counts user documents, so it can exceed the `duplicate`
+ * entries on the claim check, which marks only another operation's
  * @property {boolean} done - every page has been queued
  */
 
