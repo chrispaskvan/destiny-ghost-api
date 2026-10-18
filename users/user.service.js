@@ -13,6 +13,11 @@ import notificationTypes from '../notifications/notification.types.js';
  */
 const messageCollectionId = 'Messages';
 const userCollectionId = 'Users';
+/**
+ * Subscribers read per page of a broadcast: small enough that a page re-run
+ * after a crash is cheap, large enough that a broadcast is a few round trips.
+ */
+const SUBSCRIBED_USERS_PAGE_SIZE = 100;
 
 /**
  * Schema for Bungie OAuth tokens.
@@ -479,22 +484,31 @@ class UserService {
     }
 
     /**
-     * Get subscribed users for a given notification type. Excludes users who
-     * have opted out via SMS (isSubscribed === false); users missing the
-     * field are treated as subscribed, since it defaults to true and existing
-     * documents predate the field.
+     * The notification type itself, or a rejection when it is not one there
+     * are subscriptions for.
      * @param {string} notificationType
-     * @returns {Promise<SubscribedUser[]>}
+     * @returns {string}
      */
-    async getSubscribedUsers(notificationType) {
+    static #notificationFor(notificationType) {
         const notification = Object.values(notificationTypes).find(
             type => notificationType === type,
         );
 
         if (!notification) {
-            return Promise.reject(Error('notificationType is not valid'));
+            throw new Error('notificationType is not valid');
         }
 
+        return notification;
+    }
+
+    /**
+     * The query for users subscribed to a notification type, or a rejection
+     * when the type is not one there are subscriptions for.
+     * @param {string} notificationType
+     * @returns {import('../helpers/queryBuilder.js').Query}
+     */
+    static #subscribedUsersQuery(notificationType) {
+        const notification = UserService.#notificationFor(notificationType);
         const qb = new QueryBuilder();
 
         qb.select('displayName')
@@ -507,11 +521,103 @@ class UserService {
             .where('type', notification)
             .where('enabled', true);
 
+        return qb.getQuery();
+    }
+
+    /**
+     * Get subscribed users for a given notification type. Excludes users who
+     * have opted out via SMS (isSubscribed === false); users missing the
+     * field are treated as subscribed, since it defaults to true and existing
+     * documents predate the field.
+     * @param {string} notificationType
+     * @returns {Promise<SubscribedUser[]>}
+     */
+    async getSubscribedUsers(notificationType) {
         const documents = /** @type {SubscribedUser[]} */ (
-            await this.documents.getDocuments(userCollectionId, qb.getQuery())
+            await this.documents.getDocuments(
+                userCollectionId,
+                UserService.#subscribedUsersQuery(notificationType),
+            )
         );
 
         return documents.filter(document => document.isSubscribed !== false);
+    }
+
+    /**
+     * Get one page of the users `getSubscribedUsers` would return, so a
+     * broadcast can work through them a page at a time and record where it
+     * got to.
+     *
+     * Pages are keyed on the document id, in id order: each page starts after
+     * the last id the previous one returned. Ids never change, so a user who
+     * stays subscribed throughout is never skipped, however other documents
+     * change meanwhile - an opaque continuation token cannot promise that,
+     * because a query without `ORDER BY` has no defined order to resume in.
+     * Pages are still read live: a user who subscribes part way through is
+     * included only if their id is past the cursor when it gets there.
+     *
+     * The cursor is the last id Cosmos returned, before opted-out users are
+     * dropped, so a page that ends on one still moves the cursor on.
+     *
+     * Ids are not unique across partitions: `movePlatform` recreates a user
+     * under the same id in their new platform's partition, and the old copy
+     * stays, marked `movedTo`, until it is cleaned up. Both copies are read,
+     * because between marking the old copy and creating the new one - or
+     * after that create failed - the marked copy is the only one there is.
+     * What must not happen is a page ending between two copies of one id,
+     * which would carry the cursor past the second. So a full page holds back
+     * the rows of its last id and stops the cursor before them; the next page
+     * reads every copy of that id together. A page holds 100 rows and an id
+     * has at most two copies, so every page still moves on.
+     *
+     * With every copy of an id on one page, the page keeps one per id: the
+     * live copy when there is one, the marked copy only when it is all there
+     * is. Sending to both would leave it to chance which one recipient
+     * deduplication kept, and the one kept is the identity the send then uses
+     * with Bungie - the old platform's, if the marked copy won.
+     * `QueryBuilder` has no `TOP`, `ORDER BY` or range filter, so the query
+     * is written out; its select, join and filters match `getSubscribedUsers`.
+     * @param {string} notificationType
+     * @param {string} [cursor] - the last id the previous page returned;
+     * omitted for the first page
+     * @returns {Promise<{ users: SubscribedUser[], cursor: string | undefined }>}
+     * `cursor` is undefined after the last page
+     */
+    async getSubscribedUsersPage(notificationType, cursor = '') {
+        const notification = UserService.#notificationFor(notificationType);
+        const items = /** @type {(SubscribedUser & { id: string, movedTo?: number })[]} */ (
+            await this.documents.getDocuments(userCollectionId, {
+                query:
+                    'SELECT TOP @pageSize u.id, u.displayName, u.isSubscribed, u.membershipId, ' +
+                    'u.membershipType, u.movedTo, u.phoneNumber ' +
+                    'FROM Users u JOIN n IN u.notifications ' +
+                    'WHERE n.type = @type AND n.enabled = @enabled ' +
+                    'AND u.id > @after ' +
+                    'ORDER BY u.id',
+                parameters: [
+                    { name: '@pageSize', value: SUBSCRIBED_USERS_PAGE_SIZE },
+                    { name: '@type', value: notification },
+                    { name: '@enabled', value: true },
+                    { name: '@after', value: cursor },
+                ],
+            })
+        );
+        const full = items.length === SUBSCRIBED_USERS_PAGE_SIZE;
+        const lastId = items.at(-1)?.id;
+        const held = full ? items.filter(({ id }) => id !== lastId) : items;
+        const live = new Set(
+            held.filter(({ movedTo }) => movedTo === undefined).map(({ id }) => id),
+        );
+        const current = held.filter(({ id, movedTo }) => movedTo === undefined || !live.has(id));
+        const users = current.filter(user => user.isSubscribed !== false);
+        /**
+         * The fallback to `lastId` is for a page made of one id alone, which
+         * two copies at most cannot fill; it keeps the cursor moving rather
+         * than reading the same page forever.
+         */
+        const next = full ? (held.at(-1)?.id ?? lastId) : undefined;
+
+        return { users, cursor: next };
     }
 
     /**
@@ -783,6 +889,27 @@ class UserService {
         return /** @type {*} */ (
             UserService.#oneLiveDocument(documents, `phoneNumber ${phoneNumber}`)
         );
+    }
+
+    /**
+     * Whether the account behind a number is part way through a platform move:
+     * it has documents, and every one is marked `movedTo`. `movePlatform`
+     * marks the old copy before creating the new one, so this is the gap
+     * between those writes - or a move whose create failed, until
+     * `clearPlatformMove` restores it. Lookups that want the live record find
+     * nothing here, which is not the same as there being no account.
+     * @param {string} phoneNumber
+     * @returns {Promise<boolean>}
+     */
+    async isMovingPlatforms(phoneNumber) {
+        const documents = /** @type {{ movedTo?: number }[]} */ (
+            await this.documents.getDocuments(
+                userCollectionId,
+                new QueryBuilder().select('movedTo').where('phoneNumber', phoneNumber).getQuery(),
+            )
+        );
+
+        return documents.length > 0 && documents.every(({ movedTo }) => movedTo !== undefined);
     }
 
     /**

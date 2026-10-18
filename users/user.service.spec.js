@@ -1117,6 +1117,207 @@ describe('UserService', () => {
         });
     });
 
+    describe('isMovingPlatforms', () => {
+        it.each([
+            ['every document is marked', [{ movedTo: 3 }], true],
+            ['a live document remains', [{ movedTo: 3 }, {}], false],
+            ['there is no document at all', [], false],
+        ])('should say %s means %s', async (_label, documents, moving) => {
+            documentService.getDocuments.mockResolvedValue(documents);
+
+            await expect(userService.isMovingPlatforms('+12085550123')).resolves.toBe(moving);
+
+            const [[, query]] = documentService.getDocuments.mock.calls;
+
+            expect(query.query).toContain('movedTo');
+            expect(query.parameters).toEqual([{ name: '@phoneNumber', value: '+12085550123' }]);
+        });
+    });
+
+    describe('getSubscribedUsersPage', () => {
+        const parametersOf = ({ parameters }) =>
+            Object.fromEntries(parameters.map(({ name, value }) => [name, value]));
+        const subscribers = count =>
+            Array.from({ length: count }, (_, index) => ({
+                ...user,
+                id: `user-${String(index).padStart(4, '0')}`,
+                isSubscribed: true,
+            }));
+
+        it('should reject a type there are no subscriptions for', async () => {
+            await expect(userService.getSubscribedUsersPage('not-a-type')).rejects.toThrow();
+            expect(documentService.getDocuments).not.toHaveBeenCalled();
+        });
+
+        it('should read in id order from after the cursor, with the same join and filters as getSubscribedUsers', async () => {
+            documentService.getDocuments.mockResolvedValue([]);
+
+            await userService.getSubscribedUsers('Xur');
+            await userService.getSubscribedUsersPage('Xur', 'user-0099');
+
+            const [[, all], [collection, page]] = documentService.getDocuments.mock.calls;
+
+            expect(collection).toBe('Users');
+            expect(page.query).toContain(all.query.slice(all.query.indexOf(' FROM ')));
+            expect(page.query).toMatch(/^SELECT TOP @pageSize u\.id, /);
+            expect(page.query).toContain('u.movedTo');
+            expect(page.query).toMatch(/ AND u\.id > @after ORDER BY u\.id$/);
+            expect(parametersOf(page)).toEqual({
+                ...parametersOf(all),
+                '@pageSize': 100,
+                '@after': 'user-0099',
+            });
+        });
+
+        it('should start the first page before every id', async () => {
+            documentService.getDocuments.mockResolvedValue([]);
+
+            await userService.getSubscribedUsersPage('Xur');
+
+            const [[, page]] = documentService.getDocuments.mock.calls;
+
+            expect(parametersOf(page)['@after']).toBe('');
+        });
+
+        it("should hold back a full page's last id for the next page, stopping the cursor before it", async () => {
+            documentService.getDocuments.mockResolvedValue(subscribers(100));
+
+            const page = await userService.getSubscribedUsersPage('Xur');
+
+            expect(page.users.map(({ id }) => id)).not.toContain('user-0099');
+            expect(page.users).toHaveLength(99);
+            expect(page.cursor).toBe('user-0098');
+        });
+
+        it('should move the cursor past opted-out users, so a page ending on one does not repeat', async () => {
+            const items = subscribers(100);
+
+            items[98].isSubscribed = false;
+            documentService.getDocuments.mockResolvedValue(items);
+
+            const page = await userService.getSubscribedUsersPage('Xur');
+
+            expect(page.users).toHaveLength(98);
+            expect(page.cursor).toBe('user-0098');
+        });
+
+        it('should end after a page shorter than a full one', async () => {
+            documentService.getDocuments.mockResolvedValue(subscribers(42));
+
+            await expect(userService.getSubscribedUsersPage('Xur')).resolves.toMatchObject({
+                cursor: undefined,
+            });
+        });
+
+        /**
+         * `movePlatform` leaves the old copy of a user, under the same id, in
+         * their old partition until it is cleaned up. Both copies are read,
+         * and a page must never end between them: here the old copy is the
+         * 100th row and the live one the 101st, so a cursor that stopped on
+         * the 100th would carry the next page past the live copy.
+         */
+        it('should read every copy of an id on one page, so a move cannot hide a subscriber', async () => {
+            const live = subscribers(150);
+            const superseded = { ...live[99], membershipType: 1, movedTo: 3 };
+
+            documentService.getDocuments.mockImplementation(async (_collection, query) => {
+                const { '@pageSize': size, '@after': after } = parametersOf(query);
+
+                return [superseded, ...live]
+                    .filter(({ id }) => id > after)
+                    .sort((a, b) => a.id.localeCompare(b.id))
+                    .slice(0, size);
+            });
+
+            const seen = [];
+            let cursor;
+
+            do {
+                const page = await userService.getSubscribedUsersPage('Xur', cursor);
+
+                seen.push(...page.users);
+                ({ cursor } = page);
+            } while (cursor);
+
+            for (const { id } of live) {
+                expect(
+                    seen.filter(user => user.id === id && user.movedTo === undefined),
+                ).toHaveLength(1);
+            }
+            expect(seen.filter(({ movedTo }) => movedTo !== undefined)).toEqual([]);
+        });
+
+        it('should keep one copy per id: the live one when there is one, the marked one when it is all there is', async () => {
+            const [live, moving, other] = subscribers(3);
+
+            documentService.getDocuments.mockResolvedValue([
+                { ...live, membershipType: 1, movedTo: 3 },
+                live,
+                { ...moving, membershipType: 1, movedTo: 3 },
+                other,
+            ]);
+
+            const { users } = await userService.getSubscribedUsersPage('Xur');
+
+            expect(users).toEqual([live, { ...moving, membershipType: 1, movedTo: 3 }, other]);
+        });
+
+        it("should follow the live copy's consent, not the superseded copy's", async () => {
+            const [user] = subscribers(1);
+
+            documentService.getDocuments.mockResolvedValue([
+                { ...user, membershipType: 1, movedTo: 3, isSubscribed: true },
+                { ...user, isSubscribed: false },
+            ]);
+
+            const { users } = await userService.getSubscribedUsersPage('Xur');
+
+            expect(users).toEqual([]);
+        });
+
+        /**
+         * The property the keyset exists for: documents changing between
+         * pages - someone new subscribing behind the cursor, someone ahead of
+         * it being updated - cannot make the broadcast skip anyone who stayed
+         * subscribed throughout. The fake evaluates the query the way Cosmos
+         * would: ids after the cursor, in id order, at most a page.
+         */
+        it('should not skip anyone who stays subscribed while other documents change between pages', async () => {
+            let store = subscribers(250);
+
+            documentService.getDocuments.mockImplementation(async (_collection, query) => {
+                const { '@pageSize': size, '@after': after } = parametersOf(query);
+
+                return store
+                    .filter(({ id }) => id > after)
+                    .sort((a, b) => a.id.localeCompare(b.id))
+                    .slice(0, size);
+            });
+
+            const seen = [];
+            let cursor;
+
+            do {
+                const page = await userService.getSubscribedUsersPage('Xur', cursor);
+
+                seen.push(...page.users.map(({ id }) => id));
+                ({ cursor } = page);
+                store = [
+                    { ...user, id: 'user-0000a', isSubscribed: true },
+                    ...store.map(document =>
+                        document.id === 'user-0200'
+                            ? { ...document, displayName: 'renamed' }
+                            : document,
+                    ),
+                ];
+            } while (cursor);
+
+            for (const { id } of subscribers(250)) {
+                expect(seen.filter(seenId => seenId === id)).toHaveLength(1);
+            }
+        });
+    });
+
     describe('getUserById', () => {
         describe('when user id defined', () => {
             it('should return an existing user', () => {

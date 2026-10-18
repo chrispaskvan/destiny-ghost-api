@@ -18,6 +18,7 @@ import loaders from './loaders/index.js';
 import publisher from './helpers/publisher.js';
 import subscriber from './helpers/subscriber.js';
 import consentQueue from './twilio/consent.queue.js';
+import broadcastQueue from './notifications/broadcast.queue.js';
 import processExternalPromisesWithTimeout from './helpers/process-external-promises-with-timeout.js';
 import pool from './helpers/pool.js';
 import { startServer as startGrpcServer, stopServer as stopGrpcServer } from './grpc.js';
@@ -53,6 +54,7 @@ const shutdownStages = [
         tasks: [
             ['Publisher', () => publisher.close()],
             ['Consent queue', () => consentQueue.close()],
+            ['Broadcast queue', () => broadcastQueue.close()],
         ],
         timeout: 3000,
     },

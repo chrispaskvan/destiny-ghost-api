@@ -39,11 +39,16 @@ class ClaimCheck {
     }
 
     /**
+     * Record a recipient's starting status, unless they already have one.
+     *
+     * A broadcast that resumes after a crash queues its last page again, and
+     * by then some of those recipients may have been sent to; their receipt
+     * must keep what it says rather than go back to `queued`.
      * @param {string} phoneNumber
      * @param {string} [status]
      */
     async addPhoneNumber(phoneNumber, status = 'queued') {
-        await cache.hSet(this.#number, phoneNumber, status);
+        await cache.hSetNX(this.#number, phoneNumber, status);
         await cache.expire(this.#number, claimCheckExpiration);
     }
 
