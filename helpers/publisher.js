@@ -202,7 +202,7 @@ class Publisher {
             },
         });
         const deduplicated = result.id !== jobId;
-        const ownOperation = deduplicated && String(result.id).startsWith(`${claimCheckNumber}-`);
+        const ownOperation = deduplicated && Publisher.#queuedBy(result.id, claimCheckNumber);
 
         log.info(
             {
@@ -219,18 +219,37 @@ class Publisher {
     }
 
     /**
-     * Whether a recipient's job for an operation exists. A rejected
-     * `sendNotification` does not prove it does not: the add can land in
-     * Redis and its reply be lost. Rejects when Redis does, so a caller can
-     * tell "not there" from "could not tell".
-     * @param {QueuedUser} user
+     * Whether a notification was queued under a deduplication id, and if so
+     * whether by this operation - what `sendNotification` would have said
+     * had its reply not been lost. A rejected `sendNotification` does not
+     * prove nothing was queued: the add can land in Redis and its reply be
+     * lost.
+     *
+     * Asked of the deduplication id rather than of this user's job id, since
+     * that is what a recipient is queued once under: another document
+     * sharing their phone number can hold it. It also outlives the job it
+     * came from, so a job that has already run and been pruned still counts
+     * as queued. Rejects when Redis does, so a caller can tell "not queued"
+     * from "could not tell".
+     * @param {string} deduplicationId
      * @param {string} claimCheckNumber
-     * @returns {Promise<boolean>}
+     * @returns {Promise<{ queued: boolean, ownOperation: boolean }>}
      */
-    async hasNotification({ membershipId }, claimCheckNumber) {
-        return Boolean(
-            await this.#queue.getJob(Publisher.#jobIdFor(claimCheckNumber, membershipId)),
-        );
+    async findNotification(deduplicationId, claimCheckNumber) {
+        const jobId = await this.#queue.getDeduplicationJobId(deduplicationId);
+
+        if (!jobId) return { queued: false, ownOperation: false };
+
+        return { queued: true, ownOperation: Publisher.#queuedBy(jobId, claimCheckNumber) };
+    }
+
+    /**
+     * Job ids begin with the claim check they were queued under.
+     * @param {string | undefined} jobId
+     * @param {string} claimCheckNumber
+     */
+    static #queuedBy(jobId, claimCheckNumber) {
+        return String(jobId).startsWith(`${claimCheckNumber}-`);
     }
 
     /**

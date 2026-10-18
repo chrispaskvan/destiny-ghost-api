@@ -8,6 +8,7 @@ import ClaimCheck, {
     legacy,
     PENDING,
     ranks,
+    RECORD_PENDING,
     SKIPPED,
 } from './claim-check.js';
 import cache from './cache.js';
@@ -16,8 +17,8 @@ import log from './log.js';
 vi.mock('./cache.js', () => ({
     default: {
         eval: vi.fn(),
-        multi: vi.fn(),
         hGetAll: vi.fn(),
+        withCommandOptions: vi.fn(),
     },
 }));
 vi.mock('./log.js', () => ({
@@ -48,45 +49,19 @@ const fakeRedis = () => {
     const store = new Map();
     const hash = key => store.get(key) ?? store.set(key, new Map()).get(key);
 
-    /** Each transaction's commands, as sent. */
-    const transactions = [];
-    const commands = {
-        hSetNX: (key, field, value) => {
-            if (hash(key).has(field)) return 0;
-            hash(key).set(field, value);
-
-            return 1;
-        },
-        expire: () => 1,
-    };
-
     return {
         store,
-        transactions,
-        multi: vi.fn(() => {
-            const queued = [];
-            const queue =
-                name =>
-                (...args) => {
-                    queued.push([name, ...args]);
-
-                    return transaction;
-                };
-            const transaction = {
-                hSetNX: queue('hSetNX'),
-                expire: queue('expire'),
-                exec: vi.fn(async () => {
-                    transactions.push(queued);
-
-                    return queued.map(([name, ...args]) => commands[name](...args));
-                }),
-            };
-
-            return transaction;
-        }),
         hGetAll: vi.fn(async key => Object.fromEntries(store.get(key) ?? [])),
-        eval: vi.fn(async (_script, options) => advance(options)),
+        eval: vi.fn(async (script, options) =>
+            script === ADVANCE ? advance(options) : recordPending(options),
+        ),
     };
+
+    function recordPending({ keys: [key], arguments: [field, json] }) {
+        if (!hash(key).has(field)) hash(key).set(field, json);
+
+        return 1;
+    }
 
     function advance({ keys: [key], arguments: [field, json] }) {
         const stored = store.get(key)?.get(field);
@@ -147,8 +122,17 @@ describe('ClaimCheck', () => {
         vi.clearAllMocks();
         redis = fakeRedis();
         cache.eval.mockImplementation(redis.eval);
-        cache.multi.mockImplementation(redis.multi);
         cache.hGetAll.mockImplementation(redis.hGetAll);
+        /**
+         * Stands in for node-redis's options proxy: the same commands, with
+         * the options they were sent under as `this`, so a test can tell a
+         * command sent through it from one sent on the bare client.
+         */
+        cache.withCommandOptions.mockImplementation(options => ({
+            options,
+            eval: cache.eval,
+            hGetAll: cache.hGetAll,
+        }));
         claimCheck = new ClaimCheck();
     });
 
@@ -179,19 +163,16 @@ describe('ClaimCheck', () => {
 
     describe('addPhoneNumber', () => {
         it('should record a recipient as pending and set the expiry', async () => {
-            await claimCheck.addPhoneNumber(testPhoneNumber);
+            await expect(claimCheck.addPhoneNumber(testPhoneNumber)).resolves.toBe(true);
 
-            expect(redis.transactions).toEqual([
-                [
-                    [
-                        'hSetNX',
-                        testClaimCheckId,
-                        testPhoneNumber,
-                        JSON.stringify({ status: PENDING }),
-                    ],
-                    ['expire', testClaimCheckId, claimCheckExpiration],
+            expect(cache.eval).toHaveBeenCalledExactlyOnceWith(RECORD_PENDING, {
+                keys: [testClaimCheckId],
+                arguments: [
+                    testPhoneNumber,
+                    JSON.stringify({ status: PENDING }),
+                    String(claimCheckExpiration),
                 ],
-            ]);
+            });
             await expect(entryOf(testPhoneNumber)).resolves.toEqual({ status: PENDING });
         });
 
@@ -216,15 +197,7 @@ describe('ClaimCheck', () => {
          */
         it('should give up on a write Redis does not answer in time', async () => {
             vi.useFakeTimers();
-            cache.multi.mockReturnValueOnce({
-                hSetNX() {
-                    return this;
-                },
-                expire() {
-                    return this;
-                },
-                exec: vi.fn(() => new Promise(() => {})),
-            });
+            cache.eval.mockReturnValueOnce(new Promise(() => {}));
 
             const recording = claimCheck.addPhoneNumber(testPhoneNumber);
 
@@ -249,15 +222,7 @@ describe('ClaimCheck', () => {
          * written must not stop that.
          */
         it('should report a recipient Redis would not record, rather than reject', async () => {
-            cache.multi.mockReturnValueOnce({
-                hSetNX() {
-                    return this;
-                },
-                expire() {
-                    return this;
-                },
-                exec: vi.fn().mockRejectedValue(new Error('Cache connection failed')),
-            });
+            cache.eval.mockRejectedValueOnce(new Error('Cache connection failed'));
 
             await expect(claimCheck.addPhoneNumber(testPhoneNumber)).resolves.toBe(false);
             expect(log.warn).toHaveBeenCalledWith(
@@ -267,11 +232,25 @@ describe('ClaimCheck', () => {
         });
 
         it('should not reject when the client throws building the command', async () => {
-            cache.multi.mockImplementationOnce(() => {
+            cache.eval.mockImplementationOnce(() => {
                 throw new Error('Client is closed');
             });
 
             await expect(claimCheck.addPhoneNumber(testPhoneNumber)).resolves.toBe(false);
+        });
+
+        /**
+         * A `pending` sent once the client reconnects could land after the
+         * recipient's worker had found no entry and finished, making one
+         * nothing would move on. node-redis's own timeout drops a command
+         * still waiting to be sent instead.
+         */
+        it('should send with a timeout that drops it if still unsent', async () => {
+            await claimCheck.addPhoneNumber(testPhoneNumber);
+
+            expect(cache.eval.mock.contexts[0]).toMatchObject({
+                options: { timeout: CLAIM_CHECK_TIMEOUT_MS },
+            });
         });
     });
 
@@ -319,6 +298,14 @@ describe('ClaimCheck', () => {
          * Unlike a write, a read that failed cannot stand in for one that
          * worked: an empty receipt would say nobody was queued.
          */
+        it('should send with a timeout that drops it if still unsent', async () => {
+            await ClaimCheck.getClaimCheck(testClaimCheckId);
+
+            expect(cache.hGetAll.mock.contexts[0]).toMatchObject({
+                options: { timeout: CLAIM_CHECK_TIMEOUT_MS },
+            });
+        });
+
         it('should give up on a read Redis does not answer in time', async () => {
             vi.useFakeTimers();
             cache.hGetAll.mockReturnValueOnce(new Promise(() => {}));
@@ -348,13 +335,21 @@ describe('ClaimCheck', () => {
         it('should hand the script the entry and the expiry', async () => {
             await ClaimCheck.advance(testClaimCheckId, testPhoneNumber, { status: 'sent', sid });
 
-            expect(cache.eval).toHaveBeenCalledExactlyOnceWith(ADVANCE, {
+            expect(cache.eval).toHaveBeenLastCalledWith(ADVANCE, {
                 keys: [testClaimCheckId],
                 arguments: [
                     testPhoneNumber,
                     JSON.stringify({ status: 'sent', sid }),
                     String(claimCheckExpiration),
                 ],
+            });
+        });
+
+        it('should send with a timeout that drops it if still unsent', async () => {
+            await ClaimCheck.advance(testClaimCheckId, testPhoneNumber, { status: 'sent', sid });
+
+            expect(cache.eval.mock.contexts.at(-1)).toMatchObject({
+                options: { timeout: CLAIM_CHECK_TIMEOUT_MS },
             });
         });
 

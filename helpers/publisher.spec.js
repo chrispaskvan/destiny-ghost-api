@@ -5,6 +5,7 @@ const { mocks } = vi.hoisted(() => ({
     mocks: {
         add: vi.fn(async (_name, _data, { jobId }) => ({ id: jobId })),
         getJob: vi.fn(),
+        getDeduplicationJobId: vi.fn(),
         queueClose: vi.fn(),
         queueEventsClose: vi.fn(),
         queueEventsOn: vi.fn(),
@@ -19,6 +20,9 @@ vi.mock('bullmq', () => ({
         }
         getJob(...args) {
             return mocks.getJob(...args);
+        }
+        getDeduplicationJobId(...args) {
+            return mocks.getDeduplicationJobId(...args);
         }
         close() {
             return mocks.queueClose();
@@ -177,26 +181,54 @@ describe('Publisher', () => {
         });
     });
 
-    describe('hasNotification', () => {
-        const user = { membershipId: '4611686018', membershipType: 2, phoneNumber: '+12085550123' };
+    describe('findNotification', () => {
+        const deduplicationId = 'xur-2026-09-29-+12085550123';
 
-        it("should look the recipient's job up under the id it was queued with", async () => {
-            mocks.getJob.mockResolvedValueOnce({ id: 'op1-4611686018' });
+        it('should ask BullMQ which job holds the deduplication id', async () => {
+            mocks.getDeduplicationJobId.mockResolvedValueOnce('op1-4611686018');
 
-            await expect(publisher.hasNotification(user, 'op1')).resolves.toBe(true);
-            expect(mocks.getJob).toHaveBeenCalledWith('op1-4611686018');
+            await expect(publisher.findNotification(deduplicationId, 'op1')).resolves.toEqual({
+                queued: true,
+                ownOperation: true,
+            });
+            expect(mocks.getDeduplicationJobId).toHaveBeenCalledExactlyOnceWith(deduplicationId);
         });
 
-        it('should say so when there is no such job', async () => {
-            mocks.getJob.mockResolvedValueOnce(undefined);
+        /**
+         * Two documents sharing a phone number: the first was queued, and
+         * the second, asked about, finds the first's job holding the number.
+         */
+        it("should count another of this operation's jobs for the same phone as its own", async () => {
+            mocks.getDeduplicationJobId.mockResolvedValueOnce('op1-another-membership');
 
-            await expect(publisher.hasNotification(user, 'op1')).resolves.toBe(false);
+            await expect(publisher.findNotification(deduplicationId, 'op1')).resolves.toEqual({
+                queued: true,
+                ownOperation: true,
+            });
+        });
+
+        it("should tell another operation's job from this one's", async () => {
+            mocks.getDeduplicationJobId.mockResolvedValueOnce('op0-4611686018');
+
+            await expect(publisher.findNotification(deduplicationId, 'op1')).resolves.toEqual({
+                queued: true,
+                ownOperation: false,
+            });
+        });
+
+        it('should say so when nothing holds it', async () => {
+            mocks.getDeduplicationJobId.mockResolvedValueOnce(null);
+
+            await expect(publisher.findNotification(deduplicationId, 'op1')).resolves.toEqual({
+                queued: false,
+                ownOperation: false,
+            });
         });
 
         it('should reject when Redis does, rather than answer no', async () => {
-            mocks.getJob.mockRejectedValueOnce(new Error('Redis connection lost'));
+            mocks.getDeduplicationJobId.mockRejectedValueOnce(new Error('Redis connection lost'));
 
-            await expect(publisher.hasNotification(user, 'op1')).rejects.toThrow(
+            await expect(publisher.findNotification(deduplicationId, 'op1')).rejects.toThrow(
                 'Redis connection lost',
             );
         });

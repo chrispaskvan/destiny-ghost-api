@@ -22,11 +22,25 @@ const claimCheckExpiration = 86400; // 1 day in seconds
  * Longer than the consent marker's, which sits inside the rate limiter's one
  * slot: a Redis that is slow but answering should still get its receipts.
  *
- * A write that times out is still sent once the client reconnects. That is
- * safe for both: `advance` applies its rank rules whenever it lands, and
- * `addPhoneNumber` never overwrites an entry already there.
+ * Every command also carries this as node-redis's own timeout (see
+ * `timedCache`), so one that times out before it was ever sent is dropped
+ * rather than sent once the client reconnects.
  */
 const CLAIM_CHECK_TIMEOUT_MS = 1000;
+
+/**
+ * The cache client, with every command dropped if it is still waiting to be
+ * sent when the timeout passes.
+ *
+ * Stopping waiting is not enough: a `pending` that timed out but is sent once
+ * the client reconnects can land after the recipient's worker - on another
+ * instance, with a healthy connection - has finished and found no entry to
+ * move. It would make one nothing moves on. node-redis's timeout covers a
+ * command only until it is written, so `bounded` still bounds the wait for
+ * the reply; a command written to a Redis that is slow but connected runs
+ * when it gets there, as any command would.
+ */
+const timedCache = () => cache.withCommandOptions({ timeout: CLAIM_CHECK_TIMEOUT_MS });
 
 /**
  * Await a receipt command, but no longer than the timeout above.
@@ -237,6 +251,22 @@ return 1
 `;
 
 /**
+ * Record a recipient as pending, unless they already have an entry, and
+ * refresh the receipt's expiry. A script rather than a MULTI, which would be
+ * as atomic, because node-redis ignores command options - and so the timeout
+ * in `timedCache` - on a MULTI.
+ *
+ * KEYS[1] claim check; ARGV[1] phone number, ARGV[2] entry as JSON, ARGV[3]
+ * expiry in seconds.
+ */
+const RECORD_PENDING = `
+redis.call('HSETNX', KEYS[1], ARGV[1], ARGV[2])
+redis.call('EXPIRE', KEYS[1], ARGV[3])
+
+return 1
+`;
+
+/**
  * One recipient's progress.
  * @typedef {Object} ClaimCheckEntry
  * @property {string} status - `pending`, one of Twilio's message statuses, or
@@ -295,19 +325,21 @@ class ClaimCheck {
      */
     async addPhoneNumber(phoneNumber) {
         const number = this.#number;
-        // One round trip, and no hash left without its expiry between the two.
-        const replies = await write(
+        const recorded = await write(
             () =>
-                cache
-                    .multi()
-                    .hSetNX(number, phoneNumber, JSON.stringify({ status: PENDING }))
-                    .expire(number, claimCheckExpiration)
-                    .exec(),
+                timedCache().eval(RECORD_PENDING, {
+                    keys: [number],
+                    arguments: [
+                        phoneNumber,
+                        JSON.stringify({ status: PENDING }),
+                        String(claimCheckExpiration),
+                    ],
+                }),
             { claimCheckNumber: number, phoneNumber },
             'Unable to record the recipient on the claim check; sending without it.',
         );
 
-        return replies !== undefined;
+        return recorded !== undefined;
     }
 
     /**
@@ -322,7 +354,7 @@ class ClaimCheck {
      * @returns {Promise<Record<string, ClaimCheckEntry>>}
      */
     static async getClaimCheck(number) {
-        const entries = Object.entries(await bounded(cache.hGetAll(number)));
+        const entries = Object.entries(await bounded(timedCache().hGetAll(number)));
 
         return Object.fromEntries(
             entries.map(([phoneNumber, stored]) => [phoneNumber, parse(stored)]),
@@ -340,7 +372,7 @@ class ClaimCheck {
     static async advance(claimCheckNumber, phoneNumber, entry) {
         const written = await write(
             () =>
-                cache.eval(ADVANCE, {
+                timedCache().eval(ADVANCE, {
                     keys: [claimCheckNumber],
                     arguments: [phoneNumber, JSON.stringify(entry), String(claimCheckExpiration)],
                 }),
@@ -362,5 +394,6 @@ export {
     legacy,
     PENDING,
     ranks,
+    RECORD_PENDING,
     SKIPPED,
 };

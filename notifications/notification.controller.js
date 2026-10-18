@@ -393,6 +393,9 @@ class NotificationController {
     async #broadcast({ weeklyReset }, { claimCheckNumber, notificationType }, job) {
         const claimCheck = new ClaimCheck(claimCheckNumber);
         const limit = pLimit(20);
+        /** @param {{ phoneNumber: string }} user */
+        const deduplicationIdFor = ({ phoneNumber }) =>
+            `${notificationType}-${weeklyReset}-${phoneNumber}`;
         /**
          * Recorded before it is queued, so the worker that sends it finds an
          * entry to move on. A queueing failure after that leaves the
@@ -411,7 +414,7 @@ class NotificationController {
             const { deduplicated, ownOperation } = await this.publisher.sendNotification(user, {
                 notificationType,
                 claimCheckNumber,
-                deduplicationId: `${notificationType}-${weeklyReset}-${user.phoneNumber}`,
+                deduplicationId: deduplicationIdFor(user),
             });
 
             if (deduplicated && !ownOperation) {
@@ -469,11 +472,17 @@ class NotificationController {
                  * it is the one asked.
                  */
                 if (isLastAttempt(job)) {
+                    const unqueued = users.filter((_, i) => results[i].status === 'rejected');
+
                     await Promise.all(
-                        results.flatMap((result, i) =>
-                            result.status === 'rejected'
-                                ? [limit(() => this.#markIfNeverQueued(users[i], claimCheckNumber))]
-                                : [],
+                        unqueued.map(user =>
+                            limit(() =>
+                                this.#markIfNeverQueued(
+                                    user.phoneNumber,
+                                    claimCheckNumber,
+                                    deduplicationIdFor(user),
+                                ),
+                            ),
                         ),
                     );
                 }
@@ -503,20 +512,24 @@ class NotificationController {
 
     /**
      * Record a recipient as never queued, once nothing more will try - but
-     * only if their job is in fact absent. A failed add can still have
-     * landed, and that job will report for itself; an outcome of ours
+     * only if nothing was queued for them, asked of the deduplication id
+     * their add would have claimed. A failed add can still have landed, and
+     * another document sharing their phone number can have queued them under
+     * its own job; either job reports for itself, and an outcome of ours
      * recorded first would hold the receipt at `not-queued` against a skip
-     * or failure of its own. A lookup that fails leaves the entry pending
-     * rather than guessing.
-     * @param {import('../users/user.service.js').SubscribedUser} user
+     * or failure of its own. Held by another operation, they are a duplicate,
+     * as `queueRecipient` would have recorded. A lookup that fails leaves
+     * the entry pending rather than guessing.
+     * @param {string} phoneNumber
      * @param {string} claimCheckNumber
+     * @param {string} deduplicationId
      * @returns {Promise<void>}
      */
-    async #markIfNeverQueued(user, claimCheckNumber) {
-        const { phoneNumber } = user;
+    async #markIfNeverQueued(phoneNumber, claimCheckNumber, deduplicationId) {
+        let found;
 
         try {
-            if (await this.publisher.hasNotification(user, claimCheckNumber)) return;
+            found = await this.publisher.findNotification(deduplicationId, claimCheckNumber);
         } catch (err) {
             log.warn(
                 { err, claimCheckNumber, phoneNumber },
@@ -526,10 +539,13 @@ class NotificationController {
             return;
         }
 
-        await ClaimCheck.advance(claimCheckNumber, phoneNumber, {
-            status: ERROR,
-            reason: 'not-queued',
-        });
+        if (found.ownOperation) return;
+
+        await ClaimCheck.advance(
+            claimCheckNumber,
+            phoneNumber,
+            found.queued ? { status: DUPLICATE } : { status: ERROR, reason: 'not-queued' },
+        );
     }
 
     /**

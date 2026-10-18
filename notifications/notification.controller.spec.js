@@ -421,12 +421,15 @@ describe('NotificationController', () => {
             publisher.sendNotification
                 .mockResolvedValueOnce({ deduplicated: false })
                 .mockRejectedValueOnce(new Error('Redis unavailable'));
-            publisher.hasNotification.mockResolvedValueOnce(false);
+            publisher.findNotification.mockResolvedValueOnce({
+                queued: false,
+                ownOperation: false,
+            });
 
             await expect(run(job)).rejects.toThrow('1 of 2 recipients');
 
-            expect(publisher.hasNotification).toHaveBeenCalledExactlyOnceWith(
-                otherUser,
+            expect(publisher.findNotification).toHaveBeenCalledExactlyOnceWith(
+                `${notificationTypes.Xur}-2026-09-29-${otherUser.phoneNumber}`,
                 claimCheckNumber,
             );
             expect(ClaimCheck.advance).toHaveBeenCalledExactlyOnceWith(
@@ -455,18 +458,18 @@ describe('NotificationController', () => {
                 cursor: undefined,
             });
             publisher.sendNotification.mockRejectedValue(new Error('Redis unavailable'));
-            publisher.hasNotification.mockImplementation(async () => {
+            publisher.findNotification.mockImplementation(async () => {
                 inFlight += 1;
                 mostInFlight = Math.max(mostInFlight, inFlight);
                 await new Promise(resolve => setImmediate(resolve));
                 inFlight -= 1;
 
-                return true;
+                return { queued: true, ownOperation: true };
             });
 
             await expect(run(job)).rejects.toThrow('25 of 25 recipients');
 
-            expect(publisher.hasNotification).toHaveBeenCalledTimes(25);
+            expect(publisher.findNotification).toHaveBeenCalledTimes(25);
             expect(mostInFlight).toBe(20);
         });
 
@@ -482,11 +485,58 @@ describe('NotificationController', () => {
                 cursor: undefined,
             });
             publisher.sendNotification.mockRejectedValueOnce(new Error('Socket closed'));
-            publisher.hasNotification.mockResolvedValueOnce(true);
+            publisher.findNotification.mockResolvedValueOnce({ queued: true, ownOperation: true });
 
             await expect(run(job)).rejects.toThrow('1 of 1 recipients');
 
             expect(ClaimCheck.advance).not.toHaveBeenCalled();
+        });
+
+        /**
+         * Two documents share a phone number, and only the second failed to
+         * queue. The first one's job holds the number and will report for
+         * it, so the second is asked about by the number, not by its own
+         * job, and nothing is recorded over that job's outcome.
+         */
+        it('should leave a recipient another document of theirs queued', async () => {
+            const job = { ...jobWith(), attemptsMade: 4, opts: { attempts: 5 } };
+            const samePhone = { ...mockUser, membershipId: chance.guid() };
+
+            userService.getSubscribedUsersPage.mockResolvedValueOnce({
+                users: [mockUser, samePhone],
+                cursor: undefined,
+            });
+            publisher.sendNotification
+                .mockResolvedValueOnce({ deduplicated: false })
+                .mockRejectedValueOnce(new Error('Redis unavailable'));
+            publisher.findNotification.mockResolvedValueOnce({ queued: true, ownOperation: true });
+
+            await expect(run(job)).rejects.toThrow('1 of 2 recipients');
+
+            expect(publisher.findNotification).toHaveBeenCalledExactlyOnceWith(
+                `${notificationTypes.Xur}-2026-09-29-${mockUser.phoneNumber}`,
+                claimCheckNumber,
+            );
+            expect(ClaimCheck.advance).not.toHaveBeenCalled();
+        });
+
+        it('should record a duplicate when another operation queued them', async () => {
+            const job = { ...jobWith(), attemptsMade: 4, opts: { attempts: 5 } };
+
+            userService.getSubscribedUsersPage.mockResolvedValueOnce({
+                users: [mockUser],
+                cursor: undefined,
+            });
+            publisher.sendNotification.mockRejectedValueOnce(new Error('Socket closed'));
+            publisher.findNotification.mockResolvedValueOnce({ queued: true, ownOperation: false });
+
+            await expect(run(job)).rejects.toThrow('1 of 1 recipients');
+
+            expect(ClaimCheck.advance).toHaveBeenCalledExactlyOnceWith(
+                claimCheckNumber,
+                phoneNumber,
+                { status: DUPLICATE },
+            );
         });
 
         it('should leave a recipient pending when it cannot tell whether they were queued', async () => {
@@ -497,7 +547,7 @@ describe('NotificationController', () => {
                 cursor: undefined,
             });
             publisher.sendNotification.mockRejectedValueOnce(new Error('Redis unavailable'));
-            publisher.hasNotification.mockRejectedValueOnce(new Error('Redis unavailable'));
+            publisher.findNotification.mockRejectedValueOnce(new Error('Redis unavailable'));
 
             await expect(run(job)).rejects.toThrow('1 of 1 recipients');
 
