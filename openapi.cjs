@@ -3,12 +3,15 @@ const { join } = require('node:path');
 
 const isProduction = process.env.NODE_ENV === 'production';
 const packageJson = JSON.parse(readFileSync(join(__dirname, 'package.json'), 'utf8'));
+// GIT_SHA is passed into the Docker build so the docs identify the deployed commit.
+const gitSha = process.env.GIT_SHA?.slice(0, 8);
+const version = gitSha ? `${packageJson.version}.${gitSha}` : packageJson.version;
 
 module.exports = {
     openapi: '3.1.1',
     info: {
         title: 'Destiny-Ghost API',
-        version: packageJson.version,
+        version,
         description:
             "A Node Express application for receiving SMS/MMS Notifications around changes to the vendor wares in Bungie's Destiny and make ad-hoc queries in the database.",
         license: {

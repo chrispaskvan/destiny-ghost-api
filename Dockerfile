@@ -16,8 +16,11 @@ RUN pnpm install --frozen-lockfile
 # Copy source code
 COPY . .
 
+# Commit SHA appended to the OpenAPI version (.git is excluded from the build context)
+ARG GIT_SHA
+
 # Generate OpenAPI documentation for production
-RUN NODE_ENV=production pnpm run swagger
+RUN GIT_SHA=$GIT_SHA NODE_ENV=production pnpm run swagger
 
 # Production stage - lean runtime image
 FROM node:${NODE_VERSION}-trixie-slim AS production
