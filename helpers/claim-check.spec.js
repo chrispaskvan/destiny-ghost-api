@@ -11,6 +11,7 @@ import ClaimCheck, {
     SKIPPED,
 } from './claim-check.js';
 import cache from './cache.js';
+import log from './log.js';
 
 vi.mock('./cache.js', () => ({
     default: {
@@ -18,6 +19,9 @@ vi.mock('./cache.js', () => ({
         multi: vi.fn(),
         hGetAll: vi.fn(),
     },
+}));
+vi.mock('./log.js', () => ({
+    default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 vi.mock('@paralleldrive/cuid2', () => ({
     createId: vi.fn(() => 'test-claim-check-id'),
@@ -222,15 +226,29 @@ describe('ClaimCheck', () => {
                 exec: vi.fn(() => new Promise(() => {})),
             });
 
-            const recording = expect(claimCheck.addPhoneNumber(testPhoneNumber)).rejects.toThrow(
-                `did not answer within ${CLAIM_CHECK_TIMEOUT_MS}ms`,
-            );
+            const recording = claimCheck.addPhoneNumber(testPhoneNumber);
 
             await vi.advanceTimersByTimeAsync(CLAIM_CHECK_TIMEOUT_MS);
-            await recording;
+            await expect(recording).resolves.toBe(false);
+            expect(log.warn).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    err: expect.objectContaining({
+                        message: expect.stringContaining(
+                            `did not answer within ${CLAIM_CHECK_TIMEOUT_MS}ms`,
+                        ),
+                    }),
+                    claimCheckNumber: testClaimCheckId,
+                    phoneNumber: testPhoneNumber,
+                }),
+                'Unable to record the recipient on the claim check; sending without it.',
+            );
         });
 
-        it('should reject when Redis does', async () => {
+        /**
+         * The recipient is sent to either way; a receipt that cannot be
+         * written must not stop that.
+         */
+        it('should report a recipient Redis would not record, rather than reject', async () => {
             cache.multi.mockReturnValueOnce({
                 hSetNX() {
                     return this;
@@ -241,9 +259,19 @@ describe('ClaimCheck', () => {
                 exec: vi.fn().mockRejectedValue(new Error('Cache connection failed')),
             });
 
-            await expect(claimCheck.addPhoneNumber(testPhoneNumber)).rejects.toThrow(
-                'Cache connection failed',
+            await expect(claimCheck.addPhoneNumber(testPhoneNumber)).resolves.toBe(false);
+            expect(log.warn).toHaveBeenCalledWith(
+                expect.objectContaining({ err: new Error('Cache connection failed') }),
+                'Unable to record the recipient on the claim check; sending without it.',
             );
+        });
+
+        it('should not reject when the client throws building the command', async () => {
+            cache.multi.mockImplementationOnce(() => {
+                throw new Error('Client is closed');
+            });
+
+            await expect(claimCheck.addPhoneNumber(testPhoneNumber)).resolves.toBe(false);
         });
     });
 
@@ -287,6 +315,22 @@ describe('ClaimCheck', () => {
             await expect(entryOf(testPhoneNumber)).resolves.toEqual({ status: PENDING });
         });
 
+        /**
+         * Unlike a write, a read that failed cannot stand in for one that
+         * worked: an empty receipt would say nobody was queued.
+         */
+        it('should give up on a read Redis does not answer in time', async () => {
+            vi.useFakeTimers();
+            cache.hGetAll.mockReturnValueOnce(new Promise(() => {}));
+
+            const reading = expect(ClaimCheck.getClaimCheck(testClaimCheckId)).rejects.toThrow(
+                `did not answer within ${CLAIM_CHECK_TIMEOUT_MS}ms`,
+            );
+
+            await vi.advanceTimersByTimeAsync(CLAIM_CHECK_TIMEOUT_MS);
+            await reading;
+        });
+
         it('should reject when Redis does', async () => {
             cache.hGetAll.mockRejectedValueOnce(new Error('Cache read failed'));
 
@@ -318,20 +362,47 @@ describe('ClaimCheck', () => {
             vi.useFakeTimers();
             cache.eval.mockReturnValueOnce(new Promise(() => {}));
 
-            const advancing = expect(
-                ClaimCheck.advance(testClaimCheckId, testPhoneNumber, { status: 'sent', sid }),
-            ).rejects.toThrow(`did not answer within ${CLAIM_CHECK_TIMEOUT_MS}ms`);
+            const advancing = ClaimCheck.advance(testClaimCheckId, testPhoneNumber, {
+                status: 'sent',
+                sid,
+            });
 
             await vi.advanceTimersByTimeAsync(CLAIM_CHECK_TIMEOUT_MS);
-            await advancing;
+            await expect(advancing).resolves.toBe(false);
         });
 
-        it('should reject when Redis does', async () => {
+        /**
+         * Failing the caller would retry a worker whose message Twilio had
+         * already accepted, or answer a status callback with an error for a
+         * report that was kept.
+         */
+        it('should report an outcome Redis would not record, rather than reject', async () => {
+            const outcome = { status: 'sent', sid };
+
             cache.eval.mockRejectedValueOnce(new Error('Cache write failed'));
 
             await expect(
+                ClaimCheck.advance(testClaimCheckId, testPhoneNumber, outcome),
+            ).resolves.toBe(false);
+            expect(log.warn).toHaveBeenCalledWith(
+                {
+                    err: new Error('Cache write failed'),
+                    claimCheckNumber: testClaimCheckId,
+                    phoneNumber: testPhoneNumber,
+                    outcome,
+                },
+                'Unable to record the claim-check outcome.',
+            );
+        });
+
+        it('should not reject when the client throws building the command', async () => {
+            cache.eval.mockImplementationOnce(() => {
+                throw new Error('Client is closed');
+            });
+
+            await expect(
                 ClaimCheck.advance(testClaimCheckId, testPhoneNumber, { status: 'sent', sid }),
-            ).rejects.toThrow('Cache write failed');
+            ).resolves.toBe(false);
         });
 
         it('should move a recipient through every stage in order', async () => {

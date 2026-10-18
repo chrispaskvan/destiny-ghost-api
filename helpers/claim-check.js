@@ -1,6 +1,7 @@
 // @ts-check
 import { createId } from '@paralleldrive/cuid2';
 import cache from './cache.js';
+import log from './log.js';
 import processExternalPromisesWithTimeout from './process-external-promises-with-timeout.js';
 
 /**
@@ -11,11 +12,12 @@ import processExternalPromisesWithTimeout from './process-external-promises-with
 const claimCheckExpiration = 86400; // 1 day in seconds
 
 /**
- * Bounds every write to a receipt. node-redis queues commands while it
- * reconnects rather than failing them, so an unbounded write does not fail on
+ * Bounds every command to a receipt. node-redis queues commands while it
+ * reconnects rather than failing them, so an unbounded one does not fail on
  * a dropped connection - it waits for one that may not come back, holding up
  * whatever awaits it: a send, a Twilio webhook, a shutdown draining its last
- * outcomes. A receipt is worth less than any of those.
+ * outcomes, a caller polling the receipt. A receipt is worth less than any of
+ * those.
  *
  * Longer than the consent marker's, which sits inside the rate limiter's one
  * slot: a Redis that is slow but answering should still get its receipts.
@@ -40,6 +42,37 @@ const bounded = async command => {
     if (result.status === 'rejected') throw result.reason;
 
     throw new Error(`The claim check did not answer within ${CLAIM_CHECK_TIMEOUT_MS}ms.`);
+};
+
+/**
+ * Write to a receipt without ever failing the caller.
+ *
+ * Every write here sits beside something worth more than the receipt. Failing
+ * a worker after Twilio accepted its message would hand the job back to
+ * BullMQ, and the retry would send it a second time - trading a lost receipt
+ * for a duplicate SMS. Failing the request that queues a recipient would stop
+ * their send over a receipt that only reports on it. Failing a status callback
+ * would answer Twilio with an error for a report that was kept. So a write that
+ * fails or times out is logged and reported as not written, and the receipt
+ * goes without it.
+ *
+ * Takes the command unbuilt, so a client that throws while building it is
+ * caught too, as in `consent-marker.js`.
+ * @template T
+ * @param {() => Promise<T>} command
+ * @param {Record<string, unknown>} context - logged with the failure
+ * @param {string} message
+ * @returns {Promise<T | undefined>} what the command resolved with, or
+ * `undefined` when it did not
+ */
+const write = async (command, context, message) => {
+    try {
+        return await bounded(command());
+    } catch (err) {
+        log.warn({ err, ...context }, message);
+
+        return undefined;
+    }
 };
 
 /**
@@ -250,23 +283,31 @@ class ClaimCheck {
      * Record a recipient as pending, unless they already have an entry.
      *
      * Called before their job is queued, never after, so the worker that
-     * sends it finds an entry to move forward. Rejects, within the timeout,
-     * when it cannot; callers send regardless, and the receipt goes without
-     * that recipient. A broadcast that
+     * sends it finds an entry to move forward. Never rejects (see `write`): a
+     * recipient who cannot be recorded is still sent to, and the receipt goes
+     * without them - their worker's outcome then finds no entry and is
+     * dropped, as one for an expired receipt would be. A broadcast that
      * resumes after a crash records its last page again, and by then some of
      * those recipients may have been sent to; their entry is kept rather than
      * put back to pending.
      * @param {string} phoneNumber
+     * @returns {Promise<boolean>} whether the recipient is on the receipt
      */
     async addPhoneNumber(phoneNumber) {
+        const number = this.#number;
         // One round trip, and no hash left without its expiry between the two.
-        await bounded(
-            cache
-                .multi()
-                .hSetNX(this.#number, phoneNumber, JSON.stringify({ status: PENDING }))
-                .expire(this.#number, claimCheckExpiration)
-                .exec(),
+        const replies = await write(
+            () =>
+                cache
+                    .multi()
+                    .hSetNX(number, phoneNumber, JSON.stringify({ status: PENDING }))
+                    .expire(number, claimCheckExpiration)
+                    .exec(),
+            { claimCheckNumber: number, phoneNumber },
+            'Unable to record the recipient on the claim check; sending without it.',
         );
+
+        return replies !== undefined;
     }
 
     /**
@@ -274,11 +315,14 @@ class ClaimCheck {
      * its first page yet, or has nobody to queue, as much as for a claim
      * check that has expired: Redis cannot tell an empty hash from a missing
      * one, and only the first two are worth a caller polling.
+     *
+     * Unlike a write, a read rejects when Redis does not answer in time: an
+     * empty receipt in its place would tell the caller nobody was queued.
      * @param {string} number
      * @returns {Promise<Record<string, ClaimCheckEntry>>}
      */
     static async getClaimCheck(number) {
-        const entries = Object.entries(await cache.hGetAll(number));
+        const entries = Object.entries(await bounded(cache.hGetAll(number)));
 
         return Object.fromEntries(
             entries.map(([phoneNumber, stored]) => [phoneNumber, parse(stored)]),
@@ -286,18 +330,22 @@ class ClaimCheck {
     }
 
     /**
-     * Move a recipient forward; see `ADVANCE` for when it does not.
+     * Move a recipient forward; see `ADVANCE` for when it does not. Never
+     * rejects (see `write`).
      * @param {string} claimCheckNumber
      * @param {string} phoneNumber
      * @param {ClaimCheckEntry} entry
      * @returns {Promise<boolean>} whether the entry was written
      */
     static async advance(claimCheckNumber, phoneNumber, entry) {
-        const written = await bounded(
-            cache.eval(ADVANCE, {
-                keys: [claimCheckNumber],
-                arguments: [phoneNumber, JSON.stringify(entry), String(claimCheckExpiration)],
-            }),
+        const written = await write(
+            () =>
+                cache.eval(ADVANCE, {
+                    keys: [claimCheckNumber],
+                    arguments: [phoneNumber, JSON.stringify(entry), String(claimCheckExpiration)],
+                }),
+            { claimCheckNumber, phoneNumber, outcome: entry },
+            'Unable to record the claim-check outcome.',
         );
 
         return written === 1;

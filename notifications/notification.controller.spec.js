@@ -184,25 +184,6 @@ describe('NotificationController', () => {
                 );
             });
 
-            /**
-             * The receipt never decides who is sent to: a Redis outage costs
-             * the recipient their entry, not their notification.
-             */
-            it('should still queue the job when the recipient cannot be recorded', async () => {
-                userService.getUserByPhoneNumber.mockResolvedValue(mockUser);
-                publisher.sendNotification.mockResolvedValue({ deduplicated: false });
-                mockClaimCheck.addPhoneNumber.mockRejectedValue(new Error('Redis is down'));
-
-                await expect(
-                    notificationController.create(notificationTypes.Xur, { phoneNumber }),
-                ).resolves.toEqual({ claimCheckNumber });
-                expect(publisher.sendNotification).toHaveBeenCalledOnce();
-                expect(log.warn).toHaveBeenCalledWith(
-                    expect.objectContaining({ claimCheckNumber, phoneNumber }),
-                    'Unable to record the recipient on the claim check; sending without it.',
-                );
-            });
-
             it('should throw NotificationError when user is not found', async () => {
                 const subscription = notificationTypes.Xur;
 
@@ -456,6 +437,40 @@ describe('NotificationController', () => {
         });
 
         /**
+         * The Redis that failed the adds is the one these lookups ask, so
+         * they are throttled like the adds were rather than sent all at once.
+         */
+        it('should look up no more recipients at once than it queues', async () => {
+            const job = { ...jobWith(), attemptsMade: 4, opts: { attempts: 5 } };
+            const users = Array.from({ length: 25 }, (_, i) => ({
+                ...mockUser,
+                membershipId: `m${i}`,
+                phoneNumber: `+1555000${String(i).padStart(4, '0')}`,
+            }));
+            let inFlight = 0;
+            let mostInFlight = 0;
+
+            userService.getSubscribedUsersPage.mockResolvedValueOnce({
+                users,
+                cursor: undefined,
+            });
+            publisher.sendNotification.mockRejectedValue(new Error('Redis unavailable'));
+            publisher.hasNotification.mockImplementation(async () => {
+                inFlight += 1;
+                mostInFlight = Math.max(mostInFlight, inFlight);
+                await new Promise(resolve => setImmediate(resolve));
+                inFlight -= 1;
+
+                return true;
+            });
+
+            await expect(run(job)).rejects.toThrow('25 of 25 recipients');
+
+            expect(publisher.hasNotification).toHaveBeenCalledTimes(25);
+            expect(mostInFlight).toBe(20);
+        });
+
+        /**
          * The add landed and only its reply was lost: the job exists and
          * will report for itself, so nothing is recorded over it.
          */
@@ -577,28 +592,6 @@ describe('NotificationController', () => {
             expect(ClaimCheck.advance).not.toHaveBeenCalled();
         });
 
-        it('should not fail the page when a duplicate cannot be marked', async () => {
-            userService.getSubscribedUsersPage.mockResolvedValueOnce({
-                users: [mockUser],
-                cursor: undefined,
-            });
-            publisher.sendNotification.mockResolvedValueOnce({
-                deduplicated: true,
-                ownOperation: false,
-            });
-            ClaimCheck.advance.mockRejectedValue(new Error('Redis is down'));
-
-            await expect(run(jobWith())).resolves.toEqual({
-                queued: 0,
-                duplicates: 1,
-                done: true,
-            });
-            expect(log.warn).toHaveBeenCalledWith(
-                expect.objectContaining({ phoneNumber, outcome: { status: DUPLICATE } }),
-                'Unable to record the claim-check outcome.',
-            );
-        });
-
         it('should record each recipient before queueing them, so their worker finds an entry', async () => {
             userService.getSubscribedUsersPage.mockResolvedValueOnce({
                 users: [mockUser],
@@ -611,21 +604,6 @@ describe('NotificationController', () => {
             expect(mockClaimCheck.addPhoneNumber.mock.invocationCallOrder[0]).toBeLessThan(
                 publisher.sendNotification.mock.invocationCallOrder[0],
             );
-        });
-
-        it('should still queue a recipient it could not record, without failing the page', async () => {
-            userService.getSubscribedUsersPage.mockResolvedValueOnce({
-                users: [mockUser],
-                cursor: undefined,
-            });
-            mockClaimCheck.addPhoneNumber.mockRejectedValue(new Error('Redis is down'));
-
-            await expect(run(jobWith())).resolves.toEqual({
-                queued: 1,
-                duplicates: 0,
-                done: true,
-            });
-            expect(publisher.sendNotification).toHaveBeenCalledOnce();
         });
     });
 
@@ -909,66 +887,6 @@ describe('NotificationController', () => {
                     status: SKIPPED,
                     reason: 'opted-out',
                 });
-            });
-        });
-
-        describe('when the claim check cannot be written', () => {
-            it('should not fail a suppressed job, which would retry it', async () => {
-                userService.getConsentByPhoneNumber.mockResolvedValue({ isSubscribed: false });
-                ClaimCheck.advance.mockRejectedValue(new Error('Redis is down'));
-
-                await expect(
-                    sendMethod(mockUser, {
-                        claimCheckNumber,
-                        notificationType: notificationTypes.Xur,
-                    }),
-                ).resolves.toBeUndefined();
-
-                expect(notificationService.sendMessage).not.toHaveBeenCalled();
-            });
-
-            it('should not fail a delivered job, which would send it twice', async () => {
-                const weaponCategoryHash = 1;
-
-                authenticationService.authenticate.mockResolvedValue({
-                    bungie: { access_token: accessToken },
-                });
-                destinyService.getProfile.mockResolvedValue([mockCharacter]);
-                destinyService.getXur.mockResolvedValue([123456]);
-                worldRepository.getWeaponCategory.mockResolvedValue(weaponCategoryHash);
-                worldRepository.getItemByHash.mockResolvedValue(mockItem);
-                notificationService.sendMessage.mockImplementation(sendMessageHonouringGuard());
-                ClaimCheck.advance.mockRejectedValue(new Error('Redis is down'));
-
-                await expect(
-                    sendMethod(mockUser, {
-                        claimCheckNumber,
-                        notificationType: notificationTypes.Xur,
-                    }),
-                ).resolves.toBeUndefined();
-
-                expect(notificationService.sendMessage).toHaveBeenCalledTimes(1);
-            });
-
-            it('should not fail the Xur-unavailable fallback either', async () => {
-                authenticationService.authenticate.mockResolvedValue({
-                    bungie: { access_token: accessToken },
-                });
-                destinyService.getProfile.mockResolvedValue([mockCharacter]);
-                destinyService.getXur.mockRejectedValue(
-                    new DestinyError(1627, 'Xur is not around.', 'DestinyVendorNotFound'),
-                );
-                notificationService.sendMessage.mockImplementation(sendMessageHonouringGuard());
-                ClaimCheck.advance.mockRejectedValue(new Error('Redis is down'));
-
-                await expect(
-                    sendMethod(mockUser, {
-                        claimCheckNumber,
-                        notificationType: notificationTypes.Xur,
-                    }),
-                ).resolves.toBeUndefined();
-
-                expect(notificationService.sendMessage).toHaveBeenCalledTimes(1);
             });
         });
 
@@ -1408,19 +1326,6 @@ describe('NotificationController', () => {
                 phoneNumber,
                 { status: ERROR, reason: 'permanent' },
             );
-        });
-
-        it('should not throw when the receipt cannot be written', async () => {
-            ClaimCheck.advance.mockRejectedValue(new Error('Redis is down'));
-
-            await expect(
-                gaveUp(
-                    mockUser,
-                    { claimCheckNumber, notificationType: notificationTypes.Xur },
-                    { attemptsMade: 3, opts: { attempts: 3 } },
-                    new Error('Service Unavailable'),
-                ),
-            ).resolves.toBeUndefined();
         });
     });
 });

@@ -80,58 +80,6 @@ class NotificationController {
     }
 
     /**
-     * Record a claim-check outcome without letting the receipt fail the job.
-     *
-     * The hash lives in Redis, so these writes reject when Redis does. Letting
-     * that propagate would hand the job back to BullMQ *after* Twilio had
-     * already accepted the message, and the retry would send it a second time
-     * - trading a lost receipt for a duplicate SMS, which is much the worse of
-     * the two. The suppression path has the same problem in a quieter form: a
-     * failed receipt would retry a job that is only going to suppress again.
-     *
-     * The ordering rules - nothing moves a recipient backwards - are the
-     * claim check's own; see `ADVANCE`.
-     * @param {string} claimCheckNumber
-     * @param {string} phoneNumber
-     * @param {import('../helpers/claim-check.js').ClaimCheckEntry} outcome
-     * @returns {Promise<void>}
-     */
-    static async #recordOutcome(claimCheckNumber, phoneNumber, outcome) {
-        try {
-            await ClaimCheck.advance(claimCheckNumber, phoneNumber, outcome);
-        } catch (err) {
-            log.warn(
-                { err, claimCheckNumber, phoneNumber, outcome },
-                'Unable to record the claim-check outcome.',
-            );
-        }
-    }
-
-    /**
-     * Record a recipient as pending before their job is queued, without
-     * letting the receipt decide whether they are sent to.
-     *
-     * The same rule as `#recordOutcome`, from the other side: a receipt that
-     * cannot be written must not stop a send any more than it may cause one.
-     * Redis being down or slow - the write is bounded - costs this recipient
-     * their place on the receipt, and their worker's outcome then finds no
-     * entry and is dropped, as one for an expired receipt would be.
-     * @param {ClaimCheck} claimCheck
-     * @param {string} phoneNumber
-     * @returns {Promise<void>}
-     */
-    static async #recordPending(claimCheck, phoneNumber) {
-        try {
-            await claimCheck.addPhoneNumber(phoneNumber);
-        } catch (err) {
-            log.warn(
-                { err, claimCheckNumber: claimCheck.number, phoneNumber },
-                'Unable to record the recipient on the claim check; sending without it.',
-            );
-        }
-    }
-
-    /**
      * What Twilio said when it accepted a message, or the skip recorded when
      * the final consent check withheld it.
      * @param {{ sid: string, status: string } | undefined} sent
@@ -188,7 +136,7 @@ class NotificationController {
             return true;
         }
 
-        await NotificationController.#recordOutcome(claimCheckNumber, phoneNumber, {
+        await ClaimCheck.advance(claimCheckNumber, phoneNumber, {
             status: SKIPPED,
             reason: 'opted-out',
         });
@@ -216,7 +164,7 @@ class NotificationController {
     async #gaveUp({ phoneNumber }, { claimCheckNumber }, job, err) {
         const permanent = err instanceof UnrecoverableError || err?.name === 'UnrecoverableError';
 
-        await NotificationController.#recordOutcome(claimCheckNumber, phoneNumber, {
+        await ClaimCheck.advance(claimCheckNumber, phoneNumber, {
             status: ERROR,
             reason: permanent || !isExhausted(job) ? 'permanent' : 'retries-exhausted',
         });
@@ -261,7 +209,7 @@ class NotificationController {
                         { membershipId, membershipType },
                         'Skipping Xur notification: user could not be authenticated.',
                     );
-                    await NotificationController.#recordOutcome(claimCheckNumber, phoneNumber, {
+                    await ClaimCheck.advance(claimCheckNumber, phoneNumber, {
                         status: SKIPPED,
                         reason: 'unauthenticated',
                     });
@@ -348,13 +296,13 @@ class NotificationController {
                         },
                     );
 
-                    await NotificationController.#recordOutcome(
+                    await ClaimCheck.advance(
                         claimCheckNumber,
                         phoneNumber,
                         NotificationController.#sentOutcome(sent),
                     );
                 } else {
-                    await NotificationController.#recordOutcome(claimCheckNumber, phoneNumber, {
+                    await ClaimCheck.advance(claimCheckNumber, phoneNumber, {
                         status: SKIPPED,
                         reason: 'no-characters',
                     });
@@ -377,7 +325,7 @@ class NotificationController {
                     );
 
                     log.info(JSON.stringify(sent?.status));
-                    await NotificationController.#recordOutcome(
+                    await ClaimCheck.advance(
                         claimCheckNumber,
                         phoneNumber,
                         NotificationController.#sentOutcome(sent),
@@ -414,7 +362,7 @@ class NotificationController {
              * left pending, so the receipt says nothing was sent instead of
              * looking like a job still waiting to run.
              */
-            await NotificationController.#recordOutcome(claimCheckNumber, phoneNumber, {
+            await ClaimCheck.advance(claimCheckNumber, phoneNumber, {
                 status: SKIPPED,
                 reason: 'unsupported-type',
             });
@@ -458,7 +406,7 @@ class NotificationController {
          * @param {import('../users/user.service.js').SubscribedUser} user
          */
         const queueRecipient = async user => {
-            await NotificationController.#recordPending(claimCheck, user.phoneNumber);
+            await claimCheck.addPhoneNumber(user.phoneNumber);
 
             const { deduplicated, ownOperation } = await this.publisher.sendNotification(user, {
                 notificationType,
@@ -467,7 +415,7 @@ class NotificationController {
             });
 
             if (deduplicated && !ownOperation) {
-                await NotificationController.#recordOutcome(claimCheckNumber, user.phoneNumber, {
+                await ClaimCheck.advance(claimCheckNumber, user.phoneNumber, {
                     status: DUPLICATE,
                 });
             }
@@ -517,12 +465,14 @@ class NotificationController {
                  * the recipients that could not be queued are told so rather
                  * than left pending for a job that will never exist. Those
                  * that were queued keep their entry: their job does exist.
+                 * Throttled like the queueing, since the Redis that failed
+                 * it is the one asked.
                  */
                 if (isLastAttempt(job)) {
                     await Promise.all(
                         results.flatMap((result, i) =>
                             result.status === 'rejected'
-                                ? [this.#markIfNeverQueued(users[i], claimCheckNumber)]
+                                ? [limit(() => this.#markIfNeverQueued(users[i], claimCheckNumber))]
                                 : [],
                         ),
                     );
@@ -576,7 +526,7 @@ class NotificationController {
             return;
         }
 
-        await NotificationController.#recordOutcome(claimCheckNumber, phoneNumber, {
+        await ClaimCheck.advance(claimCheckNumber, phoneNumber, {
             status: ERROR,
             reason: 'not-queued',
         });
@@ -617,7 +567,7 @@ class NotificationController {
                  * caller was never given, and expires with it. If recording
                  * fails, the job is queued anyway.
                  */
-                await NotificationController.#recordPending(claimCheck, phoneNumber);
+                await claimCheck.addPhoneNumber(phoneNumber);
                 await this.publisher.sendNotification(user, {
                     notificationType: subscription,
                     claimCheckNumber,
