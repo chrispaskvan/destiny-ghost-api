@@ -12,6 +12,7 @@ const {
     poolClose,
     publisherClose,
     consentQueueClose,
+    broadcastQueueClose,
     subscriberClose,
     processExternalPromisesWithTimeout,
     trackMetric,
@@ -29,6 +30,7 @@ const {
     poolClose: vi.fn(),
     publisherClose: vi.fn(),
     consentQueueClose: vi.fn(),
+    broadcastQueueClose: vi.fn(),
     subscriberClose: vi.fn(),
     processExternalPromisesWithTimeout: vi.fn(),
     trackMetric: vi.fn(),
@@ -47,6 +49,7 @@ vi.mock('./helpers/pool.js', () => ({ default: { close: poolClose } }));
 vi.mock('./helpers/publisher.js', () => ({ default: { close: publisherClose } }));
 vi.mock('./helpers/subscriber.js', () => ({ default: { close: subscriberClose } }));
 vi.mock('./twilio/consent.queue.js', () => ({ default: { close: consentQueueClose } }));
+vi.mock('./notifications/broadcast.queue.js', () => ({ default: { close: broadcastQueueClose } }));
 vi.mock('./helpers/process-external-promises-with-timeout.js', () => ({
     default: processExternalPromisesWithTimeout,
 }));
@@ -56,7 +59,7 @@ vi.mock('./helpers/event-loop-delay.js', () => ({ readStartupEventLoopDelay }));
 
 const world2 = { items: [] };
 const workers = [subscriberClose];
-const producers = [publisherClose, consentQueueClose];
+const producers = [publisherClose, consentQueueClose, broadcastQueueClose];
 const connections = [cacheQuit, jobsQuit, poolClose];
 const allCloses = [...workers, ...producers, ...connections];
 const settle = () => new Promise(resolve => setImmediate(resolve));
@@ -183,7 +186,7 @@ describe('startServer shutdown wiring', () => {
         expect(httpServer.close).not.toHaveBeenCalled();
         expect(processExternalPromisesWithTimeout.mock.calls).toEqual([
             [[expect.any(Promise)], 10_000],
-            [[expect.any(Promise), expect.any(Promise)], 3000],
+            [[expect.any(Promise), expect.any(Promise), expect.any(Promise)], 3000],
             [[expect.any(Promise), expect.any(Promise), expect.any(Promise)], 3000],
         ]);
     });

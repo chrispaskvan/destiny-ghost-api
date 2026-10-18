@@ -12,6 +12,16 @@ import ClaimCheck, { DUPLICATE, SKIPPED } from '../helpers/claim-check.js';
 import mayDeliver from '../helpers/consent.js';
 import log from '../helpers/log.js';
 import currentWeeklyReset from '../helpers/weekly-reset.js';
+import {
+    PROGRESS_UNSAVED,
+    recipientsNotQueued,
+    SUBSCRIBERS_UNREADABLE,
+} from './broadcast.failures.js';
+import {
+    enqueueBroadcast,
+    getBroadcast,
+    QUEUE_NAME as BROADCAST_QUEUE,
+} from './broadcast.queue.js';
 
 /**
  * Constructor options for NotificationController.
@@ -54,6 +64,16 @@ class NotificationController {
         this.world = options.worldRepository;
 
         subscriber.listen(this.#send.bind(this));
+        /**
+         * One broadcast at a time, and one whose worker died is picked up
+         * again from its saved page up to five times rather than BullMQ's
+         * default of once, so a second crash during the same broadcast does
+         * not abandon it.
+         */
+        subscriber.listen(this.#broadcast.bind(this), BROADCAST_QUEUE, {
+            concurrency: 1,
+            maxStalledCount: 5,
+        });
     }
 
     /**
@@ -98,12 +118,33 @@ class NotificationController {
     /**
      * The early gate: whether this job is worth starting at all, recording the
      * suppression when it is not.
+     *
+     * A number whose every document is marked `movedTo` belongs to an account
+     * part way through `movePlatform`: the old copy is marked, the new one not
+     * yet created. Consent finds no live account there, but that is not the
+     * same as there being none, so the job throws instead of recording a
+     * skip, and BullMQ tries it again once the move has landed. A move that
+     * never lands fails the job when its retries run out - recorded as a
+     * failure, not quietly skipped.
      * @param {string} phoneNumber
      * @param {string} notificationType
      * @param {string} claimCheckNumber
      * @returns {Promise<boolean>}
      */
     async #worthStarting(phoneNumber, notificationType, claimCheckNumber) {
+        if (await this.#stillConsents(phoneNumber, notificationType)) {
+            return true;
+        }
+
+        if (await this.users.isMovingPlatforms(phoneNumber)) {
+            throw new Error('The account is moving platforms; trying again once the move lands.');
+        }
+
+        /**
+         * Not moving now, but the move may have landed between the consent
+         * read above and that check, leaving a live account the first read
+         * could not see. Reading consent again settles it either way.
+         */
         if (await this.#stillConsents(phoneNumber, notificationType)) {
             return true;
         }
@@ -157,15 +198,29 @@ class NotificationController {
                 }
 
                 const { access_token: accessToken } = authenticatedUser.bungie;
-                const characters = await this.destiny.getProfile(membershipId, membershipType);
+                /**
+                 * The identity to ask Bungie about is the live record's, which
+                 * `authenticate` reads by phone number, not the one the job
+                 * was queued with: a job queued from the old copy of a user
+                 * part way through a platform move carries the platform they
+                 * have left.
+                 */
+                const {
+                    membershipId: liveMembershipId = membershipId,
+                    membershipType: liveMembershipType = membershipType,
+                } = authenticatedUser;
+                const characters = await this.destiny.getProfile(
+                    liveMembershipId,
+                    liveMembershipType,
+                );
 
                 if (characters?.length) {
                     let itemHashes;
 
                     try {
                         itemHashes = await this.destiny.getXur(
-                            membershipId,
-                            membershipType,
+                            liveMembershipId,
+                            liveMembershipType,
                             characters[0].characterId,
                             accessToken,
                         );
@@ -280,23 +335,117 @@ class NotificationController {
     }
 
     /**
+     * Queue a broadcast's recipients, a page of subscribers at a time,
+     * saving how far it has got on the job after every page.
+     *
+     * Runs as the broadcast queue's worker, so it outlives the request that
+     * accepted the broadcast. If the process dies part way, BullMQ hands the
+     * job to the next worker, which starts from the last saved page: the page
+     * in progress is queued again, and each recipient's job id makes that a
+     * no-op for anyone it already reached. A recipient that cannot be queued
+     * fails the page before its progress is saved, so BullMQ's retry comes
+     * back to the same page rather than skipping past them.
+     *
+     * Recipients are deduplicated by event - the notification type and the
+     * Destiny week the broadcast was accepted in - so a second broadcast for
+     * the same week cannot text anyone twice, while next week's is never
+     * mistaken for it.
+     * @param {{ weeklyReset: string }} body
+     * @param {{ claimCheckNumber: string, notificationType: string }} properties
+     * @param {import('bullmq').Job} job
+     * @returns {Promise<Omit<import('./broadcast.queue.js').BroadcastProgress, 'cursor'>>}
+     */
+    async #broadcast({ weeklyReset }, { claimCheckNumber, notificationType }, job) {
+        const claimCheck = new ClaimCheck(claimCheckNumber);
+        const limit = pLimit(20);
+        /** @param {import('../users/user.service.js').SubscribedUser} user */
+        const queueRecipient = async user => {
+            const { deduplicated } = await this.publisher.sendNotification(user, {
+                notificationType,
+                claimCheckNumber,
+                deduplicationId: `${notificationType}-${weeklyReset}-${user.phoneNumber}`,
+            });
+
+            await claimCheck.addPhoneNumber(user.phoneNumber, deduplicated ? DUPLICATE : undefined);
+
+            return deduplicated;
+        };
+        /** @type {import('./broadcast.queue.js').BroadcastProgress} */
+        let progress = { queued: 0, duplicates: 0, done: false, ...job.data.progress };
+
+        /**
+         * Whatever a step throws becomes the job's `failedReason`, which the
+         * progress endpoint shows to callers. Errors there are private by
+         * default (`adr-files/client-safe-error-messages.md`), so each step's
+         * raw error is logged here and replaced with a message written for
+         * the caller.
+         * @template T
+         * @param {string} message
+         * @param {() => Promise<T>} step
+         * @returns {Promise<T>}
+         */
+        const safely = async (message, step) => {
+            try {
+                return await step();
+            } catch (err) {
+                log.error({ err, claimCheckNumber }, message);
+
+                throw new Error(message);
+            }
+        };
+
+        while (!progress.done) {
+            const { users, cursor } = await safely(SUBSCRIBERS_UNREADABLE, () =>
+                this.users.getSubscribedUsersPage(notificationType, progress.cursor),
+            );
+            const results = await Promise.allSettled(
+                users.map(user => limit(() => queueRecipient(user))),
+            );
+            const failures = results.filter(result => result.status === 'rejected');
+
+            if (failures.length) {
+                for (const { reason: err } of failures) {
+                    log.error({ err, claimCheckNumber }, 'Unable to queue a notification.');
+                }
+
+                throw new Error(recipientsNotQueued(failures.length, users.length));
+            }
+
+            const duplicates = results.filter(
+                result => result.status === 'fulfilled' && result.value,
+            ).length;
+
+            progress = {
+                cursor,
+                queued: progress.queued + users.length - duplicates,
+                duplicates: progress.duplicates + duplicates,
+                done: !cursor,
+            };
+            const saved = progress;
+
+            await safely(PROGRESS_UNSAVED, () => job.updateData({ ...job.data, progress: saved }));
+        }
+
+        const { cursor: _cursor, ...totals } = progress;
+
+        return totals;
+    }
+
+    /**
      * Send notification(s)
      *
-     * Each recipient is queued under a deduplication id that says what makes
-     * two sends the same one. A broadcast names the event - the notification
-     * type and the Destiny week - so a second broadcast for the same week,
-     * however it was triggered, cannot text anyone twice, while next week's
-     * is never mistaken for it. A single-recipient send is deliberate, so it
-     * names only its own operation: sending it again sends it again.
+     * A broadcast is accepted, not sent, here: it is recorded as a job on the
+     * broadcast queue, and `#broadcast` queues its recipients from there, so
+     * it survives this process. A single-recipient send is queued directly,
+     * and deliberately: it is deduplicated only within its own operation, so
+     * sending it again sends it again.
      *
      * @param {string} subscription
      * @param {{ operationId?: string, phoneNumber?: string }} [options] -
      * `operationId` when the caller has already reserved one; a new id
      * otherwise
-     * @returns {Promise<{ claimCheckNumber: string, scheduled: Promise<{ failed: number }> }>}
-     * resolves once the operation has started. A broadcast goes on queueing
-     * recipients after that; `scheduled` settles when every one has been
-     * attempted, with how many could not be queued, and never rejects.
+     * @returns {Promise<{ claimCheckNumber: string }>} once the operation is
+     * durably recorded
      */
     async create(subscription, { operationId, phoneNumber } = {}) {
         const claimCheck = new ClaimCheck(operationId);
@@ -317,39 +466,32 @@ class NotificationController {
                 });
                 await claimCheck.addPhoneNumber(phoneNumber);
 
-                return { claimCheckNumber, scheduled: Promise.resolve({ failed: 0 }) };
+                return { claimCheckNumber };
             }
 
             throw new NotificationError('user not found');
         }
 
-        const users = await this.users.getSubscribedUsers(subscription);
-        const weeklyReset = currentWeeklyReset();
-        const limit = pLimit(20);
-        /** @param {import('../users/user.service.js').SubscribedUser} user */
-        const sendNotification = async user => {
-            const { deduplicated } = await this.publisher.sendNotification(user, {
-                notificationType: subscription,
-                claimCheckNumber,
-                deduplicationId: `${subscription}-${weeklyReset}-${user.phoneNumber}`,
-            });
+        if (!Object.values(notificationTypes).includes(subscription)) {
+            throw new Error('notificationType is not valid');
+        }
 
-            await claimCheck.addPhoneNumber(user.phoneNumber, deduplicated ? DUPLICATE : undefined);
-        };
-
-        const scheduled = Promise.allSettled(
-            users.map(user => limit(() => sendNotification(user))),
-        ).then(results => {
-            const failures = results.filter(result => result.status === 'rejected');
-
-            for (const { reason: err } of failures) {
-                log.error({ err, claimCheckNumber }, 'Unable to queue a notification.');
-            }
-
-            return { failed: failures.length };
+        await enqueueBroadcast({
+            operationId: claimCheckNumber,
+            notificationType: subscription,
+            weeklyReset: currentWeeklyReset(),
         });
 
-        return { claimCheckNumber, scheduled };
+        return { claimCheckNumber };
+    }
+
+    /**
+     * How far a broadcast has got.
+     *
+     * @param {string} number - Claim Check Number
+     */
+    async getBroadcast(number) {
+        return await getBroadcast(number);
     }
 
     /**
