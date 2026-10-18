@@ -17,9 +17,8 @@
  *
  * @module dispatchRecord
  */
-import cache from './cache.js';
+import boundedCommand from './bounded-cache.js';
 import log from './log.js';
-import processExternalPromisesWithTimeout from './process-external-promises-with-timeout.js';
 
 /**
  * As long as the claim check it belongs to: a retry after that has no receipt
@@ -50,26 +49,36 @@ const DISPATCH_RECORD_TIMEOUT_MS = 1000;
 const keyFor = (claimCheckNumber, phoneNumber) => `dispatch:${claimCheckNumber}:${phoneNumber}`;
 
 /**
- * Run a command against the cache, no longer than the timeout. node-redis's
- * own timeout drops a command still unsent when it passes, so an `attempting`
- * that timed out is not written after the send it was meant to precede was
- * abandoned.
+ * Bounded by `boundedCommand`, which also drops a command still unsent when
+ * the timeout passes: an `attempting` that timed out is not written after
+ * the send it was meant to precede was abandoned.
  * @template T
- * @param {(client: typeof cache) => Promise<T>} command
+ * @param {Parameters<typeof boundedCommand<T>>[0]} command
  * @param {number} timeout
  * @returns {Promise<T>}
  */
-const bounded = async (command, timeout) => {
-    const [result] = await processExternalPromisesWithTimeout(
-        [command(cache.withCommandOptions({ timeout }))],
-        timeout,
-    );
+const bounded = (command, timeout) => boundedCommand(command, timeout, 'dispatch record');
 
-    if (result.status === 'fulfilled') return result.value;
-    if (result.status === 'rejected') throw result.reason;
+/**
+ * Write the record only if it still holds what the caller last read (an
+ * empty string for none), so two copies of one job - BullMQ can run a
+ * stalled job again while the original is still going - cannot both decide
+ * to send. Whichever writes second finds the other's record and backs off.
+ *
+ * KEYS[1] record; ARGV[1] what was read, ARGV[2] the new record, ARGV[3]
+ * expiry in seconds.
+ */
+const BEGIN = `
+local current = redis.call('GET', KEYS[1]) or ''
 
-    throw new Error(`The dispatch record did not answer within ${timeout}ms.`);
-};
+if current ~= ARGV[1] then
+    return 0
+end
+
+redis.call('SET', KEYS[1], ARGV[2], 'EX', ARGV[3])
+
+return 1
+`;
 
 /**
  * @param {string} claimCheckNumber
@@ -86,24 +95,33 @@ const read = async (claimCheckNumber, phoneNumber) => {
 };
 
 /**
- * Record that a send is about to be made. Rejects when it cannot, and the
- * caller must not send.
+ * Record that a send is about to be made, unless the record has changed
+ * since `seen` was read (see `BEGIN`). Rejects when it cannot be written, and
+ * the caller must not send.
  * @param {string} claimCheckNumber
  * @param {string} phoneNumber
  * @param {string} body - exactly what is sent, to recognise it by later
- * @returns {Promise<void>}
+ * @param {DispatchRecord | null} seen - what `read` returned
+ * @returns {Promise<boolean>} whether this caller holds the send; `false`
+ * when another attempt changed the record first
  */
-const begin = async (claimCheckNumber, phoneNumber, body) => {
+const begin = async (claimCheckNumber, phoneNumber, body, seen) => {
     /** @type {Attempting} */
     const record = { state: 'attempting', at: Date.now(), body };
-
-    await bounded(
+    const written = await bounded(
         client =>
-            client.set(keyFor(claimCheckNumber, phoneNumber), JSON.stringify(record), {
-                EX: DISPATCH_RECORD_TTL_SECONDS,
+            client.eval(BEGIN, {
+                keys: [keyFor(claimCheckNumber, phoneNumber)],
+                arguments: [
+                    seen ? JSON.stringify(seen) : '',
+                    JSON.stringify(record),
+                    String(DISPATCH_RECORD_TTL_SECONDS),
+                ],
             }),
         DISPATCH_RECORD_SLOT_TIMEOUT_MS,
     );
+
+    return written === 1;
 };
 
 /**
@@ -155,4 +173,9 @@ const forget = async (claimCheckNumber, phoneNumber) => {
 };
 
 export default { read, begin, accept, forget };
-export { DISPATCH_RECORD_SLOT_TIMEOUT_MS, DISPATCH_RECORD_TIMEOUT_MS, DISPATCH_RECORD_TTL_SECONDS };
+export {
+    BEGIN,
+    DISPATCH_RECORD_SLOT_TIMEOUT_MS,
+    DISPATCH_RECORD_TIMEOUT_MS,
+    DISPATCH_RECORD_TTL_SECONDS,
+};

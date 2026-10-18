@@ -50,6 +50,7 @@ vi.mock('../helpers/retry.js', async importOriginal => {
     };
 });
 import { isTransientError } from '../helpers/retry.js';
+import SendDeferredError from './send-deferred.error.js';
 import SendOutcomeUnknownError from './send-outcome-unknown.error.js';
 import DestinyError from '../destiny/destiny.error.js';
 
@@ -1183,8 +1184,18 @@ describe('NotificationController', () => {
              * know it; made permanent, the job would never get the attempt
              * that looks the message up.
              */
-            it('should re-throw a send Twilio may have taken, for the retry to look up', async () => {
-                const unknown = new SendOutcomeUnknownError('Twilio may have accepted it');
+            it.each([
+                ['a send Twilio may have taken', () => new SendOutcomeUnknownError('lost answer')],
+                ['a send that could not be recorded', () => new SendDeferredError('not recorded')],
+                [
+                    'either, matched by name',
+                    () =>
+                        Object.assign(new Error('lost answer'), {
+                            name: 'SendOutcomeUnknownError',
+                        }),
+                ],
+            ])('should re-throw %s, for the retry to settle', async (_, make) => {
+                const unknown = make();
 
                 authenticationService.authenticate.mockResolvedValue({
                     bungie: { access_token: accessToken },

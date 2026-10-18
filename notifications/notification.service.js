@@ -13,6 +13,7 @@ import DispatchRecord from '../helpers/dispatch-record.js';
 import { withRetry, isTransientError } from '../helpers/retry.js';
 import { BRAND_PREFIX, MAX_SMS_MESSAGE_LENGTH } from '../twilio/twilio.constants.js';
 import twilioRateLimiter from '../helpers/twilio-rate-limiter.js';
+import SendDeferredError from './send-deferred.error.js';
 import SendOutcomeUnknownError from './send-outcome-unknown.error.js';
 
 /**
@@ -53,6 +54,21 @@ const NEVER_CONNECTED = new Set([
 ]);
 
 /**
+ * Cut a body to the limit without splitting a character. `substring` counts
+ * UTF-16 units, so a cut can fall inside an emoji, and half of one goes out
+ * as U+FFFD - leaving the text Twilio stores different from the text recorded
+ * to recognise it by.
+ * @param {string} text
+ * @returns {string}
+ */
+const truncate = text => {
+    const cut = text.substring(0, MAX_SMS_MESSAGE_LENGTH);
+    const last = cut.charCodeAt(cut.length - 1);
+
+    return last >= 0xd800 && last <= 0xdbff ? cut.slice(0, -1) : cut;
+};
+
+/**
  * Whether a failed `create` certainly sent nothing: Twilio answered and
  * refused it (any status under 500, a 429 included), or the request never
  * left. Anything else - a timeout, a reset, a 5xx, an error of a kind not
@@ -76,9 +92,16 @@ const certainlyNotSent = err => {
  */
 
 /**
+ * A message an earlier attempt sent, known from its record alone: its SID,
+ * and the status that means Twilio took it. Its delivery reports carry the
+ * rest.
+ * @typedef {Pick<SentMessage, 'sid' | 'status'>} SettledMessage
+ */
+
+/**
  * The subset of the Twilio client this service uses. Kept structural so tests can
  * substitute a stub without constructing a real client.
- * @typedef {((sid: string) => { fetch: () => Promise<SentMessage> }) & {
+ * @typedef {{
  *     create: (message: TwilioMessage) => Promise<SentMessage>,
  *     list: (options: { to: string, from: string, limit: number }) => Promise<SentMessage[]>,
  * }} TwilioMessages
@@ -114,17 +137,20 @@ class Notifications {
      * callback, and `claimCheckNumber` keys the record of the send. `guard` is
      * checked inside the rate limiter's slot, immediately before the provider
      * call - see below.
-     * @returns {Promise<SentMessage | undefined>} The sent message, or
-     * `undefined` when `guard` withheld it.
+     * @returns {Promise<SentMessage | SettledMessage | undefined>} The sent
+     * message - or, for a send an earlier attempt made, what its record says
+     * about it - or `undefined` when `guard` withheld it.
      * @throws {SendOutcomeUnknownError} when Twilio may have taken the message
      * and nothing yet says whether it did
+     * @throws {SendDeferredError} when the send could not be recorded, and so
+     * was not made
      */
     async sendMessage(body, to, mediaUrl, { claimCheckNumber, notificationType, guard } = {}) {
         const query =
             claimCheckNumber && notificationType
                 ? `?claim-check-number=${claimCheckNumber}&notification-type=${notificationType}`
                 : '';
-        const text = `${BRAND_PREFIX}${body}`.substring(0, MAX_SMS_MESSAGE_LENGTH);
+        const text = truncate(`${BRAND_PREFIX}${body}`);
         /** @type {TwilioMessage} */
         const message = {
             to,
@@ -142,10 +168,14 @@ class Notifications {
             message.mediaUrl = [mediaUrl];
         }
 
-        if (claimCheckNumber) {
-            const earlier = await this.#reconcile(claimCheckNumber, message);
+        /** @type {import('../helpers/dispatch-record.js').DispatchRecord | null} */
+        let seen = null;
 
-            if (earlier) return earlier;
+        if (claimCheckNumber) {
+            const settled = await this.#reconcile(claimCheckNumber, message);
+
+            if (settled.earlier) return settled.earlier;
+            seen = settled.seen;
         }
 
         const sent = await withRetry(
@@ -172,10 +202,27 @@ class Notifications {
                     /**
                      * After the guard, so a withheld send leaves no record, and
                      * as the last thing before the provider call, so a record
-                     * exists for every message Twilio could have. A failure
-                     * here rejects, and nothing is sent.
+                     * exists for every message Twilio could have. Written only
+                     * if the record is still what `#reconcile` read, so a copy
+                     * of this job that got here first, while this one waited
+                     * for the slot, is not sent over.
                      */
-                    await DispatchRecord.begin(claimCheckNumber, to, text);
+                    let claimed;
+
+                    try {
+                        claimed = await DispatchRecord.begin(claimCheckNumber, to, text, seen);
+                    } catch (err) {
+                        throw new SendDeferredError(
+                            'Unable to record the send, so it was not made.',
+                            { cause: err },
+                        );
+                    }
+
+                    if (!claimed) {
+                        throw new SendOutcomeUnknownError(
+                            'Another attempt at this send got there first; the next attempt will look it up.',
+                        );
+                    }
 
                     try {
                         return await this.client.messages.create(message);
@@ -215,26 +262,48 @@ class Notifications {
      *   had time to list it, it was never taken; send. Not found sooner,
      *   throw, and look again on the next attempt.
      *
-     * A record or lookup that cannot be read rejects: guessing either way
-     * risks a duplicate or a loss, and the next attempt may be able to tell.
+     * A record or lookup that cannot be read is an unknown outcome too:
+     * guessing either way risks a duplicate or a loss, and the next attempt
+     * may be able to tell. Failing it any other way would let the job end as
+     * a plain error, when Twilio may well have the message.
      * @param {string} claimCheckNumber
      * @param {TwilioMessage} message
-     * @returns {Promise<SentMessage | undefined>} the message an earlier
-     * attempt sent, or `undefined` when this one should send
+     * @returns {Promise<{ earlier?: SettledMessage | SentMessage, seen: import('../helpers/dispatch-record.js').DispatchRecord | null }>}
+     * the message an earlier attempt sent, if any, and the record as read
      */
     async #reconcile(claimCheckNumber, message) {
         const { to, from } = message;
-        const record = await DispatchRecord.read(claimCheckNumber, to);
+        let record;
 
-        if (!record) return undefined;
-        if (record.state === 'accepted') return await this.client.messages(record.sid).fetch();
+        try {
+            record = await DispatchRecord.read(claimCheckNumber, to);
+        } catch (err) {
+            throw new SendOutcomeUnknownError(
+                'Unable to read the record of earlier attempts; the next attempt will look again.',
+                { cause: err },
+            );
+        }
+
+        if (!record) return { seen: null };
+        if (record.state === 'accepted') {
+            return { earlier: { sid: record.sid, status: 'accepted' }, seen: record };
+        }
 
         const since = record.at - CLOCK_SKEW_MS;
-        const listed = await this.client.messages.list({
-            to,
-            from: /** @type {string} */ (from),
-            limit: RECONCILE_PAGE_SIZE,
-        });
+        let listed;
+
+        try {
+            listed = await this.client.messages.list({
+                to,
+                from: /** @type {string} */ (from),
+                limit: RECONCILE_PAGE_SIZE,
+            });
+        } catch (err) {
+            throw new SendOutcomeUnknownError(
+                'Unable to ask Twilio about an earlier attempt; the next attempt will look again.',
+                { cause: err },
+            );
+        }
         /**
          * Matched on `record.body`, not this attempt's: a retry can compose
          * different text (a Xur inventory read again), and it is the earlier
@@ -250,7 +319,7 @@ class Notifications {
         if (found) {
             await DispatchRecord.accept(claimCheckNumber, to, found.sid);
 
-            return found;
+            return { earlier: found, seen: record };
         }
 
         if (Date.now() - record.at < RECONCILE_AFTER_MS) {
@@ -259,7 +328,7 @@ class Notifications {
             );
         }
 
-        return undefined;
+        return { seen: record };
     }
 }
 

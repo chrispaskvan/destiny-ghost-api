@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import DispatchRecord, {
+    BEGIN,
     DISPATCH_RECORD_SLOT_TIMEOUT_MS,
     DISPATCH_RECORD_TIMEOUT_MS,
     DISPATCH_RECORD_TTL_SECONDS,
@@ -9,6 +10,7 @@ import log from './log.js';
 
 vi.mock('./cache.js', () => ({
     default: {
+        eval: vi.fn(),
         get: vi.fn(),
         set: vi.fn(),
         del: vi.fn(),
@@ -36,8 +38,19 @@ describe('DispatchRecord', () => {
             return 'OK';
         });
         cache.del.mockImplementation(async k => Number(store.delete(k)));
+        /**
+         * A mirror of `BEGIN`, which Redis runs for real: it covers how the
+         * module calls the script and reads its answer, not the script.
+         */
+        cache.eval.mockImplementation(async (script, { keys: [k], arguments: [seen, next] }) => {
+            expect(script).toBe(BEGIN);
+            if ((store.get(k) ?? '') !== seen) return 0;
+            store.set(k, next);
+            return 1;
+        });
         cache.withCommandOptions.mockImplementation(options => ({
             options,
+            eval: cache.eval,
             get: cache.get,
             set: cache.set,
             del: cache.del,
@@ -85,10 +98,13 @@ describe('DispatchRecord', () => {
         it('should record the attempt, with what was sent and when', async () => {
             vi.useFakeTimers({ now: 1_000 });
 
-            await DispatchRecord.begin(claimCheckNumber, phoneNumber, 'hello');
+            await expect(
+                DispatchRecord.begin(claimCheckNumber, phoneNumber, 'hello', null),
+            ).resolves.toBe(true);
 
-            expect(cache.set).toHaveBeenCalledWith(key, expect.any(String), {
-                EX: DISPATCH_RECORD_TTL_SECONDS,
+            expect(cache.eval).toHaveBeenCalledWith(BEGIN, {
+                keys: [key],
+                arguments: ['', expect.any(String), String(DISPATCH_RECORD_TTL_SECONDS)],
             });
             await expect(DispatchRecord.read(claimCheckNumber, phoneNumber)).resolves.toEqual({
                 state: 'attempting',
@@ -97,19 +113,54 @@ describe('DispatchRecord', () => {
             });
         });
 
-        it('should reject when the attempt cannot be recorded', async () => {
-            cache.set.mockRejectedValueOnce(new Error('down'));
+        it('should take over an attempt that is still what was read', async () => {
+            await DispatchRecord.begin(claimCheckNumber, phoneNumber, 'first', null);
+            const seen = await DispatchRecord.read(claimCheckNumber, phoneNumber);
 
             await expect(
-                DispatchRecord.begin(claimCheckNumber, phoneNumber, 'hello'),
+                DispatchRecord.begin(claimCheckNumber, phoneNumber, 'second', seen),
+            ).resolves.toBe(true);
+            await expect(DispatchRecord.read(claimCheckNumber, phoneNumber)).resolves.toMatchObject(
+                { body: 'second' },
+            );
+        });
+
+        it.each([
+            ['another attempt began since nothing was read', async () => null],
+            [
+                'the attempt read has since been accepted',
+                async () => {
+                    const seen = await DispatchRecord.read(claimCheckNumber, phoneNumber);
+
+                    await DispatchRecord.accept(claimCheckNumber, phoneNumber, sid);
+
+                    return seen;
+                },
+            ],
+        ])('should back off, writing nothing, when %s', async (_, arrange) => {
+            await DispatchRecord.begin(claimCheckNumber, phoneNumber, 'first', null);
+            const seen = await arrange();
+            const before = store.get(key);
+
+            await expect(
+                DispatchRecord.begin(claimCheckNumber, phoneNumber, 'second', seen),
+            ).resolves.toBe(false);
+            expect(store.get(key)).toBe(before);
+        });
+
+        it('should reject when the attempt cannot be recorded', async () => {
+            cache.eval.mockRejectedValueOnce(new Error('down'));
+
+            await expect(
+                DispatchRecord.begin(claimCheckNumber, phoneNumber, 'hello', null),
             ).rejects.toThrow('down');
         });
 
         it('should reject once it outlasts the slot timeout', async () => {
             vi.useFakeTimers();
-            cache.set.mockReturnValueOnce(new Promise(() => {}));
+            cache.eval.mockReturnValueOnce(new Promise(() => {}));
 
-            const beginning = DispatchRecord.begin(claimCheckNumber, phoneNumber, 'hello');
+            const beginning = DispatchRecord.begin(claimCheckNumber, phoneNumber, 'hello', null);
             const settled = expect(beginning).rejects.toThrow(
                 `${DISPATCH_RECORD_SLOT_TIMEOUT_MS}ms`,
             );
@@ -119,9 +170,9 @@ describe('DispatchRecord', () => {
         });
 
         it('should send with the slot timeout so an unsent one is dropped', async () => {
-            await DispatchRecord.begin(claimCheckNumber, phoneNumber, 'hello');
+            await DispatchRecord.begin(claimCheckNumber, phoneNumber, 'hello', null);
 
-            expect(cache.set.mock.contexts[0]).toEqual(
+            expect(cache.eval.mock.contexts[0]).toEqual(
                 expect.objectContaining({ options: { timeout: DISPATCH_RECORD_SLOT_TIMEOUT_MS } }),
             );
         });
@@ -129,7 +180,7 @@ describe('DispatchRecord', () => {
 
     describe('accept', () => {
         it('should replace the attempt with the accepted SID', async () => {
-            await DispatchRecord.begin(claimCheckNumber, phoneNumber, 'hello');
+            await DispatchRecord.begin(claimCheckNumber, phoneNumber, 'hello', null);
             await DispatchRecord.accept(claimCheckNumber, phoneNumber, sid);
 
             await expect(DispatchRecord.read(claimCheckNumber, phoneNumber)).resolves.toEqual({
@@ -166,7 +217,7 @@ describe('DispatchRecord', () => {
 
     describe('forget', () => {
         it('should drop the record', async () => {
-            await DispatchRecord.begin(claimCheckNumber, phoneNumber, 'hello');
+            await DispatchRecord.begin(claimCheckNumber, phoneNumber, 'hello', null);
             await DispatchRecord.forget(claimCheckNumber, phoneNumber);
 
             await expect(DispatchRecord.read(claimCheckNumber, phoneNumber)).resolves.toBeNull();

@@ -8,6 +8,7 @@ import NotificationError from './notification.error.js';
 import notificationTypes from './notification.types.js';
 import DestinyError from '../destiny/destiny.error.js';
 import XurUnavailableError from './xur-unavailable.error.js';
+import SendDeferredError from './send-deferred.error.js';
 import SendOutcomeUnknownError from './send-outcome-unknown.error.js';
 import ClaimCheck, { DUPLICATE, ERROR, SKIPPED } from '../helpers/claim-check.js';
 import mayDeliver from '../helpers/consent.js';
@@ -24,6 +25,17 @@ import {
     getBroadcast,
     QUEUE_NAME as BROADCAST_QUEUE,
 } from './broadcast.queue.js';
+
+/**
+ * Whether `err` is one of `type`, or carries its name: matched by name as
+ * well, as BullMQ matches its own, so one from another copy of the module is
+ * not missed.
+ * @param {unknown} err
+ * @param {typeof SendOutcomeUnknownError | typeof SendDeferredError} type
+ * @returns {boolean}
+ */
+const isA = (err, type) =>
+    err instanceof type || /** @type {{ name?: unknown }} */ (err)?.name === type.name;
 
 /**
  * Constructor options for NotificationController.
@@ -181,8 +193,7 @@ class NotificationController {
      */
     async #gaveUp({ phoneNumber }, { claimCheckNumber }, job, err) {
         const permanent = err instanceof UnrecoverableError || err?.name === 'UnrecoverableError';
-        const unknown =
-            err instanceof SendOutcomeUnknownError || err?.name === 'SendOutcomeUnknownError';
+        const unknown = isA(err, SendOutcomeUnknownError);
 
         if (unknown) {
             log.error(
@@ -366,10 +377,12 @@ class NotificationController {
                 }
 
                 /**
-                 * Retried, never made permanent: the next attempt is the one
-                 * that finds out whether Twilio took the message.
+                 * Retried, never made permanent. The send may have reached
+                 * Twilio, and the next attempt is the one that finds out; or
+                 * it could not be recorded and was not made, and the next
+                 * attempt may be able to.
                  */
-                if (err instanceof SendOutcomeUnknownError) {
+                if (isA(err, SendOutcomeUnknownError) || isA(err, SendDeferredError)) {
                     throw err;
                 }
 

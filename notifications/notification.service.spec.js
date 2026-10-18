@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import mockTwilioCreateMessageResponse from '../mocks/twilioCreateMessageResponse.json';
+import { MAX_SMS_MESSAGE_LENGTH } from '../twilio/twilio.constants.js';
 import Notifications, { CLOCK_SKEW_MS, RECONCILE_AFTER_MS } from './notification.service.js';
+import SendDeferredError from './send-deferred.error.js';
 import SendOutcomeUnknownError from './send-outcome-unknown.error.js';
 import DispatchRecord from '../helpers/dispatch-record.js';
 import { withRetry, isTransientError } from '../helpers/retry.js';
@@ -20,12 +22,13 @@ vi.mock('../helpers/dispatch-record.js', () => ({
         read: vi.fn(async (claimCheckNumber, phoneNumber) =>
             structuredClone(records.get(`${claimCheckNumber}:${phoneNumber}`) ?? null),
         ),
-        begin: vi.fn(async (claimCheckNumber, phoneNumber, body) => {
-            records.set(`${claimCheckNumber}:${phoneNumber}`, {
-                state: 'attempting',
-                at: Date.now(),
-                body,
-            });
+        begin: vi.fn(async (claimCheckNumber, phoneNumber, body, seen) => {
+            const key = `${claimCheckNumber}:${phoneNumber}`;
+
+            if (JSON.stringify(records.get(key) ?? null) !== JSON.stringify(seen)) return false;
+            records.set(key, { state: 'attempting', at: Date.now(), body });
+
+            return true;
         }),
         accept: vi.fn(async (claimCheckNumber, phoneNumber, sid) => {
             records.set(`${claimCheckNumber}:${phoneNumber}`, { state: 'accepted', sid });
@@ -170,7 +173,7 @@ describe('Notifications', () => {
         /**
          * Twilio with faults to inject: `create` takes the message and then
          * fails to say so (`acceptThenFail`), or fails without taking it
-         * (`failWith`). `list` and `fetch` read back what it took.
+         * (`failWith`). `list` reads back what it took.
          */
         const fakeTwilio = () => {
             /** @type {Array<Record<string, unknown>>} */
@@ -180,32 +183,27 @@ describe('Notifications', () => {
                 /** @type {unknown} */ acceptThenFail: undefined,
                 /** @type {unknown} */ failWith: undefined,
             };
-            const messages = Object.assign(
-                vi.fn(sid => ({
-                    fetch: vi.fn(async () => taken.find(message => message.sid === sid)),
-                })),
-                {
-                    create: vi.fn(async message => {
-                        if (provider.failWith) throw provider.failWith;
+            const messages = {
+                create: vi.fn(async message => {
+                    if (provider.failWith) throw provider.failWith;
 
-                        const sent = {
-                            ...message,
-                            sid: `SM${String(taken.length + 1).padStart(32, '0')}`,
-                            status: 'queued',
-                            direction: 'outbound-api',
-                            dateCreated: new Date(),
-                        };
+                    const sent = {
+                        ...message,
+                        sid: `SM${String(taken.length + 1).padStart(32, '0')}`,
+                        status: 'queued',
+                        direction: 'outbound-api',
+                        dateCreated: new Date(),
+                    };
 
-                        taken.unshift(sent);
-                        if (provider.acceptThenFail) throw provider.acceptThenFail;
+                    taken.unshift(sent);
+                    if (provider.acceptThenFail) throw provider.acceptThenFail;
 
-                        return sent;
-                    }),
-                    list: vi.fn(async ({ to: recipient, limit }) =>
-                        taken.filter(message => message.to === recipient).slice(0, limit),
-                    ),
-                },
-            );
+                    return sent;
+                }),
+                list: vi.fn(async ({ to: recipient, limit }) =>
+                    taken.filter(message => message.to === recipient).slice(0, limit),
+                ),
+            };
 
             return {
                 provider,
@@ -221,11 +219,13 @@ describe('Notifications', () => {
             DispatchRecord.begin.mockImplementationOnce(async (...args) => {
                 expect(messages.create).not.toHaveBeenCalled();
                 records.set(key, { state: 'attempting', at: Date.now(), body: args[2] });
+
+                return true;
             });
 
             const sent = await service.sendMessage('Aegis of the Reef', to, undefined, options);
 
-            expect(DispatchRecord.begin).toHaveBeenCalledWith(claimCheckNumber, to, body);
+            expect(DispatchRecord.begin).toHaveBeenCalledWith(claimCheckNumber, to, body, null);
             expect(records.get(key)).toEqual({ state: 'accepted', sid: sent.sid });
         });
 
@@ -254,8 +254,8 @@ describe('Notifications', () => {
             const second = await service.sendMessage('Aegis of the Reef', to, undefined, options);
 
             expect(messages.create).toHaveBeenCalledTimes(1);
-            expect(messages).toHaveBeenCalledWith(first.sid);
-            expect(second).toBe(provider.taken[0]);
+            expect(second).toEqual({ sid: first.sid, status: 'accepted' });
+            expect(provider.taken).toHaveLength(1);
         });
 
         it('should adopt the message an attempt that crashed before recording its SID sent', async () => {
@@ -371,16 +371,76 @@ describe('Notifications', () => {
             expect(records.get(key)).toMatchObject({ state: 'attempting', body });
         });
 
-        it('should not send when the attempt cannot be recorded', async () => {
+        it('should defer, not send, when the attempt cannot be recorded', async () => {
             const { service, messages } = fakeTwilio();
             const err = new Error('down');
 
             DispatchRecord.begin.mockRejectedValueOnce(err);
 
-            await expect(
-                service.sendMessage('Aegis of the Reef', to, undefined, options),
-            ).rejects.toBe(err);
+            const sending = service.sendMessage('Aegis of the Reef', to, undefined, options);
+
+            await expect(sending).rejects.toBeInstanceOf(SendDeferredError);
+            await expect(sending).rejects.toHaveProperty('cause', err);
             expect(messages.create).not.toHaveBeenCalled();
+        });
+
+        /**
+         * A stalled job's second copy can read the record, then wait for a
+         * slot while the first copy sends: it must not send over it.
+         */
+        it.each([
+            ['began', { state: 'attempting', at: Date.now(), body }],
+            ['was accepted', { state: 'accepted', sid: `SM${'e'.repeat(32)}` }],
+        ])(
+            'should back off when another copy of the job %s while it waited for a slot',
+            async (_, record) => {
+                const { service, messages } = fakeTwilio();
+
+                limiter.schedule.mockImplementationOnce(async fn => {
+                    records.set(key, record);
+
+                    return fn();
+                });
+
+                await expect(
+                    service.sendMessage('Aegis of the Reef', to, undefined, options),
+                ).rejects.toBeInstanceOf(SendOutcomeUnknownError);
+                expect(messages.create).not.toHaveBeenCalled();
+                expect(records.get(key)).toEqual(record);
+            },
+        );
+
+        it('should take over an attempt it read once that is old enough', async () => {
+            const { service, messages } = fakeTwilio();
+
+            records.set(key, { state: 'attempting', at: Date.now() - RECONCILE_AFTER_MS, body });
+
+            await service.sendMessage('Aegis of the Reef', to, undefined, options);
+
+            expect(DispatchRecord.begin).toHaveBeenCalledWith(
+                claimCheckNumber,
+                to,
+                body,
+                expect.objectContaining({ state: 'attempting' }),
+            );
+            expect(messages.create).toHaveBeenCalledTimes(1);
+        });
+
+        /**
+         * Half an emoji goes out as U+FFFD, so Twilio would store text that
+         * no longer matches the record.
+         */
+        it('should not cut a character in half at the length limit', async () => {
+            const { service, messages } = fakeTwilio();
+            const prefix = 'Destiny-Ghost: ';
+            const long = `${'x'.repeat(MAX_SMS_MESSAGE_LENGTH - prefix.length - 1)}🙂 and more`;
+
+            await service.sendMessage(long, to, undefined, options);
+
+            const sent = messages.create.mock.calls[0][0].body;
+
+            expect(sent).toBe(`${prefix}${'x'.repeat(MAX_SMS_MESSAGE_LENGTH - prefix.length - 1)}`);
+            expect(DispatchRecord.begin).toHaveBeenCalledWith(claimCheckNumber, to, sent, null);
         });
 
         it.each([
@@ -395,16 +455,25 @@ describe('Notifications', () => {
                     fake.messages.list.mockRejectedValueOnce(fake.err);
                 },
             ],
-        ])('should neither guess nor send when %s', async (_, arrange) => {
-            const fake = { ...fakeTwilio(), err: new Error('down') };
+        ])(
+            'should report an unknown outcome, neither guessing nor sending, when %s',
+            async (_, arrange) => {
+                const fake = { ...fakeTwilio(), err: new Error('down') };
 
-            arrange(fake);
+                arrange(fake);
 
-            await expect(
-                fake.service.sendMessage('Aegis of the Reef', to, undefined, options),
-            ).rejects.toBe(fake.err);
-            expect(fake.messages.create).not.toHaveBeenCalled();
-        });
+                const sending = fake.service.sendMessage(
+                    'Aegis of the Reef',
+                    to,
+                    undefined,
+                    options,
+                );
+
+                await expect(sending).rejects.toBeInstanceOf(SendOutcomeUnknownError);
+                await expect(sending).rejects.toHaveProperty('cause', fake.err);
+                expect(fake.messages.create).not.toHaveBeenCalled();
+            },
+        );
 
         it('should leave no record when the guard withholds the send', async () => {
             const { service, messages } = fakeTwilio();
