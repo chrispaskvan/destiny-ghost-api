@@ -152,7 +152,7 @@ class Notifications {
      * A send for a claim check is recorded around the provider call (#719),
      * so a job retried after Twilio took its message does not send it again:
      * the retry finds the record and returns that message instead. See
-     * `#reconcile`.
+     * `settleEarlier`.
      *
      * @param {string} body - Message body, prefixed and truncated before sending.
      * @param {string} to - Recipient phone number in E.164 format.
@@ -214,7 +214,7 @@ class Notifications {
              * has changed since is caught by `begin`, which expects the
              * record as it was read.
              */
-            const settled = alreadySettled ?? (await this.#reconcile(claimCheckNumber, to));
+            const settled = alreadySettled ?? (await this.settleEarlier(claimCheckNumber, to));
 
             if (settled.earlier) return settled.earlier;
             seen = settled.seen;
@@ -261,7 +261,7 @@ class Notifications {
                  * After the guard, so a withheld send leaves no record, and
                  * as the last thing before the provider call, so a record
                  * exists for every message Twilio could have. Written only
-                 * if the record is still what `#reconcile` read, so a copy
+                 * if the record is still what `settleEarlier` read, so a copy
                  * of this job that got here first, while this one waited
                  * for the slot, is not sent over.
                  */
@@ -313,25 +313,8 @@ class Notifications {
     }
 
     /**
-     * Settle an earlier attempt at this claim check's send to `to`, for a
-     * caller with work to do before it calls `sendMessage` - so a retry whose
-     * message went out reports it, rather than repeating that work and
-     * perhaps failing or skipping before it finds out. Pass the result to
-     * `sendMessage` as `settled`, so it is not looked up again.
-     * @param {string} claimCheckNumber
-     * @param {string} to
-     * @returns {Promise<Settled>} the earlier message, if there is one to
-     * report, and the record as read
-     * @throws {SendOutcomeUnknownError} when an earlier attempt cannot be
-     * settled yet
-     * @throws {SendDeferredError} when the record cannot be read
-     */
-    async settleEarlier(claimCheckNumber, to) {
-        return await this.#reconcile(claimCheckNumber, to);
-    }
-
-    /**
-     * Settle what an earlier attempt at this send did, before trying again.
+     * Settle what an earlier attempt at this claim check's send to `to` did,
+     * before trying again.
      *
      * - none recorded: nothing was attempted; send.
      * - accepted: Twilio took it; return that message, and send nothing.
@@ -349,11 +332,21 @@ class Notifications {
      * A record found never taken is dropped, so the decision stands: a job
      * that goes on to fail for another reason is not then reported as
      * perhaps having sent it.
+     *
+     * `sendMessage` settles first itself. A caller with work to do before it
+     * calls `sendMessage` settles first instead - so a retry whose message
+     * went out reports it, rather than repeating that work and perhaps
+     * failing or skipping before it finds out - and passes the result to
+     * `sendMessage` as `settled`, so it is not looked up again.
      * @param {string} claimCheckNumber
      * @param {string} to
-     * @returns {Promise<Settled>}
+     * @returns {Promise<Settled>} the earlier message, if there is one to
+     * report, and the record as read
+     * @throws {SendOutcomeUnknownError} when an earlier attempt cannot be
+     * settled yet
+     * @throws {SendDeferredError} when the record cannot be read
      */
-    async #reconcile(claimCheckNumber, to) {
+    async settleEarlier(claimCheckNumber, to) {
         let record;
 
         try {

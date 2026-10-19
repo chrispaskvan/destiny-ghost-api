@@ -292,9 +292,14 @@ class NotificationController {
          * not taken back by anything that has changed since, and the work it
          * would repeat could fail or skip before `sendMessage` found out.
          * Throws, for BullMQ to retry, when an earlier attempt cannot be
-         * settled yet.
+         * settled yet. Only a type with a sender can have sent anything
+         * (#722), so the others skip the lookup.
          */
-        const settled = await this.notifications.settleEarlier(claimCheckNumber, phoneNumber);
+        /** @type {import('./notification.service.js').Settled} */
+        const settled =
+            notificationType === notificationTypes.Xur
+                ? await this.notifications.settleEarlier(claimCheckNumber, phoneNumber)
+                : { seen: null };
 
         if (settled.earlier) {
             await ClaimCheck.advance(

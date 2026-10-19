@@ -89,7 +89,7 @@ Every send for a claim check now costs two extra Redis writes. A retry costs a R
 
 **Twilio may store a body differently from how it was sent** in ways other than a split character (line endings, for example). The probe's plain text matched exactly. A body that does not match is resent once 10 seconds have passed.
 
-**A paused process can still send late.** A copy that freezes between `begin` and `create` (a VM pause, CPU starvation) for longer than the 40-second wait can send after a stalled copy has already sent. Nothing on our side can stop a request a paused process has yet to make: Twilio offers no idempotency key or fencing token to refuse it.
+**A paused process can still send late.** A copy that freezes between `begin` and `create` (a VM pause, CPU starvation) for longer than the 40-second wait can send after a stalled copy has already sent. The 30-second request timeout doesn't bound this either. Its timer starts only once the request has a socket, so time spent waiting for a free connection in the agent's pool isn't counted, and it can't fire while the event loop is blocked. A request held up that way still goes out late. Nothing on our side can stop a request a paused process has yet to make: Twilio offers no idempotency key or fencing token to refuse it.
 
 **Instances' clocks are compared.** The 10 seconds is measured on the instance doing the retry, against times another instance may have written. In the stall race, a host whose clock runs 10 seconds or more ahead could take over a send that is still in flight and send it again. NTP keeps instances well inside that. Closing it fully would need Redis's own time on every read as well as every write.
 

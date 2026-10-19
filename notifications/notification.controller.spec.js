@@ -8,7 +8,7 @@ import NotificationError from './notification.error.js';
 import notificationTypes from './notification.types.js';
 import ClaimCheck, { DUPLICATE, ERROR, SKIPPED } from '../helpers/claim-check.js';
 import log from '../helpers/log.js';
-import { enqueueBroadcast } from './broadcast.queue.js';
+import { enqueueBroadcast, getBroadcast } from './broadcast.queue.js';
 
 vi.mock('bullmq', () => ({
     // Matches real BullMQ's constructor, which only accepts a message - a
@@ -35,7 +35,11 @@ vi.mock('../helpers/subscriber.js');
 vi.mock('./notification.error.js');
 vi.mock('../helpers/claim-check.js');
 vi.mock('../helpers/dispatch-record.js');
-vi.mock('./broadcast.queue.js', () => ({ enqueueBroadcast: vi.fn(), QUEUE_NAME: 'broadcasts' }));
+vi.mock('./broadcast.queue.js', () => ({
+    enqueueBroadcast: vi.fn(),
+    getBroadcast: vi.fn(),
+    QUEUE_NAME: 'broadcasts',
+}));
 vi.mock('../helpers/log.js', () => ({
     default: {
         info: vi.fn(),
@@ -660,6 +664,19 @@ describe('NotificationController', () => {
             expect(mockClaimCheck.addPhoneNumber.mock.invocationCallOrder[0]).toBeLessThan(
                 publisher.sendNotification.mock.invocationCallOrder[0],
             );
+        });
+    });
+
+    describe('getBroadcast', () => {
+        it("should report a broadcast's progress from its queue", async () => {
+            const progress = { state: 'active', queued: 100, duplicates: 2, complete: false };
+
+            getBroadcast.mockResolvedValueOnce(progress);
+
+            await expect(notificationController.getBroadcast(claimCheckNumber)).resolves.toBe(
+                progress,
+            );
+            expect(getBroadcast).toHaveBeenCalledWith(claimCheckNumber);
         });
     });
 
@@ -1443,6 +1460,7 @@ describe('NotificationController', () => {
                     notificationType: notificationTypes.Gunsmith,
                 });
 
+                expect(notificationService.settleEarlier).not.toHaveBeenCalled();
                 expect(authenticationService.authenticate).not.toHaveBeenCalled();
                 expect(destinyService.getProfile).not.toHaveBeenCalled();
                 expect(notificationService.sendMessage).not.toHaveBeenCalled();
