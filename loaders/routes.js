@@ -17,7 +17,9 @@ import Destiny2Service from '../destiny2/destiny2.service.js';
 import DestinyCache from '../destiny/destiny.cache.js';
 import DestinyService from '../destiny/destiny.service.js';
 import MmsService from '../twilio/mms.service.js';
-import NotificationService from '../notifications/notification.service.js';
+import NotificationService, {
+    TWILIO_REQUEST_TIMEOUT_MS,
+} from '../notifications/notification.service.js';
 import UserCache from '../users/user.cache.js';
 import UserService from '../users/user.service.js';
 import World from '../helpers/world.js';
@@ -59,7 +61,12 @@ export default () => {
         key: authenticationKey,
     });
     const documents = new Documents({ client: cosmosClient });
-    const messageClient = twilio(accountSid, authToken);
+    /**
+     * The timeout is set rather than left to twilio-node's default: how long
+     * a retry waits before deciding an unanswered send was never taken
+     * depends on it (#719).
+     */
+    const messageClient = twilio(accountSid, authToken, { timeout: TWILIO_REQUEST_TIMEOUT_MS });
     const userCache = new UserCache({ client });
     const userService = new UserService({
         cacheService: userCache,

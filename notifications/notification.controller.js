@@ -231,6 +231,33 @@ class NotificationController {
     }
 
     /**
+     * What to fail a send job with, so BullMQ retries what may yet succeed
+     * and gives up at once on what cannot: a transient error (ours marked
+     * `retryable` among them) or an `UnrecoverableError` as it is, anything
+     * else made unrecoverable.
+     * @param {unknown} err
+     * @returns {Error}
+     */
+    static #forBullMQ(err) {
+        if (err instanceof Error && isTransientError(err)) return err;
+        if (isA(err, UnrecoverableError)) return /** @type {Error} */ (err);
+
+        /**
+         * Unlike native `Error`, BullMQ's `UnrecoverableError` constructor
+         * only accepts a message - a second `{ cause }` argument is
+         * silently dropped. Set `cause` as a property afterward so it's
+         * not lost.
+         */
+        const unrecoverableError = new UnrecoverableError(
+            err instanceof Error ? err.message : String(err),
+        );
+
+        unrecoverableError.cause = err;
+
+        return unrecoverableError;
+    }
+
+    /**
      * The record of this recipient's send, for a job BullMQ has given up on.
      * `null` when there is none, or it cannot be read: the last error then
      * decides on its own.
@@ -267,13 +294,13 @@ class NotificationController {
          * Throws, for BullMQ to retry, when an earlier attempt cannot be
          * settled yet.
          */
-        const earlier = await this.notifications.findEarlier(claimCheckNumber, phoneNumber);
+        const settled = await this.notifications.settleEarlier(claimCheckNumber, phoneNumber);
 
-        if (earlier) {
+        if (settled.earlier) {
             await ClaimCheck.advance(
                 claimCheckNumber,
                 phoneNumber,
-                NotificationController.#sentOutcome(earlier),
+                NotificationController.#sentOutcome(settled.earlier),
             );
 
             return;
@@ -394,6 +421,7 @@ class NotificationController {
                             claimCheckNumber,
                             notificationType,
                             guard: () => this.#stillConsents(phoneNumber, notificationType),
+                            settled,
                         },
                     );
 
@@ -412,18 +440,27 @@ class NotificationController {
                 if (err instanceof XurUnavailableError) {
                     /**
                      * Reached only after the Bungie calls above have run, so
-                     * it needs the same guard as the main path.
+                     * it needs the same guard as the main path. Sent from
+                     * inside this `catch`, so its own failures are classified
+                     * here rather than by what follows.
                      */
-                    const sent = await this.notifications.sendMessage(
-                        "Xur has closed shop. He'll return Friday.",
-                        phoneNumber,
-                        undefined,
-                        {
-                            claimCheckNumber,
-                            notificationType,
-                            guard: () => this.#stillConsents(phoneNumber, notificationType),
-                        },
-                    );
+                    let sent;
+
+                    try {
+                        sent = await this.notifications.sendMessage(
+                            "Xur has closed shop. He'll return Friday.",
+                            phoneNumber,
+                            undefined,
+                            {
+                                claimCheckNumber,
+                                notificationType,
+                                guard: () => this.#stillConsents(phoneNumber, notificationType),
+                                settled,
+                            },
+                        );
+                    } catch (sendErr) {
+                        throw NotificationController.#forBullMQ(sendErr);
+                    }
 
                     log.info(JSON.stringify(sent?.status));
                     await ClaimCheck.advance(
@@ -435,27 +472,7 @@ class NotificationController {
                     return;
                 }
 
-                if (err instanceof Error && isTransientError(err)) {
-                    throw err;
-                }
-
-                if (isA(err, UnrecoverableError)) {
-                    throw err;
-                }
-
-                /**
-                 * Unlike native `Error`, BullMQ's `UnrecoverableError` constructor
-                 * only accepts a message - a second `{ cause }` argument is
-                 * silently dropped. Set `cause` as a property afterward so it's
-                 * not lost.
-                 */
-                const unrecoverableError = new UnrecoverableError(
-                    err instanceof Error ? err.message : String(err),
-                );
-
-                unrecoverableError.cause = err;
-
-                throw unrecoverableError;
+                throw NotificationController.#forBullMQ(err);
             }
         } else {
             /**

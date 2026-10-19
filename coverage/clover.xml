@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<coverage generated="1792375592000" clover="3.2.0">
-  <project timestamp="1792375592000" name="All files">
-    <metrics statements="3083" coveredstatements="2881" conditionals="1599" coveredconditionals="1405" methods="676" coveredmethods="628" elements="5358" coveredelements="4914" complexity="0" loc="3083" ncloc="3083" packages="14" files="107" classes="107"/>
+<coverage generated="1792376674358" clover="3.2.0">
+  <project timestamp="1792376674358" name="All files">
+    <metrics statements="3084" coveredstatements="2882" conditionals="1603" coveredconditionals="1409" methods="677" coveredmethods="629" elements="5364" coveredelements="4920" complexity="0" loc="3084" ncloc="3084" packages="14" files="107" classes="107"/>
     <package name="destiny-ghost-api">
       <metrics statements="123" coveredstatements="117" conditionals="45" coveredconditionals="41" methods="27" coveredmethods="25"/>
       <file name="grpc.js" path="/Users/chrispaskvan/Projects/destiny-ghost/destiny-ghost-api/grpc.js">
@@ -289,10 +289,10 @@
       </file>
       <file name="destiny.error.js" path="/Users/chrispaskvan/Projects/destiny-ghost/destiny-ghost-api/destiny/destiny.error.js">
         <metrics statements="4" coveredstatements="4" conditionals="0" coveredconditionals="0" methods="1" coveredmethods="1"/>
-        <line num="14" count="17" type="stmt"/>
-        <line num="16" count="17" type="stmt"/>
-        <line num="17" count="17" type="stmt"/>
-        <line num="18" count="17" type="stmt"/>
+        <line num="14" count="21" type="stmt"/>
+        <line num="16" count="21" type="stmt"/>
+        <line num="17" count="21" type="stmt"/>
+        <line num="18" count="21" type="stmt"/>
       </file>
       <file name="destiny.routes.js" path="/Users/chrispaskvan/Projects/destiny-ghost/destiny-ghost-api/destiny/destiny.routes.js">
         <metrics statements="35" coveredstatements="14" conditionals="15" coveredconditionals="4" methods="6" coveredmethods="2"/>
@@ -453,48 +453,48 @@
         <metrics statements="118" coveredstatements="109" conditionals="88" coveredconditionals="74" methods="20" coveredmethods="18"/>
         <line num="22" count="4" type="stmt"/>
         <line num="23" count="4" type="stmt"/>
-        <line num="30" count="74" type="cond" truecount="2" falsecount="0"/>
-        <line num="32" count="74" type="cond" truecount="2" falsecount="2"/>
-        <line num="41" count="1847" type="cond" truecount="3" falsecount="1"/>
+        <line num="30" count="77" type="cond" truecount="2" falsecount="0"/>
+        <line num="32" count="77" type="cond" truecount="2" falsecount="2"/>
+        <line num="41" count="1998" type="cond" truecount="3" falsecount="1"/>
         <line num="42" count="0" type="stmt"/>
-        <line num="45" count="1847" type="cond" truecount="2" falsecount="0"/>
-        <line num="46" count="1773" type="stmt"/>
-        <line num="49" count="74" type="stmt"/>
-        <line num="50" count="74" type="stmt"/>
-        <line num="51" count="74" type="stmt"/>
-        <line num="52" count="74" type="stmt"/>
-        <line num="57" count="74" type="stmt"/>
-        <line num="58" count="71" type="stmt"/>
-        <line num="64" count="74" type="stmt"/>
-        <line num="65" count="74" type="stmt"/>
+        <line num="45" count="1998" type="cond" truecount="2" falsecount="0"/>
+        <line num="46" count="1921" type="stmt"/>
+        <line num="49" count="77" type="stmt"/>
+        <line num="50" count="77" type="stmt"/>
+        <line num="51" count="77" type="stmt"/>
+        <line num="52" count="77" type="stmt"/>
+        <line num="57" count="77" type="stmt"/>
+        <line num="58" count="74" type="stmt"/>
+        <line num="64" count="77" type="stmt"/>
+        <line num="65" count="77" type="stmt"/>
         <line num="66" count="3" type="stmt"/>
-        <line num="70" count="74" type="stmt"/>
+        <line num="70" count="77" type="stmt"/>
         <line num="71" count="2" type="stmt"/>
         <line num="73" count="2" type="cond" truecount="3" falsecount="1"/>
         <line num="74" count="2" type="stmt"/>
         <line num="77" count="2" type="stmt"/>
-        <line num="79" count="74" type="stmt"/>
-        <line num="80" count="76" type="cond" truecount="2" falsecount="0"/>
-        <line num="81" count="74" type="stmt"/>
-        <line num="82" count="74" type="stmt"/>
-        <line num="83" count="76" type="stmt"/>
-        <line num="85" count="76" type="cond" truecount="2" falsecount="0"/>
-        <line num="86" count="71" type="stmt"/>
-        <line num="87" count="71" type="cond" truecount="1" falsecount="1"/>
+        <line num="79" count="77" type="stmt"/>
+        <line num="80" count="79" type="cond" truecount="2" falsecount="0"/>
+        <line num="81" count="77" type="stmt"/>
+        <line num="82" count="77" type="stmt"/>
+        <line num="83" count="79" type="stmt"/>
+        <line num="85" count="79" type="cond" truecount="2" falsecount="0"/>
+        <line num="86" count="74" type="stmt"/>
+        <line num="87" count="74" type="cond" truecount="1" falsecount="1"/>
         <line num="88" count="3" type="cond" truecount="1" falsecount="1"/>
         <line num="89" count="3" type="stmt"/>
-        <line num="93" count="74" type="stmt"/>
-        <line num="94" count="76" type="stmt"/>
-        <line num="95" count="76" type="stmt"/>
-        <line num="98" count="74" type="stmt"/>
-        <line num="99" count="74" type="stmt"/>
-        <line num="101" count="74" type="cond" truecount="2" falsecount="0"/>
-        <line num="102" count="71" type="stmt"/>
-        <line num="103" count="71" type="stmt"/>
+        <line num="93" count="77" type="stmt"/>
+        <line num="94" count="79" type="stmt"/>
+        <line num="95" count="79" type="stmt"/>
+        <line num="98" count="77" type="stmt"/>
+        <line num="99" count="77" type="stmt"/>
+        <line num="101" count="77" type="cond" truecount="2" falsecount="0"/>
+        <line num="102" count="74" type="stmt"/>
+        <line num="103" count="74" type="stmt"/>
         <line num="105" count="3" type="stmt"/>
         <line num="106" count="3" type="stmt"/>
-        <line num="110" count="74" type="stmt"/>
-        <line num="121" count="1847" type="cond" truecount="2" falsecount="0"/>
+        <line num="110" count="77" type="stmt"/>
+        <line num="121" count="1998" type="cond" truecount="2" falsecount="0"/>
         <line num="123" count="3" type="cond" truecount="2" falsecount="0"/>
         <line num="124" count="2" type="stmt"/>
         <line num="126" count="1" type="stmt"/>
@@ -524,14 +524,14 @@
         <line num="239" count="9" type="stmt"/>
         <line num="241" count="9" type="stmt"/>
         <line num="247" count="9" type="stmt"/>
-        <line num="248" count="1846" type="cond" truecount="2" falsecount="0"/>
+        <line num="248" count="1997" type="cond" truecount="2" falsecount="0"/>
         <line num="249" count="2" type="stmt"/>
         <line num="252" count="2" type="stmt"/>
-        <line num="255" count="1844" type="stmt"/>
-        <line num="260" count="1844" type="cond" truecount="2" falsecount="0"/>
+        <line num="255" count="1995" type="stmt"/>
+        <line num="260" count="1995" type="cond" truecount="2" falsecount="0"/>
         <line num="268" count="3" type="stmt"/>
-        <line num="269" count="1841" type="stmt"/>
-        <line num="272" count="1841" type="stmt"/>
+        <line num="269" count="1992" type="stmt"/>
+        <line num="272" count="1992" type="stmt"/>
         <line num="275" count="3" type="stmt"/>
         <line num="277" count="3" type="cond" truecount="1" falsecount="1"/>
         <line num="279" count="3" type="stmt"/>
@@ -720,7 +720,7 @@
       </file>
     </package>
     <package name="destiny-ghost-api.helpers">
-      <metrics statements="1038" coveredstatements="1000" conditionals="485" coveredconditionals="440" methods="284" coveredmethods="274"/>
+      <metrics statements="1039" coveredstatements="1001" conditionals="485" coveredconditionals="440" methods="284" coveredmethods="274"/>
       <file name="ai.js" path="/Users/chrispaskvan/Projects/destiny-ghost/destiny-ghost-api/helpers/ai.js">
         <metrics statements="23" coveredstatements="23" conditionals="7" coveredconditionals="7" methods="5" coveredmethods="5"/>
         <line num="13" count="5" type="stmt"/>
@@ -901,7 +901,7 @@
         <line num="40" count="7" type="stmt"/>
         <line num="60" count="7" type="stmt"/>
         <line num="74" count="7" type="stmt"/>
-        <line num="77" count="179" type="stmt"/>
+        <line num="77" count="181" type="stmt"/>
         <line num="98" count="7" type="stmt"/>
         <line num="99" count="93" type="stmt"/>
         <line num="100" count="93" type="stmt"/>
@@ -909,14 +909,14 @@
         <line num="115" count="3" type="stmt"/>
         <line num="137" count="1" type="stmt"/>
         <line num="155" count="7" type="stmt"/>
-        <line num="156" count="86" type="stmt"/>
-        <line num="157" count="86" type="stmt"/>
-        <line num="162" count="86" type="cond" truecount="2" falsecount="0"/>
+        <line num="156" count="88" type="stmt"/>
+        <line num="157" count="88" type="stmt"/>
+        <line num="162" count="88" type="cond" truecount="2" falsecount="0"/>
         <line num="163" count="2" type="stmt"/>
         <line num="172" count="2" type="stmt"/>
-        <line num="175" count="84" type="stmt"/>
-        <line num="177" count="84" type="cond" truecount="2" falsecount="0"/>
-        <line num="178" count="76" type="stmt"/>
+        <line num="175" count="86" type="stmt"/>
+        <line num="177" count="86" type="cond" truecount="2" falsecount="0"/>
+        <line num="178" count="78" type="stmt"/>
         <line num="181" count="8" type="stmt"/>
         <line num="186" count="0" type="stmt"/>
         <line num="188" count="0" type="stmt"/>
@@ -924,26 +924,26 @@
       <file name="consent.js" path="/Users/chrispaskvan/Projects/destiny-ghost/destiny-ghost-api/helpers/consent.js">
         <metrics statements="21" coveredstatements="21" conditionals="19" coveredconditionals="19" methods="2" coveredmethods="2"/>
         <line num="48" count="8" type="stmt"/>
-        <line num="53" count="97" type="stmt"/>
-        <line num="66" count="97" type="stmt"/>
+        <line num="53" count="99" type="stmt"/>
+        <line num="66" count="99" type="stmt"/>
         <line num="71" count="5" type="stmt"/>
         <line num="76" count="5" type="stmt"/>
-        <line num="92" count="92" type="cond" truecount="5" falsecount="0"/>
-        <line num="97" count="97" type="cond" truecount="4" falsecount="0"/>
+        <line num="92" count="94" type="cond" truecount="5" falsecount="0"/>
+        <line num="97" count="99" type="cond" truecount="4" falsecount="0"/>
         <line num="98" count="4" type="stmt"/>
         <line num="103" count="4" type="stmt"/>
-        <line num="106" count="88" type="cond" truecount="2" falsecount="0"/>
+        <line num="106" count="90" type="cond" truecount="2" falsecount="0"/>
         <line num="111" count="6" type="stmt"/>
         <line num="116" count="6" type="stmt"/>
-        <line num="124" count="82" type="cond" truecount="4" falsecount="0"/>
+        <line num="124" count="84" type="cond" truecount="4" falsecount="0"/>
         <line num="125" count="14" type="stmt"/>
         <line num="130" count="14" type="stmt"/>
-        <line num="140" count="68" type="cond" truecount="2" falsecount="0"/>
-        <line num="141" count="36" type="stmt"/>
-        <line num="143" count="36" type="cond" truecount="2" falsecount="0"/>
+        <line num="140" count="70" type="cond" truecount="2" falsecount="0"/>
+        <line num="141" count="38" type="stmt"/>
+        <line num="143" count="38" type="cond" truecount="2" falsecount="0"/>
         <line num="144" count="3" type="stmt"/>
         <line num="149" count="3" type="stmt"/>
-        <line num="153" count="65" type="stmt"/>
+        <line num="153" count="67" type="stmt"/>
       </file>
       <file name="csrf.middleware.js" path="/Users/chrispaskvan/Projects/destiny-ghost/destiny-ghost-api/helpers/csrf.middleware.js">
         <metrics statements="1" coveredstatements="1" conditionals="0" coveredconditionals="0" methods="0" coveredmethods="0"/>
@@ -960,7 +960,7 @@
         <line num="31" count="13" type="stmt"/>
       </file>
       <file name="dispatch-record.js" path="/Users/chrispaskvan/Projects/destiny-ghost/destiny-ghost-api/helpers/dispatch-record.js">
-        <metrics statements="26" coveredstatements="26" conditionals="8" coveredconditionals="8" methods="11" coveredmethods="11"/>
+        <metrics statements="27" coveredstatements="27" conditionals="8" coveredconditionals="8" methods="11" coveredmethods="11"/>
         <line num="31" count="6" type="stmt"/>
         <line num="34" count="6" type="stmt"/>
         <line num="48" count="55" type="stmt"/>
@@ -970,23 +970,24 @@
         <line num="95" count="41" type="stmt"/>
         <line num="97" count="41" type="stmt"/>
         <line num="108" count="33" type="stmt"/>
-        <line num="120" count="6" type="stmt"/>
-        <line num="121" count="14" type="stmt"/>
+        <line num="121" count="6" type="stmt"/>
         <line num="122" count="14" type="stmt"/>
-        <line num="124" count="6" type="stmt"/>
-        <line num="133" count="6" type="stmt"/>
-        <line num="134" count="14" type="stmt"/>
-        <line num="135" count="14" type="stmt"/>
-        <line num="139" count="12" type="cond" truecount="2" falsecount="0"/>
-        <line num="153" count="6" type="stmt"/>
-        <line num="155" count="27" type="stmt"/>
-        <line num="157" count="27" type="cond" truecount="2" falsecount="0"/>
-        <line num="168" count="6" type="stmt"/>
-        <line num="169" count="5" type="stmt"/>
-        <line num="185" count="6" type="stmt"/>
-        <line num="186" count="4" type="stmt"/>
-        <line num="200" count="6" type="stmt"/>
-        <line num="201" count="5" type="stmt"/>
+        <line num="123" count="14" type="stmt"/>
+        <line num="125" count="6" type="stmt"/>
+        <line num="127" count="6" type="stmt"/>
+        <line num="136" count="6" type="stmt"/>
+        <line num="137" count="14" type="stmt"/>
+        <line num="138" count="14" type="stmt"/>
+        <line num="142" count="12" type="cond" truecount="2" falsecount="0"/>
+        <line num="156" count="6" type="stmt"/>
+        <line num="158" count="27" type="stmt"/>
+        <line num="160" count="27" type="cond" truecount="2" falsecount="0"/>
+        <line num="171" count="6" type="stmt"/>
+        <line num="172" count="5" type="stmt"/>
+        <line num="188" count="6" type="stmt"/>
+        <line num="189" count="4" type="stmt"/>
+        <line num="204" count="6" type="stmt"/>
+        <line num="205" count="5" type="stmt"/>
       </file>
       <file name="documents.js" path="/Users/chrispaskvan/Projects/destiny-ghost/destiny-ghost-api/helpers/documents.js">
         <metrics statements="15" coveredstatements="15" conditionals="2" coveredconditionals="1" methods="6" coveredmethods="6"/>
@@ -1195,9 +1196,9 @@
         <line num="51" count="12" type="stmt"/>
         <line num="52" count="12" type="stmt"/>
         <line num="53" count="12" type="stmt"/>
-        <line num="57" count="1463" type="stmt"/>
-        <line num="66" count="34" type="stmt"/>
-        <line num="73" count="34" type="stmt"/>
+        <line num="57" count="1626" type="stmt"/>
+        <line num="66" count="35" type="stmt"/>
+        <line num="73" count="35" type="stmt"/>
         <line num="81" count="11" type="stmt"/>
         <line num="83" count="11" type="cond" truecount="2" falsecount="0"/>
         <line num="84" count="3" type="stmt"/>
@@ -1221,13 +1222,13 @@
         <line num="173" count="3" type="stmt"/>
         <line num="174" count="3" type="stmt"/>
         <line num="176" count="3" type="stmt"/>
-        <line num="177" count="12" type="stmt"/>
-        <line num="182" count="12" type="stmt"/>
-        <line num="183" count="1457" type="stmt"/>
-        <line num="184" count="1455" type="stmt"/>
-        <line num="187" count="10" type="cond" truecount="2" falsecount="0"/>
+        <line num="177" count="13" type="stmt"/>
+        <line num="182" count="13" type="stmt"/>
+        <line num="183" count="1620" type="stmt"/>
+        <line num="184" count="1618" type="stmt"/>
+        <line num="187" count="11" type="cond" truecount="2" falsecount="0"/>
         <line num="188" count="1" type="stmt"/>
-        <line num="191" count="9" type="stmt"/>
+        <line num="191" count="10" type="stmt"/>
       </file>
       <file name="performance.js" path="/Users/chrispaskvan/Projects/destiny-ghost/destiny-ghost-api/helpers/performance.js">
         <metrics statements="66" coveredstatements="66" conditionals="30" coveredconditionals="28" methods="25" coveredmethods="25"/>
@@ -1236,10 +1237,10 @@
         <line num="31" count="46" type="cond" truecount="2" falsecount="0"/>
         <line num="39" count="4" type="stmt"/>
         <line num="40" count="4" type="stmt"/>
-        <line num="42" count="1878" type="cond" truecount="2" falsecount="0"/>
+        <line num="42" count="1913" type="cond" truecount="2" falsecount="0"/>
         <line num="43" count="3" type="stmt"/>
-        <line num="51" count="1719" type="stmt"/>
-        <line num="53" count="1719" type="cond" truecount="2" falsecount="0"/>
+        <line num="51" count="1753" type="stmt"/>
+        <line num="53" count="1753" type="cond" truecount="2" falsecount="0"/>
         <line num="54" count="3" type="stmt"/>
         <line num="55" count="3" type="stmt"/>
         <line num="82" count="4" type="stmt"/>
@@ -1301,7 +1302,7 @@
       <file name="pool.js" path="/Users/chrispaskvan/Projects/destiny-ghost/destiny-ghost-api/helpers/pool.js">
         <metrics statements="3" coveredstatements="3" conditionals="0" coveredconditionals="0" methods="2" coveredmethods="1"/>
         <line num="4" count="5" type="stmt"/>
-        <line num="6" count="47" type="stmt"/>
+        <line num="6" count="48" type="stmt"/>
         <line num="7" count="5" type="stmt"/>
       </file>
       <file name="postmaster.js" path="/Users/chrispaskvan/Projects/destiny-ghost/destiny-ghost-api/helpers/postmaster.js">
@@ -1327,20 +1328,20 @@
       <file name="process-external-promises-with-timeout.js" path="/Users/chrispaskvan/Projects/destiny-ghost/destiny-ghost-api/helpers/process-external-promises-with-timeout.js">
         <metrics statements="15" coveredstatements="15" conditionals="4" coveredconditionals="4" methods="6" coveredmethods="6"/>
         <line num="2" count="12" type="stmt"/>
-        <line num="10" count="375" type="stmt"/>
-        <line num="11" count="375" type="stmt"/>
-        <line num="12" count="375" type="stmt"/>
-        <line num="14" count="375" type="stmt"/>
-        <line num="15" count="375" type="stmt"/>
-        <line num="17" count="377" type="stmt"/>
-        <line num="20" count="377" type="stmt"/>
-        <line num="28" count="375" type="stmt"/>
-        <line num="29" count="377" type="cond" truecount="2" falsecount="0"/>
-        <line num="30" count="351" type="stmt"/>
+        <line num="10" count="377" type="stmt"/>
+        <line num="11" count="377" type="stmt"/>
+        <line num="12" count="377" type="stmt"/>
+        <line num="14" count="377" type="stmt"/>
+        <line num="15" count="377" type="stmt"/>
+        <line num="17" count="379" type="stmt"/>
+        <line num="20" count="379" type="stmt"/>
+        <line num="28" count="377" type="stmt"/>
+        <line num="29" count="379" type="cond" truecount="2" falsecount="0"/>
+        <line num="30" count="353" type="stmt"/>
         <line num="33" count="26" type="cond" truecount="2" falsecount="0"/>
         <line num="34" count="13" type="stmt"/>
         <line num="37" count="13" type="stmt"/>
-        <line num="40" count="375" type="stmt"/>
+        <line num="40" count="377" type="stmt"/>
       </file>
       <file name="publisher.js" path="/Users/chrispaskvan/Projects/destiny-ghost/destiny-ghost-api/helpers/publisher.js">
         <metrics statements="41" coveredstatements="39" conditionals="14" coveredconditionals="14" methods="16" coveredmethods="16"/>
@@ -1605,12 +1606,12 @@
         <line num="51" count="22" type="stmt"/>
         <line num="55" count="59" type="stmt"/>
         <line num="62" count="16" type="stmt"/>
-        <line num="96" count="64" type="stmt"/>
-        <line num="105" count="64" type="cond" truecount="2" falsecount="0"/>
-        <line num="107" count="60" type="cond" truecount="2" falsecount="0"/>
-        <line num="108" count="13" type="cond" truecount="3" falsecount="0"/>
-        <line num="111" count="47" type="cond" truecount="4" falsecount="0"/>
-        <line num="113" count="37" type="cond" truecount="2" falsecount="0"/>
+        <line num="96" count="68" type="stmt"/>
+        <line num="105" count="68" type="cond" truecount="2" falsecount="0"/>
+        <line num="107" count="63" type="cond" truecount="2" falsecount="0"/>
+        <line num="108" count="14" type="cond" truecount="3" falsecount="0"/>
+        <line num="111" count="49" type="cond" truecount="4" falsecount="0"/>
+        <line num="113" count="39" type="cond" truecount="2" falsecount="0"/>
         <line num="116" count="16" type="stmt"/>
         <line num="124" count="16" type="stmt"/>
         <line num="141" count="14" type="cond" truecount="4" falsecount="0"/>
@@ -2016,49 +2017,49 @@
       </file>
       <file name="routes.js" path="/Users/chrispaskvan/Projects/destiny-ghost/destiny-ghost-api/loaders/routes.js">
         <metrics statements="43" coveredstatements="40" conditionals="0" coveredconditionals="0" methods="3" coveredmethods="2"/>
-        <line num="45" count="3" type="stmt"/>
-        <line num="48" count="3" type="stmt"/>
-        <line num="53" count="3" type="stmt"/>
-        <line num="54" count="3" type="stmt"/>
-        <line num="57" count="3" type="stmt"/>
-        <line num="61" count="3" type="stmt"/>
-        <line num="62" count="3" type="stmt"/>
+        <line num="47" count="3" type="stmt"/>
+        <line num="50" count="3" type="stmt"/>
+        <line num="55" count="3" type="stmt"/>
+        <line num="56" count="3" type="stmt"/>
+        <line num="59" count="3" type="stmt"/>
         <line num="63" count="3" type="stmt"/>
-        <line num="64" count="3" type="stmt"/>
+        <line num="69" count="3" type="stmt"/>
         <line num="70" count="3" type="stmt"/>
-        <line num="75" count="3" type="stmt"/>
+        <line num="71" count="3" type="stmt"/>
         <line num="77" count="3" type="stmt"/>
-        <line num="81" count="3" type="stmt"/>
-        <line num="85" count="3" type="stmt"/>
-        <line num="86" count="3" type="stmt"/>
-        <line num="87" count="3" type="stmt"/>
-        <line num="90" count="3" type="stmt"/>
+        <line num="82" count="3" type="stmt"/>
+        <line num="84" count="3" type="stmt"/>
+        <line num="88" count="3" type="stmt"/>
+        <line num="92" count="3" type="stmt"/>
+        <line num="93" count="3" type="stmt"/>
+        <line num="94" count="3" type="stmt"/>
         <line num="97" count="3" type="stmt"/>
         <line num="104" count="3" type="stmt"/>
-        <line num="105" count="3" type="stmt"/>
-        <line num="107" count="3" type="stmt"/>
-        <line num="108" count="3" type="stmt"/>
-        <line num="118" count="3" type="stmt"/>
-        <line num="124" count="3" type="stmt"/>
-        <line num="126" count="3" type="stmt"/>
+        <line num="111" count="3" type="stmt"/>
+        <line num="112" count="3" type="stmt"/>
+        <line num="114" count="3" type="stmt"/>
+        <line num="115" count="3" type="stmt"/>
+        <line num="125" count="3" type="stmt"/>
         <line num="131" count="3" type="stmt"/>
-        <line num="135" count="3" type="stmt"/>
-        <line num="137" count="3" type="stmt"/>
+        <line num="133" count="3" type="stmt"/>
+        <line num="138" count="3" type="stmt"/>
+        <line num="142" count="3" type="stmt"/>
         <line num="144" count="3" type="stmt"/>
-        <line num="146" count="3" type="stmt"/>
+        <line num="151" count="3" type="stmt"/>
         <line num="153" count="3" type="stmt"/>
-        <line num="155" count="3" type="stmt"/>
+        <line num="160" count="3" type="stmt"/>
         <line num="162" count="3" type="stmt"/>
-        <line num="164" count="3" type="stmt"/>
-        <line num="167" count="3" type="stmt"/>
-        <line num="172" count="3" type="stmt"/>
+        <line num="169" count="3" type="stmt"/>
+        <line num="171" count="3" type="stmt"/>
         <line num="174" count="3" type="stmt"/>
-        <line num="176" count="1" type="stmt"/>
-        <line num="183" count="0" type="stmt"/>
-        <line num="184" count="0" type="stmt"/>
-        <line num="189" count="0" type="stmt"/>
-        <line num="203" count="3" type="stmt"/>
+        <line num="179" count="3" type="stmt"/>
+        <line num="181" count="3" type="stmt"/>
+        <line num="183" count="1" type="stmt"/>
+        <line num="190" count="0" type="stmt"/>
+        <line num="191" count="0" type="stmt"/>
+        <line num="196" count="0" type="stmt"/>
         <line num="210" count="3" type="stmt"/>
+        <line num="217" count="3" type="stmt"/>
       </file>
     </package>
     <package name="destiny-ghost-api.mcp">
@@ -2201,7 +2202,7 @@
       </file>
     </package>
     <package name="destiny-ghost-api.notifications">
-      <metrics statements="314" coveredstatements="302" conditionals="174" coveredconditionals="166" methods="56" coveredmethods="52"/>
+      <metrics statements="314" coveredstatements="302" conditionals="178" coveredconditionals="170" methods="57" coveredmethods="53"/>
       <file name="broadcast.failures.js" path="/Users/chrispaskvan/Projects/destiny-ghost/destiny-ghost-api/notifications/broadcast.failures.js">
         <metrics statements="10" coveredstatements="10" conditionals="7" coveredconditionals="7" methods="2" coveredmethods="2"/>
         <line num="14" count="6" type="stmt"/>
@@ -2238,23 +2239,23 @@
         <line num="147" count="5" type="stmt"/>
       </file>
       <file name="notification.controller.js" path="/Users/chrispaskvan/Projects/destiny-ghost/destiny-ghost-api/notifications/notification.controller.js">
-        <metrics statements="145" coveredstatements="143" conditionals="77" coveredconditionals="75" methods="32" coveredmethods="31"/>
+        <metrics statements="146" coveredstatements="144" conditionals="77" coveredconditionals="75" methods="33" coveredmethods="32"/>
         <line num="37" count="4" type="stmt"/>
-        <line num="38" count="23" type="cond" truecount="2" falsecount="0"/>
-        <line num="73" count="75" type="stmt"/>
-        <line num="74" count="75" type="stmt"/>
-        <line num="75" count="75" type="stmt"/>
-        <line num="76" count="75" type="stmt"/>
-        <line num="77" count="75" type="stmt"/>
-        <line num="78" count="75" type="stmt"/>
-        <line num="80" count="75" type="stmt"/>
-        <line num="89" count="75" type="stmt"/>
+        <line num="38" count="24" type="cond" truecount="2" falsecount="0"/>
+        <line num="73" count="77" type="stmt"/>
+        <line num="74" count="77" type="stmt"/>
+        <line num="75" count="77" type="stmt"/>
+        <line num="76" count="77" type="stmt"/>
+        <line num="77" count="77" type="stmt"/>
+        <line num="78" count="77" type="stmt"/>
+        <line num="80" count="77" type="stmt"/>
+        <line num="89" count="77" type="stmt"/>
         <line num="102" count="10" type="cond" truecount="2" falsecount="0"/>
         <line num="104" count="6" type="cond" truecount="4" falsecount="0"/>
         <line num="114" count="11" type="cond" truecount="2" falsecount="0"/>
-        <line num="127" count="45" type="stmt"/>
-        <line num="147" count="31" type="cond" truecount="2" falsecount="0"/>
-        <line num="148" count="24" type="stmt"/>
+        <line num="127" count="47" type="stmt"/>
+        <line num="147" count="33" type="cond" truecount="2" falsecount="0"/>
+        <line num="148" count="26" type="stmt"/>
         <line num="151" count="7" type="cond" truecount="2" falsecount="0"/>
         <line num="152" count="1" type="stmt"/>
         <line num="160" count="6" type="cond" truecount="2" falsecount="0"/>
@@ -2270,120 +2271,121 @@
         <line num="220" count="12" type="cond" truecount="2" falsecount="0"/>
         <line num="221" count="4" type="stmt"/>
         <line num="227" count="10" type="stmt"/>
-        <line num="242" count="12" type="stmt"/>
-        <line num="243" count="12" type="stmt"/>
-        <line num="245" count="1" type="stmt"/>
-        <line num="250" count="1" type="stmt"/>
-        <line num="260" count="33" type="stmt"/>
-        <line num="270" count="33" type="stmt"/>
-        <line num="272" count="32" type="cond" truecount="2" falsecount="0"/>
-        <line num="273" count="1" type="stmt"/>
-        <line num="279" count="1" type="stmt"/>
-        <line num="300" count="31" type="cond" truecount="2" falsecount="0"/>
-        <line num="301" count="5" type="stmt"/>
-        <line num="304" count="25" type="cond" truecount="2" falsecount="0"/>
-        <line num="305" count="24" type="stmt"/>
-        <line num="306" count="24" type="stmt"/>
-        <line num="308" count="20" type="cond" truecount="2" falsecount="0"/>
-        <line num="309" count="3" type="stmt"/>
-        <line num="313" count="3" type="stmt"/>
-        <line num="318" count="3" type="stmt"/>
-        <line num="321" count="17" type="stmt"/>
-        <line num="332" count="17" type="stmt"/>
-        <line num="333" count="17" type="stmt"/>
-        <line num="338" count="15" type="cond" truecount="2" falsecount="0"/>
-        <line num="341" count="12" type="stmt"/>
-        <line num="342" count="12" type="stmt"/>
-        <line num="349" count="3" type="cond" truecount="4" falsecount="0"/>
-        <line num="350" count="2" type="cond" truecount="1" falsecount="1"/>
-        <line num="354" count="2" type="stmt"/>
-        <line num="358" count="0" type="stmt"/>
-        <line num="361" count="9" type="stmt"/>
-        <line num="362" count="9" type="stmt"/>
-        <line num="366" count="7" type="stmt"/>
-        <line num="371" count="7" type="stmt"/>
-        <line num="373" count="9" type="stmt"/>
-        <line num="375" count="6" type="stmt"/>
-        <line num="377" count="5" type="cond" truecount="1" falsecount="0"/>
+        <line num="242" count="12" type="cond" truecount="4" falsecount="0"/>
+        <line num="243" count="4" type="cond" truecount="2" falsecount="0"/>
+        <line num="251" count="3" type="stmt"/>
+        <line num="255" count="12" type="stmt"/>
+        <line num="257" count="12" type="stmt"/>
+        <line num="269" count="12" type="stmt"/>
+        <line num="270" count="12" type="stmt"/>
+        <line num="272" count="1" type="stmt"/>
+        <line num="277" count="1" type="stmt"/>
+        <line num="287" count="35" type="stmt"/>
+        <line num="297" count="35" type="stmt"/>
+        <line num="299" count="34" type="cond" truecount="2" falsecount="0"/>
+        <line num="300" count="1" type="stmt"/>
+        <line num="306" count="1" type="stmt"/>
+        <line num="327" count="33" type="cond" truecount="2" falsecount="0"/>
+        <line num="328" count="5" type="stmt"/>
+        <line num="331" count="27" type="cond" truecount="2" falsecount="0"/>
+        <line num="332" count="26" type="stmt"/>
+        <line num="333" count="26" type="stmt"/>
+        <line num="335" count="22" type="cond" truecount="2" falsecount="0"/>
+        <line num="336" count="3" type="stmt"/>
+        <line num="340" count="3" type="stmt"/>
+        <line num="345" count="3" type="stmt"/>
+        <line num="348" count="19" type="stmt"/>
+        <line num="359" count="19" type="stmt"/>
+        <line num="360" count="19" type="stmt"/>
+        <line num="365" count="17" type="cond" truecount="2" falsecount="0"/>
+        <line num="368" count="14" type="stmt"/>
+        <line num="369" count="14" type="stmt"/>
+        <line num="376" count="5" type="cond" truecount="4" falsecount="0"/>
+        <line num="377" count="4" type="cond" truecount="1" falsecount="1"/>
+        <line num="381" count="4" type="stmt"/>
+        <line num="385" count="0" type="stmt"/>
+        <line num="388" count="9" type="stmt"/>
         <line num="389" count="9" type="stmt"/>
-        <line num="396" count="6" type="stmt"/>
-        <line num="400" count="6" type="stmt"/>
-        <line num="406" count="3" type="stmt"/>
-        <line num="412" count="12" type="cond" truecount="2" falsecount="0"/>
-        <line num="417" count="2" type="stmt"/>
-        <line num="424" count="2" type="stmt"/>
-        <line num="428" count="2" type="stmt"/>
-        <line num="429" count="2" type="stmt"/>
-        <line num="435" count="2" type="stmt"/>
-        <line num="438" count="10" type="cond" truecount="4" falsecount="0"/>
-        <line num="439" count="7" type="stmt"/>
-        <line num="442" count="3" type="cond" truecount="2" falsecount="0"/>
-        <line num="443" count="1" type="stmt"/>
-        <line num="452" count="2" type="stmt"/>
-        <line num="456" count="12" type="stmt"/>
-        <line num="458" count="12" type="stmt"/>
-        <line num="466" count="1" type="stmt"/>
-        <line num="495" count="17" type="stmt"/>
-        <line num="496" count="17" type="stmt"/>
-        <line num="498" count="17" type="stmt"/>
-        <line num="499" count="76" type="stmt"/>
+        <line num="393" count="7" type="stmt"/>
+        <line num="398" count="7" type="stmt"/>
+        <line num="400" count="9" type="stmt"/>
+        <line num="402" count="6" type="stmt"/>
+        <line num="404" count="5" type="cond" truecount="1" falsecount="0"/>
+        <line num="416" count="9" type="stmt"/>
+        <line num="423" count="6" type="stmt"/>
+        <line num="428" count="6" type="stmt"/>
+        <line num="434" count="3" type="stmt"/>
+        <line num="440" count="14" type="cond" truecount="2" falsecount="0"/>
+        <line num="449" count="4" type="stmt"/>
+        <line num="450" count="4" type="stmt"/>
+        <line num="457" count="2" type="stmt"/>
+        <line num="462" count="2" type="stmt"/>
+        <line num="465" count="2" type="stmt"/>
+        <line num="466" count="4" type="stmt"/>
+        <line num="472" count="2" type="stmt"/>
+        <line num="475" count="10" type="stmt"/>
+        <line num="483" count="1" type="stmt"/>
         <line num="512" count="17" type="stmt"/>
-        <line num="513" count="46" type="stmt"/>
-        <line num="515" count="46" type="stmt"/>
-        <line num="521" count="15" type="cond" truecount="4" falsecount="0"/>
-        <line num="522" count="1" type="stmt"/>
-        <line num="527" count="15" type="stmt"/>
-        <line num="530" count="17" type="stmt"/>
-        <line num="543" count="17" type="stmt"/>
-        <line num="544" count="28" type="stmt"/>
-        <line num="545" count="28" type="stmt"/>
-        <line num="547" count="2" type="stmt"/>
-        <line num="549" count="2" type="stmt"/>
-        <line num="553" count="17" type="stmt"/>
-        <line num="554" count="18" type="stmt"/>
-        <line num="555" count="18" type="stmt"/>
-        <line num="557" count="17" type="stmt"/>
-        <line num="558" count="46" type="stmt"/>
-        <line num="560" count="46" type="stmt"/>
-        <line num="562" count="17" type="cond" truecount="2" falsecount="0"/>
-        <line num="563" count="7" type="stmt"/>
-        <line num="564" count="31" type="stmt"/>
-        <line num="575" count="7" type="cond" truecount="2" falsecount="0"/>
-        <line num="576" count="32" type="stmt"/>
-        <line num="578" count="6" type="stmt"/>
-        <line num="580" count="30" type="stmt"/>
-        <line num="581" count="30" type="stmt"/>
-        <line num="591" count="7" type="stmt"/>
-        <line num="594" count="10" type="stmt"/>
-        <line num="595" count="12" type="cond" truecount="2" falsecount="0"/>
-        <line num="598" count="10" type="stmt"/>
-        <line num="604" count="10" type="stmt"/>
-        <line num="606" count="10" type="stmt"/>
-        <line num="609" count="8" type="stmt"/>
-        <line num="611" count="8" type="stmt"/>
-        <line num="632" count="30" type="stmt"/>
-        <line num="633" count="30" type="stmt"/>
-        <line num="635" count="1" type="stmt"/>
-        <line num="640" count="1" type="stmt"/>
-        <line num="643" count="29" type="cond" truecount="2" falsecount="0"/>
-        <line num="645" count="2" type="stmt"/>
-        <line num="669" count="8" type="stmt"/>
-        <line num="670" count="8" type="stmt"/>
-        <line num="672" count="8" type="cond" truecount="2" falsecount="0"/>
-        <line num="673" count="5" type="stmt"/>
-        <line num="675" count="5" type="cond" truecount="2" falsecount="0"/>
-        <line num="676" count="3" type="cond" truecount="2" falsecount="0"/>
-        <line num="677" count="1" type="stmt"/>
-        <line num="687" count="2" type="stmt"/>
-        <line num="688" count="2" type="stmt"/>
-        <line num="694" count="2" type="stmt"/>
-        <line num="697" count="2" type="stmt"/>
-        <line num="700" count="3" type="cond" truecount="2" falsecount="0"/>
-        <line num="701" count="1" type="stmt"/>
+        <line num="513" count="17" type="stmt"/>
+        <line num="515" count="17" type="stmt"/>
+        <line num="516" count="76" type="stmt"/>
+        <line num="529" count="17" type="stmt"/>
+        <line num="530" count="46" type="stmt"/>
+        <line num="532" count="46" type="stmt"/>
+        <line num="538" count="15" type="cond" truecount="4" falsecount="0"/>
+        <line num="539" count="1" type="stmt"/>
+        <line num="544" count="15" type="stmt"/>
+        <line num="547" count="17" type="stmt"/>
+        <line num="560" count="17" type="stmt"/>
+        <line num="561" count="28" type="stmt"/>
+        <line num="562" count="28" type="stmt"/>
+        <line num="564" count="2" type="stmt"/>
+        <line num="566" count="2" type="stmt"/>
+        <line num="570" count="17" type="stmt"/>
+        <line num="571" count="18" type="stmt"/>
+        <line num="572" count="18" type="stmt"/>
+        <line num="574" count="17" type="stmt"/>
+        <line num="575" count="46" type="stmt"/>
+        <line num="577" count="46" type="stmt"/>
+        <line num="579" count="17" type="cond" truecount="2" falsecount="0"/>
+        <line num="580" count="7" type="stmt"/>
+        <line num="581" count="31" type="stmt"/>
+        <line num="592" count="7" type="cond" truecount="2" falsecount="0"/>
+        <line num="593" count="32" type="stmt"/>
+        <line num="595" count="6" type="stmt"/>
+        <line num="597" count="30" type="stmt"/>
+        <line num="598" count="30" type="stmt"/>
+        <line num="608" count="7" type="stmt"/>
+        <line num="611" count="10" type="stmt"/>
+        <line num="612" count="12" type="cond" truecount="2" falsecount="0"/>
+        <line num="615" count="10" type="stmt"/>
+        <line num="621" count="10" type="stmt"/>
+        <line num="623" count="10" type="stmt"/>
+        <line num="626" count="8" type="stmt"/>
+        <line num="628" count="8" type="stmt"/>
+        <line num="649" count="30" type="stmt"/>
+        <line num="650" count="30" type="stmt"/>
+        <line num="652" count="1" type="stmt"/>
+        <line num="657" count="1" type="stmt"/>
+        <line num="660" count="29" type="cond" truecount="2" falsecount="0"/>
+        <line num="662" count="2" type="stmt"/>
+        <line num="686" count="8" type="stmt"/>
+        <line num="687" count="8" type="stmt"/>
+        <line num="689" count="8" type="cond" truecount="2" falsecount="0"/>
+        <line num="690" count="5" type="stmt"/>
+        <line num="692" count="5" type="cond" truecount="2" falsecount="0"/>
+        <line num="693" count="3" type="cond" truecount="2" falsecount="0"/>
+        <line num="694" count="1" type="stmt"/>
         <line num="704" count="2" type="stmt"/>
-        <line num="710" count="1" type="stmt"/>
-        <line num="719" count="0" type="stmt"/>
-        <line num="729" count="1" type="stmt"/>
+        <line num="705" count="2" type="stmt"/>
+        <line num="711" count="2" type="stmt"/>
+        <line num="714" count="2" type="stmt"/>
+        <line num="717" count="3" type="cond" truecount="2" falsecount="0"/>
+        <line num="718" count="1" type="stmt"/>
+        <line num="721" count="2" type="stmt"/>
+        <line num="727" count="1" type="stmt"/>
+        <line num="736" count="0" type="stmt"/>
+        <line num="746" count="1" type="stmt"/>
       </file>
       <file name="notification.error.js" path="/Users/chrispaskvan/Projects/destiny-ghost/destiny-ghost-api/notifications/notification.error.js">
         <metrics statements="2" coveredstatements="0" conditionals="0" coveredconditionals="0" methods="1" coveredmethods="0"/>
@@ -2450,82 +2452,81 @@
         <line num="231" count="21" type="stmt"/>
       </file>
       <file name="notification.service.js" path="/Users/chrispaskvan/Projects/destiny-ghost/destiny-ghost-api/notifications/notification.service.js">
-        <metrics statements="75" coveredstatements="74" conditionals="55" coveredconditionals="53" methods="9" coveredmethods="9"/>
+        <metrics statements="74" coveredstatements="73" conditionals="59" coveredconditionals="57" methods="9" coveredmethods="9"/>
         <line num="30" count="5" type="stmt"/>
         <line num="39" count="5" type="stmt"/>
-        <line num="48" count="5" type="stmt"/>
-        <line num="55" count="5" type="stmt"/>
-        <line num="62" count="5" type="stmt"/>
-        <line num="79" count="5" type="stmt"/>
-        <line num="80" count="52" type="stmt"/>
-        <line num="81" count="52" type="stmt"/>
-        <line num="83" count="52" type="cond" truecount="4" falsecount="0"/>
-        <line num="94" count="5" type="stmt"/>
-        <line num="95" count="13" type="cond" truecount="1" falsecount="1"/>
-        <line num="97" count="13" type="cond" truecount="2" falsecount="0"/>
-        <line num="99" count="8" type="cond" truecount="2" falsecount="0"/>
-        <line num="135" count="96" type="stmt"/>
-        <line num="136" count="96" type="cond" truecount="2" falsecount="0"/>
-        <line num="165" count="52" type="cond" truecount="4" falsecount="0"/>
-        <line num="168" count="52" type="stmt"/>
-        <line num="170" count="52" type="stmt"/>
-        <line num="177" count="52" type="cond" truecount="1" falsecount="1"/>
-        <line num="183" count="0" type="stmt"/>
-        <line num="187" count="52" type="stmt"/>
-        <line num="193" count="52" type="stmt"/>
-        <line num="195" count="52" type="cond" truecount="2" falsecount="0"/>
-        <line num="196" count="41" type="stmt"/>
-        <line num="198" count="36" type="cond" truecount="2" falsecount="0"/>
-        <line num="199" count="32" type="stmt"/>
-        <line num="208" count="43" type="stmt"/>
-        <line num="212" count="43" type="stmt"/>
-        <line num="218" count="43" type="stmt"/>
-        <line num="219" count="38" type="stmt"/>
-        <line num="231" count="38" type="cond" truecount="4" falsecount="0"/>
-        <line num="232" count="2" type="stmt"/>
-        <line num="235" count="36" type="cond" truecount="2" falsecount="0"/>
-        <line num="236" count="7" type="stmt"/>
-        <line num="247" count="29" type="stmt"/>
-        <line num="248" count="29" type="stmt"/>
-        <line num="250" count="1" type="stmt"/>
-        <line num="255" count="28" type="cond" truecount="2" falsecount="0"/>
-        <line num="256" count="2" type="stmt"/>
-        <line num="261" count="26" type="stmt"/>
-        <line num="262" count="26" type="stmt"/>
-        <line num="264" count="13" type="cond" truecount="2" falsecount="0"/>
-        <line num="265" count="5" type="stmt"/>
-        <line num="266" count="5" type="stmt"/>
-        <line num="269" count="8" type="stmt"/>
-        <line num="270" count="8" type="stmt"/>
-        <line num="277" count="20" type="cond" truecount="4" falsecount="0"/>
-        <line num="278" count="2" type="stmt"/>
-        <line num="284" count="18" type="stmt"/>
-        <line num="287" count="23" type="cond" truecount="5" falsecount="0"/>
-        <line num="288" count="13" type="stmt"/>
-        <line num="291" count="23" type="stmt"/>
-        <line num="310" count="5" type="stmt"/>
-        <line num="315" count="4" type="stmt"/>
-        <line num="339" count="46" type="stmt"/>
-        <line num="342" count="46" type="stmt"/>
-        <line num="343" count="46" type="stmt"/>
-        <line num="345" count="1" type="stmt"/>
-        <line num="351" count="45" type="cond" truecount="2" falsecount="0"/>
-        <line num="352" count="20" type="cond" truecount="2" falsecount="0"/>
-        <line num="353" count="2" type="stmt"/>
-        <line num="356" count="18" type="stmt"/>
-        <line num="359" count="18" type="stmt"/>
-        <line num="365" count="18" type="stmt"/>
-        <line num="366" count="18" type="stmt"/>
-        <line num="373" count="1" type="stmt"/>
-        <line num="383" count="17" type="stmt"/>
-        <line num="385" count="8" type="cond" truecount="3" falsecount="0"/>
-        <line num="390" count="17" type="cond" truecount="2" falsecount="0"/>
-        <line num="391" count="4" type="stmt"/>
-        <line num="393" count="4" type="stmt"/>
-        <line num="396" count="13" type="cond" truecount="2" falsecount="0"/>
-        <line num="398" count="46" type="cond" truecount="2" falsecount="0"/>
-        <line num="399" count="4" type="stmt"/>
-        <line num="404" count="9" type="stmt"/>
+        <line num="49" count="5" type="stmt"/>
+        <line num="56" count="5" type="stmt"/>
+        <line num="63" count="5" type="stmt"/>
+        <line num="80" count="5" type="stmt"/>
+        <line num="81" count="55" type="stmt"/>
+        <line num="82" count="55" type="stmt"/>
+        <line num="84" count="55" type="cond" truecount="4" falsecount="0"/>
+        <line num="95" count="5" type="stmt"/>
+        <line num="96" count="13" type="cond" truecount="1" falsecount="1"/>
+        <line num="98" count="13" type="cond" truecount="2" falsecount="0"/>
+        <line num="100" count="8" type="cond" truecount="2" falsecount="0"/>
+        <line num="145" count="104" type="stmt"/>
+        <line num="146" count="104" type="cond" truecount="2" falsecount="0"/>
+        <line num="180" count="55" type="cond" truecount="4" falsecount="0"/>
+        <line num="183" count="55" type="stmt"/>
+        <line num="185" count="55" type="stmt"/>
+        <line num="192" count="55" type="cond" truecount="1" falsecount="1"/>
+        <line num="198" count="0" type="stmt"/>
+        <line num="202" count="55" type="stmt"/>
+        <line num="208" count="55" type="stmt"/>
+        <line num="210" count="55" type="cond" truecount="2" falsecount="0"/>
+        <line num="217" count="44" type="cond" truecount="2" falsecount="0"/>
+        <line num="219" count="44" type="cond" truecount="2" falsecount="0"/>
+        <line num="220" count="35" type="stmt"/>
+        <line num="229" count="46" type="stmt"/>
+        <line num="233" count="46" type="stmt"/>
+        <line num="239" count="46" type="stmt"/>
+        <line num="240" count="41" type="stmt"/>
+        <line num="252" count="41" type="cond" truecount="4" falsecount="0"/>
+        <line num="253" count="2" type="stmt"/>
+        <line num="256" count="39" type="cond" truecount="2" falsecount="0"/>
+        <line num="257" count="7" type="stmt"/>
+        <line num="268" count="32" type="stmt"/>
+        <line num="269" count="32" type="stmt"/>
+        <line num="271" count="1" type="stmt"/>
+        <line num="276" count="31" type="cond" truecount="2" falsecount="0"/>
+        <line num="277" count="3" type="stmt"/>
+        <line num="282" count="28" type="stmt"/>
+        <line num="283" count="28" type="stmt"/>
+        <line num="285" count="13" type="cond" truecount="2" falsecount="0"/>
+        <line num="286" count="5" type="stmt"/>
+        <line num="287" count="5" type="stmt"/>
+        <line num="290" count="8" type="stmt"/>
+        <line num="291" count="8" type="stmt"/>
+        <line num="298" count="21" type="cond" truecount="4" falsecount="0"/>
+        <line num="299" count="2" type="stmt"/>
+        <line num="305" count="19" type="stmt"/>
+        <line num="308" count="25" type="cond" truecount="5" falsecount="0"/>
+        <line num="309" count="15" type="stmt"/>
+        <line num="312" count="25" type="stmt"/>
+        <line num="330" count="8" type="stmt"/>
+        <line num="359" count="50" type="stmt"/>
+        <line num="360" count="50" type="stmt"/>
+        <line num="362" count="1" type="stmt"/>
+        <line num="368" count="49" type="cond" truecount="2" falsecount="0"/>
+        <line num="369" count="22" type="cond" truecount="2" falsecount="0"/>
+        <line num="370" count="2" type="stmt"/>
+        <line num="373" count="20" type="stmt"/>
+        <line num="376" count="20" type="stmt"/>
+        <line num="382" count="20" type="stmt"/>
+        <line num="383" count="20" type="stmt"/>
+        <line num="390" count="1" type="stmt"/>
+        <line num="400" count="19" type="stmt"/>
+        <line num="402" count="8" type="cond" truecount="3" falsecount="0"/>
+        <line num="407" count="19" type="cond" truecount="2" falsecount="0"/>
+        <line num="408" count="4" type="stmt"/>
+        <line num="410" count="4" type="stmt"/>
+        <line num="413" count="15" type="cond" truecount="2" falsecount="0"/>
+        <line num="415" count="50" type="cond" truecount="2" falsecount="0"/>
+        <line num="416" count="4" type="stmt"/>
+        <line num="421" count="11" type="stmt"/>
+        <line num="423" count="11" type="cond" truecount="2" falsecount="0"/>
       </file>
       <file name="notification.types.js" path="/Users/chrispaskvan/Projects/destiny-ghost/destiny-ghost-api/notifications/notification.types.js">
         <metrics statements="1" coveredstatements="1" conditionals="0" coveredconditionals="0" methods="0" coveredmethods="0"/>
@@ -2533,8 +2534,8 @@
       </file>
       <file name="retryable.error.js" path="/Users/chrispaskvan/Projects/destiny-ghost/destiny-ghost-api/notifications/retryable.error.js">
         <metrics statements="2" coveredstatements="2" conditionals="0" coveredconditionals="0" methods="1" coveredmethods="1"/>
-        <line num="15" count="25" type="stmt"/>
-        <line num="17" count="25" type="stmt"/>
+        <line num="15" count="27" type="stmt"/>
+        <line num="17" count="27" type="stmt"/>
       </file>
       <file name="send-deferred.error.js" path="/Users/chrispaskvan/Projects/destiny-ghost/destiny-ghost-api/notifications/send-deferred.error.js">
         <metrics statements="0" coveredstatements="0" conditionals="0" coveredconditionals="0" methods="0" coveredmethods="0"/>
@@ -2544,10 +2545,10 @@
       </file>
       <file name="xur-unavailable.error.js" path="/Users/chrispaskvan/Projects/destiny-ghost/destiny-ghost-api/notifications/xur-unavailable.error.js">
         <metrics statements="4" coveredstatements="4" conditionals="2" coveredconditionals="1" methods="1" coveredmethods="1"/>
-        <line num="15" count="2" type="stmt"/>
-        <line num="16" count="2" type="stmt"/>
-        <line num="17" count="2" type="cond" truecount="1" falsecount="1"/>
-        <line num="18" count="2" type="stmt"/>
+        <line num="15" count="4" type="stmt"/>
+        <line num="16" count="4" type="stmt"/>
+        <line num="17" count="4" type="cond" truecount="1" falsecount="1"/>
+        <line num="18" count="4" type="stmt"/>
       </file>
     </package>
     <package name="destiny-ghost-api.twilio">

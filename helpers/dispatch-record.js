@@ -115,13 +115,16 @@ const replace = async (claimCheckNumber, phoneNumber, expected, replacement) => 
  * @param {Parameters<typeof replace>} args
  * @param {Record<string, unknown>} context - logged with the failure
  * @param {string} message
- * @returns {Promise<void>}
+ * @returns {Promise<boolean>} whether it was written; `false` when the
+ * record had changed, or Redis could not be asked
  */
 const settle = async (args, context, message) => {
     try {
-        await replace(...args);
+        return await replace(...args);
     } catch (err) {
         log.warn({ err, ...context }, message);
+
+        return false;
     }
 };
 
@@ -163,7 +166,7 @@ const begin = async (claimCheckNumber, phoneNumber, body, seen) => {
  * @param {string} phoneNumber
  * @param {string} sid
  * @param {DispatchRecord} mine - the record this attempt wrote or adopted
- * @returns {Promise<void>}
+ * @returns {Promise<boolean>} whether it was written
  */
 const accept = (claimCheckNumber, phoneNumber, sid, mine) =>
     settle(
@@ -180,7 +183,7 @@ const accept = (claimCheckNumber, phoneNumber, sid, mine) =>
  * @param {string} claimCheckNumber
  * @param {string} phoneNumber
  * @param {Attempting} mine - the record this attempt wrote
- * @returns {Promise<void>}
+ * @returns {Promise<boolean>} whether it was written
  */
 const unsettled = (claimCheckNumber, phoneNumber, mine) =>
     settle(
@@ -190,12 +193,13 @@ const unsettled = (claimCheckNumber, phoneNumber, mine) =>
     );
 
 /**
- * Drop the record of a send Twilio refused, so a later attempt is not made to
- * wait for one that was never taken.
+ * Drop the record of a send Twilio refused, or one a lookup has found it
+ * never took, so a later attempt is not made to wait for it - and a job
+ * that then gives up for another reason is not reported as perhaps sent.
  * @param {string} claimCheckNumber
  * @param {string} phoneNumber
- * @param {Attempting} mine - the record this attempt wrote
- * @returns {Promise<void>}
+ * @param {Attempting} mine - the record this attempt wrote, or read
+ * @returns {Promise<boolean>} whether it was dropped
  */
 const forget = (claimCheckNumber, phoneNumber, mine) =>
     settle(

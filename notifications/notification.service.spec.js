@@ -39,18 +39,18 @@ vi.mock('../helpers/dispatch-record.js', () => ({
                 ? record
                 : null;
         }),
-        accept: vi.fn(async (claimCheckNumber, phoneNumber, sid, mine) => {
-            replaceRecord(`${claimCheckNumber}:${phoneNumber}`, mine, { state: 'accepted', sid });
-        }),
-        unsettled: vi.fn(async (claimCheckNumber, phoneNumber, mine) => {
+        accept: vi.fn(async (claimCheckNumber, phoneNumber, sid, mine) =>
+            replaceRecord(`${claimCheckNumber}:${phoneNumber}`, mine, { state: 'accepted', sid }),
+        ),
+        unsettled: vi.fn(async (claimCheckNumber, phoneNumber, mine) =>
             replaceRecord(`${claimCheckNumber}:${phoneNumber}`, mine, {
                 ...mine,
                 failedAt: Date.now(),
-            });
-        }),
-        forget: vi.fn(async (claimCheckNumber, phoneNumber, mine) => {
-            replaceRecord(`${claimCheckNumber}:${phoneNumber}`, mine, null);
-        }),
+            }),
+        ),
+        forget: vi.fn(async (claimCheckNumber, phoneNumber, mine) =>
+            replaceRecord(`${claimCheckNumber}:${phoneNumber}`, mine, null),
+        ),
     },
 }));
 vi.mock('../helpers/twilio-rate-limiter.js', () => ({
@@ -452,7 +452,10 @@ describe('Notifications', () => {
             },
         );
 
-        it('should take over an attempt it read once that is old enough', async () => {
+        it.each([
+            ['dropped', true, null],
+            ['left behind', false, expect.objectContaining({ state: 'attempting' })],
+        ])('should send afresh over an old enough attempt it %s', async (_, dropped, seen) => {
             const { service, messages } = fakeTwilio();
 
             records.set(key, {
@@ -461,15 +464,11 @@ describe('Notifications', () => {
                 failedAt: Date.now() - RECONCILE_AFTER_MS,
                 body,
             });
+            if (!dropped) DispatchRecord.forget.mockResolvedValueOnce(false);
 
             await service.sendMessage('Aegis of the Reef', to, undefined, options);
 
-            expect(DispatchRecord.begin).toHaveBeenCalledWith(
-                claimCheckNumber,
-                to,
-                body,
-                expect.objectContaining({ state: 'attempting' }),
-            );
+            expect(DispatchRecord.begin).toHaveBeenCalledWith(claimCheckNumber, to, body, seen);
             expect(messages.create).toHaveBeenCalledTimes(1);
         });
 
@@ -491,36 +490,35 @@ describe('Notifications', () => {
         });
 
         it.each([
+            /**
+             * Nothing was sent by this attempt, and the next may be able to
+             * read it: deferred, not unknown.
+             */
             [
                 'the record cannot be read',
                 fake => DispatchRecord.read.mockRejectedValueOnce(fake.err),
+                SendDeferredError,
             ],
+            /** There is a record to settle, and Twilio may have its message. */
             [
                 'Twilio cannot be asked',
                 fake => {
                     records.set(key, { state: 'attempting', at: 0, body });
                     fake.messages.list.mockRejectedValueOnce(fake.err);
                 },
+                SendOutcomeUnknownError,
             ],
-        ])(
-            'should report an unknown outcome, neither guessing nor sending, when %s',
-            async (_, arrange) => {
-                const fake = { ...fakeTwilio(), err: new Error('down') };
+        ])('should neither guess nor send when %s', async (_, arrange, expected) => {
+            const fake = { ...fakeTwilio(), err: new Error('down') };
 
-                arrange(fake);
+            arrange(fake);
 
-                const sending = fake.service.sendMessage(
-                    'Aegis of the Reef',
-                    to,
-                    undefined,
-                    options,
-                );
+            const sending = fake.service.sendMessage('Aegis of the Reef', to, undefined, options);
 
-                await expect(sending).rejects.toBeInstanceOf(SendOutcomeUnknownError);
-                await expect(sending).rejects.toHaveProperty('cause', fake.err);
-                expect(fake.messages.create).not.toHaveBeenCalled();
-            },
-        );
+            await expect(sending).rejects.toBeInstanceOf(expected);
+            await expect(sending).rejects.toHaveProperty('cause', fake.err);
+            expect(fake.messages.create).not.toHaveBeenCalled();
+        });
 
         /**
          * `create` can take most of its timeout before failing; the wait for
@@ -662,22 +660,25 @@ describe('Notifications', () => {
             ).rejects.toBe(refused);
         });
 
-        describe('findEarlier', () => {
+        describe('settleEarlier', () => {
             it('should find nothing when no attempt was made', async () => {
                 const { service, messages } = fakeTwilio();
 
-                await expect(service.findEarlier(claimCheckNumber, to)).resolves.toBeUndefined();
+                await expect(service.settleEarlier(claimCheckNumber, to)).resolves.toEqual({
+                    seen: null,
+                });
                 expect(messages.list).not.toHaveBeenCalled();
             });
 
             it('should report an accepted send from its record', async () => {
                 const { service } = fakeTwilio();
+                const accepted = { state: 'accepted', sid: `SM${'d'.repeat(32)}` };
 
-                records.set(key, { state: 'accepted', sid: `SM${'d'.repeat(32)}` });
+                records.set(key, accepted);
 
-                await expect(service.findEarlier(claimCheckNumber, to)).resolves.toEqual({
-                    sid: `SM${'d'.repeat(32)}`,
-                    status: 'accepted',
+                await expect(service.settleEarlier(claimCheckNumber, to)).resolves.toEqual({
+                    earlier: { sid: accepted.sid, status: 'accepted' },
+                    seen: accepted,
                 });
             });
 
@@ -689,9 +690,9 @@ describe('Notifications', () => {
                     .sendMessage('Aegis of the Reef', to, undefined, options)
                     .catch(() => {});
 
-                await expect(service.findEarlier(claimCheckNumber, to)).resolves.toBe(
-                    provider.taken[0],
-                );
+                const settled = await service.settleEarlier(claimCheckNumber, to);
+
+                expect(settled.earlier).toBe(provider.taken[0]);
                 expect(messages.create).toHaveBeenCalledTimes(1);
                 expect(messages.list).toHaveBeenCalledWith(
                     expect.objectContaining({ to, from: expect.any(String) }),
@@ -708,12 +709,16 @@ describe('Notifications', () => {
                     body,
                 });
 
-                await expect(service.findEarlier(claimCheckNumber, to)).rejects.toBeInstanceOf(
+                await expect(service.settleEarlier(claimCheckNumber, to)).rejects.toBeInstanceOf(
                     SendOutcomeUnknownError,
                 );
             });
 
-            it('should find nothing once an unlisted attempt is old enough', async () => {
+            /**
+             * The decision stands: a job that then fails for another reason
+             * is not reported as perhaps having sent it.
+             */
+            it('should drop an unlisted attempt once it is old enough', async () => {
                 const { service } = fakeTwilio();
 
                 records.set(key, {
@@ -723,7 +728,56 @@ describe('Notifications', () => {
                     body,
                 });
 
-                await expect(service.findEarlier(claimCheckNumber, to)).resolves.toBeUndefined();
+                await expect(service.settleEarlier(claimCheckNumber, to)).resolves.toEqual({
+                    seen: null,
+                });
+                expect(records.has(key)).toBe(false);
+            });
+
+            it('should keep what it read when the record cannot be dropped', async () => {
+                const { service } = fakeTwilio();
+                const record = {
+                    state: 'attempting',
+                    at: Date.now() - RECONCILE_AFTER_MS,
+                    failedAt: Date.now() - RECONCILE_AFTER_MS,
+                    body,
+                };
+
+                records.set(key, record);
+                DispatchRecord.forget.mockResolvedValueOnce(false);
+
+                await expect(service.settleEarlier(claimCheckNumber, to)).resolves.toEqual({
+                    seen: record,
+                });
+            });
+
+            it('should let sendMessage use what it found, rather than look again', async () => {
+                const { service, messages } = fakeTwilio();
+                const settled = await service.settleEarlier(claimCheckNumber, to);
+
+                DispatchRecord.read.mockClear();
+                await service.sendMessage('Aegis of the Reef', to, undefined, {
+                    ...options,
+                    settled,
+                });
+
+                expect(DispatchRecord.read).not.toHaveBeenCalled();
+                expect(messages.create).toHaveBeenCalledTimes(1);
+            });
+
+            it('should still back off when the record changed after it was settled', async () => {
+                const { service, messages } = fakeTwilio();
+                const settled = await service.settleEarlier(claimCheckNumber, to);
+
+                records.set(key, { state: 'attempting', at: Date.now(), body: 'another copy' });
+
+                await expect(
+                    service.sendMessage('Aegis of the Reef', to, undefined, {
+                        ...options,
+                        settled,
+                    }),
+                ).rejects.toBeInstanceOf(SendOutcomeUnknownError);
+                expect(messages.create).not.toHaveBeenCalled();
             });
         });
 

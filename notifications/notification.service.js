@@ -39,8 +39,9 @@ const RECONCILE_AFTER_MS = 10_000;
 const CLOCK_SKEW_MS = 5000;
 
 /**
- * How long twilio-node waits for `create` to answer: its default, which the
- * client in `loaders/routes.js` does not change. An attempt with no recorded
+ * How long twilio-node waits for `create` to answer. Set on the client where
+ * it is made (`loaders/routes.js`), not left to the library's default, so the
+ * two cannot drift apart. An attempt with no recorded
  * failure may have ended in a crash, or may still be waiting on Twilio in a
  * copy of the job that stalled, so its wait is counted from when that
  * request could last have been answered.
@@ -114,6 +115,15 @@ const certainlyNotSent = err => {
  */
 
 /**
+ * What settling an earlier attempt found: the message it sent, if any, and
+ * the record as read, which the next `begin` expects to find unchanged.
+ * @typedef {{
+ *     earlier?: SentMessage | SettledMessage,
+ *     seen: import('../helpers/dispatch-record.js').DispatchRecord | null,
+ * }} Settled
+ */
+
+/**
  * The subset of the Twilio client this service uses. Kept structural so tests can
  * substitute a stub without constructing a real client.
  * @typedef {{
@@ -147,7 +157,7 @@ class Notifications {
      * @param {string} body - Message body, prefixed and truncated before sending.
      * @param {string} to - Recipient phone number in E.164 format.
      * @param {string} [mediaUrl] - Attachment URL; makes this an MMS.
-     * @param {{ claimCheckNumber?: string, notificationType?: string, guard?: () => Promise<boolean> }} [options]
+     * @param {{ claimCheckNumber?: string, notificationType?: string, guard?: () => Promise<boolean>, settled?: Settled }} [options]
      * `claimCheckNumber` and `notificationType` correlate the delivery
      * callback, and `claimCheckNumber` keys the record of the send. `guard` is
      * checked inside the rate limiter's slot, immediately before the provider
@@ -160,7 +170,12 @@ class Notifications {
      * @throws {SendDeferredError} when the send could not be recorded, and so
      * was not made
      */
-    async sendMessage(body, to, mediaUrl, { claimCheckNumber, notificationType, guard } = {}) {
+    async sendMessage(
+        body,
+        to,
+        mediaUrl,
+        { claimCheckNumber, notificationType, guard, settled: alreadySettled } = {},
+    ) {
         const query =
             claimCheckNumber && notificationType
                 ? `?claim-check-number=${claimCheckNumber}&notification-type=${notificationType}`
@@ -193,7 +208,13 @@ class Notifications {
         let mine = null;
 
         if (claimCheckNumber) {
-            const settled = await this.#reconcile(claimCheckNumber, message);
+            /**
+             * A caller that settled the earlier attempt already passes what
+             * it found, rather than have it looked up twice. Anything that
+             * has changed since is caught by `begin`, which expects the
+             * record as it was read.
+             */
+            const settled = alreadySettled ?? (await this.#reconcile(claimCheckNumber, to));
 
             if (settled.earlier) return settled.earlier;
             seen = settled.seen;
@@ -292,27 +313,21 @@ class Notifications {
     }
 
     /**
-     * The message an earlier attempt at this claim check's send to `to`
-     * already sent, for a caller with work to do before it calls
-     * `sendMessage` - so a retry whose message went out reports it, rather
-     * than repeating that work and perhaps failing or skipping before it
-     * finds out. `sendMessage` settles the same way, so a caller that does
-     * not ask loses nothing but the work.
+     * Settle an earlier attempt at this claim check's send to `to`, for a
+     * caller with work to do before it calls `sendMessage` - so a retry whose
+     * message went out reports it, rather than repeating that work and
+     * perhaps failing or skipping before it finds out. Pass the result to
+     * `sendMessage` as `settled`, so it is not looked up again.
      * @param {string} claimCheckNumber
      * @param {string} to
-     * @returns {Promise<SentMessage | SettledMessage | undefined>} the earlier
-     * message, or `undefined` when there is none to report and a send should
-     * go ahead
+     * @returns {Promise<Settled>} the earlier message, if there is one to
+     * report, and the record as read
      * @throws {SendOutcomeUnknownError} when an earlier attempt cannot be
      * settled yet
+     * @throws {SendDeferredError} when the record cannot be read
      */
-    async findEarlier(claimCheckNumber, to) {
-        const { earlier } = await this.#reconcile(claimCheckNumber, {
-            to,
-            from: configuration.twilio.phoneNumber,
-        });
-
-        return earlier;
+    async settleEarlier(claimCheckNumber, to) {
+        return await this.#reconcile(claimCheckNumber, to);
     }
 
     /**
@@ -326,24 +341,26 @@ class Notifications {
      *   had time to list it, it was never taken; send. Not found sooner,
      *   throw, and look again on the next attempt.
      *
-     * A record or lookup that cannot be read is an unknown outcome too:
-     * guessing either way risks a duplicate or a loss, and the next attempt
-     * may be able to tell. Failing it any other way would let the job end as
-     * a plain error, when Twilio may well have the message.
+     * Neither guesses when it cannot see. A record that cannot be read
+     * defers the send: this attempt has sent nothing, and the next may be
+     * able to read it. A lookup that fails, with a record there to settle, is
+     * an unknown outcome: Twilio may well have that message.
+     *
+     * A record found never taken is dropped, so the decision stands: a job
+     * that goes on to fail for another reason is not then reported as
+     * perhaps having sent it.
      * @param {string} claimCheckNumber
-     * @param {TwilioMessage} message
-     * @returns {Promise<{ earlier?: SettledMessage | SentMessage, seen: import('../helpers/dispatch-record.js').DispatchRecord | null }>}
-     * the message an earlier attempt sent, if any, and the record as read
+     * @param {string} to
+     * @returns {Promise<Settled>}
      */
-    async #reconcile(claimCheckNumber, message) {
-        const { to, from } = message;
+    async #reconcile(claimCheckNumber, to) {
         let record;
 
         try {
             record = await DispatchRecord.read(claimCheckNumber, to);
         } catch (err) {
-            throw new SendOutcomeUnknownError(
-                'Unable to read the record of earlier attempts; the next attempt will look again.',
+            throw new SendDeferredError(
+                'Unable to read the record of earlier attempts, so nothing was sent.',
                 { cause: err },
             );
         }
@@ -365,7 +382,7 @@ class Notifications {
             listed = await this.limiter.schedule(() =>
                 this.client.messages.list({
                     to,
-                    from: /** @type {string} */ (from),
+                    from: configuration.twilio.phoneNumber,
                     limit: RECONCILE_PAGE_SIZE,
                 }),
             );
@@ -401,7 +418,9 @@ class Notifications {
             );
         }
 
-        return { seen: record };
+        const dropped = await DispatchRecord.forget(claimCheckNumber, to, record);
+
+        return { seen: dropped ? null : record };
     }
 }
 

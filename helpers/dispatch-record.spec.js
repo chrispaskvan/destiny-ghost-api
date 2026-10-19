@@ -191,7 +191,7 @@ describe('DispatchRecord', () => {
             const mine = await begin('hello');
 
             vi.setSystemTime(2_000);
-            await write(mine);
+            await expect(write(mine)).resolves.toBe(true);
 
             await expect(read()).resolves.toEqual(expected(mine));
         });
@@ -200,7 +200,7 @@ describe('DispatchRecord', () => {
             const mine = await begin('hello');
             const theirs = await begin('again', mine);
 
-            await write(mine);
+            await expect(write(mine)).resolves.toBe(false);
 
             await expect(read()).resolves.toEqual(theirs);
         });
@@ -210,7 +210,7 @@ describe('DispatchRecord', () => {
 
             cache.eval.mockRejectedValueOnce(new Error('down'));
 
-            await expect(write(mine)).resolves.toBeUndefined();
+            await expect(write(mine)).resolves.toBe(false);
             expect(log.warn).toHaveBeenCalledWith(
                 expect.objectContaining({ claimCheckNumber, phoneNumber }),
                 expect.any(String),
@@ -226,7 +226,7 @@ describe('DispatchRecord', () => {
             const writing = write(mine);
 
             await vi.advanceTimersByTimeAsync(DISPATCH_RECORD_TIMEOUT_MS);
-            await expect(writing).resolves.toBeUndefined();
+            await expect(writing).resolves.toBe(false);
         });
     });
 });

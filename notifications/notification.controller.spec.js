@@ -91,7 +91,7 @@ const destinyService = {
     getXur: vi.fn(),
 };
 const notificationService = {
-    findEarlier: vi.fn(),
+    settleEarlier: vi.fn(),
     sendMessage: vi.fn(),
 };
 const userService = {
@@ -139,6 +139,7 @@ beforeEach(() => {
     // starts and again inside the limiter slot, so without this each test
     // would exercise suppression.
     userService.getConsentByPhoneNumber.mockResolvedValue({ isSubscribed: true });
+    notificationService.settleEarlier.mockResolvedValue({ seen: null });
     notificationService.sendMessage.mockImplementation(sendMessageHonouringGuard());
     notificationController = new NotificationController({
         authenticationService,
@@ -986,6 +987,7 @@ describe('NotificationController', () => {
                         claimCheckNumber,
                         notificationType: notificationTypes.Xur,
                         guard: expect.any(Function),
+                        settled: { seen: null },
                     },
                 );
                 expect(ClaimCheck.advance).toHaveBeenCalledWith(claimCheckNumber, phoneNumber, {
@@ -1025,6 +1027,7 @@ describe('NotificationController', () => {
                         claimCheckNumber,
                         notificationType: notificationTypes.Xur,
                         guard: expect.any(Function),
+                        settled: { seen: null },
                     },
                 );
             });
@@ -1059,6 +1062,7 @@ describe('NotificationController', () => {
                         claimCheckNumber,
                         notificationType: notificationTypes.Xur,
                         guard: expect.any(Function),
+                        settled: { seen: null },
                     },
                 );
             });
@@ -1171,6 +1175,7 @@ describe('NotificationController', () => {
                         claimCheckNumber,
                         notificationType: notificationTypes.Xur,
                         guard: expect.any(Function),
+                        settled: { seen: null },
                     },
                 );
                 expect(log.info).toHaveBeenCalledWith(JSON.stringify('sent'));
@@ -1178,6 +1183,48 @@ describe('NotificationController', () => {
                     status: 'sent',
                     sid: messageSid,
                 });
+            });
+
+            /**
+             * Sent from inside the catch that classifies everything else, so
+             * its own failures must be classified too: a refusal retried four
+             * more times repeats all the Bungie work for nothing.
+             */
+            it.each([
+                [
+                    'fail the job for good when Twilio refuses the fallback',
+                    () => Object.assign(new Error('Unsubscribed recipient'), { status: 400 }),
+                    rejection => {
+                        expect(rejection.name).toBe('UnrecoverableError');
+                        expect(rejection.message).toBe('Unsubscribed recipient');
+                    },
+                ],
+                [
+                    'leave the fallback to a retry when its outcome is unknown',
+                    () => new SendOutcomeUnknownError('lost answer'),
+                    (rejection, err) => expect(rejection).toBe(err),
+                ],
+            ])('should %s', async (_, make, check) => {
+                const err = make();
+                const actual = await vi.importActual('../helpers/retry.js');
+
+                isTransientError.mockImplementation(actual.isTransientError);
+                authenticationService.authenticate.mockResolvedValue({
+                    bungie: { access_token: accessToken },
+                });
+                destinyService.getProfile.mockResolvedValue([mockCharacter]);
+                destinyService.getXur.mockRejectedValue(
+                    new DestinyError(1627, 'Vendor not found', 'DestinyVendorNotFound'),
+                );
+                notificationService.sendMessage.mockRejectedValue(err);
+
+                const rejection = await sendMethod(mockUser, {
+                    claimCheckNumber,
+                    notificationType: notificationTypes.Xur,
+                }).catch(e => e);
+
+                check(rejection, err);
+                expect(ClaimCheck.advance).not.toHaveBeenCalled();
             });
         });
 
@@ -1349,9 +1396,9 @@ describe('NotificationController', () => {
 
         describe('when an earlier attempt already sent the message (#719)', () => {
             it('should record that send and stop, before consent and Bungie', async () => {
-                notificationService.findEarlier.mockResolvedValueOnce({
-                    sid: messageSid,
-                    status: 'accepted',
+                notificationService.settleEarlier.mockResolvedValueOnce({
+                    earlier: { sid: messageSid, status: 'accepted' },
+                    seen: { state: 'accepted', sid: messageSid },
                 });
 
                 await sendMethod(mockUser, {
@@ -1359,7 +1406,7 @@ describe('NotificationController', () => {
                     notificationType: notificationTypes.Xur,
                 });
 
-                expect(notificationService.findEarlier).toHaveBeenCalledWith(
+                expect(notificationService.settleEarlier).toHaveBeenCalledWith(
                     claimCheckNumber,
                     phoneNumber,
                 );
@@ -1376,7 +1423,7 @@ describe('NotificationController', () => {
             it('should leave it to a retry, doing no work, when it cannot be settled yet', async () => {
                 const unknown = new SendOutcomeUnknownError('not listed yet');
 
-                notificationService.findEarlier.mockRejectedValueOnce(unknown);
+                notificationService.settleEarlier.mockRejectedValueOnce(unknown);
 
                 await expect(
                     sendMethod(mockUser, {
