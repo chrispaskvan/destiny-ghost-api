@@ -34,6 +34,7 @@ vi.mock('../helpers/publisher.js');
 vi.mock('../helpers/subscriber.js');
 vi.mock('./notification.error.js');
 vi.mock('../helpers/claim-check.js');
+vi.mock('../helpers/dispatch-record.js');
 vi.mock('./broadcast.queue.js', () => ({ enqueueBroadcast: vi.fn(), QUEUE_NAME: 'broadcasts' }));
 vi.mock('../helpers/log.js', () => ({
     default: {
@@ -50,6 +51,7 @@ vi.mock('../helpers/retry.js', async importOriginal => {
     };
 });
 import { isTransientError } from '../helpers/retry.js';
+import DispatchRecord from '../helpers/dispatch-record.js';
 import SendDeferredError from './send-deferred.error.js';
 import SendOutcomeUnknownError from './send-outcome-unknown.error.js';
 import DestinyError from '../destiny/destiny.error.js';
@@ -1310,6 +1312,21 @@ describe('NotificationController', () => {
             });
         });
 
+        it('should re-throw an UnrecoverableError from another copy of BullMQ as is', async () => {
+            const foreign = Object.assign(new Error('Account closed'), {
+                name: 'UnrecoverableError',
+            });
+
+            authenticationService.authenticate.mockRejectedValue(foreign);
+
+            await expect(
+                sendMethod(mockUser, {
+                    claimCheckNumber,
+                    notificationType: notificationTypes.Xur,
+                }),
+            ).rejects.toBe(foreign);
+        });
+
         /**
          * A failure the retry may yet recover from records nothing; BullMQ's
          * decision that there will be no retry is what records the error, so
@@ -1453,6 +1470,81 @@ describe('NotificationController', () => {
             );
 
             expect(log.error).not.toHaveBeenCalled();
+        });
+
+        /**
+         * An attempt that may have reached Twilio, then one that fails for
+         * another reason before it can look: the record still says unknown.
+         */
+        it.each([
+            ['an error of its own', () => new Error('Service Unavailable')],
+            [
+                'BullMQ failing it for stalling',
+                () => new UnrecoverableError('job stalled more than allowable limit'),
+            ],
+        ])(
+            'should record an unknown outcome when the record shows an unsettled send and the job ends on %s',
+            async (_, err) => {
+                DispatchRecord.read.mockResolvedValueOnce({
+                    state: 'attempting',
+                    at: 0,
+                    body: 'hi',
+                });
+
+                await gaveUp(
+                    mockUser,
+                    { claimCheckNumber, notificationType: notificationTypes.Xur },
+                    { attemptsMade: 3, opts: { attempts: 3 } },
+                    err(),
+                );
+
+                expect(DispatchRecord.read).toHaveBeenCalledWith(claimCheckNumber, phoneNumber);
+                expect(ClaimCheck.advance).toHaveBeenCalledExactlyOnceWith(
+                    claimCheckNumber,
+                    phoneNumber,
+                    { status: ERROR, reason: 'unknown-outcome' },
+                );
+                expect(log.error).toHaveBeenCalledOnce();
+            },
+        );
+
+        it('should go by the last error when the send was accepted', async () => {
+            DispatchRecord.read.mockResolvedValueOnce({ state: 'accepted', sid: messageSid });
+
+            await gaveUp(
+                mockUser,
+                { claimCheckNumber, notificationType: notificationTypes.Xur },
+                { attemptsMade: 3, opts: { attempts: 3 } },
+                new Error('Service Unavailable'),
+            );
+
+            expect(ClaimCheck.advance).toHaveBeenCalledExactlyOnceWith(
+                claimCheckNumber,
+                phoneNumber,
+                { status: ERROR, reason: 'retries-exhausted' },
+            );
+            expect(log.error).not.toHaveBeenCalled();
+        });
+
+        it('should go by the last error, and warn, when the record cannot be read', async () => {
+            DispatchRecord.read.mockRejectedValueOnce(new Error('down'));
+
+            await gaveUp(
+                mockUser,
+                { claimCheckNumber, notificationType: notificationTypes.Xur },
+                { attemptsMade: 3, opts: { attempts: 3 } },
+                new Error('Service Unavailable'),
+            );
+
+            expect(ClaimCheck.advance).toHaveBeenCalledExactlyOnceWith(
+                claimCheckNumber,
+                phoneNumber,
+                { status: ERROR, reason: 'retries-exhausted' },
+            );
+            expect(log.warn).toHaveBeenCalledWith(
+                expect.objectContaining({ claimCheckNumber, phoneNumber }),
+                expect.any(String),
+            );
         });
     });
 });

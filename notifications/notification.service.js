@@ -17,13 +17,16 @@ import SendDeferredError from './send-deferred.error.js';
 import SendOutcomeUnknownError from './send-outcome-unknown.error.js';
 
 /**
- * How long a send must have been out before a lookup that cannot find it is
- * taken to mean Twilio never took it. Measured against a live account, an
- * accepted message is listed within a second of `create` answering; this is
- * that with room to spare, and still shorter than the first retry's backoff,
- * so the retry after an ambiguous send can decide rather than wait again.
+ * How long after an ambiguous answer - or, with none recorded, after the send
+ * began - a lookup that cannot find the message is taken to mean Twilio never
+ * took it. Measured against a live account, a message is listed within a
+ * second when Twilio sends it at once, and within 3.3s when it queues it -
+ * listed while still queued, so the lag is Twilio's, not the wait to send.
+ * This is three times that. The first retry, 5s after the failure, finds a
+ * message Twilio took; one it never took costs the job its second attempt
+ * waiting, and the third sends.
  */
-const RECONCILE_AFTER_MS = 5000;
+const RECONCILE_AFTER_MS = 10_000;
 
 /**
  * Allowance for our clock and Twilio's disagreeing when matching a listed
@@ -170,6 +173,12 @@ class Notifications {
 
         /** @type {import('../helpers/dispatch-record.js').DispatchRecord | null} */
         let seen = null;
+        /**
+         * What this attempt wrote, which its writes after the send expect to
+         * find: a copy of the job that has taken over since is left alone.
+         * @type {import('../helpers/dispatch-record.js').Attempting | null}
+         */
+        let mine = null;
 
         if (claimCheckNumber) {
             const settled = await this.#reconcile(claimCheckNumber, message);
@@ -207,10 +216,8 @@ class Notifications {
                      * of this job that got here first, while this one waited
                      * for the slot, is not sent over.
                      */
-                    let claimed;
-
                     try {
-                        claimed = await DispatchRecord.begin(claimCheckNumber, to, text, seen);
+                        mine = await DispatchRecord.begin(claimCheckNumber, to, text, seen);
                     } catch (err) {
                         throw new SendDeferredError(
                             'Unable to record the send, so it was not made.',
@@ -218,7 +225,7 @@ class Notifications {
                         );
                     }
 
-                    if (!claimed) {
+                    if (!mine) {
                         throw new SendOutcomeUnknownError(
                             'Another attempt at this send got there first; the next attempt will look it up.',
                         );
@@ -228,10 +235,11 @@ class Notifications {
                         return await this.client.messages.create(message);
                     } catch (err) {
                         if (certainlyNotSent(err)) {
-                            await DispatchRecord.forget(claimCheckNumber, to);
+                            await DispatchRecord.forget(claimCheckNumber, to, mine);
                             throw err;
                         }
 
+                        await DispatchRecord.unsettled(claimCheckNumber, to, mine);
                         throw new SendOutcomeUnknownError(
                             'Twilio may have accepted the message; the next attempt will look it up.',
                             { cause: err },
@@ -244,8 +252,8 @@ class Notifications {
             },
         );
 
-        if (claimCheckNumber && sent) {
-            await DispatchRecord.accept(claimCheckNumber, to, sent.sid);
+        if (claimCheckNumber && sent && mine) {
+            await DispatchRecord.accept(claimCheckNumber, to, sent.sid, mine);
         }
 
         return sent;
@@ -293,11 +301,18 @@ class Notifications {
         let listed;
 
         try {
-            listed = await this.client.messages.list({
-                to,
-                from: /** @type {string} */ (from),
-                limit: RECONCILE_PAGE_SIZE,
-            });
+            /**
+             * Through the limiter like every Twilio call, so the retries of a
+             * burst of ambiguous sends do not ask all at once and get 429s
+             * back - each of which would cost its job an attempt.
+             */
+            listed = await this.limiter.schedule(() =>
+                this.client.messages.list({
+                    to,
+                    from: /** @type {string} */ (from),
+                    limit: RECONCILE_PAGE_SIZE,
+                }),
+            );
         } catch (err) {
             throw new SendOutcomeUnknownError(
                 'Unable to ask Twilio about an earlier attempt; the next attempt will look again.',
@@ -317,12 +332,12 @@ class Notifications {
         );
 
         if (found) {
-            await DispatchRecord.accept(claimCheckNumber, to, found.sid);
+            await DispatchRecord.accept(claimCheckNumber, to, found.sid, record);
 
             return { earlier: found, seen: record };
         }
 
-        if (Date.now() - record.at < RECONCILE_AFTER_MS) {
+        if (Date.now() - (record.failedAt ?? record.at) < RECONCILE_AFTER_MS) {
             throw new SendOutcomeUnknownError(
                 'An earlier attempt is not listed yet; the next attempt will look again.',
             );

@@ -11,6 +11,7 @@ import XurUnavailableError from './xur-unavailable.error.js';
 import SendDeferredError from './send-deferred.error.js';
 import SendOutcomeUnknownError from './send-outcome-unknown.error.js';
 import ClaimCheck, { DUPLICATE, ERROR, SKIPPED } from '../helpers/claim-check.js';
+import DispatchRecord from '../helpers/dispatch-record.js';
 import mayDeliver from '../helpers/consent.js';
 import { isExhausted, isLastAttempt } from '../helpers/job-attempts.js';
 import log from '../helpers/log.js';
@@ -31,7 +32,7 @@ import {
  * well, as BullMQ matches its own, so one from another copy of the module is
  * not missed.
  * @param {unknown} err
- * @param {typeof SendOutcomeUnknownError | typeof SendDeferredError} type
+ * @param {new (...args: any[]) => Error} type
  * @returns {boolean}
  */
 const isA = (err, type) =>
@@ -184,7 +185,11 @@ class NotificationController {
      * A job that ends still not knowing whether Twilio took its message
      * (#719) says so, rather than calling it an error the recipient was
      * spared: they may well have the text. It is logged as an error too,
-     * since only someone checking Twilio's console can settle it now.
+     * since only someone checking Twilio's console can settle it now. That
+     * is decided by the record of the send, not only the last error: an
+     * attempt that may have reached Twilio can be followed by one that fails
+     * for some other reason - Bungie down, or the job stalling again - before
+     * it gets as far as looking.
      * @param {QueuedUser} user
      * @param {{ claimCheckNumber: string }} properties
      * @param {import('bullmq').Job} job
@@ -192,8 +197,12 @@ class NotificationController {
      * @returns {Promise<void>}
      */
     async #gaveUp({ phoneNumber }, { claimCheckNumber }, job, err) {
-        const permanent = err instanceof UnrecoverableError || err?.name === 'UnrecoverableError';
-        const unknown = isA(err, SendOutcomeUnknownError);
+        const permanent = isA(err, UnrecoverableError);
+        const unknown = await NotificationController.#mayHaveSent(
+            claimCheckNumber,
+            phoneNumber,
+            err,
+        );
 
         if (unknown) {
             log.error(
@@ -206,6 +215,32 @@ class NotificationController {
             status: ERROR,
             reason: NotificationController.#givenUpBecause(permanent, unknown, job),
         });
+    }
+
+    /**
+     * Whether an attempt at this send may have reached Twilio: the last one
+     * said so, or the record still shows one begun and never settled. A
+     * record that cannot be read leaves the last error to decide.
+     * @param {string} claimCheckNumber
+     * @param {string} phoneNumber
+     * @param {Error} err - what the last attempt failed with
+     * @returns {Promise<boolean>}
+     */
+    static async #mayHaveSent(claimCheckNumber, phoneNumber, err) {
+        if (isA(err, SendOutcomeUnknownError)) return true;
+
+        try {
+            const record = await DispatchRecord.read(claimCheckNumber, phoneNumber);
+
+            return record?.state === 'attempting';
+        } catch (readErr) {
+            log.warn(
+                { err: readErr, claimCheckNumber, phoneNumber },
+                'Unable to read the record of the send; going by the last error.',
+            );
+
+            return false;
+        }
     }
 
     /**
@@ -386,7 +421,7 @@ class NotificationController {
                     throw err;
                 }
 
-                if (err instanceof UnrecoverableError) {
+                if (isA(err, UnrecoverableError)) {
                     throw err;
                 }
 

@@ -17,24 +17,41 @@ vi.mock('../helpers/retry.js', () => ({
  */
 const records = vi.hoisted(() => new Map());
 
+/**
+ * Replaces the record at `key` only if it still holds `expected`, as the real
+ * module's script does.
+ */
+const replaceRecord = vi.hoisted(() => (key, expected, replacement) => {
+    if (JSON.stringify(records.get(key) ?? null) !== JSON.stringify(expected)) return false;
+    if (replacement) records.set(key, replacement);
+    else records.delete(key);
+
+    return true;
+});
+
 vi.mock('../helpers/dispatch-record.js', () => ({
     default: {
         read: vi.fn(async (claimCheckNumber, phoneNumber) =>
             structuredClone(records.get(`${claimCheckNumber}:${phoneNumber}`) ?? null),
         ),
         begin: vi.fn(async (claimCheckNumber, phoneNumber, body, seen) => {
-            const key = `${claimCheckNumber}:${phoneNumber}`;
+            const record = { state: 'attempting', at: Date.now(), body };
 
-            if (JSON.stringify(records.get(key) ?? null) !== JSON.stringify(seen)) return false;
-            records.set(key, { state: 'attempting', at: Date.now(), body });
-
-            return true;
+            return replaceRecord(`${claimCheckNumber}:${phoneNumber}`, seen, record)
+                ? record
+                : null;
         }),
-        accept: vi.fn(async (claimCheckNumber, phoneNumber, sid) => {
-            records.set(`${claimCheckNumber}:${phoneNumber}`, { state: 'accepted', sid });
+        accept: vi.fn(async (claimCheckNumber, phoneNumber, sid, mine) => {
+            replaceRecord(`${claimCheckNumber}:${phoneNumber}`, mine, { state: 'accepted', sid });
         }),
-        forget: vi.fn(async (claimCheckNumber, phoneNumber) => {
-            records.delete(`${claimCheckNumber}:${phoneNumber}`);
+        unsettled: vi.fn(async (claimCheckNumber, phoneNumber, mine) => {
+            replaceRecord(`${claimCheckNumber}:${phoneNumber}`, mine, {
+                ...mine,
+                failedAt: Date.now(),
+            });
+        }),
+        forget: vi.fn(async (claimCheckNumber, phoneNumber, mine) => {
+            replaceRecord(`${claimCheckNumber}:${phoneNumber}`, mine, null);
         }),
     },
 }));
@@ -218,9 +235,11 @@ describe('Notifications', () => {
 
             DispatchRecord.begin.mockImplementationOnce(async (...args) => {
                 expect(messages.create).not.toHaveBeenCalled();
-                records.set(key, { state: 'attempting', at: Date.now(), body: args[2] });
+                const record = { state: 'attempting', at: Date.now(), body: args[2] };
 
-                return true;
+                records.set(key, record);
+
+                return record;
             });
 
             const sent = await service.sendMessage('Aegis of the Reef', to, undefined, options);
@@ -474,6 +493,78 @@ describe('Notifications', () => {
                 expect(fake.messages.create).not.toHaveBeenCalled();
             },
         );
+
+        /**
+         * `create` can take most of its timeout before failing; the wait for
+         * Twilio to list the message starts from the failure, not the begin.
+         */
+        it('should wait from when an ambiguous answer came back, not from when the send began', async () => {
+            const { provider, service, messages } = fakeTwilio();
+
+            provider.failWith = timeout;
+            await expect(
+                service.sendMessage('Aegis of the Reef', to, undefined, options),
+            ).rejects.toBeInstanceOf(SendOutcomeUnknownError);
+            const record = records.get(key);
+
+            expect(record).toMatchObject({ state: 'attempting', failedAt: expect.any(Number) });
+            records.set(key, { ...record, at: record.at - 30_000 });
+            provider.failWith = undefined;
+
+            await expect(
+                service.sendMessage('Aegis of the Reef', to, undefined, options),
+            ).rejects.toBeInstanceOf(SendOutcomeUnknownError);
+            expect(messages.create).toHaveBeenCalledTimes(1);
+        });
+
+        it('should look an earlier attempt up through the rate limiter', async () => {
+            const { service, messages } = fakeTwilio();
+            let inSlot = 0;
+
+            limiter.schedule.mockImplementation(async fn => {
+                inSlot += 1;
+                try {
+                    return await fn();
+                } finally {
+                    inSlot -= 1;
+                }
+            });
+            messages.list.mockImplementation(async () => {
+                expect(inSlot).toBe(1);
+
+                return [];
+            });
+            records.set(key, { state: 'attempting', at: Date.now() - RECONCILE_AFTER_MS, body });
+
+            await service.sendMessage('Aegis of the Reef', to, undefined, options);
+
+            expect(messages.list).toHaveBeenCalledOnce();
+        });
+
+        /**
+         * A copy that took over while this one's `create` was in flight keeps
+         * its record, whatever this one then hears back from Twilio.
+         */
+        it.each([
+            ['accepted', undefined],
+            ['refused', Object.assign(new Error('invalid'), { status: 400 })],
+            ['left unknown', timeout],
+        ])("should leave a newer copy's record when its own send is %s", async (_, failure) => {
+            const { service, messages } = fakeTwilio();
+            const theirs = { state: 'attempting', at: Date.now(), body: 'theirs' };
+            const create = messages.create.getMockImplementation();
+
+            messages.create.mockImplementationOnce(async message => {
+                records.set(key, theirs);
+                if (failure) throw failure;
+
+                return create(message);
+            });
+
+            await service.sendMessage('Aegis of the Reef', to, undefined, options).catch(() => {});
+
+            expect(records.get(key)).toEqual(theirs);
+        });
 
         it('should leave no record when the guard withholds the send', async () => {
             const { service, messages } = fakeTwilio();
