@@ -2,7 +2,8 @@
 /**
  * A send held back because it could not be recorded first (#719): nothing
  * went to Twilio. Thrown so BullMQ tries the job again later, where the
- * record's Redis may be back.
+ * record's Redis may be back. Marked `retryable`, which `isTransientError`
+ * honours, so no caller makes it permanent.
  *
  * Distinct from `SendOutcomeUnknownError`, which means Twilio may have the
  * message: a job that gives up on this one sent nothing, and nobody needs to
@@ -18,6 +19,7 @@ class SendDeferredError extends Error {
 
         Object.assign(this, {
             name: 'SendDeferredError',
+            retryable: true,
         });
     }
 }

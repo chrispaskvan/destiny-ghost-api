@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import mockTwilioCreateMessageResponse from '../mocks/twilioCreateMessageResponse.json';
 import { MAX_SMS_MESSAGE_LENGTH } from '../twilio/twilio.constants.js';
-import Notifications, { CLOCK_SKEW_MS, RECONCILE_AFTER_MS } from './notification.service.js';
+import Notifications, {
+    CLOCK_SKEW_MS,
+    RECONCILE_AFTER_MS,
+    TWILIO_REQUEST_TIMEOUT_MS,
+} from './notification.service.js';
 import SendDeferredError from './send-deferred.error.js';
 import SendOutcomeUnknownError from './send-outcome-unknown.error.js';
 import DispatchRecord from '../helpers/dispatch-record.js';
@@ -310,6 +314,7 @@ describe('Notifications', () => {
             records.set(key, {
                 state: 'attempting',
                 at: Date.now() - RECONCILE_AFTER_MS + 1000,
+                failedAt: Date.now() - RECONCILE_AFTER_MS + 1000,
                 body,
             });
 
@@ -323,7 +328,12 @@ describe('Notifications', () => {
         it('should send once an attempt Twilio never listed is old enough', async () => {
             const { service, messages } = fakeTwilio();
 
-            records.set(key, { state: 'attempting', at: Date.now() - RECONCILE_AFTER_MS, body });
+            records.set(key, {
+                state: 'attempting',
+                at: Date.now() - RECONCILE_AFTER_MS,
+                failedAt: Date.now() - RECONCILE_AFTER_MS,
+                body,
+            });
 
             const sent = await service.sendMessage('Aegis of the Reef', to, undefined, options);
 
@@ -338,6 +348,14 @@ describe('Notifications', () => {
                 'created before the attempt',
                 { dateCreated: new Date(Date.now() - CLOCK_SKEW_MS - RECONCILE_AFTER_MS - 1000) },
             ],
+            /**
+             * Most likely another operation's identical text: the allowance
+             * for clocks is seconds, not the minute it once was.
+             */
+            [
+                'sent ten seconds before the attempt',
+                { dateCreated: new Date(Date.now() - RECONCILE_AFTER_MS - 10_000) },
+            ],
         ])('should not adopt a message %s', async (_, difference) => {
             const { provider, service, messages } = fakeTwilio();
 
@@ -349,7 +367,12 @@ describe('Notifications', () => {
                 dateCreated: new Date(),
                 ...difference,
             });
-            records.set(key, { state: 'attempting', at: Date.now() - RECONCILE_AFTER_MS, body });
+            records.set(key, {
+                state: 'attempting',
+                at: Date.now() - RECONCILE_AFTER_MS,
+                failedAt: Date.now() - RECONCILE_AFTER_MS,
+                body,
+            });
 
             await service.sendMessage('Aegis of the Reef', to, undefined, options);
 
@@ -432,7 +455,12 @@ describe('Notifications', () => {
         it('should take over an attempt it read once that is old enough', async () => {
             const { service, messages } = fakeTwilio();
 
-            records.set(key, { state: 'attempting', at: Date.now() - RECONCILE_AFTER_MS, body });
+            records.set(key, {
+                state: 'attempting',
+                at: Date.now() - RECONCILE_AFTER_MS,
+                failedAt: Date.now() - RECONCILE_AFTER_MS,
+                body,
+            });
 
             await service.sendMessage('Aegis of the Reef', to, undefined, options);
 
@@ -534,7 +562,12 @@ describe('Notifications', () => {
 
                 return [];
             });
-            records.set(key, { state: 'attempting', at: Date.now() - RECONCILE_AFTER_MS, body });
+            records.set(key, {
+                state: 'attempting',
+                at: Date.now() - RECONCILE_AFTER_MS,
+                failedAt: Date.now() - RECONCILE_AFTER_MS,
+                body,
+            });
 
             await service.sendMessage('Aegis of the Reef', to, undefined, options);
 
@@ -564,6 +597,69 @@ describe('Notifications', () => {
             await service.sendMessage('Aegis of the Reef', to, undefined, options).catch(() => {});
 
             expect(records.get(key)).toEqual(theirs);
+        });
+
+        /**
+         * No failure recorded: the attempt may have crashed, or may still be
+         * waiting on Twilio in a copy of the job that stalled, so the wait
+         * counts from when its request could last have been answered.
+         */
+        it.each([
+            ["still within Twilio's request timeout", RECONCILE_AFTER_MS + 1000, 0],
+            ['past it and the wait after', TWILIO_REQUEST_TIMEOUT_MS + RECONCILE_AFTER_MS, 1],
+        ])(
+            'with no failure recorded, should send only once an attempt is %s',
+            async (_, age, creates) => {
+                const { service, messages } = fakeTwilio();
+
+                records.set(key, { state: 'attempting', at: Date.now() - age, body });
+
+                await service
+                    .sendMessage('Aegis of the Reef', to, undefined, options)
+                    .catch(() => {});
+
+                expect(messages.create).toHaveBeenCalledTimes(creates);
+            },
+        );
+
+        it.each([
+            ['its Redis is down', new Error('ECONNREFUSED')],
+            [
+                'its queue is full',
+                Object.assign(new Error("Number of requests reached it's maximum"), {
+                    name: 'RateLimiterQueueError',
+                }),
+            ],
+        ])('should defer, not fail, a send the rate limiter refuses because %s', async (_, err) => {
+            const { service, messages } = fakeTwilio();
+
+            limiter.schedule.mockRejectedValueOnce(err);
+
+            const sending = service.sendMessage('Aegis of the Reef', to, undefined, options);
+
+            await expect(sending).rejects.toBeInstanceOf(SendDeferredError);
+            await expect(sending).rejects.toHaveProperty('cause', err);
+            expect(messages.create).not.toHaveBeenCalled();
+        });
+
+        it('should rethrow a rate limiter failure as is for a send without a claim check', async () => {
+            const { service } = fakeTwilio();
+            const err = new Error('down');
+
+            limiter.schedule.mockRejectedValueOnce(err);
+
+            await expect(service.sendMessage('Your code is 1234', to)).rejects.toBe(err);
+        });
+
+        it('should not defer a failure from the send itself', async () => {
+            const { provider, service } = fakeTwilio();
+            const refused = Object.assign(new Error('invalid'), { status: 400 });
+
+            provider.failWith = refused;
+
+            await expect(
+                service.sendMessage('Aegis of the Reef', to, undefined, options),
+            ).rejects.toBe(refused);
         });
 
         it('should leave no record when the guard withholds the send', async () => {

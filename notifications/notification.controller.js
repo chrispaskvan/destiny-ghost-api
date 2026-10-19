@@ -8,7 +8,6 @@ import NotificationError from './notification.error.js';
 import notificationTypes from './notification.types.js';
 import DestinyError from '../destiny/destiny.error.js';
 import XurUnavailableError from './xur-unavailable.error.js';
-import SendDeferredError from './send-deferred.error.js';
 import SendOutcomeUnknownError from './send-outcome-unknown.error.js';
 import ClaimCheck, { DUPLICATE, ERROR, SKIPPED } from '../helpers/claim-check.js';
 import DispatchRecord from '../helpers/dispatch-record.js';
@@ -408,16 +407,6 @@ class NotificationController {
                 }
 
                 if (err instanceof Error && isTransientError(err)) {
-                    throw err;
-                }
-
-                /**
-                 * Retried, never made permanent. The send may have reached
-                 * Twilio, and the next attempt is the one that finds out; or
-                 * it could not be recorded and was not made, and the next
-                 * attempt may be able to.
-                 */
-                if (isA(err, SendOutcomeUnknownError) || isA(err, SendDeferredError)) {
                     throw err;
                 }
 

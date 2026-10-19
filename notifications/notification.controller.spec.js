@@ -1182,22 +1182,22 @@ describe('NotificationController', () => {
 
         describe('when a transient error occurs', () => {
             /**
-             * It carries no status or code, so the transient check does not
-             * know it; made permanent, the job would never get the attempt
-             * that looks the message up.
+             * They carry no status or code; they mark themselves retryable,
+             * which the transient check honours. Made permanent, the job would
+             * never get the attempt that settles the send.
              */
             it.each([
                 ['a send Twilio may have taken', () => new SendOutcomeUnknownError('lost answer')],
                 ['a send that could not be recorded', () => new SendDeferredError('not recorded')],
                 [
-                    'either, matched by name',
-                    () =>
-                        Object.assign(new Error('lost answer'), {
-                            name: 'SendOutcomeUnknownError',
-                        }),
+                    'any error marked retryable',
+                    () => Object.assign(new Error('lost answer'), { retryable: true }),
                 ],
             ])('should re-throw %s, for the retry to settle', async (_, make) => {
                 const unknown = make();
+                const actual = await vi.importActual('../helpers/retry.js');
+
+                isTransientError.mockImplementation(actual.isTransientError);
 
                 authenticationService.authenticate.mockResolvedValue({
                     bungie: { access_token: accessToken },

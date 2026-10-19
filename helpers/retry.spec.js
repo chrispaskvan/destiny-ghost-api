@@ -192,6 +192,14 @@ describe('withRetry', () => {
 });
 
 describe('isTransientError', () => {
+    test('returns true for an error marked retryable', () => {
+        expect(isTransientError(Object.assign(new Error(), { retryable: true }))).toBe(true);
+    });
+
+    test.each([false, 'yes', 1])('returns false for retryable %p', retryable => {
+        expect(isTransientError(Object.assign(new Error(), { retryable }))).toBe(false);
+    });
+
     test.each([408, 429, 500, 502, 503, 504])('returns true for status %i', status => {
         const err = Object.assign(new Error(), { status });
 

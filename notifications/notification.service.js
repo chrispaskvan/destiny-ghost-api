@@ -8,6 +8,7 @@
  * @description Utility functions for submitting a SMS/MMS message with Twilio,
  * recording the message, and updating the message status.
  */
+import { StatusCodes } from 'http-status-codes';
 import configuration from '../helpers/config.js';
 import DispatchRecord from '../helpers/dispatch-record.js';
 import { withRetry, isTransientError } from '../helpers/retry.js';
@@ -17,9 +18,10 @@ import SendDeferredError from './send-deferred.error.js';
 import SendOutcomeUnknownError from './send-outcome-unknown.error.js';
 
 /**
- * How long after an ambiguous answer - or, with none recorded, after the send
- * began - a lookup that cannot find the message is taken to mean Twilio never
- * took it. Measured against a live account, a message is listed within a
+ * How long after an ambiguous answer - or, with none recorded, after the
+ * send's request could last have been answered (`TWILIO_REQUEST_TIMEOUT_MS`)
+ * - a lookup that cannot find the message is taken to mean Twilio never took
+ * it. Measured against a live account, a message is listed within a
  * second when Twilio sends it at once, and within 3.3s when it queues it -
  * listed while still queued, so the lag is Twilio's, not the wait to send.
  * This is three times that. The first retry, 5s after the failure, finds a
@@ -30,10 +32,21 @@ const RECONCILE_AFTER_MS = 10_000;
 
 /**
  * Allowance for our clock and Twilio's disagreeing when matching a listed
- * message's `dateCreated` against when the attempt was recorded. Twilio
- * reports whole seconds, so this also covers the truncation.
+ * message's `dateCreated` against when the attempt was recorded, and for
+ * Twilio reporting whole seconds. Both clocks are kept by NTP, so this is
+ * small on purpose: it is also how far back an identical message sent by
+ * another operation could be mistaken for this one.
  */
-const CLOCK_SKEW_MS = 60_000;
+const CLOCK_SKEW_MS = 5000;
+
+/**
+ * How long twilio-node waits for `create` to answer: its default, which the
+ * client in `loaders/routes.js` does not change. An attempt with no recorded
+ * failure may have ended in a crash, or may still be waiting on Twilio in a
+ * copy of the job that stalled, so its wait is counted from when that
+ * request could last have been answered.
+ */
+const TWILIO_REQUEST_TIMEOUT_MS = 30_000;
 
 /**
  * How many of a recipient's latest messages a lookup reads. The match is on
@@ -82,7 +95,7 @@ const truncate = text => {
 const certainlyNotSent = err => {
     const { status, code } = /** @type {{ status?: unknown, code?: unknown }} */ (err ?? {});
 
-    if (typeof status === 'number') return status < 500;
+    if (typeof status === 'number') return status < StatusCodes.INTERNAL_SERVER_ERROR;
 
     return typeof code === 'string' && NEVER_CONNECTED.has(code);
 };
@@ -187,70 +200,93 @@ class Notifications {
             seen = settled.seen;
         }
 
-        const sent = await withRetry(
-            () =>
-                this.limiter.schedule(async () => {
-                    /**
-                     * Checked here rather than by the caller, because the wait
-                     * for this slot is the gap that matters. The limiter is
-                     * cluster-wide at one message per 250ms, so on a broadcast
-                     * a recipient can sit in this queue for minutes after the
-                     * caller decided to send - long enough for a STOP to
-                     * arrive. Callers with nothing to withhold on - the welcome
-                     * message, a verification code, a keyword acknowledgement -
-                     * pass no guard and are never gated.
-                     */
-                    if (guard && !(await guard())) {
-                        return undefined;
-                    }
+        /**
+         * Whether the limiter got as far as running the send. One that
+         * rejects before then - its Redis down, or its queue full - sent
+         * nothing, and for a claim check that is a send to retry, not an
+         * error to fail the job with.
+         */
+        let granted = false;
+        /** @type {SentMessage | undefined} */
+        let sent;
 
-                    if (!claimCheckNumber) {
-                        return await this.client.messages.create(message);
-                    }
+        try {
+            sent = await withRetry(
+                () =>
+                    this.limiter.schedule(async () => {
+                        granted = true;
 
-                    /**
-                     * After the guard, so a withheld send leaves no record, and
-                     * as the last thing before the provider call, so a record
-                     * exists for every message Twilio could have. Written only
-                     * if the record is still what `#reconcile` read, so a copy
-                     * of this job that got here first, while this one waited
-                     * for the slot, is not sent over.
-                     */
-                    try {
-                        mine = await DispatchRecord.begin(claimCheckNumber, to, text, seen);
-                    } catch (err) {
-                        throw new SendDeferredError(
-                            'Unable to record the send, so it was not made.',
-                            { cause: err },
-                        );
-                    }
-
-                    if (!mine) {
-                        throw new SendOutcomeUnknownError(
-                            'Another attempt at this send got there first; the next attempt will look it up.',
-                        );
-                    }
-
-                    try {
-                        return await this.client.messages.create(message);
-                    } catch (err) {
-                        if (certainlyNotSent(err)) {
-                            await DispatchRecord.forget(claimCheckNumber, to, mine);
-                            throw err;
+                        /**
+                         * Checked here rather than by the caller, because the wait
+                         * for this slot is the gap that matters. The limiter is
+                         * cluster-wide at one message per 250ms, so on a broadcast
+                         * a recipient can sit in this queue for minutes after the
+                         * caller decided to send - long enough for a STOP to
+                         * arrive. Callers with nothing to withhold on - the welcome
+                         * message, a verification code, a keyword acknowledgement -
+                         * pass no guard and are never gated.
+                         */
+                        if (guard && !(await guard())) {
+                            return undefined;
                         }
 
-                        await DispatchRecord.unsettled(claimCheckNumber, to, mine);
-                        throw new SendOutcomeUnknownError(
-                            'Twilio may have accepted the message; the next attempt will look it up.',
-                            { cause: err },
-                        );
-                    }
-                }),
-            {
-                shouldRetry: isTransientError,
-                maxRetries: 0,
-            },
-        );
+                        if (!claimCheckNumber) {
+                            return await this.client.messages.create(message);
+                        }
+
+                        /**
+                         * After the guard, so a withheld send leaves no record, and
+                         * as the last thing before the provider call, so a record
+                         * exists for every message Twilio could have. Written only
+                         * if the record is still what `#reconcile` read, so a copy
+                         * of this job that got here first, while this one waited
+                         * for the slot, is not sent over.
+                         */
+                        try {
+                            mine = await DispatchRecord.begin(claimCheckNumber, to, text, seen);
+                        } catch (err) {
+                            throw new SendDeferredError(
+                                'Unable to record the send, so it was not made.',
+                                { cause: err },
+                            );
+                        }
+
+                        if (!mine) {
+                            throw new SendOutcomeUnknownError(
+                                'Another attempt at this send got there first; the next attempt will look it up.',
+                            );
+                        }
+
+                        try {
+                            return await this.client.messages.create(message);
+                        } catch (err) {
+                            if (certainlyNotSent(err)) {
+                                await DispatchRecord.forget(claimCheckNumber, to, mine);
+                                throw err;
+                            }
+
+                            await DispatchRecord.unsettled(claimCheckNumber, to, mine);
+                            throw new SendOutcomeUnknownError(
+                                'Twilio may have accepted the message; the next attempt will look it up.',
+                                { cause: err },
+                            );
+                        }
+                    }),
+                {
+                    shouldRetry: isTransientError,
+                    maxRetries: 0,
+                },
+            );
+        } catch (err) {
+            if (claimCheckNumber && !granted) {
+                throw new SendDeferredError(
+                    'The rate limiter did not grant the send, so it was not made.',
+                    { cause: err },
+                );
+            }
+
+            throw err;
+        }
 
         if (claimCheckNumber && sent && mine) {
             await DispatchRecord.accept(claimCheckNumber, to, sent.sid, mine);
@@ -337,7 +373,9 @@ class Notifications {
             return { earlier: found, seen: record };
         }
 
-        if (Date.now() - (record.failedAt ?? record.at) < RECONCILE_AFTER_MS) {
+        const settledFrom = record.failedAt ?? record.at + TWILIO_REQUEST_TIMEOUT_MS;
+
+        if (Date.now() - settledFrom < RECONCILE_AFTER_MS) {
             throw new SendOutcomeUnknownError(
                 'An earlier attempt is not listed yet; the next attempt will look again.',
             );
@@ -348,4 +386,4 @@ class Notifications {
 }
 
 export default Notifications;
-export { CLOCK_SKEW_MS, RECONCILE_AFTER_MS, RECONCILE_PAGE_SIZE };
+export { CLOCK_SKEW_MS, RECONCILE_AFTER_MS, RECONCILE_PAGE_SIZE, TWILIO_REQUEST_TIMEOUT_MS };

@@ -37,9 +37,10 @@ If `attempting` cannot be written, nothing is sent: the send fails with `SendDef
 
 - **None:** send.
 - **`accepted`:** return its SID with status `accepted`. Nothing is sent, and Twilio isn't asked: the record already proves the send, and the claim check never moves backwards, so its delivery reports bring the rest.
-- **`attempting`:** list the recipient's latest 20 messages from our number and look for one sent by the API, with the recorded body, created no earlier than a minute before the attempt. That minute covers the two clocks disagreeing and Twilio reporting whole seconds. The list call goes through the rate limiter like every Twilio call, so the retries of a burst of ambiguous sends don't all ask at once and get 429s back.
+- **`attempting`:** list the recipient's latest 20 messages from our number and look for one sent by the API, with the recorded body, created no earlier than 5 seconds before the attempt. That covers the two clocks disagreeing (both are kept by NTP) and Twilio reporting whole seconds. It is kept short on purpose, because it is also how far back another operation's identical message could be mistaken for this one. The list call goes through the rate limiter like every Twilio call, so the retries of a burst of ambiguous sends don't all ask at once and get 429s back.
   - **Found:** adopt it as if `create` had answered.
-  - **Not found, and at least 10 seconds have passed since the ambiguous answer** (or since the attempt began, when none was recorded): Twilio never took it. Send. Counting from the answer matters because a `create` can take most of its timeout before failing, and counting from the begin would use the wait up before the retry looked.
+  - **Not found, and at least 10 seconds have passed since the ambiguous answer:** Twilio never took it. Send. Counting from the answer matters because a `create` can take most of its timeout before failing, and counting from the begin would use the wait up before the retry looked.
+  - **When no answer was recorded,** the attempt crashed, or is still waiting on Twilio in a copy of the job that stalled. The 10 seconds then count from when its request could last have been answered: the begin plus twilio-node's 30-second request timeout. A crashed job only comes back after stall detection, so this costs it almost nothing.
   - **Not found sooner:** report the outcome as unknown and look again on the next attempt.
 
 The body matched is the recorded one, not the retry's own. A retry can compose different text, such as a Xur inventory read again, and it is the earlier text Twilio would have. Bodies are cut to the length limit without splitting a character: half an emoji goes out as U+FFFD, and Twilio would store text that no longer matches.
@@ -53,12 +54,12 @@ The 10 seconds is three times the slowest listing measured. Retries are 5 then 1
 | Failure | Proves | Policy |
 | --- | --- | --- |
 | guard withholds | nothing was sent | skip, as before |
-| `attempting` cannot be written | nothing was sent | `SendDeferredError`, and BullMQ retries |
+| `attempting` cannot be written, or the rate limiter rejects before the send runs (its Redis down, or its queue full) | nothing was sent | `SendDeferredError`, and BullMQ retries |
 | Twilio answers with a status under 500 (a 429 included), or the request never connected (`ECONNREFUSED`, `ENOTFOUND`, `EAI_AGAIN`, unreachable host or network, connect timeout) | Twilio did not take it | drop the record. Rethrow as is: a 429 is retried, a 4xx fails the job permanently. |
 | a timeout, a reset, a 5xx, or an error of any kind not recognised above | nothing either way | keep `attempting`, throw `SendOutcomeUnknownError`, and BullMQ retries. The retry reconciles. |
 | the record or Twilio's list cannot be read, or another copy of the job got there first | nothing yet | `SendOutcomeUnknownError`, and BullMQ retries. It never guesses. |
 
-Both errors carry no status or code, so the worker rethrows them by type (or by name) rather than letting its catch-all fail the job permanently.
+Both errors carry no status or code. They mark themselves `retryable`, which `isTransientError` honours, so the worker's existing transient check retries them, and its catch-all never makes them permanent. A later error that means "try again" only has to carry the same marker.
 
 **When the job runs out of attempts still not knowing,** judged by the record rather than only the last error, the receipt records `error` with reason `unknown-outcome`, and the worker logs an error naming the claim check and phone, for someone to check Twilio's console. Twilio's reports take precedence over the service's own outcomes (see `twilio-message-status.md`), so if the message did go out, its delivery callback replaces the `error` on its own.
 
@@ -76,11 +77,15 @@ Every send for a claim check now costs two extra Redis writes. A retry costs a R
 
 **The listing lag was measured on a burst of 8.** A much deeper Twilio queue might be indexed more slowly. The queued messages were listed before they were sent, which suggests the lag doesn't grow with the queue, but that wasn't measured. A message not listed within 10 seconds is resent. This is the duplicate case above.
 
-**The match identifies text, not the operation.** If another claim check sends the same text to the same number between this attempt and its retry, the retry adopts that message as its own. This one's is then never sent, and its receipt reports the other's delivery. It needs identical text, such as the fixed "Xur has closed shop" reply, from two operations within seconds. An upper bound on `dateCreated` cannot rule it out, because the clock-skew allowance is wider than the window.
+**The match identifies text, not the operation.** If another claim check sends the same text to the same number between 5 seconds before this attempt and its retry, the retry adopts that message as its own. This one's is then never sent, and its receipt reports the other's delivery. It needs identical text, such as the fixed "Xur has closed shop" reply, from two operations within seconds.
 
 **Twilio may store a body differently from how it was sent** in ways other than a split character (line endings, for example). The probe's plain text matched exactly. A body that does not match is resent once 10 seconds have passed.
 
 **Instances' clocks are compared.** The 10 seconds is measured on the instance doing the retry, against times another instance may have written. In the stall race, a host whose clock runs 10 seconds or more ahead could take over a send that is still in flight and send it again. NTP keeps instances well inside that. Closing it fully would need Redis's own time on every read as well as every write.
+
+**The 10 seconds was measured on a healthy Twilio.** Ambiguous answers are most likely when Twilio is degraded, which is also when it may list messages most slowly. A message Twilio took but listed later than the window is sent again. If the account turns on message-body redaction, no body matches, and every ambiguous send is resent after the window: the duplicates this replaces, and nothing worse. Waiting longer would trade those duplicates for lost messages, since a job only has three attempts.
+
+**An unsettled record errs toward alerting.** A send that certainly never reached Twilio can still leave `attempting` behind: Twilio refused it and the delete failed, or `begin` timed out but its write landed later. If that job then gives up, it ends as `unknown-outcome` and alerts an operator, who checks Twilio and finds nothing. That's the safe direction to be wrong in.
 
 **A recipient sent more than 20 messages** from our number since the attempt pushes it off the page that is read. This is unlikely within the seconds the lookup covers.
 

@@ -76,6 +76,7 @@ const TRANSIENT_NETWORK_CODES = new Set([
  * Works for any SDK error that exposes a numeric `status` property
  * (Twilio RestException, Google GenAI ApiError, etc.).
  *
+ * - `retryable: true` → transient: an error that says so of itself
  * - numeric status 408, 429, ≥500 → transient
  * - known network/timeout error codes → transient
  * - TypeError "fetch failed" (Node native fetch) → transient
@@ -90,9 +91,18 @@ function isTransientError(err) {
      * ApiError, DestinyError, network errors) expose `status`/`code`, none
      * of which are on the base `Error` type.
      */
-    const { status, code } = /** @type {{ status?: unknown, code?: unknown }} */ (
-        /** @type {unknown} */ (err)
-    );
+    const { status, code, retryable } =
+        /** @type {{ status?: unknown, code?: unknown, retryable?: unknown }} */ (
+            /** @type {unknown} */ (err)
+        );
+
+    /**
+     * Errors of our own that mean "try again later" - a send that could not
+     * be recorded, or whose outcome is not known yet (#719) - mark
+     * themselves, so every caller that asks this question gets the same
+     * answer without having to know each type.
+     */
+    if (retryable === true) return true;
 
     if (typeof status === 'number') {
         return status === 408 || status === 429 || status >= 500;
