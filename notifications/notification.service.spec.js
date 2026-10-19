@@ -9,12 +9,6 @@ import Notifications, {
 import SendDeferredError from './send-deferred.error.js';
 import SendOutcomeUnknownError from './send-outcome-unknown.error.js';
 import DispatchRecord from '../helpers/dispatch-record.js';
-import { withRetry, isTransientError } from '../helpers/retry.js';
-
-vi.mock('../helpers/retry.js', () => ({
-    withRetry: vi.fn(fn => fn()),
-    isTransientError: vi.fn(),
-}));
 /**
  * The record kept in memory, so the cases below can drive a send through each
  * state and assert what the next attempt does with it.
@@ -156,13 +150,19 @@ describe('Notifications', () => {
         });
     });
 
-    it('wraps sendMessage with retry using isTransientError', async () => {
-        await notificationService.sendMessage('Aegis of the Reef', '+11111111111');
+    /**
+     * BullMQ retries the job; a retry in here would send again without
+     * settling the earlier attempt first (#719).
+     */
+    it('sends once, leaving retries to the job', async () => {
+        const err = Object.assign(new Error('Service Unavailable'), { status: 503 });
 
-        expect(withRetry).toHaveBeenCalledWith(expect.any(Function), {
-            shouldRetry: isTransientError,
-            maxRetries: 0,
-        });
+        client.messages.create.mockRejectedValueOnce(err);
+
+        await expect(
+            notificationService.sendMessage('Aegis of the Reef', '+11111111111'),
+        ).rejects.toBe(err);
+        expect(client.messages.create).toHaveBeenCalledTimes(1);
     });
 
     it('sendMessage', async () => {
@@ -660,6 +660,71 @@ describe('Notifications', () => {
             await expect(
                 service.sendMessage('Aegis of the Reef', to, undefined, options),
             ).rejects.toBe(refused);
+        });
+
+        describe('findEarlier', () => {
+            it('should find nothing when no attempt was made', async () => {
+                const { service, messages } = fakeTwilio();
+
+                await expect(service.findEarlier(claimCheckNumber, to)).resolves.toBeUndefined();
+                expect(messages.list).not.toHaveBeenCalled();
+            });
+
+            it('should report an accepted send from its record', async () => {
+                const { service } = fakeTwilio();
+
+                records.set(key, { state: 'accepted', sid: `SM${'d'.repeat(32)}` });
+
+                await expect(service.findEarlier(claimCheckNumber, to)).resolves.toEqual({
+                    sid: `SM${'d'.repeat(32)}`,
+                    status: 'accepted',
+                });
+            });
+
+            it('should find an attempt Twilio listed, without sending', async () => {
+                const { provider, service, messages } = fakeTwilio();
+
+                provider.acceptThenFail = timeout;
+                await service
+                    .sendMessage('Aegis of the Reef', to, undefined, options)
+                    .catch(() => {});
+
+                await expect(service.findEarlier(claimCheckNumber, to)).resolves.toBe(
+                    provider.taken[0],
+                );
+                expect(messages.create).toHaveBeenCalledTimes(1);
+                expect(messages.list).toHaveBeenCalledWith(
+                    expect.objectContaining({ to, from: expect.any(String) }),
+                );
+            });
+
+            it('should throw while an attempt is too recent to settle', async () => {
+                const { service } = fakeTwilio();
+
+                records.set(key, {
+                    state: 'attempting',
+                    at: Date.now(),
+                    failedAt: Date.now(),
+                    body,
+                });
+
+                await expect(service.findEarlier(claimCheckNumber, to)).rejects.toBeInstanceOf(
+                    SendOutcomeUnknownError,
+                );
+            });
+
+            it('should find nothing once an unlisted attempt is old enough', async () => {
+                const { service } = fakeTwilio();
+
+                records.set(key, {
+                    state: 'attempting',
+                    at: Date.now() - RECONCILE_AFTER_MS,
+                    failedAt: Date.now() - RECONCILE_AFTER_MS,
+                    body,
+                });
+
+                await expect(service.findEarlier(claimCheckNumber, to)).resolves.toBeUndefined();
+            });
         });
 
         it('should leave no record when the guard withholds the send', async () => {

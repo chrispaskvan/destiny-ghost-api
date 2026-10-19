@@ -47,6 +47,7 @@ vi.mock('./application-insights.js', () => ({
 }));
 
 import publisher from './publisher.js';
+import log from './log.js';
 import applicationInsights from './application-insights.js';
 
 const chance = new Chance();
@@ -57,11 +58,34 @@ beforeEach(() => {
 
 describe('Publisher', () => {
     describe('Queue configuration', () => {
+        /**
+         * A send whose outcome is unknown waits for Twilio to list it before
+         * it is sent again (#719). If the job's retries ran out first, the
+         * message would be neither found nor resent - lost.
+         */
+        it('should leave a retry after the longest wait an unsettled send can need', async () => {
+            const { RECONCILE_AFTER_MS, TWILIO_REQUEST_TIMEOUT_MS } = await import(
+                '../notifications/notification.service.js'
+            );
+            const [, { defaultJobOptions }] = mocks.constructorArgs;
+            const { attempts, backoff } = defaultJobOptions;
+            /** BullMQ's exponential backoff: delay × 2^(retry - 1). */
+            const lastRetryAfterFirstFailure = Array.from(
+                { length: attempts - 1 },
+                (_, retry) => backoff.delay * 2 ** retry,
+            ).reduce((total, delay) => total + delay, 0);
+
+            expect(backoff.type).toBe('exponential');
+            expect(lastRetryAfterFirstFailure).toBeGreaterThan(
+                TWILIO_REQUEST_TIMEOUT_MS + RECONCILE_AFTER_MS,
+            );
+        });
+
         it('should configure Queue with defaultJobOptions for retries and cleanup', () => {
             const [, options] = mocks.constructorArgs;
 
             expect(options.defaultJobOptions).toEqual({
-                attempts: 3,
+                attempts: 5,
                 backoff: {
                     type: 'exponential',
                     delay: 5000,
@@ -281,6 +305,26 @@ describe('Publisher', () => {
 
             expect(reason).toBeInstanceOf(AggregateError);
             expect(reason.errors).toEqual([err]);
+        });
+    });
+
+    describe('queue lifecycle logging', () => {
+        // Captured at module init, before clearAllMocks wipes the call records.
+        const handlers = Object.fromEntries(mocks.queueEventsOn.mock.calls);
+
+        it.each([
+            ['deduplicated', 'Job deduplicated'],
+            ['added', 'Job added to queue'],
+            ['waiting', 'Job waiting in queue'],
+            ['active', 'Job started processing'],
+            ['completed', 'Job completed'],
+        ])('should log the job id when a job is %s', (event, message) => {
+            const info = vi.spyOn(log, 'info').mockImplementation(() => {});
+
+            handlers[event]({ jobId: 'job-1', deduplicationId: 'dedup-1' }, 'event-1');
+
+            expect(info).toHaveBeenCalledWith(expect.objectContaining({ jobId: 'job-1' }), message);
+            info.mockRestore();
         });
     });
 

@@ -53,7 +53,17 @@ class Publisher {
         this.#queue = new Queue(topic, {
             connection: client,
             defaultJobOptions: {
-                attempts: 3,
+                /**
+                 * Five, so a send whose outcome is unknown (#719) has
+                 * attempts left once Twilio has had time to list it.
+                 * Retries land about 5, 15, 35 and 75 seconds after the
+                 * first failure. The last must come after a recorded
+                 * failure's wait, and after an unrecorded one's, which
+                 * starts only when the request could last have been
+                 * answered. See `notification.service.js` and the spec
+                 * that holds the two together.
+                 */
+                attempts: 5,
                 backoff: {
                     type: 'exponential',
                     delay: 5000,

@@ -11,7 +11,6 @@
 import { StatusCodes } from 'http-status-codes';
 import configuration from '../helpers/config.js';
 import DispatchRecord from '../helpers/dispatch-record.js';
-import { withRetry, isTransientError } from '../helpers/retry.js';
 import { BRAND_PREFIX, MAX_SMS_MESSAGE_LENGTH } from '../twilio/twilio.constants.js';
 import twilioRateLimiter from '../helpers/twilio-rate-limiter.js';
 import SendDeferredError from './send-deferred.error.js';
@@ -138,7 +137,7 @@ class Notifications {
     }
 
     /**
-     * Send an SMS or MMS message through Twilio, rate limited and retried.
+     * Send an SMS or MMS message through Twilio, rate limited.
      *
      * A send for a claim check is recorded around the provider call (#719),
      * so a job retried after Twilio took its message does not send it again:
@@ -211,72 +210,69 @@ class Notifications {
         let sent;
 
         try {
-            sent = await withRetry(
-                () =>
-                    this.limiter.schedule(async () => {
-                        granted = true;
+            /**
+             * Tried once. BullMQ retries the job, and only a retry of the job
+             * settles an earlier attempt first: a retry in here would send
+             * again without looking.
+             */
+            sent = await this.limiter.schedule(async () => {
+                granted = true;
 
-                        /**
-                         * Checked here rather than by the caller, because the wait
-                         * for this slot is the gap that matters. The limiter is
-                         * cluster-wide at one message per 250ms, so on a broadcast
-                         * a recipient can sit in this queue for minutes after the
-                         * caller decided to send - long enough for a STOP to
-                         * arrive. Callers with nothing to withhold on - the welcome
-                         * message, a verification code, a keyword acknowledgement -
-                         * pass no guard and are never gated.
-                         */
-                        if (guard && !(await guard())) {
-                            return undefined;
-                        }
+                /**
+                 * Checked here rather than by the caller, because the wait
+                 * for this slot is the gap that matters. The limiter is
+                 * cluster-wide at one message per 250ms, so on a broadcast
+                 * a recipient can sit in this queue for minutes after the
+                 * caller decided to send - long enough for a STOP to
+                 * arrive. Callers with nothing to withhold on - the welcome
+                 * message, a verification code, a keyword acknowledgement -
+                 * pass no guard and are never gated.
+                 */
+                if (guard && !(await guard())) {
+                    return undefined;
+                }
 
-                        if (!claimCheckNumber) {
-                            return await this.client.messages.create(message);
-                        }
+                if (!claimCheckNumber) {
+                    return await this.client.messages.create(message);
+                }
 
-                        /**
-                         * After the guard, so a withheld send leaves no record, and
-                         * as the last thing before the provider call, so a record
-                         * exists for every message Twilio could have. Written only
-                         * if the record is still what `#reconcile` read, so a copy
-                         * of this job that got here first, while this one waited
-                         * for the slot, is not sent over.
-                         */
-                        try {
-                            mine = await DispatchRecord.begin(claimCheckNumber, to, text, seen);
-                        } catch (err) {
-                            throw new SendDeferredError(
-                                'Unable to record the send, so it was not made.',
-                                { cause: err },
-                            );
-                        }
+                /**
+                 * After the guard, so a withheld send leaves no record, and
+                 * as the last thing before the provider call, so a record
+                 * exists for every message Twilio could have. Written only
+                 * if the record is still what `#reconcile` read, so a copy
+                 * of this job that got here first, while this one waited
+                 * for the slot, is not sent over.
+                 */
+                try {
+                    mine = await DispatchRecord.begin(claimCheckNumber, to, text, seen);
+                } catch (err) {
+                    throw new SendDeferredError('Unable to record the send, so it was not made.', {
+                        cause: err,
+                    });
+                }
 
-                        if (!mine) {
-                            throw new SendOutcomeUnknownError(
-                                'Another attempt at this send got there first; the next attempt will look it up.',
-                            );
-                        }
+                if (!mine) {
+                    throw new SendOutcomeUnknownError(
+                        'Another attempt at this send got there first; the next attempt will look it up.',
+                    );
+                }
 
-                        try {
-                            return await this.client.messages.create(message);
-                        } catch (err) {
-                            if (certainlyNotSent(err)) {
-                                await DispatchRecord.forget(claimCheckNumber, to, mine);
-                                throw err;
-                            }
+                try {
+                    return await this.client.messages.create(message);
+                } catch (err) {
+                    if (certainlyNotSent(err)) {
+                        await DispatchRecord.forget(claimCheckNumber, to, mine);
+                        throw err;
+                    }
 
-                            await DispatchRecord.unsettled(claimCheckNumber, to, mine);
-                            throw new SendOutcomeUnknownError(
-                                'Twilio may have accepted the message; the next attempt will look it up.',
-                                { cause: err },
-                            );
-                        }
-                    }),
-                {
-                    shouldRetry: isTransientError,
-                    maxRetries: 0,
-                },
-            );
+                    await DispatchRecord.unsettled(claimCheckNumber, to, mine);
+                    throw new SendOutcomeUnknownError(
+                        'Twilio may have accepted the message; the next attempt will look it up.',
+                        { cause: err },
+                    );
+                }
+            });
         } catch (err) {
             if (claimCheckNumber && !granted) {
                 throw new SendDeferredError(
@@ -293,6 +289,30 @@ class Notifications {
         }
 
         return sent;
+    }
+
+    /**
+     * The message an earlier attempt at this claim check's send to `to`
+     * already sent, for a caller with work to do before it calls
+     * `sendMessage` - so a retry whose message went out reports it, rather
+     * than repeating that work and perhaps failing or skipping before it
+     * finds out. `sendMessage` settles the same way, so a caller that does
+     * not ask loses nothing but the work.
+     * @param {string} claimCheckNumber
+     * @param {string} to
+     * @returns {Promise<SentMessage | SettledMessage | undefined>} the earlier
+     * message, or `undefined` when there is none to report and a send should
+     * go ahead
+     * @throws {SendOutcomeUnknownError} when an earlier attempt cannot be
+     * settled yet
+     */
+    async findEarlier(claimCheckNumber, to) {
+        const { earlier } = await this.#reconcile(claimCheckNumber, {
+            to,
+            from: configuration.twilio.phoneNumber,
+        });
+
+        return earlier;
     }
 
     /**

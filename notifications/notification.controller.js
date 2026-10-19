@@ -196,12 +196,26 @@ class NotificationController {
      * @returns {Promise<void>}
      */
     async #gaveUp({ phoneNumber }, { claimCheckNumber }, job, err) {
+        const record = await NotificationController.#recordOfSend(claimCheckNumber, phoneNumber);
+
+        /**
+         * Twilio took the message, and only what came after failed - a crash
+         * before the receipt was written, then a retry that failed at Bungie
+         * or stalled again. The receipt says what happened, not that the job
+         * failed.
+         */
+        if (record?.state === 'accepted') {
+            await ClaimCheck.advance(
+                claimCheckNumber,
+                phoneNumber,
+                NotificationController.#sentOutcome({ sid: record.sid, status: 'accepted' }),
+            );
+
+            return;
+        }
+
         const permanent = isA(err, UnrecoverableError);
-        const unknown = await NotificationController.#mayHaveSent(
-            claimCheckNumber,
-            phoneNumber,
-            err,
-        );
+        const unknown = isA(err, SendOutcomeUnknownError) || record?.state === 'attempting';
 
         if (unknown) {
             log.error(
@@ -217,28 +231,23 @@ class NotificationController {
     }
 
     /**
-     * Whether an attempt at this send may have reached Twilio: the last one
-     * said so, or the record still shows one begun and never settled. A
-     * record that cannot be read leaves the last error to decide.
+     * The record of this recipient's send, for a job BullMQ has given up on.
+     * `null` when there is none, or it cannot be read: the last error then
+     * decides on its own.
      * @param {string} claimCheckNumber
      * @param {string} phoneNumber
-     * @param {Error} err - what the last attempt failed with
-     * @returns {Promise<boolean>}
+     * @returns {Promise<import('../helpers/dispatch-record.js').DispatchRecord | null>}
      */
-    static async #mayHaveSent(claimCheckNumber, phoneNumber, err) {
-        if (isA(err, SendOutcomeUnknownError)) return true;
-
+    static async #recordOfSend(claimCheckNumber, phoneNumber) {
         try {
-            const record = await DispatchRecord.read(claimCheckNumber, phoneNumber);
-
-            return record?.state === 'attempting';
-        } catch (readErr) {
+            return await DispatchRecord.read(claimCheckNumber, phoneNumber);
+        } catch (err) {
             log.warn(
-                { err: readErr, claimCheckNumber, phoneNumber },
+                { err, claimCheckNumber, phoneNumber },
                 'Unable to read the record of the send; going by the last error.',
             );
 
-            return false;
+            return null;
         }
     }
 
@@ -249,6 +258,26 @@ class NotificationController {
      */
     async #send(user, { claimCheckNumber, notificationType }) {
         const { membershipId, membershipType, phoneNumber } = user;
+
+        /**
+         * A retry whose message already went out reports it and stops, before
+         * the consent check and the calls to Bungie: a send already made is
+         * not taken back by anything that has changed since, and the work it
+         * would repeat could fail or skip before `sendMessage` found out.
+         * Throws, for BullMQ to retry, when an earlier attempt cannot be
+         * settled yet.
+         */
+        const earlier = await this.notifications.findEarlier(claimCheckNumber, phoneNumber);
+
+        if (earlier) {
+            await ClaimCheck.advance(
+                claimCheckNumber,
+                phoneNumber,
+                NotificationController.#sentOutcome(earlier),
+            );
+
+            return;
+        }
 
         /**
          * `create` filtered consent when this job was queued, but that was

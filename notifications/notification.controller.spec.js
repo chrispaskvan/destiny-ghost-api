@@ -91,6 +91,7 @@ const destinyService = {
     getXur: vi.fn(),
 };
 const notificationService = {
+    findEarlier: vi.fn(),
     sendMessage: vi.fn(),
 };
 const userService = {
@@ -1346,6 +1347,48 @@ describe('NotificationController', () => {
             expect(ClaimCheck.advance).not.toHaveBeenCalled();
         });
 
+        describe('when an earlier attempt already sent the message (#719)', () => {
+            it('should record that send and stop, before consent and Bungie', async () => {
+                notificationService.findEarlier.mockResolvedValueOnce({
+                    sid: messageSid,
+                    status: 'accepted',
+                });
+
+                await sendMethod(mockUser, {
+                    claimCheckNumber,
+                    notificationType: notificationTypes.Xur,
+                });
+
+                expect(notificationService.findEarlier).toHaveBeenCalledWith(
+                    claimCheckNumber,
+                    phoneNumber,
+                );
+                expect(ClaimCheck.advance).toHaveBeenCalledExactlyOnceWith(
+                    claimCheckNumber,
+                    phoneNumber,
+                    { status: 'accepted', sid: messageSid },
+                );
+                expect(userService.getConsentByPhoneNumber).not.toHaveBeenCalled();
+                expect(authenticationService.authenticate).not.toHaveBeenCalled();
+                expect(notificationService.sendMessage).not.toHaveBeenCalled();
+            });
+
+            it('should leave it to a retry, doing no work, when it cannot be settled yet', async () => {
+                const unknown = new SendOutcomeUnknownError('not listed yet');
+
+                notificationService.findEarlier.mockRejectedValueOnce(unknown);
+
+                await expect(
+                    sendMethod(mockUser, {
+                        claimCheckNumber,
+                        notificationType: notificationTypes.Xur,
+                    }),
+                ).rejects.toBe(unknown);
+                expect(authenticationService.authenticate).not.toHaveBeenCalled();
+                expect(ClaimCheck.advance).not.toHaveBeenCalled();
+            });
+        });
+
         describe('when notification type is not Xur', () => {
             it('should not process non-Xur notifications, recording why', async () => {
                 await sendMethod(mockUser, {
@@ -1508,23 +1551,39 @@ describe('NotificationController', () => {
             },
         );
 
-        it('should go by the last error when the send was accepted', async () => {
-            DispatchRecord.read.mockResolvedValueOnce({ state: 'accepted', sid: messageSid });
+        /**
+         * Twilio took it; only what came after failed. The receipt reports
+         * the send, not the job.
+         */
+        it.each([
+            ['an error of its own', () => new Error('Service Unavailable')],
+            [
+                'BullMQ failing it for stalling',
+                () => new UnrecoverableError('job stalled more than allowable limit'),
+            ],
+        ])(
+            'should record the accepted send when the record shows one and the job ends on %s',
+            async (_, err) => {
+                DispatchRecord.read.mockResolvedValueOnce({ state: 'accepted', sid: messageSid });
 
-            await gaveUp(
-                mockUser,
-                { claimCheckNumber, notificationType: notificationTypes.Xur },
-                { attemptsMade: 3, opts: { attempts: 3 } },
-                new Error('Service Unavailable'),
-            );
+                await gaveUp(
+                    mockUser,
+                    { claimCheckNumber, notificationType: notificationTypes.Xur },
+                    { attemptsMade: 3, opts: { attempts: 3 } },
+                    err(),
+                );
 
-            expect(ClaimCheck.advance).toHaveBeenCalledExactlyOnceWith(
-                claimCheckNumber,
-                phoneNumber,
-                { status: ERROR, reason: 'retries-exhausted' },
-            );
-            expect(log.error).not.toHaveBeenCalled();
-        });
+                expect(ClaimCheck.advance).toHaveBeenCalledExactlyOnceWith(
+                    claimCheckNumber,
+                    phoneNumber,
+                    {
+                        status: 'accepted',
+                        sid: messageSid,
+                    },
+                );
+                expect(log.error).not.toHaveBeenCalled();
+            },
+        );
 
         it('should go by the last error, and warn, when the record cannot be read', async () => {
             DispatchRecord.read.mockRejectedValueOnce(new Error('down'));
