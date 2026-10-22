@@ -195,10 +195,16 @@ describe('readConsent', () => {
         vi.useFakeTimers();
         cache.hGetAll.mockReturnValue(new Promise(() => {}));
 
-        const reading = readConsent(phoneNumber);
+        let result = 'pending';
 
-        await vi.advanceTimersByTimeAsync(CONSENT_MARKER_TIMEOUT_MS);
-        await expect(reading).resolves.toBeUndefined();
+        readConsent(phoneNumber).then(marker => {
+            result = marker;
+        });
+
+        await vi.advanceTimersByTimeAsync(CONSENT_MARKER_TIMEOUT_MS - 1);
+        expect(result).toBe('pending');
+        await vi.advanceTimersByTimeAsync(1);
+        expect(result).toBeUndefined();
     });
 
     it('should send with a timeout that drops it if still unsent', async () => {

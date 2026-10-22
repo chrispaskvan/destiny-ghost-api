@@ -69,7 +69,8 @@ const CONSENT_MARKER_TTL_SECONDS = 86_400;
  * invokes once the rate limiter has granted that send a token. The limiter is
  * a token bucket, so a slow read delays its own message and no other.
  *
- * The claim check's bound, then, rather than a tighter one. Twilio waits 15
+ * A second, then - the same figure the claim check uses, chosen here for
+ * reasons of this module's own rather than tied to it. Twilio waits 15
  * seconds for a webhook's answer, so a second on a slow Redis still answers a
  * STOP in good time; and a read given that long is more likely to see a STOP
  * than to give up and let the send go ahead on the stored state alone.
