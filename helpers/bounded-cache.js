@@ -18,18 +18,24 @@ import processExternalPromisesWithTimeout from './process-external-promises-with
  * Redis that is slow but connected runs when it gets there, as any would.
  * MULTI ignores command options, so a transaction is not dropped: use a script.
  *
+ * A write that is better late than never - one whose script compares before
+ * it writes, so landing after newer state does no harm - can keep its
+ * command instead (`keepUnsent`): the caller still stops waiting, and the
+ * command goes out when the client reconnects, ahead of any sent after it.
+ *
  * Takes the command unbuilt, so a client that throws while building it
  * rejects like any other failure.
  * @template T
  * @param {(client: typeof cache) => Promise<T>} command
  * @param {number} timeout - milliseconds
  * @param {string} name - what is being asked, for the timeout's message
+ * @param {{ keepUnsent?: boolean }} [options]
  * @returns {Promise<T>} what the command resolved with; rejects with its
  * error, or with one of its own when it timed out
  */
-const boundedCommand = async (command, timeout, name) => {
+const boundedCommand = async (command, timeout, name, { keepUnsent = false } = {}) => {
     const [result] = await processExternalPromisesWithTimeout(
-        [command(cache.withCommandOptions({ timeout }))],
+        [command(keepUnsent ? cache : cache.withCommandOptions({ timeout }))],
         timeout,
     );
 

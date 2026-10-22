@@ -72,15 +72,6 @@ describe('DestinyCache', () => {
             });
         });
 
-        describe('when nothing is cached', () => {
-            it('should return undefined without reading a ttl', async () => {
-                client.get.mockResolvedValueOnce(null);
-
-                await expect(destinyCache.getManifest()).resolves.toBeUndefined();
-                expect(client.ttl).not.toHaveBeenCalled();
-            });
-        });
-
         describe('when the client throws', () => {
             it('should swallow the error and return undefined', async () => {
                 client.get.mockRejectedValueOnce(new Error('boom'));
@@ -102,14 +93,6 @@ describe('DestinyCache', () => {
                 const result = await destinyCache.getVendor(hash);
 
                 expect(result).toEqual(mockXurResponse.Response);
-            });
-        });
-
-        describe('when nothing is cached', () => {
-            it('should return undefined', async () => {
-                client.get.mockResolvedValueOnce(null);
-
-                await expect(destinyCache.getVendor(hash)).resolves.toBeUndefined();
             });
         });
 

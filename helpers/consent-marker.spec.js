@@ -5,8 +5,9 @@ import mayDeliver from './consent.js';
 import {
     recordConsent,
     readConsent,
-    CONSENT_MARKER_TIMEOUT_MS,
+    CONSENT_MARKER_READ_TIMEOUT_MS,
     CONSENT_MARKER_TTL_SECONDS,
+    CONSENT_MARKER_WRITE_TIMEOUT_MS,
     RECORD_CONSENT,
 } from './consent-marker.js';
 
@@ -67,8 +68,8 @@ beforeEach(() => {
      */
     cache.withCommandOptions.mockImplementation(options => ({
         options,
-        eval: (...args) => cache.eval(...args),
-        hGetAll: (...args) => cache.hGetAll(...args),
+        eval: vi.fn((...args) => cache.eval(...args)),
+        hGetAll: vi.fn((...args) => cache.hGetAll(...args)),
     }));
 });
 
@@ -143,18 +144,23 @@ describe('recordConsent', () => {
             settled = true;
         });
 
-        await vi.advanceTimersByTimeAsync(CONSENT_MARKER_TIMEOUT_MS - 1);
+        await vi.advanceTimersByTimeAsync(CONSENT_MARKER_WRITE_TIMEOUT_MS - 1);
         expect(settled).toBe(false);
         await vi.advanceTimersByTimeAsync(1);
         expect(settled).toBe(true);
     });
 
-    it('should send with a timeout that drops it if still unsent', async () => {
+    /**
+     * A STOP queued while Redis reconnects must still be written when it
+     * comes back, ahead of the rate limiter's commands on the same client:
+     * sent with a command timeout, node-redis would drop it instead, and a
+     * send right after the reconnect could miss it.
+     */
+    it('should keep the write queued rather than dropping it if still unsent', async () => {
         await recordConsent(phoneNumber, false, receivedAt);
 
-        expect(cache.withCommandOptions).toHaveBeenCalledWith({
-            timeout: CONSENT_MARKER_TIMEOUT_MS,
-        });
+        expect(cache.withCommandOptions).not.toHaveBeenCalled();
+        expect(cache.eval).toHaveBeenCalledOnce();
     });
 });
 
@@ -201,18 +207,19 @@ describe('readConsent', () => {
             result = marker;
         });
 
-        await vi.advanceTimersByTimeAsync(CONSENT_MARKER_TIMEOUT_MS - 1);
+        await vi.advanceTimersByTimeAsync(CONSENT_MARKER_READ_TIMEOUT_MS - 1);
         expect(result).toBe('pending');
         await vi.advanceTimersByTimeAsync(1);
         expect(result).toBeUndefined();
     });
 
-    it('should send with a timeout that drops it if still unsent', async () => {
+    it('should send through a client that drops it if still unsent', async () => {
         await readConsent(phoneNumber);
 
         expect(cache.withCommandOptions).toHaveBeenCalledWith({
-            timeout: CONSENT_MARKER_TIMEOUT_MS,
+            timeout: CONSENT_MARKER_READ_TIMEOUT_MS,
         });
+        expect(cache.withCommandOptions.mock.results[0].value.hGetAll).toHaveBeenCalledOnce();
     });
 });
 

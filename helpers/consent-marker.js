@@ -59,34 +59,33 @@ return 1
 const CONSENT_MARKER_TTL_SECONDS = 86_400;
 
 /**
- * Bounds how long either side of this module can wait on Redis. node-redis
- * queues commands while it reconnects, so an unbounded call does not fail on a
- * dropped connection - it waits for one that may not come back.
+ * How long a STOP's reply waits for its marker. node-redis queues commands
+ * while it reconnects, so an unbounded call does not fail on a dropped
+ * connection - it waits for one that may not come back, holding the webhook
+ * open instead of answering.
  *
- * Both directions need it, for different reasons. An unbounded write holds the
- * webhook open instead of answering a STOP. An unbounded read holds up the
- * send it guards: it runs as the delivery gate, which `NotificationService`
- * invokes once the rate limiter has granted that send a token. The limiter is
- * a token bucket, so a slow read delays its own message and no other.
- *
- * A second, then - the same figure the claim check uses, chosen here for
- * reasons of this module's own rather than tied to it. Twilio waits 15
- * seconds for a webhook's answer, so a second on a slow Redis still answers a
- * STOP in good time; and a read given that long is more likely to see a STOP
- * than to give up and let the send go ahead on the stored state alone.
+ * Short, because waiting longer buys nothing. The write is never dropped
+ * (`keepUnsent`): one still queued when this passes goes out when the client
+ * reconnects, ahead of the rate limiter's commands on the same client, so the
+ * marker is in place before any send that follows can read it. Landing late
+ * does no harm - `RECORD_CONSENT` compares on when the message arrived - and
+ * it lands when Redis gets to it whether the reply waits or not. All a longer
+ * wait would do is delay the reply, and the durable write queued after it.
  */
-const CONSENT_MARKER_TIMEOUT_MS = 1000;
+const CONSENT_MARKER_WRITE_TIMEOUT_MS = 250;
 
 /**
- * Every command here goes through `boundedCommand`, which also drops one
- * still unsent when the bound passes. A marker that lands late would do no
- * harm - `RECORD_CONSENT` compares on when the message arrived - but there is
- * no reason to send what the caller has stopped waiting for.
- * @template T
- * @param {Parameters<typeof boundedCommand<T>>[0]} command
- * @returns {Promise<T>}
+ * How long the delivery gate waits for a marker before going ahead on the
+ * stored state alone. The gate runs once the rate limiter has granted its
+ * send a token, so a slow read holds up that send, and the queue worker slot
+ * it occupies, but not the limiter.
+ *
+ * Longer than the write's, because here waiting buys something: on a Redis
+ * that is slow but answering, a read given a second is more likely to see a
+ * STOP than to give up and let the send through. A read still unsent when
+ * this passes is dropped - nothing waits for its answer any more.
  */
-const bounded = command => boundedCommand(command, CONSENT_MARKER_TIMEOUT_MS, 'consent marker');
+const CONSENT_MARKER_READ_TIMEOUT_MS = 1000;
 
 /** @param {string} phoneNumber */
 const keyFor = phoneNumber => `consent:${phoneNumber}`;
@@ -101,7 +100,7 @@ const keyFor = phoneNumber => `consent:${phoneNumber}`;
 /**
  * Record a consent change before replying to it.
  *
- * Never rejects, and never waits longer than the timeout above. A marker that
+ * Never rejects, and never waits longer than `CONSENT_MARKER_WRITE_TIMEOUT_MS`. A marker that
  * cannot be written leaves the window exactly as wide as it was before this
  * module existed, which is worse than closing it and better than failing to
  * answer a STOP.
@@ -113,22 +112,26 @@ const keyFor = phoneNumber => `consent:${phoneNumber}`;
 const recordConsent = async (phoneNumber, isSubscribed, receivedAt) => {
     /**
      * Everything inside the one `try`, a client that throws while building
-     * the command included (`bounded` takes it unbuilt). `request()` awaits
+     * the command included (`boundedCommand` takes it unbuilt). `request()` awaits
      * this before answering a STOP, so "never rejects" has to hold because of
      * how this is written rather than because of how a dependency currently
      * behaves: a bad release would otherwise turn a Redis fault into an
      * unanswered compliance keyword.
      */
     try {
-        await bounded(client =>
-            client.eval(RECORD_CONSENT, {
-                keys: [keyFor(phoneNumber)],
-                arguments: [
-                    isSubscribed ? '1' : '0',
-                    String(receivedAt),
-                    String(CONSENT_MARKER_TTL_SECONDS),
-                ],
-            }),
+        await boundedCommand(
+            client =>
+                client.eval(RECORD_CONSENT, {
+                    keys: [keyFor(phoneNumber)],
+                    arguments: [
+                        isSubscribed ? '1' : '0',
+                        String(receivedAt),
+                        String(CONSENT_MARKER_TTL_SECONDS),
+                    ],
+                }),
+            CONSENT_MARKER_WRITE_TIMEOUT_MS,
+            'consent marker',
+            { keepUnsent: true },
         );
     } catch (err) {
         log.warn(
@@ -141,7 +144,7 @@ const recordConsent = async (phoneNumber, isSubscribed, receivedAt) => {
 /**
  * The consent recorded at acknowledgement, if any is still held.
  *
- * Never rejects, and never waits longer than the timeout above. A marker that
+ * Never rejects, and never waits longer than `CONSENT_MARKER_READ_TIMEOUT_MS`. A marker that
  * cannot be read is reported as absent, leaving the caller on the stored state - the position it was in before this module
  * existed. Suppressing everything whenever Redis blinked would be worse, and
  * pointless besides: the send path's rate limiter is Redis-backed too, so a
@@ -154,7 +157,11 @@ const readConsent = async phoneNumber => {
     let marker;
 
     try {
-        marker = await bounded(client => client.hGetAll(keyFor(phoneNumber)));
+        marker = await boundedCommand(
+            client => client.hGetAll(keyFor(phoneNumber)),
+            CONSENT_MARKER_READ_TIMEOUT_MS,
+            'consent marker',
+        );
     } catch (err) {
         log.warn({ err, phoneNumber }, 'Unable to read the consent acknowledgement.');
 
@@ -174,7 +181,8 @@ const readConsent = async phoneNumber => {
 export {
     recordConsent,
     readConsent,
-    CONSENT_MARKER_TIMEOUT_MS,
+    CONSENT_MARKER_READ_TIMEOUT_MS,
     CONSENT_MARKER_TTL_SECONDS,
+    CONSENT_MARKER_WRITE_TIMEOUT_MS,
     RECORD_CONSENT,
 };

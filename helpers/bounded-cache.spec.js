@@ -24,6 +24,30 @@ describe('boundedCommand', () => {
         expect(command).toHaveBeenCalledWith({ options: { timeout: 750 } });
     });
 
+    /**
+     * For a write that is better late than never: the caller stops waiting,
+     * but the command stays queued rather than being dropped.
+     */
+    it('should send on the bare client, with no command timeout, when told to keep it', async () => {
+        const command = vi.fn(async () => 'OK');
+
+        await boundedCommand(command, 750, 'thing', { keepUnsent: true });
+
+        expect(cache.withCommandOptions).not.toHaveBeenCalled();
+        expect(command).toHaveBeenCalledWith(cache);
+    });
+
+    it('should still stop waiting at the timeout when told to keep the command', async () => {
+        vi.useFakeTimers();
+
+        const waiting = expect(
+            boundedCommand(() => new Promise(() => {}), 750, 'thing', { keepUnsent: true }),
+        ).rejects.toThrow('The thing did not answer within 750ms.');
+
+        await vi.advanceTimersByTimeAsync(750);
+        await waiting;
+    });
+
     it("should reject with the command's own error", async () => {
         const err = new Error('down');
 
