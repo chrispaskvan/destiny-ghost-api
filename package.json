@@ -14,6 +14,8 @@
         "start": "node --disable-proto=delete --env-file-if-exists=.env --max-old-space-size=8192 --unhandled-rejections=strict start.js",
         "swagger": "rm -f openapi.json && swagger-jsdoc -d openapi.cjs ./**/*.routes.js -o openapi.json",
         "test": "pnpm test:watch --run",
+        "test:unit": "pnpm test:watch --run .spec.js",
+        "test:integration": "pnpm test:watch --run .test.js",
         "test:watch": "NODE_ENV=test node --env-file-if-exists=.env node_modules/vitest/vitest.mjs",
         "prepare": "husky || true",
         "typecheck": "tsc --noEmit -p jsconfig.json"

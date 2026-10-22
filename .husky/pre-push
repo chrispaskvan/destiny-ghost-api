@@ -1,1 +1,4 @@
-pnpm test
+# Unit specs only: fast, with no network, and bounded, so a run that never
+# exits fails the push instead of blocking it (#783). Integration tests run
+# with `pnpm test:integration`, and `pnpm coverage` runs everything.
+node scripts/with-timeout.js 300 pnpm test:unit
