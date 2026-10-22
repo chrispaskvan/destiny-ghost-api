@@ -8,7 +8,9 @@ import NotificationError from './notification.error.js';
 import notificationTypes from './notification.types.js';
 import DestinyError from '../destiny/destiny.error.js';
 import XurUnavailableError from './xur-unavailable.error.js';
+import SendOutcomeUnknownError from './send-outcome-unknown.error.js';
 import ClaimCheck, { DUPLICATE, ERROR, SKIPPED } from '../helpers/claim-check.js';
+import DispatchRecord from '../helpers/dispatch-record.js';
 import mayDeliver from '../helpers/consent.js';
 import { isExhausted, isLastAttempt } from '../helpers/job-attempts.js';
 import log from '../helpers/log.js';
@@ -23,6 +25,17 @@ import {
     getBroadcast,
     QUEUE_NAME as BROADCAST_QUEUE,
 } from './broadcast.queue.js';
+
+/**
+ * Whether `err` is one of `type`, or carries its name: matched by name as
+ * well, as BullMQ matches its own, so one from another copy of the module is
+ * not missed.
+ * @param {unknown} err
+ * @param {new (...args: any[]) => Error} type
+ * @returns {boolean}
+ */
+const isA = (err, type) =>
+    err instanceof type || /** @type {{ name?: unknown }} */ (err)?.name === type.name;
 
 /**
  * Constructor options for NotificationController.
@@ -77,6 +90,18 @@ class NotificationController {
             concurrency: 1,
             maxStalledCount: 5,
         });
+    }
+
+    /**
+     * @param {boolean} permanent - the job failed with an `UnrecoverableError`
+     * @param {boolean} unknown - the job failed with a `SendOutcomeUnknownError`
+     * @param {import('bullmq').Job} job
+     * @returns {'unknown-outcome' | 'permanent' | 'retries-exhausted'}
+     */
+    static #givenUpBecause(permanent, unknown, job) {
+        if (unknown) return 'unknown-outcome';
+
+        return permanent || !isExhausted(job) ? 'permanent' : 'retries-exhausted';
     }
 
     /**
@@ -155,6 +180,15 @@ class NotificationController {
      * attempt it lands, and only a job that failed every attempt otherwise
      * ran out of retries. Matched by name as well, as BullMQ does, so one
      * from another copy of the library is not missed.
+     *
+     * A job that ends still not knowing whether Twilio took its message
+     * (#719) says so, rather than calling it an error the recipient was
+     * spared: they may well have the text. It is logged as an error too,
+     * since only someone checking Twilio's console can settle it now. That
+     * is decided by the record of the send, not only the last error: an
+     * attempt that may have reached Twilio can be followed by one that fails
+     * for some other reason - Bungie down, or the job stalling again - before
+     * it gets as far as looking.
      * @param {QueuedUser} user
      * @param {{ claimCheckNumber: string }} properties
      * @param {import('bullmq').Job} job
@@ -162,12 +196,86 @@ class NotificationController {
      * @returns {Promise<void>}
      */
     async #gaveUp({ phoneNumber }, { claimCheckNumber }, job, err) {
-        const permanent = err instanceof UnrecoverableError || err?.name === 'UnrecoverableError';
+        const record = await NotificationController.#recordOfSend(claimCheckNumber, phoneNumber);
+
+        /**
+         * Twilio took the message, and only what came after failed - a crash
+         * before the receipt was written, then a retry that failed at Bungie
+         * or stalled again. The receipt says what happened, not that the job
+         * failed.
+         */
+        if (record?.state === 'accepted') {
+            await ClaimCheck.advance(
+                claimCheckNumber,
+                phoneNumber,
+                NotificationController.#sentOutcome({ sid: record.sid, status: 'accepted' }),
+            );
+
+            return;
+        }
+
+        const permanent = isA(err, UnrecoverableError);
+        const unknown = isA(err, SendOutcomeUnknownError) || record?.state === 'attempting';
+
+        if (unknown) {
+            log.error(
+                { err, claimCheckNumber, phoneNumber, jobId: job.id },
+                'Gave up not knowing whether Twilio sent the message.',
+            );
+        }
 
         await ClaimCheck.advance(claimCheckNumber, phoneNumber, {
             status: ERROR,
-            reason: permanent || !isExhausted(job) ? 'permanent' : 'retries-exhausted',
+            reason: NotificationController.#givenUpBecause(permanent, unknown, job),
         });
+    }
+
+    /**
+     * What to fail a send job with, so BullMQ retries what may yet succeed
+     * and gives up at once on what cannot: a transient error (ours marked
+     * `retryable` among them) or an `UnrecoverableError` as it is, anything
+     * else made unrecoverable.
+     * @param {unknown} err
+     * @returns {Error}
+     */
+    static #forBullMQ(err) {
+        if (err instanceof Error && isTransientError(err)) return err;
+        if (isA(err, UnrecoverableError)) return /** @type {Error} */ (err);
+
+        /**
+         * Unlike native `Error`, BullMQ's `UnrecoverableError` constructor
+         * only accepts a message - a second `{ cause }` argument is
+         * silently dropped. Set `cause` as a property afterward so it's
+         * not lost.
+         */
+        const unrecoverableError = new UnrecoverableError(
+            err instanceof Error ? err.message : String(err),
+        );
+
+        unrecoverableError.cause = err;
+
+        return unrecoverableError;
+    }
+
+    /**
+     * The record of this recipient's send, for a job BullMQ has given up on.
+     * `null` when there is none, or it cannot be read: the last error then
+     * decides on its own.
+     * @param {string} claimCheckNumber
+     * @param {string} phoneNumber
+     * @returns {Promise<import('../helpers/dispatch-record.js').DispatchRecord | null>}
+     */
+    static async #recordOfSend(claimCheckNumber, phoneNumber) {
+        try {
+            return await DispatchRecord.read(claimCheckNumber, phoneNumber);
+        } catch (err) {
+            log.warn(
+                { err, claimCheckNumber, phoneNumber },
+                'Unable to read the record of the send; going by the last error.',
+            );
+
+            return null;
+        }
     }
 
     /**
@@ -177,6 +285,31 @@ class NotificationController {
      */
     async #send(user, { claimCheckNumber, notificationType }) {
         const { membershipId, membershipType, phoneNumber } = user;
+
+        /**
+         * A retry whose message already went out reports it and stops, before
+         * the consent check and the calls to Bungie: a send already made is
+         * not taken back by anything that has changed since, and the work it
+         * would repeat could fail or skip before `sendMessage` found out.
+         * Throws, for BullMQ to retry, when an earlier attempt cannot be
+         * settled yet. Only a type with a sender can have sent anything
+         * (#722), so the others skip the lookup.
+         */
+        /** @type {import('./notification.service.js').Settled} */
+        const settled =
+            notificationType === notificationTypes.Xur
+                ? await this.notifications.settleEarlier(claimCheckNumber, phoneNumber)
+                : { seen: null };
+
+        if (settled.earlier) {
+            await ClaimCheck.advance(
+                claimCheckNumber,
+                phoneNumber,
+                NotificationController.#sentOutcome(settled.earlier),
+            );
+
+            return;
+        }
 
         /**
          * `create` filtered consent when this job was queued, but that was
@@ -293,6 +426,7 @@ class NotificationController {
                             claimCheckNumber,
                             notificationType,
                             guard: () => this.#stillConsents(phoneNumber, notificationType),
+                            settled,
                         },
                     );
 
@@ -311,18 +445,27 @@ class NotificationController {
                 if (err instanceof XurUnavailableError) {
                     /**
                      * Reached only after the Bungie calls above have run, so
-                     * it needs the same guard as the main path.
+                     * it needs the same guard as the main path. Sent from
+                     * inside this `catch`, so its own failures are classified
+                     * here rather than by what follows.
                      */
-                    const sent = await this.notifications.sendMessage(
-                        "Xur has closed shop. He'll return Friday.",
-                        phoneNumber,
-                        undefined,
-                        {
-                            claimCheckNumber,
-                            notificationType,
-                            guard: () => this.#stillConsents(phoneNumber, notificationType),
-                        },
-                    );
+                    let sent;
+
+                    try {
+                        sent = await this.notifications.sendMessage(
+                            "Xur has closed shop. He'll return Friday.",
+                            phoneNumber,
+                            undefined,
+                            {
+                                claimCheckNumber,
+                                notificationType,
+                                guard: () => this.#stillConsents(phoneNumber, notificationType),
+                                settled,
+                            },
+                        );
+                    } catch (sendErr) {
+                        throw NotificationController.#forBullMQ(sendErr);
+                    }
 
                     log.info(JSON.stringify(sent?.status));
                     await ClaimCheck.advance(
@@ -334,27 +477,7 @@ class NotificationController {
                     return;
                 }
 
-                if (err instanceof Error && isTransientError(err)) {
-                    throw err;
-                }
-
-                if (err instanceof UnrecoverableError) {
-                    throw err;
-                }
-
-                /**
-                 * Unlike native `Error`, BullMQ's `UnrecoverableError` constructor
-                 * only accepts a message - a second `{ cause }` argument is
-                 * silently dropped. Set `cause` as a property afterward so it's
-                 * not lost.
-                 */
-                const unrecoverableError = new UnrecoverableError(
-                    err instanceof Error ? err.message : String(err),
-                );
-
-                unrecoverableError.cause = err;
-
-                throw unrecoverableError;
+                throw NotificationController.#forBullMQ(err);
             }
         } else {
             /**

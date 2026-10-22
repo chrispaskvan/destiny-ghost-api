@@ -57,6 +57,8 @@ None of this makes delivery exactly-once: queue execution is at-least-once, and 
 
 Deduplicating by weekly reset assumes each notification type is a weekly event. A type that needs more than one broadcast a week needs its own event identity.
 
+Deduplication stops a recipient being queued twice, not a queued send being repeated when its job is retried. That is `notification-dispatch-reconciliation.md` (#719).
+
 ## References
 
 * [#716: make submission idempotency atomic and operation-scoped](https://github.com/chrispaskvan/destiny-ghost-api/issues/716)

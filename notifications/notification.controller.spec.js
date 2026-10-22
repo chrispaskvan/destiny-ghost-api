@@ -8,7 +8,7 @@ import NotificationError from './notification.error.js';
 import notificationTypes from './notification.types.js';
 import ClaimCheck, { DUPLICATE, ERROR, SKIPPED } from '../helpers/claim-check.js';
 import log from '../helpers/log.js';
-import { enqueueBroadcast } from './broadcast.queue.js';
+import { enqueueBroadcast, getBroadcast } from './broadcast.queue.js';
 
 vi.mock('bullmq', () => ({
     // Matches real BullMQ's constructor, which only accepts a message - a
@@ -34,7 +34,12 @@ vi.mock('../helpers/publisher.js');
 vi.mock('../helpers/subscriber.js');
 vi.mock('./notification.error.js');
 vi.mock('../helpers/claim-check.js');
-vi.mock('./broadcast.queue.js', () => ({ enqueueBroadcast: vi.fn(), QUEUE_NAME: 'broadcasts' }));
+vi.mock('../helpers/dispatch-record.js');
+vi.mock('./broadcast.queue.js', () => ({
+    enqueueBroadcast: vi.fn(),
+    getBroadcast: vi.fn(),
+    QUEUE_NAME: 'broadcasts',
+}));
 vi.mock('../helpers/log.js', () => ({
     default: {
         info: vi.fn(),
@@ -50,6 +55,9 @@ vi.mock('../helpers/retry.js', async importOriginal => {
     };
 });
 import { isTransientError } from '../helpers/retry.js';
+import DispatchRecord from '../helpers/dispatch-record.js';
+import SendDeferredError from './send-deferred.error.js';
+import SendOutcomeUnknownError from './send-outcome-unknown.error.js';
 import DestinyError from '../destiny/destiny.error.js';
 
 const chance = new Chance();
@@ -87,6 +95,7 @@ const destinyService = {
     getXur: vi.fn(),
 };
 const notificationService = {
+    settleEarlier: vi.fn(),
     sendMessage: vi.fn(),
 };
 const userService = {
@@ -134,6 +143,7 @@ beforeEach(() => {
     // starts and again inside the limiter slot, so without this each test
     // would exercise suppression.
     userService.getConsentByPhoneNumber.mockResolvedValue({ isSubscribed: true });
+    notificationService.settleEarlier.mockResolvedValue({ seen: null });
     notificationService.sendMessage.mockImplementation(sendMessageHonouringGuard());
     notificationController = new NotificationController({
         authenticationService,
@@ -657,6 +667,19 @@ describe('NotificationController', () => {
         });
     });
 
+    describe('getBroadcast', () => {
+        it("should report a broadcast's progress from its queue", async () => {
+            const progress = { state: 'active', queued: 100, duplicates: 2, complete: false };
+
+            getBroadcast.mockResolvedValueOnce(progress);
+
+            await expect(notificationController.getBroadcast(claimCheckNumber)).resolves.toBe(
+                progress,
+            );
+            expect(getBroadcast).toHaveBeenCalledWith(claimCheckNumber);
+        });
+    });
+
     describe('getClaimCheck', () => {
         it('should return claim check data for given number', async () => {
             const expectedClaimCheck = { number: claimCheckNumber, phoneNumbers: [phoneNumber] };
@@ -981,6 +1004,7 @@ describe('NotificationController', () => {
                         claimCheckNumber,
                         notificationType: notificationTypes.Xur,
                         guard: expect.any(Function),
+                        settled: { seen: null },
                     },
                 );
                 expect(ClaimCheck.advance).toHaveBeenCalledWith(claimCheckNumber, phoneNumber, {
@@ -1020,6 +1044,7 @@ describe('NotificationController', () => {
                         claimCheckNumber,
                         notificationType: notificationTypes.Xur,
                         guard: expect.any(Function),
+                        settled: { seen: null },
                     },
                 );
             });
@@ -1054,6 +1079,7 @@ describe('NotificationController', () => {
                         claimCheckNumber,
                         notificationType: notificationTypes.Xur,
                         guard: expect.any(Function),
+                        settled: { seen: null },
                     },
                 );
             });
@@ -1166,6 +1192,7 @@ describe('NotificationController', () => {
                         claimCheckNumber,
                         notificationType: notificationTypes.Xur,
                         guard: expect.any(Function),
+                        settled: { seen: null },
                     },
                 );
                 expect(log.info).toHaveBeenCalledWith(JSON.stringify('sent'));
@@ -1174,9 +1201,85 @@ describe('NotificationController', () => {
                     sid: messageSid,
                 });
             });
+
+            /**
+             * Sent from inside the catch that classifies everything else, so
+             * its own failures must be classified too: a refusal retried four
+             * more times repeats all the Bungie work for nothing.
+             */
+            it.each([
+                [
+                    'fail the job for good when Twilio refuses the fallback',
+                    () => Object.assign(new Error('Unsubscribed recipient'), { status: 400 }),
+                    rejection => {
+                        expect(rejection.name).toBe('UnrecoverableError');
+                        expect(rejection.message).toBe('Unsubscribed recipient');
+                    },
+                ],
+                [
+                    'leave the fallback to a retry when its outcome is unknown',
+                    () => new SendOutcomeUnknownError('lost answer'),
+                    (rejection, err) => expect(rejection).toBe(err),
+                ],
+            ])('should %s', async (_, make, check) => {
+                const err = make();
+                const actual = await vi.importActual('../helpers/retry.js');
+
+                isTransientError.mockImplementation(actual.isTransientError);
+                authenticationService.authenticate.mockResolvedValue({
+                    bungie: { access_token: accessToken },
+                });
+                destinyService.getProfile.mockResolvedValue([mockCharacter]);
+                destinyService.getXur.mockRejectedValue(
+                    new DestinyError(1627, 'Vendor not found', 'DestinyVendorNotFound'),
+                );
+                notificationService.sendMessage.mockRejectedValue(err);
+
+                const rejection = await sendMethod(mockUser, {
+                    claimCheckNumber,
+                    notificationType: notificationTypes.Xur,
+                }).catch(e => e);
+
+                check(rejection, err);
+                expect(ClaimCheck.advance).not.toHaveBeenCalled();
+            });
         });
 
         describe('when a transient error occurs', () => {
+            /**
+             * They carry no status or code; they mark themselves retryable,
+             * which the transient check honours. Made permanent, the job would
+             * never get the attempt that settles the send.
+             */
+            it.each([
+                ['a send Twilio may have taken', () => new SendOutcomeUnknownError('lost answer')],
+                ['a send that could not be recorded', () => new SendDeferredError('not recorded')],
+                [
+                    'any error marked retryable',
+                    () => Object.assign(new Error('lost answer'), { retryable: true }),
+                ],
+            ])('should re-throw %s, for the retry to settle', async (_, make) => {
+                const unknown = make();
+                const actual = await vi.importActual('../helpers/retry.js');
+
+                isTransientError.mockImplementation(actual.isTransientError);
+
+                authenticationService.authenticate.mockResolvedValue({
+                    bungie: { access_token: accessToken },
+                });
+                destinyService.getProfile.mockResolvedValue([mockCharacter]);
+                destinyService.getXur.mockResolvedValue([]);
+                notificationService.sendMessage.mockRejectedValue(unknown);
+
+                await expect(
+                    sendMethod(mockUser, {
+                        claimCheckNumber,
+                        notificationType: notificationTypes.Xur,
+                    }),
+                ).rejects.toBe(unknown);
+                expect(ClaimCheck.advance).not.toHaveBeenCalled();
+            });
+
             it('should re-throw transient getXur error for BullMQ retry', async () => {
                 const transientError = new Error('Service Unavailable');
                 transientError.status = 503;
@@ -1274,6 +1377,21 @@ describe('NotificationController', () => {
             });
         });
 
+        it('should re-throw an UnrecoverableError from another copy of BullMQ as is', async () => {
+            const foreign = Object.assign(new Error('Account closed'), {
+                name: 'UnrecoverableError',
+            });
+
+            authenticationService.authenticate.mockRejectedValue(foreign);
+
+            await expect(
+                sendMethod(mockUser, {
+                    claimCheckNumber,
+                    notificationType: notificationTypes.Xur,
+                }),
+            ).rejects.toBe(foreign);
+        });
+
         /**
          * A failure the retry may yet recover from records nothing; BullMQ's
          * decision that there will be no retry is what records the error, so
@@ -1293,6 +1411,48 @@ describe('NotificationController', () => {
             expect(ClaimCheck.advance).not.toHaveBeenCalled();
         });
 
+        describe('when an earlier attempt already sent the message (#719)', () => {
+            it('should record that send and stop, before consent and Bungie', async () => {
+                notificationService.settleEarlier.mockResolvedValueOnce({
+                    earlier: { sid: messageSid, status: 'accepted' },
+                    seen: { state: 'accepted', sid: messageSid },
+                });
+
+                await sendMethod(mockUser, {
+                    claimCheckNumber,
+                    notificationType: notificationTypes.Xur,
+                });
+
+                expect(notificationService.settleEarlier).toHaveBeenCalledWith(
+                    claimCheckNumber,
+                    phoneNumber,
+                );
+                expect(ClaimCheck.advance).toHaveBeenCalledExactlyOnceWith(
+                    claimCheckNumber,
+                    phoneNumber,
+                    { status: 'accepted', sid: messageSid },
+                );
+                expect(userService.getConsentByPhoneNumber).not.toHaveBeenCalled();
+                expect(authenticationService.authenticate).not.toHaveBeenCalled();
+                expect(notificationService.sendMessage).not.toHaveBeenCalled();
+            });
+
+            it('should leave it to a retry, doing no work, when it cannot be settled yet', async () => {
+                const unknown = new SendOutcomeUnknownError('not listed yet');
+
+                notificationService.settleEarlier.mockRejectedValueOnce(unknown);
+
+                await expect(
+                    sendMethod(mockUser, {
+                        claimCheckNumber,
+                        notificationType: notificationTypes.Xur,
+                    }),
+                ).rejects.toBe(unknown);
+                expect(authenticationService.authenticate).not.toHaveBeenCalled();
+                expect(ClaimCheck.advance).not.toHaveBeenCalled();
+            });
+        });
+
         describe('when notification type is not Xur', () => {
             it('should not process non-Xur notifications, recording why', async () => {
                 await sendMethod(mockUser, {
@@ -1300,6 +1460,7 @@ describe('NotificationController', () => {
                     notificationType: notificationTypes.Gunsmith,
                 });
 
+                expect(notificationService.settleEarlier).not.toHaveBeenCalled();
                 expect(authenticationService.authenticate).not.toHaveBeenCalled();
                 expect(destinyService.getProfile).not.toHaveBeenCalled();
                 expect(notificationService.sendMessage).not.toHaveBeenCalled();
@@ -1375,6 +1536,138 @@ describe('NotificationController', () => {
                 claimCheckNumber,
                 phoneNumber,
                 { status: ERROR, reason: 'permanent' },
+            );
+        });
+
+        it.each([
+            ['a SendOutcomeUnknownError', () => new SendOutcomeUnknownError('lost answer')],
+            [
+                'one matched by name',
+                () => Object.assign(new Error('lost answer'), { name: 'SendOutcomeUnknownError' }),
+            ],
+        ])(
+            'should record an unknown outcome for %s, and log it for an operator',
+            async (_, err) => {
+                const lastErr = err();
+
+                await gaveUp(
+                    mockUser,
+                    { claimCheckNumber, notificationType: notificationTypes.Xur },
+                    { id: 'job-1', attemptsMade: 3, opts: { attempts: 3 } },
+                    lastErr,
+                );
+
+                expect(ClaimCheck.advance).toHaveBeenCalledExactlyOnceWith(
+                    claimCheckNumber,
+                    phoneNumber,
+                    { status: ERROR, reason: 'unknown-outcome' },
+                );
+                expect(log.error).toHaveBeenCalledWith(
+                    expect.objectContaining({ err: lastErr, claimCheckNumber, phoneNumber }),
+                    expect.any(String),
+                );
+            },
+        );
+
+        it('should log nothing for an operator when the outcome is known', async () => {
+            await gaveUp(
+                mockUser,
+                { claimCheckNumber, notificationType: notificationTypes.Xur },
+                { attemptsMade: 3, opts: { attempts: 3 } },
+                new Error('Service Unavailable'),
+            );
+
+            expect(log.error).not.toHaveBeenCalled();
+        });
+
+        /**
+         * An attempt that may have reached Twilio, then one that fails for
+         * another reason before it can look: the record still says unknown.
+         */
+        it.each([
+            ['an error of its own', () => new Error('Service Unavailable')],
+            [
+                'BullMQ failing it for stalling',
+                () => new UnrecoverableError('job stalled more than allowable limit'),
+            ],
+        ])(
+            'should record an unknown outcome when the record shows an unsettled send and the job ends on %s',
+            async (_, err) => {
+                DispatchRecord.read.mockResolvedValueOnce({
+                    state: 'attempting',
+                    at: 0,
+                    body: 'hi',
+                });
+
+                await gaveUp(
+                    mockUser,
+                    { claimCheckNumber, notificationType: notificationTypes.Xur },
+                    { attemptsMade: 3, opts: { attempts: 3 } },
+                    err(),
+                );
+
+                expect(DispatchRecord.read).toHaveBeenCalledWith(claimCheckNumber, phoneNumber);
+                expect(ClaimCheck.advance).toHaveBeenCalledExactlyOnceWith(
+                    claimCheckNumber,
+                    phoneNumber,
+                    { status: ERROR, reason: 'unknown-outcome' },
+                );
+                expect(log.error).toHaveBeenCalledOnce();
+            },
+        );
+
+        /**
+         * Twilio took it; only what came after failed. The receipt reports
+         * the send, not the job.
+         */
+        it.each([
+            ['an error of its own', () => new Error('Service Unavailable')],
+            [
+                'BullMQ failing it for stalling',
+                () => new UnrecoverableError('job stalled more than allowable limit'),
+            ],
+        ])(
+            'should record the accepted send when the record shows one and the job ends on %s',
+            async (_, err) => {
+                DispatchRecord.read.mockResolvedValueOnce({ state: 'accepted', sid: messageSid });
+
+                await gaveUp(
+                    mockUser,
+                    { claimCheckNumber, notificationType: notificationTypes.Xur },
+                    { attemptsMade: 3, opts: { attempts: 3 } },
+                    err(),
+                );
+
+                expect(ClaimCheck.advance).toHaveBeenCalledExactlyOnceWith(
+                    claimCheckNumber,
+                    phoneNumber,
+                    {
+                        status: 'accepted',
+                        sid: messageSid,
+                    },
+                );
+                expect(log.error).not.toHaveBeenCalled();
+            },
+        );
+
+        it('should go by the last error, and warn, when the record cannot be read', async () => {
+            DispatchRecord.read.mockRejectedValueOnce(new Error('down'));
+
+            await gaveUp(
+                mockUser,
+                { claimCheckNumber, notificationType: notificationTypes.Xur },
+                { attemptsMade: 3, opts: { attempts: 3 } },
+                new Error('Service Unavailable'),
+            );
+
+            expect(ClaimCheck.advance).toHaveBeenCalledExactlyOnceWith(
+                claimCheckNumber,
+                phoneNumber,
+                { status: ERROR, reason: 'retries-exhausted' },
+            );
+            expect(log.warn).toHaveBeenCalledWith(
+                expect.objectContaining({ claimCheckNumber, phoneNumber }),
+                expect.any(String),
             );
         });
     });

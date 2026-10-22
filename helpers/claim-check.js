@@ -1,8 +1,7 @@
 // @ts-check
 import { createId } from '@paralleldrive/cuid2';
-import cache from './cache.js';
+import boundedCommand from './bounded-cache.js';
 import log from './log.js';
-import processExternalPromisesWithTimeout from './process-external-promises-with-timeout.js';
 
 /**
  * How long a receipt outlives its last write. Every write refreshes it, so a
@@ -23,8 +22,12 @@ const claimCheckExpiration = 86400; // 1 day in seconds
  * slot: a Redis that is slow but answering should still get its receipts.
  *
  * Every command also carries this as node-redis's own timeout (see
- * `timedCache`), so one that times out before it was ever sent is dropped
- * rather than sent once the client reconnects.
+ * `boundedCommand`), so one that times out before it was ever sent is dropped
+ * rather than sent once the client reconnects. For a receipt that matters
+ * because a `pending` that timed out but is sent once the client reconnects
+ * can land after the recipient's worker - on another instance, with a healthy
+ * connection - has finished and found no entry to move. It would make one
+ * nothing moves on.
  */
 const CLAIM_CHECK_TIMEOUT_MS = 1000;
 
@@ -37,36 +40,13 @@ const CLAIM_CHECK_TIMEOUT_MS = 1000;
 const CLAIM_CHECK_READ_TIMEOUT_MS = 10_000;
 
 /**
- * The cache client, with every command dropped if it is still waiting to be
- * sent when the timeout passes.
- *
- * Stopping waiting is not enough: a `pending` that timed out but is sent once
- * the client reconnects can land after the recipient's worker - on another
- * instance, with a healthy connection - has finished and found no entry to
- * move. It would make one nothing moves on. node-redis's timeout covers a
- * command only until it is written, so `bounded` still bounds the wait for
- * the reply; a command written to a Redis that is slow but connected runs
- * when it gets there, as any command would.
- * @param {number} [timeout]
- */
-const timedCache = (timeout = CLAIM_CHECK_TIMEOUT_MS) => cache.withCommandOptions({ timeout });
-
-/**
- * Await a receipt command, but no longer than the timeout.
  * @template T
- * @param {Promise<T>} command
+ * @param {Parameters<typeof boundedCommand<T>>[0]} command
  * @param {number} [timeout]
- * @returns {Promise<T>} what the command resolved with; rejects with its
- * error, or with one of its own when it timed out
+ * @returns {Promise<T>}
  */
-const bounded = async (command, timeout = CLAIM_CHECK_TIMEOUT_MS) => {
-    const [result] = await processExternalPromisesWithTimeout([command], timeout);
-
-    if (result.status === 'fulfilled') return result.value;
-    if (result.status === 'rejected') throw result.reason;
-
-    throw new Error(`The claim check did not answer within ${timeout}ms.`);
-};
+const bounded = (command, timeout = CLAIM_CHECK_TIMEOUT_MS) =>
+    boundedCommand(command, timeout, 'claim check');
 
 /**
  * Write to a receipt without ever failing the caller.
@@ -83,7 +63,7 @@ const bounded = async (command, timeout = CLAIM_CHECK_TIMEOUT_MS) => {
  * Takes the command unbuilt, so a client that throws while building it is
  * caught too, as in `consent-marker.js`.
  * @template T
- * @param {() => Promise<T>} command
+ * @param {Parameters<typeof bounded<T>>[0]} command
  * @param {Record<string, unknown>} context - logged with the failure
  * @param {string} message
  * @returns {Promise<T | undefined>} what the command resolved with, or
@@ -91,7 +71,7 @@ const bounded = async (command, timeout = CLAIM_CHECK_TIMEOUT_MS) => {
  */
 const write = async (command, context, message) => {
     try {
-        return await bounded(command());
+        return await bounded(command);
     } catch (err) {
         log.warn({ err, ...context }, message);
 
@@ -264,7 +244,7 @@ return 1
  * Record a recipient as pending, unless they already have an entry, and
  * refresh the receipt's expiry. A script rather than a MULTI, which would be
  * as atomic, because node-redis ignores command options - and so the timeout
- * in `timedCache` - on a MULTI.
+ * in `boundedCommand` - on a MULTI.
  *
  * KEYS[1] claim check; ARGV[1] phone number, ARGV[2] entry as JSON, ARGV[3]
  * expiry in seconds.
@@ -336,8 +316,8 @@ class ClaimCheck {
     async addPhoneNumber(phoneNumber) {
         const number = this.#number;
         const recorded = await write(
-            () =>
-                timedCache().eval(RECORD_PENDING, {
+            client =>
+                client.eval(RECORD_PENDING, {
                     keys: [number],
                     arguments: [
                         phoneNumber,
@@ -365,10 +345,7 @@ class ClaimCheck {
      */
     static async getClaimCheck(number) {
         const entries = Object.entries(
-            await bounded(
-                timedCache(CLAIM_CHECK_READ_TIMEOUT_MS).hGetAll(number),
-                CLAIM_CHECK_READ_TIMEOUT_MS,
-            ),
+            await bounded(client => client.hGetAll(number), CLAIM_CHECK_READ_TIMEOUT_MS),
         );
 
         return Object.fromEntries(
@@ -386,8 +363,8 @@ class ClaimCheck {
      */
     static async advance(claimCheckNumber, phoneNumber, entry) {
         const written = await write(
-            () =>
-                timedCache().eval(ADVANCE, {
+            client =>
+                client.eval(ADVANCE, {
                     keys: [claimCheckNumber],
                     arguments: [phoneNumber, JSON.stringify(entry), String(claimCheckExpiration)],
                 }),
