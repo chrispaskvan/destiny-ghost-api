@@ -1,10 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Chance from 'chance';
 import cache from './cache.js';
 import mayDeliver from './consent.js';
 import {
     recordConsent,
     readConsent,
+    CONSENT_MARKER_TIMEOUT_MS,
     CONSENT_MARKER_TTL_SECONDS,
     RECORD_CONSENT,
 } from './consent-marker.js';
@@ -13,6 +14,7 @@ vi.mock('./cache.js', () => ({
     default: {
         eval: vi.fn(),
         hGetAll: vi.fn(),
+        withCommandOptions: vi.fn(),
     },
 }));
 vi.mock('./log.js', () => ({
@@ -58,6 +60,20 @@ beforeEach(() => {
     vi.clearAllMocks();
     cache.eval.mockResolvedValue(1);
     cache.hGetAll.mockResolvedValue({});
+    /**
+     * The client with command options, as `boundedCommand` asks for it.
+     * Looked up on each call, so a test that swaps in a fake Redis below
+     * reaches it through here too.
+     */
+    cache.withCommandOptions.mockImplementation(options => ({
+        options,
+        eval: (...args) => cache.eval(...args),
+        hGetAll: (...args) => cache.hGetAll(...args),
+    }));
+});
+
+afterEach(() => {
+    vi.useRealTimers();
 });
 
 describe('recordConsent', () => {
@@ -118,10 +134,27 @@ describe('recordConsent', () => {
         await expect(recordConsent(phoneNumber, false, receivedAt)).resolves.toBeUndefined();
     });
 
-    it('should not wait indefinitely on a client that never settles', async () => {
+    it('should give up, still resolving, once the bound passes', async () => {
+        vi.useFakeTimers();
         cache.eval.mockReturnValue(new Promise(() => {}));
+        let settled = false;
 
-        await expect(recordConsent(phoneNumber, false, receivedAt)).resolves.toBeUndefined();
+        recordConsent(phoneNumber, false, receivedAt).then(() => {
+            settled = true;
+        });
+
+        await vi.advanceTimersByTimeAsync(CONSENT_MARKER_TIMEOUT_MS - 1);
+        expect(settled).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(settled).toBe(true);
+    });
+
+    it('should send with a timeout that drops it if still unsent', async () => {
+        await recordConsent(phoneNumber, false, receivedAt);
+
+        expect(cache.withCommandOptions).toHaveBeenCalledWith({
+            timeout: CONSENT_MARKER_TIMEOUT_MS,
+        });
     });
 });
 
@@ -145,17 +178,35 @@ describe('readConsent', () => {
         await expect(readConsent(phoneNumber)).resolves.toBeUndefined();
     });
 
-    /**
-     * This read is the delivery gate's guard, which runs inside a rate limiter
-     * slot that is `maxConcurrent: 1` cluster-wide. A read that never settles
-     * would not stall one send; it would hold the only slot and stall every
-     * outbound message. node-redis queues commands while it reconnects, so
-     * that is a dropped connection away rather than hypothetical.
-     */
-    it('should give up rather than hold the limiter slot when the client never settles', async () => {
-        cache.hGetAll.mockReturnValue(new Promise(() => {}));
+    it('should report a read that throws as absent rather than rejecting', async () => {
+        cache.hGetAll.mockImplementation(() => {
+            throw new Error('the client is closed');
+        });
 
         await expect(readConsent(phoneNumber)).resolves.toBeUndefined();
+    });
+
+    /**
+     * This read is the delivery gate's guard, which holds up the send it
+     * guards. node-redis queues commands while it reconnects, so a read that
+     * never settles is a dropped connection away rather than hypothetical.
+     */
+    it('should give up, reporting absent, once the bound passes', async () => {
+        vi.useFakeTimers();
+        cache.hGetAll.mockReturnValue(new Promise(() => {}));
+
+        const reading = readConsent(phoneNumber);
+
+        await vi.advanceTimersByTimeAsync(CONSENT_MARKER_TIMEOUT_MS);
+        await expect(reading).resolves.toBeUndefined();
+    });
+
+    it('should send with a timeout that drops it if still unsent', async () => {
+        await readConsent(phoneNumber);
+
+        expect(cache.withCommandOptions).toHaveBeenCalledWith({
+            timeout: CONSENT_MARKER_TIMEOUT_MS,
+        });
     });
 });
 
