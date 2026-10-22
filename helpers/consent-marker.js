@@ -18,9 +18,8 @@
  *
  * @module consentMarker
  */
-import cache from './cache.js';
+import boundedCommand from './bounded-cache.js';
 import log from './log.js';
-import processExternalPromisesWithTimeout from './process-external-promises-with-timeout.js';
 
 /**
  * Apply a consent change only if nothing newer is already recorded.
@@ -60,18 +59,37 @@ return 1
 const CONSENT_MARKER_TTL_SECONDS = 86_400;
 
 /**
- * Bounds how long either side of this module can wait on Redis. node-redis
- * queues commands while it reconnects, so an unbounded call does not fail on a
- * dropped connection - it waits for one that may not come back.
+ * How long a STOP's reply waits for its marker. node-redis queues commands
+ * while it reconnects, so an unbounded call does not fail on a dropped
+ * connection - it waits for one that may not come back, holding the webhook
+ * open instead of answering.
  *
- * Both directions need it, for different reasons. An unbounded write holds the
- * webhook open instead of answering a STOP. An unbounded read is worse: it
- * runs as the delivery gate's guard, which `NotificationService` invokes
- * *inside* the rate limiter's slot, and that limiter is `maxConcurrent: 1`
- * cluster-wide. A read that never settles there does not stall one send, it
- * holds the only slot and stalls every outbound message.
+ * Short, because waiting longer buys nothing. The write is never dropped
+ * (`keepUnsent`): one still queued when this passes goes out when the client
+ * reconnects, ahead of the commands queued after it on the same client - the
+ * rate limiter's among them - so a send this instance starts afterwards finds
+ * the marker. That narrows the gap on this instance only. A send on another
+ * instance, or one here that held its token before the write was queued, can
+ * still read before the marker lands; for those, the durable write is what
+ * decides. Landing late does no harm - `RECORD_CONSENT` compares on when the
+ * message arrived - and it lands when Redis gets to it whether the reply
+ * waits or not. All a longer wait would do is delay the reply, and the
+ * durable write queued after it.
  */
-const CONSENT_MARKER_TIMEOUT_MS = 250;
+const CONSENT_MARKER_WRITE_TIMEOUT_MS = 250;
+
+/**
+ * How long the delivery gate waits for a marker before going ahead on the
+ * stored state alone. The gate runs once the rate limiter has granted its
+ * send a token, so a slow read holds up that send, and the queue worker slot
+ * it occupies, but not the limiter.
+ *
+ * Longer than the write's, because here waiting buys something: on a Redis
+ * that is slow but answering, a read given a second is more likely to see a
+ * STOP than to give up and let the send through. A read still unsent when
+ * this passes is dropped - nothing waits for its answer any more.
+ */
+const CONSENT_MARKER_READ_TIMEOUT_MS = 1000;
 
 /** @param {string} phoneNumber */
 const keyFor = phoneNumber => `consent:${phoneNumber}`;
@@ -86,7 +104,7 @@ const keyFor = phoneNumber => `consent:${phoneNumber}`;
 /**
  * Record a consent change before replying to it.
  *
- * Never rejects, and never waits longer than the timeout above. A marker that
+ * Never rejects, and never waits longer than `CONSENT_MARKER_WRITE_TIMEOUT_MS`. A marker that
  * cannot be written leaves the window exactly as wide as it was before this
  * module existed, which is worse than closing it and better than failing to
  * answer a STOP.
@@ -96,10 +114,18 @@ const keyFor = phoneNumber => `consent:${phoneNumber}`;
  * @returns {Promise<void>}
  */
 const recordConsent = async (phoneNumber, isSubscribed, receivedAt) => {
+    /**
+     * Everything inside the one `try`, a client that throws while building
+     * the command included (`boundedCommand` takes it unbuilt). `request()` awaits
+     * this before answering a STOP, so "never rejects" has to hold because of
+     * how this is written rather than because of how a dependency currently
+     * behaves: a bad release would otherwise turn a Redis fault into an
+     * unanswered compliance keyword.
+     */
     try {
-        const [result] = await processExternalPromisesWithTimeout(
-            [
-                cache.eval(RECORD_CONSENT, {
+        await boundedCommand(
+            client =>
+                client.eval(RECORD_CONSENT, {
                     keys: [keyFor(phoneNumber)],
                     arguments: [
                         isSubscribed ? '1' : '0',
@@ -107,33 +133,33 @@ const recordConsent = async (phoneNumber, isSubscribed, receivedAt) => {
                         String(CONSENT_MARKER_TTL_SECONDS),
                     ],
                 }),
-            ],
-            CONSENT_MARKER_TIMEOUT_MS,
+            CONSENT_MARKER_WRITE_TIMEOUT_MS,
+            'consent marker',
+            {
+                keepUnsent: true,
+                onLateFailure: err =>
+                    log.warn(
+                        { err, phoneNumber, isSubscribed },
+                        'The queued consent acknowledgement failed; the durable write still stands.',
+                    ),
+            },
         );
-
-        if (result.status !== 'fulfilled') {
-            log.warn(
-                {
-                    phoneNumber,
-                    isSubscribed,
-                    ...(result.status === 'rejected' && { err: result.reason }),
-                    timedOut: result.status === 'timed-out',
-                },
-                'Unable to record the consent acknowledgement; the durable write still stands.',
-            );
-        }
     } catch (err) {
         /**
-         * The command is built before the timeout wrapper receives it, so
-         * anything the client raises synchronously would escape the settled
-         * handling above and reject this function. node-redis does not do that
-         * today on this path - a closed client rejects the promise rather than
-         * throwing, and the synchronous throw lives in `_executeMulti` - but
-         * `request()` awaits this before answering a STOP, so "never rejects"
-         * has to hold because of how this is written rather than because of
-         * how a dependency currently behaves. A bad release would otherwise
-         * turn a Redis fault into an unanswered compliance keyword.
+         * Not answered in time, but kept: it goes out when Redis is back, and
+         * a later failure is reported by `onLateFailure` above. Told apart
+         * from a write that failed outright, which is the one that leaves the
+         * gap open.
          */
+        if (/** @type {{ stillPending?: unknown }} */ (err)?.stillPending === true) {
+            log.info(
+                { phoneNumber, isSubscribed },
+                'The consent acknowledgement is still queued; it will be recorded when Redis answers.',
+            );
+
+            return;
+        }
+
         log.warn(
             { err, phoneNumber, isSubscribed },
             'Unable to record the consent acknowledgement; the durable write still stands.',
@@ -144,7 +170,7 @@ const recordConsent = async (phoneNumber, isSubscribed, receivedAt) => {
 /**
  * The consent recorded at acknowledgement, if any is still held.
  *
- * Never rejects, and never waits longer than the timeout above. A marker that
+ * Never rejects, and never waits longer than `CONSENT_MARKER_READ_TIMEOUT_MS`. A marker that
  * cannot be read is reported as absent, leaving the caller on the stored state - the position it was in before this module
  * existed. Suppressing everything whenever Redis blinked would be worse, and
  * pointless besides: the send path's rate limiter is Redis-backed too, so a
@@ -153,40 +179,36 @@ const recordConsent = async (phoneNumber, isSubscribed, receivedAt) => {
  * @returns {Promise<ConsentMarker | undefined>}
  */
 const readConsent = async phoneNumber => {
+    /** @type {Record<string, string> | undefined} */
+    let marker;
+
     try {
-        const [result] = await processExternalPromisesWithTimeout(
-            [cache.hGetAll(keyFor(phoneNumber))],
-            CONSENT_MARKER_TIMEOUT_MS,
+        marker = await boundedCommand(
+            client => client.hGetAll(keyFor(phoneNumber)),
+            CONSENT_MARKER_READ_TIMEOUT_MS,
+            'consent marker',
         );
-
-        if (result.status !== 'fulfilled') {
-            log.warn(
-                {
-                    phoneNumber,
-                    ...(result.status === 'rejected' && { err: result.reason }),
-                    timedOut: result.status === 'timed-out',
-                },
-                'Unable to read the consent acknowledgement.',
-            );
-
-            return undefined;
-        }
-
-        const marker = /** @type {Record<string, string> | undefined} */ (result.value);
-
-        if (!marker?.receivedAt) {
-            return undefined;
-        }
-
-        return {
-            isSubscribed: marker.isSubscribed === '1',
-            receivedAt: Number(marker.receivedAt),
-        };
     } catch (err) {
         log.warn({ err, phoneNumber }, 'Unable to read the consent acknowledgement.');
 
         return undefined;
     }
+
+    if (!marker?.receivedAt) {
+        return undefined;
+    }
+
+    return {
+        isSubscribed: marker.isSubscribed === '1',
+        receivedAt: Number(marker.receivedAt),
+    };
 };
 
-export { recordConsent, readConsent, CONSENT_MARKER_TTL_SECONDS, RECORD_CONSENT };
+export {
+    recordConsent,
+    readConsent,
+    CONSENT_MARKER_READ_TIMEOUT_MS,
+    CONSENT_MARKER_TTL_SECONDS,
+    CONSENT_MARKER_WRITE_TIMEOUT_MS,
+    RECORD_CONSENT,
+};

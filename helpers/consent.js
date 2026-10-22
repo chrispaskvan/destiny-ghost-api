@@ -52,10 +52,11 @@ const mayDeliver = async ({ users, phoneNumber, notificationType }) => {
 
     try {
         /**
-         * Together rather than in sequence: this runs inside the send path's
-         * rate limiter slot, where two round trips back to back would cost
-         * throughput that one costs nothing. `readConsent` never rejects, so
-         * only the Cosmos read can fail this.
+         * Together rather than in sequence: this runs once the send path's
+         * rate limiter has granted the send, immediately before it, and two
+         * round trips back to back would widen the gap a STOP can still land
+         * in. `readConsent` never rejects, so only the Cosmos read can fail
+         * this.
          *
          * Read from Cosmos rather than the cache: a cached document can be an
          * hour old, which is longer than the window this check exists to close

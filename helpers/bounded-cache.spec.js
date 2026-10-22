@@ -24,6 +24,76 @@ describe('boundedCommand', () => {
         expect(command).toHaveBeenCalledWith({ options: { timeout: 750 } });
     });
 
+    /**
+     * For a write that is better late than never: the caller stops waiting,
+     * but the command stays queued rather than being dropped.
+     */
+    it('should send on the bare client, with no command timeout, when told to keep it', async () => {
+        const command = vi.fn(async () => 'OK');
+
+        await boundedCommand(command, 750, 'thing', { keepUnsent: true });
+
+        expect(cache.withCommandOptions).not.toHaveBeenCalled();
+        expect(command).toHaveBeenCalledWith(cache);
+    });
+
+    it('should still stop waiting at the timeout when told to keep the command, saying it may yet land', async () => {
+        vi.useFakeTimers();
+
+        const waiting = expect(
+            boundedCommand(() => new Promise(() => {}), 750, 'thing', { keepUnsent: true }),
+        ).rejects.toMatchObject({
+            message: expect.stringContaining('The thing did not answer within 750ms'),
+            stillPending: true,
+        });
+
+        await vi.advanceTimersByTimeAsync(750);
+        await waiting;
+    });
+
+    it('should not call a dropped command pending', async () => {
+        vi.useFakeTimers();
+
+        const waiting = boundedCommand(() => new Promise(() => {}), 750, 'thing').catch(e => e);
+
+        await vi.advanceTimersByTimeAsync(750);
+        expect(await waiting).not.toHaveProperty('stillPending');
+    });
+
+    /**
+     * Nobody awaits a kept command after the timeout, so this is the only
+     * way its failure is heard.
+     */
+    it.each([
+        ['fails', true],
+        ['lands', false],
+    ])(
+        'should report a kept command that %s after the timeout only if it fails',
+        async (_, fails) => {
+            vi.useFakeTimers();
+            const onLateFailure = vi.fn();
+            const err = new Error('client closed');
+            let settle;
+            const command = () =>
+                new Promise((resolve, reject) => {
+                    settle = () => (fails ? reject(err) : resolve('OK'));
+                });
+
+            const waiting = boundedCommand(command, 750, 'thing', {
+                keepUnsent: true,
+                onLateFailure,
+            }).catch(() => {});
+
+            await vi.advanceTimersByTimeAsync(750);
+            await waiting;
+            settle();
+            await vi.advanceTimersByTimeAsync(0);
+
+            if (fails) expect(onLateFailure).toHaveBeenCalledExactlyOnceWith(err);
+            else expect(onLateFailure).not.toHaveBeenCalled();
+        },
+    );
+
     it("should reject with the command's own error", async () => {
         const err = new Error('down');
 

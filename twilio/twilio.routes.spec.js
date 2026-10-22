@@ -93,8 +93,8 @@ vi.mock('../helpers/bitly.js', () => ({
  * function, matching helpers/claim-check.spec.js) rather than relying on
  * Vitest automocking, which still executes the real module body first.
  */
-vi.mock('../helpers/cache.js', () => ({
-    default: {
+vi.mock('../helpers/cache.js', () => {
+    const cache = {
         isReady: true,
         hSet: vi.fn(),
         hGet: vi.fn(),
@@ -103,8 +103,16 @@ vi.mock('../helpers/cache.js', () => ({
         // The consent marker a STOP/START acknowledgement leaves behind
         // (helpers/consent-marker.js), written by a compare-and-set script.
         eval: vi.fn().mockResolvedValue(1),
-    },
-}));
+        // Asked for only by the delivery gate's marker read, which carries a
+        // command timeout; the marker write keeps its command and goes on
+        // the bare client (`keepUnsent`).
+        withCommandOptions: vi.fn(),
+    };
+
+    cache.withCommandOptions.mockReturnValue(cache);
+
+    return { default: cache };
+});
 
 const { getExpectedTwilioSignature } = twilio;
 const { authToken } = configuration.twilio;

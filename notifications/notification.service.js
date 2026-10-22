@@ -241,8 +241,8 @@ class Notifications {
 
                 /**
                  * Checked here rather than by the caller, because the wait
-                 * for this slot is the gap that matters. The limiter is
-                 * cluster-wide at one message per 250ms, so on a broadcast
+                 * for this slot is the gap that matters. The limiter is a
+                 * cluster-wide bucket of 4 messages a second, so on a broadcast
                  * a recipient can sit in this queue for minutes after the
                  * caller decided to send - long enough for a STOP to
                  * arrive. Callers with nothing to withhold on - the welcome
