@@ -34,6 +34,21 @@ vi.mock('../helpers/publisher.js');
 vi.mock('../helpers/subscriber.js');
 vi.mock('./notification.error.js');
 vi.mock('../helpers/claim-check.js');
+/**
+ * Both Redis clients connect as they are imported, so neither is real here
+ * (#783). BullMQ's (`jobs.js`) is reached when the publisher and subscriber
+ * mocks above load the real modules to copy their shape; the shared one
+ * (`cache.js`) through the consent gate's marker read, which finds no marker
+ * and leaves the decision to the stored state.
+ */
+vi.mock('../helpers/jobs.js', () => ({ default: {} }));
+vi.mock('../helpers/cache.js', () => {
+    const cache = { hGetAll: vi.fn(async () => ({})), eval: vi.fn(async () => 1) };
+
+    cache.withCommandOptions = vi.fn(() => cache);
+
+    return { default: cache };
+});
 vi.mock('../helpers/dispatch-record.js');
 vi.mock('./broadcast.queue.js', () => ({
     enqueueBroadcast: vi.fn(),
