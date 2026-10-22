@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Chance from 'chance';
 import cache from './cache.js';
 import mayDeliver from './consent.js';
+import log from './log.js';
 import {
     recordConsent,
     readConsent,
@@ -62,13 +63,13 @@ beforeEach(() => {
     cache.eval.mockResolvedValue(1);
     cache.hGetAll.mockResolvedValue({});
     /**
-     * The client with command options, as `boundedCommand` asks for it.
-     * Looked up on each call, so a test that swaps in a fake Redis below
-     * reaches it through here too.
+     * The client with command options, which only the read asks for: the
+     * write keeps its command and goes on the bare client. Looked up on each
+     * call, so a test that swaps in a fake Redis below reaches it through
+     * here too.
      */
     cache.withCommandOptions.mockImplementation(options => ({
         options,
-        eval: vi.fn((...args) => cache.eval(...args)),
         hGetAll: vi.fn((...args) => cache.hGetAll(...args)),
     }));
 });
@@ -114,11 +115,48 @@ describe('recordConsent', () => {
      * written leaves the window where it was; failing the reply would be worse
      * than leaving it open.
      */
-    it('should not reject when the write fails', async () => {
+    it('should not reject when the write fails, warning that it did', async () => {
         cache.eval.mockRejectedValue(new Error('Redis is down'));
 
         await expect(recordConsent(phoneNumber, false, receivedAt)).resolves.toBeUndefined();
+        expect(log.warn).toHaveBeenCalledOnce();
     });
+
+    /**
+     * A write still queued is not a failure: it lands when Redis is back.
+     * Only one that then fails is - and that is the one worth a warning.
+     */
+    it.each([
+        ['lands', false],
+        ['then fails', true],
+    ])(
+        'should report a queued write that %s as still queued, warning only on failure',
+        async (_, fails) => {
+            vi.useFakeTimers();
+            let settle;
+
+            cache.eval.mockReturnValue(
+                new Promise((resolve, reject) => {
+                    settle = () => (fails ? reject(new Error('client closed')) : resolve(1));
+                }),
+            );
+
+            const recording = recordConsent(phoneNumber, false, receivedAt);
+
+            await vi.advanceTimersByTimeAsync(CONSENT_MARKER_WRITE_TIMEOUT_MS);
+            await expect(recording).resolves.toBeUndefined();
+            expect(log.info).toHaveBeenCalledWith(
+                expect.objectContaining({ phoneNumber }),
+                expect.stringContaining('still queued'),
+            );
+            expect(log.warn).not.toHaveBeenCalled();
+
+            settle();
+            await vi.advanceTimersByTimeAsync(0);
+
+            expect(log.warn).toHaveBeenCalledTimes(fails ? 1 : 0);
+        },
+    );
 
     /**
      * Not a path node-redis takes today - a closed client rejects rather than

@@ -66,11 +66,15 @@ const CONSENT_MARKER_TTL_SECONDS = 86_400;
  *
  * Short, because waiting longer buys nothing. The write is never dropped
  * (`keepUnsent`): one still queued when this passes goes out when the client
- * reconnects, ahead of the rate limiter's commands on the same client, so the
- * marker is in place before any send that follows can read it. Landing late
- * does no harm - `RECORD_CONSENT` compares on when the message arrived - and
- * it lands when Redis gets to it whether the reply waits or not. All a longer
- * wait would do is delay the reply, and the durable write queued after it.
+ * reconnects, ahead of the commands queued after it on the same client - the
+ * rate limiter's among them - so a send this instance starts afterwards finds
+ * the marker. That narrows the gap on this instance only. A send on another
+ * instance, or one here that held its token before the write was queued, can
+ * still read before the marker lands; for those, the durable write is what
+ * decides. Landing late does no harm - `RECORD_CONSENT` compares on when the
+ * message arrived - and it lands when Redis gets to it whether the reply
+ * waits or not. All a longer wait would do is delay the reply, and the
+ * durable write queued after it.
  */
 const CONSENT_MARKER_WRITE_TIMEOUT_MS = 250;
 
@@ -131,9 +135,31 @@ const recordConsent = async (phoneNumber, isSubscribed, receivedAt) => {
                 }),
             CONSENT_MARKER_WRITE_TIMEOUT_MS,
             'consent marker',
-            { keepUnsent: true },
+            {
+                keepUnsent: true,
+                onLateFailure: err =>
+                    log.warn(
+                        { err, phoneNumber, isSubscribed },
+                        'The queued consent acknowledgement failed; the durable write still stands.',
+                    ),
+            },
         );
     } catch (err) {
+        /**
+         * Not answered in time, but kept: it goes out when Redis is back, and
+         * a later failure is reported by `onLateFailure` above. Told apart
+         * from a write that failed outright, which is the one that leaves the
+         * gap open.
+         */
+        if (/** @type {{ stillPending?: unknown }} */ (err)?.stillPending === true) {
+            log.info(
+                { phoneNumber, isSubscribed },
+                'The consent acknowledgement is still queued; it will be recorded when Redis answers.',
+            );
+
+            return;
+        }
+
         log.warn(
             { err, phoneNumber, isSubscribed },
             'Unable to record the consent acknowledgement; the durable write still stands.',

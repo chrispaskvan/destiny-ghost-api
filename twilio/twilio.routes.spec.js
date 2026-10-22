@@ -103,8 +103,9 @@ vi.mock('../helpers/cache.js', () => {
         // The consent marker a STOP/START acknowledgement leaves behind
         // (helpers/consent-marker.js), written by a compare-and-set script.
         eval: vi.fn().mockResolvedValue(1),
-        // How `boundedCommand` sends it, with a timeout; the same mocks
-        // answer, so the assertions below on `eval` still see the call.
+        // Asked for only by the delivery gate's marker read, which carries a
+        // command timeout; the marker write keeps its command and goes on
+        // the bare client (`keepUnsent`).
         withCommandOptions: vi.fn(),
     };
 
