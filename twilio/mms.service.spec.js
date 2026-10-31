@@ -10,6 +10,19 @@ import {
     UNKNOWN_STATISTIC,
 } from './twilio.constants.js';
 
+/**
+ * The shared Redis client connects as it is imported, so it is replaced here
+ * (#783). Reached through the consent gate's marker read, which finds no
+ * marker and leaves the decision to the stored state.
+ */
+vi.mock('../helpers/cache.js', () => {
+    const cache = { hGetAll: vi.fn(async () => ({})), eval: vi.fn(async () => 1) };
+
+    cache.withCommandOptions = vi.fn(() => cache);
+
+    return { default: cache };
+});
+
 const from = '+15005550006';
 const url = 'https://api.twilio.com/2010-04-01/Accounts/AC123/Messages/MM123/Media/ME123';
 const aiService = { getPlayersFromFile: vi.fn() };
