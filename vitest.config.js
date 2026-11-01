@@ -14,15 +14,16 @@ export default defineConfig({
             reporter: ['clover', 'html', 'json'],
             thresholds: {
                 autoUpdate: true,
-                statements: 93.49,
-                branches: 88.03,
-                functions: 93.08,
-                lines: 93.55,
+                statements: 93.51,
+                branches: 88.08,
+                functions: 93.09,
+                lines: 93.57,
             },
         },
         exclude: [...defaultExclude, '**/.claude/**'],
         pool: 'threads',
-        // Fails a unit spec that opens a network connection (#783).
+        // Holds each test file to an allowlist of hosts, and arms nock for
+        // integration tests (#783, #784).
         setupFiles: ['./vitest.setup.js'],
         sequence: {
             hooks: 'parallel',

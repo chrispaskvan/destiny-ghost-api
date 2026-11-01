@@ -1,6 +1,7 @@
 import net from 'node:net';
 import tls from 'node:tls';
 import { afterEach, describe, expect, it } from 'vitest';
+import { allowlistFor, LOOPBACK, NOCK_ALLOWED } from './vitest.allowlist.js';
 
 /**
  * The connection guard in `vitest.setup.js` (#783, #784). Each test opens a
@@ -28,10 +29,14 @@ const recordedBy = socket => {
 };
 
 /**
+ * A `lookup` answering every name with one IPv4 address, in either of the
+ * shapes Node asks for: an array when `options.all` is set (as it is with
+ * `autoSelectFamily`), otherwise an address and family.
  * @param {string} address
- * @returns {(hostname: string, options: object, callback: Function) => void}
+ * @returns {(hostname: string, options: { all?: boolean }, callback: Function) => void}
  */
-const lookupTo = address => (_hostname, _options, callback) => callback(null, address, 4);
+const lookupTo = address => (_hostname, options, callback) =>
+    options?.all ? callback(null, [{ address, family: 4 }]) : callback(null, address, 4);
 
 afterEach(() => {
     state.allowedHosts = specAllowlist;
@@ -75,9 +80,47 @@ describe('unit spec allowlist', () => {
     });
 });
 
+describe('allowlistFor', () => {
+    it('allows only loopback in a unit spec, whatever the Redis host', () => {
+        expect(allowlistFor('/repo/helpers/cache.spec.js', 'cache.example.net')).toBe(LOOPBACK);
+    });
+
+    it('allows loopback and the lower-cased Redis host in an integration test', () => {
+        const allowed = allowlistFor('/repo/users/user.routes.test.js', 'Cache.Example.NET');
+
+        expect([...allowed]).toEqual([...LOOPBACK, 'cache.example.net']);
+    });
+
+    it('allows only loopback in an integration test without a Redis host', () => {
+        expect([...allowlistFor('/repo/users/user.routes.test.js', undefined)]).toEqual([
+            ...LOOPBACK,
+        ]);
+    });
+
+    it('has no allowlist for any other file', () => {
+        expect(allowlistFor('/repo/helpers/itif.js', 'cache.example.net')).toBeUndefined();
+    });
+});
+
+describe('NOCK_ALLOWED', () => {
+    it.each(['127.0.0.1', '127.0.0.1:65534'])('lets %s through', host => {
+        expect(NOCK_ALLOWED.test(host)).toBe(true);
+    });
+
+    it.each(['127.0.0.10:80', '127.0.0.1.nip.io:443', '127a0b0c1.example:443', 'localhost:80'])(
+        'refuses %s',
+        host => {
+            expect(NOCK_ALLOWED.test(host)).toBe(false);
+        },
+    );
+});
+
 describe('integration test allowlist', () => {
-    it('ignores a dial to an allowed host, whatever its case', () => {
-        state.allowedHosts = new Set(['localhost', 'cache.example.net']);
+    const integrationAllowlist = () =>
+        allowlistFor('/repo/users/user.routes.test.js', 'Cache.Example.NET');
+
+    it('ignores a dial to the Redis host, whatever its case', () => {
+        state.allowedHosts = integrationAllowlist();
 
         expect(
             recordedBy(
@@ -88,14 +131,17 @@ describe('integration test allowlist', () => {
 
     it("ignores nock's simulated dial, which carries the interceptor's mockLookup", () => {
         // Named like the interceptor's own: the guard goes by the function's name.
-        const mockLookup = (_hostname, _options, callback) => callback(null, '127.0.0.1', 4);
+        const answer = lookupTo('127.0.0.1');
+        const mockLookup = (hostname, options, callback) => answer(hostname, options, callback);
 
+        state.allowedHosts = integrationAllowlist();
         expect(
             recordedBy(tls.connect({ host: 'www.bungie.net', port: 443, lookup: mockLookup })),
         ).toEqual([]);
     });
 
     it('records a dial with any other lookup, before it has connected', () => {
+        state.allowedHosts = integrationAllowlist();
         expect(
             recordedBy(
                 tls.connect({ host: 'www.bungie.net', port: 443, lookup: lookupTo(REMOTE) }),

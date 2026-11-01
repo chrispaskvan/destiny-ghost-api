@@ -12,7 +12,7 @@
  * Integration tests (`*.test.js`, #784) start a real server, which reaches the
  * shared Redis by design, so they may reach loopback and the configured Redis
  * host. nock is armed here before the test file loads, refusing every HTTP
- * request but 127.0.0.1, so the server's startup calls are fenced too.
+ * request but one to 127.0.0.1, so the server's startup calls are fenced too.
  *
  * Connections are recorded, not refused: refusing one would send the client
  * into its reconnect loop, which is its own way of keeping a worker alive.
@@ -30,9 +30,9 @@
  */
 import net from 'node:net';
 import { beforeAll, expect } from 'vitest';
+import { allowlistFor, NOCK_ALLOWED } from './vitest.allowlist.js';
 
 const STATE = Symbol.for('destiny-ghost.connection-guard');
-const LOOPBACK = new Set([undefined, '', 'localhost', '127.0.0.1', '::1', '0.0.0.0', '::']);
 
 /**
  * @typedef {Object} State
@@ -130,7 +130,7 @@ state.allowedHosts = undefined;
 state.connections = [];
 
 if (testPath.endsWith('.spec.js')) {
-    state.allowedHosts = LOOPBACK;
+    state.allowedHosts = allowlistFor(testPath);
     failure = 'A unit spec opened {count} network connection(s); mock what connects (#783)';
 }
 
@@ -140,14 +140,10 @@ if (testPath.endsWith('.test.js')) {
         import('./helpers/config.js'),
         import('nock'),
     ]);
-    const redisHost = configuration.redis?.host;
 
     nock.disableNetConnect();
-    nock.enableNetConnect('127.0.0.1');
-    state.allowedHosts = new Set([
-        ...LOOPBACK,
-        typeof redisHost === 'string' ? redisHost.toLowerCase() : redisHost,
-    ]);
+    nock.enableNetConnect(NOCK_ALLOWED);
+    state.allowedHosts = allowlistFor(testPath, configuration.redis?.host);
     failure =
         'An integration test opened {count} connection(s) outside its allowlist (loopback, Redis); intercept them with nock or a mock, or allow and document them (#784)';
 }
