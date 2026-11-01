@@ -13,13 +13,15 @@ const origin = 'https://app.destiny-ghost.com';
 beforeAll(async () => {
     process.env.PORT = 65533;
 
+    /**
+     * vitest.setup.js has already refused every outbound HTTP request but
+     * 127.0.0.1 (#784), so the Bungie manifest-version checks `startServer()`
+     * fires are refused and logged as failed; nothing here needs the manifest.
+     * Redis is the one real service this test reaches.
+     */
     const apiConnection = await startServer();
 
     baseUrl = `http://${ipAddress}:${apiConnection.port}`;
-
-    // Ensure that this component is isolated by preventing unknown calls.
-    nock.disableNetConnect();
-    nock.enableNetConnect(ipAddress);
 });
 
 /**
@@ -132,5 +134,6 @@ afterEach(() => {
  */
 afterAll(async () => {
     await stopServer();
-    nock.enableNetConnect();
+    // nock stays closed (#784): the startup manifest checks are not awaited,
+    // and one can still fire after the server stops.
 });

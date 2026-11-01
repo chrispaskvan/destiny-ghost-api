@@ -11,6 +11,8 @@ export default defineConfig({
          */
         clearMocks: true,
         coverage: {
+            // Test infrastructure (config, setup, guard rules) is not app code.
+            exclude: ['vitest.*.js'],
             reporter: ['clover', 'html', 'json'],
             thresholds: {
                 autoUpdate: true,
@@ -22,7 +24,8 @@ export default defineConfig({
         },
         exclude: [...defaultExclude, '**/.claude/**'],
         pool: 'threads',
-        // Fails a unit spec that opens a network connection (#783).
+        // Holds each test file to an allowlist of hosts, and arms nock for
+        // integration tests (#783, #784).
         setupFiles: ['./vitest.setup.js'],
         sequence: {
             hooks: 'parallel',

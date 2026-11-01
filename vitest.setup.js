@@ -1,64 +1,96 @@
 // @ts-check
 /**
- * Fails a unit spec that opens a network connection (#783).
+ * Holds each test file to an allowlist of hosts it may connect to.
  *
- * Unit specs (`*.spec.js`) run with their dependencies mocked (AGENTS.md). One
- * that connects anywhere but loopback has reached a real service - most often
- * the shared Redis, through a module that connects as it is imported
- * (`helpers/cache.js`, `helpers/jobs.js`). That makes the suite depend on the
- * network and on what that service holds, and an open client can keep a
- * worker alive after its tests have finished.
+ * Unit specs (`*.spec.js`, #783) may reach only loopback. They run with their
+ * dependencies mocked (AGENTS.md), so one that connects anywhere else has
+ * reached a real service - most often the shared Redis, through a module that
+ * connects as it is imported (`helpers/cache.js`, `helpers/jobs.js`). That
+ * makes the suite depend on the network and on what that service holds, and
+ * an open client can keep a worker alive after its tests have finished.
+ *
+ * Integration tests (`*.test.js`, #784) start a real server, which reaches the
+ * shared Redis by design, so they may reach loopback and the configured Redis
+ * host. nock is armed here before the test file loads, refusing every HTTP
+ * request but one to 127.0.0.1, so the server's startup calls are fenced too.
  *
  * Connections are recorded, not refused: refusing one would send the client
  * into its reconnect loop, which is its own way of keeping a worker alive.
- * The spec fails once its tests have run, naming what connected and from
- * where, so the import can be mocked. Integration tests (`*.test.js`) start a
- * real server, and are not checked.
+ * The file fails once it has finished, naming what connected and from where.
+ *
+ * nock's simulated dials are skipped. For every HTTP request nock handles or
+ * refuses, its interceptor (`@mswjs/interceptors`) dials a mock socket through
+ * this same `Socket#connect`, with its own `lookup` that answers loopback for
+ * every name. That socket never reaches the network. A request nock lets
+ * through gets a second, real dial without that `lookup`, and that one counts.
+ * Telling them apart at call time, rather than by waiting for the `connect`
+ * event, keeps a dial still connecting at the end of the file from being
+ * missed. If a nock upgrade renames the mock lookup, every request nock stops
+ * starts failing its file loudly, rather than the guard passing quietly.
  */
 import net from 'node:net';
-import { afterAll, expect } from 'vitest';
+import { beforeAll, expect } from 'vitest';
+import { NOCK_ALLOWED, policyFor } from './vitest.allowlist.js';
 
-const STATE = Symbol.for('destiny-ghost.unit-spec-connections');
-const LOOPBACK = new Set([undefined, '', 'localhost', '127.0.0.1', '::1', '0.0.0.0', '::']);
+const STATE = Symbol.for('destiny-ghost.connection-guard');
 
 /**
- * @typedef {{ connections: string[] }} State
- * @type {State}
+ * @typedef {Object} State
+ * @property {string[]} connections - dials outside the allowlist
+ * @property {Set<unknown> | undefined} allowedHosts - lower-cased; unset outside test files
  */
-const state = /** @type {any} */ (globalThis)[STATE] ?? { connections: [] };
+
+/** @type {State} */
+const state = /** @type {any} */ (globalThis)[STATE] ?? {
+    connections: [],
+    allowedHosts: undefined,
+};
 
 /**
- * Where a connection was asked for: the host and port, from either the
- * options-object or the `(port, host)` form, and the repository's own frames.
- * `net.connect()`, `net.createConnection()` and `tls.connect()` all end up in
- * `Socket#connect`, the first two passing their arguments already normalized
- * into an `[options, callback]` array - which is how ioredis connects.
+ * The host and port a connection was asked for, from either the
+ * options-object or the `(port, host)` form. `net.connect()`,
+ * `net.createConnection()` and `tls.connect()` all end up in `Socket#connect`,
+ * the first two passing their arguments already normalized into an
+ * `[options, callback]` array - which is how ioredis connects. The host is
+ * lower-cased, as DNS names are case-insensitive and node-redis dials the one
+ * its URL parser lower-cased.
  * @param {unknown[]} args
- * @returns {{ host: unknown, where: string }}
+ * @returns {{ host: unknown, port: unknown, simulated: boolean }}
  */
 const connectionOf = args => {
     const [first, second] = Array.isArray(args[0]) ? args[0] : args;
-    const { host, port, path } =
+    const { host, lookup, port, path } =
         first && typeof first === 'object'
-            ? /** @type {{ host?: unknown, port?: unknown, path?: unknown }} */ (first)
+            ? /** @type {{ host?: unknown, lookup?: unknown, port?: unknown, path?: unknown }} */ (
+                  first
+              )
             : {
                   host: typeof second === 'string' ? second : undefined,
+                  lookup: undefined,
                   port: first,
                   path: undefined,
               };
-    const frames = (new Error().stack ?? '')
+
+    return {
+        host: path ? 'localhost' : typeof host === 'string' ? host.toLowerCase() : host,
+        port: port ?? path,
+        simulated: typeof lookup === 'function' && lookup.name === 'mockLookup',
+    };
+};
+
+/**
+ * The repository's own frames that led to a connection.
+ * @returns {string}
+ */
+const callSite = () =>
+    (new Error().stack ?? '')
         .split('\n')
         .slice(2)
         .filter(line => !line.includes('node_modules') && !line.includes('node:'))
         .map(line => line.trim().replace(/^at /, ''))
         .filter(line => !line.includes('vitest.setup.js'))
-        .slice(0, 3);
-
-    return {
-        host: path ? 'localhost' : host,
-        where: `port ${String(port ?? path)} from ${frames.join(' <- ') || 'a dependency'}`,
-    };
-};
+        .slice(0, 3)
+        .join(' <- ') || 'a dependency';
 
 /**
  * @template {(...args: any[]) => any} F
@@ -69,10 +101,16 @@ const recorded = original =>
     /** @type {F} */ (
         /** @this {unknown} */
         function (/** @type {unknown[]} */ ...args) {
-            const { host, where } = connectionOf(args);
+            const { allowedHosts } = state;
 
-            if (!LOOPBACK.has(/** @type {string | undefined} */ (host))) {
-                state.connections.push(where);
+            if (allowedHosts) {
+                const { host, port, simulated } = connectionOf(args);
+
+                if (!simulated && !allowedHosts.has(host)) {
+                    state.connections.push(
+                        `${String(host)} port ${String(port)} from ${callSite()}`,
+                    );
+                }
             }
 
             return original.apply(this, args);
@@ -84,21 +122,44 @@ if (!(/** @type {any} */ (globalThis)[STATE])) {
     net.Socket.prototype.connect = recorded(net.Socket.prototype.connect);
 }
 
-const testPath = String(expect.getState().testPath ?? '');
+const policy = policyFor(String(expect.getState().testPath ?? ''));
 
-if (testPath.endsWith('.spec.js')) {
-    state.connections = [];
+state.allowedHosts = undefined;
+state.connections = [];
 
-    afterAll(() => {
+if (policy) {
+    /** @type {unknown} */
+    let redisHost;
+
+    if (policy.integration) {
+        // Imported only here: config reads `settings/` as it loads, which unit specs never need.
+        const [{ default: configuration }, { default: nock }] = await Promise.all([
+            import('./helpers/config.js'),
+            import('nock'),
+        ]);
+
+        nock.disableNetConnect();
+        nock.enableNetConnect(NOCK_ALLOWED);
+        redisHost = configuration.redis?.host;
+    }
+
+    state.allowedHosts = policy.allowedHosts(redisHost);
+
+    /**
+     * Checked in a `beforeAll` cleanup, not an `afterAll`: with
+     * `sequence.hooks: 'parallel'` an `afterAll` here would run alongside the
+     * file's own, such as an integration test's `stopServer()`, missing
+     * anything dialed during shutdown. Vitest runs `beforeAll` cleanups only
+     * once every `afterAll` has finished.
+     */
+    beforeAll(() => () => {
         const { connections } = state;
 
         state.connections = [];
 
         if (connections.length) {
             throw new Error(
-                `A unit spec opened ${connections.length} network connection(s); mock what connects (#783):\n  ${[
-                    ...new Set(connections),
-                ].join('\n  ')}`,
+                `${policy.failure(connections.length)}:\n  ${[...new Set(connections)].join('\n  ')}`,
             );
         }
     });

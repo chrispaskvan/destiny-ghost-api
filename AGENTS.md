@@ -66,14 +66,17 @@ Commit messages follow Conventional Commits (`fix(logging): …`, `chore(deps): 
 
 Vitest, with `chance` for randomized test data, `node-mocks-http` for req/res mocks, and `nock` for intercepting external HTTP in integration tests. Coverage thresholds in `vitest.config.js` auto-update when `pnpm coverage` runs, ratcheting them to the current coverage — treat them as a floor and don't let a change lower them.
 
-Enforcement is split between CI and git hooks: GitHub Actions runs lint, typecheck, and the OpenAPI check, while the Husky pre-push hook runs the unit specs locally, under a time limit (`scripts/with-timeout.js`) so a run that never exits fails the push instead of blocking it. Unit specs must not open network connections: `vitest.setup.js` fails one that does, naming what connected, which is usually a module that connects as it is imported (`helpers/cache.js`, `helpers/jobs.js`) and needs mocking.
+Enforcement is split between CI and git hooks: GitHub Actions runs lint, typecheck, and the OpenAPI check, while the Husky pre-push hook runs the unit specs locally, under a time limit (`scripts/with-timeout.js`) so a run that never exits fails the push instead of blocking it. `vitest.setup.js` holds every test file to an allowlist of hosts and fails a file that connects anywhere else, naming what connected. Unit specs may reach only loopback; a spec that fails is usually loading a module that connects as it is imported (`helpers/cache.js`, `helpers/jobs.js`), which needs mocking. Integration tests may also reach the configured Redis host. The guard ignores the simulated sockets nock dials for the requests it intercepts or refuses.
 
 ### Test file naming convention
 
 Two suffixes distinguish test types:
 
 * `*.spec.js` — Unit tests. Dependencies are mocked; no server is started. Fast and isolated. Most modules have one, and new modules should too.
-* `*.test.js` — Integration tests. A real server is started via `startServer()` and requests are made over HTTP; `nock` intercepts external API calls. These exist only where end-to-end HTTP behavior needs verification (e.g., `destiny2/destiny2.routes.test.js`).
+* `*.test.js` — Integration tests. A real server is started via `startServer()` and requests are made over HTTP. These exist only where end-to-end HTTP behavior needs verification (e.g., `destiny2/destiny2.routes.test.js`). What they reach for real:
+  * **Redis**: the shared instance in `settings/`, through the real server. This is by design; a disposable Redis was considered and declined (#716).
+  * **Nothing else.** `vitest.setup.js` arms `nock.disableNetConnect()` before the test file loads and allows only `127.0.0.1`, so every other HTTP call is refused, even one to `localhost` or `::1`. That includes the Bungie manifest-version checks the server fires at startup, which log `manifest update failed`. That's expected.
+  * **The manifest databases on disk.** The Destiny and Destiny 2 tests read the SQLite manifests in `DESTINY_DATABASE_DIR` / `DESTINY2_DATABASE_DIR`, and the download is refused like any other call. On a fresh checkout, run the server once to download them, or those tests fail. `pnpm start:dev` does that, but it serves HTTPS, so it also needs the TLS certificates in `security/`.
 
 When adding tests:
 
@@ -86,7 +89,7 @@ When adding tests:
 ```sh
 pnpm test              # run the full suite once
 pnpm test:unit         # unit specs only (*.spec.js); what the pre-push hook runs
-pnpm test:integration  # integration tests only (*.test.js); they reach real services
+pnpm test:integration  # integration tests only (*.test.js); they reach the shared Redis
 pnpm test:watch        # watch mode
 pnpm lint        # biome check --write (auto-fix)
 pnpm typecheck   # tsc --noEmit against jsconfig.json

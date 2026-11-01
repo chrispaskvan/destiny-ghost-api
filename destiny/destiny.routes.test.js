@@ -11,13 +11,16 @@ const ipAddress = '127.0.0.1';
 beforeAll(async () => {
     process.env.PORT = 65534;
 
+    /**
+     * vitest.setup.js has already refused every outbound HTTP request but
+     * 127.0.0.1 (#784), so the Bungie manifest-version checks `startServer()`
+     * fires are refused and logged as failed. The grimoire cards come from the
+     * Destiny manifest database already on disk - see AGENTS.md for fetching
+     * it. Redis is the one real service this test reaches.
+     */
     const apiConnection = await startServer();
 
     baseUrl = `http://${ipAddress}:${apiConnection.port}`;
-
-    // ️️️Ensure that this component is isolated by preventing unknown calls.
-    nock.disableNetConnect();
-    nock.enableNetConnect(ipAddress);
 });
 
 describe('/destiny', () => {
@@ -53,5 +56,6 @@ afterEach(() => {
  */
 afterAll(async () => {
     await stopServer();
-    nock.enableNetConnect();
+    // nock stays closed (#784): the startup manifest checks are not awaited,
+    // and one can still fire after the server stops.
 });
