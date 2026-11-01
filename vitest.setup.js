@@ -30,7 +30,7 @@
  */
 import net from 'node:net';
 import { beforeAll, expect } from 'vitest';
-import { allowlistFor, NOCK_ALLOWED } from './vitest.allowlist.js';
+import { NOCK_ALLOWED, policyFor } from './vitest.allowlist.js';
 
 const STATE = Symbol.for('destiny-ghost.connection-guard');
 
@@ -122,34 +122,28 @@ if (!(/** @type {any} */ (globalThis)[STATE])) {
     net.Socket.prototype.connect = recorded(net.Socket.prototype.connect);
 }
 
-const testPath = String(expect.getState().testPath ?? '');
-/** @type {string | undefined} */
-let failure;
+const policy = policyFor(String(expect.getState().testPath ?? ''));
 
 state.allowedHosts = undefined;
 state.connections = [];
 
-if (testPath.endsWith('.spec.js')) {
-    state.allowedHosts = allowlistFor(testPath);
-    failure = 'A unit spec opened {count} network connection(s); mock what connects (#783)';
-}
+if (policy) {
+    /** @type {unknown} */
+    let redisHost;
 
-if (testPath.endsWith('.test.js')) {
-    // Imported only here: config reads `settings/` as it loads, which unit specs never need.
-    const [{ default: configuration }, { default: nock }] = await Promise.all([
-        import('./helpers/config.js'),
-        import('nock'),
-    ]);
+    if (policy.integration) {
+        // Imported only here: config reads `settings/` as it loads, which unit specs never need.
+        const [{ default: configuration }, { default: nock }] = await Promise.all([
+            import('./helpers/config.js'),
+            import('nock'),
+        ]);
 
-    nock.disableNetConnect();
-    nock.enableNetConnect(NOCK_ALLOWED);
-    state.allowedHosts = allowlistFor(testPath, configuration.redis?.host);
-    failure =
-        'An integration test opened {count} connection(s) outside its allowlist (loopback, Redis); intercept them with nock or a mock, or allow and document them (#784)';
-}
+        nock.disableNetConnect();
+        nock.enableNetConnect(NOCK_ALLOWED);
+        redisHost = configuration.redis?.host;
+    }
 
-if (failure) {
-    const message = failure;
+    state.allowedHosts = policy.allowedHosts(redisHost);
 
     /**
      * Checked in a `beforeAll` cleanup, not an `afterAll`: with
@@ -165,9 +159,7 @@ if (failure) {
 
         if (connections.length) {
             throw new Error(
-                `${message.replace('{count}', String(connections.length))}:\n  ${[
-                    ...new Set(connections),
-                ].join('\n  ')}`,
+                `${policy.failure(connections.length)}:\n  ${[...new Set(connections)].join('\n  ')}`,
             );
         }
     });

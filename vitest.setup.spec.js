@@ -1,7 +1,7 @@
 import net from 'node:net';
 import tls from 'node:tls';
 import { afterEach, describe, expect, it } from 'vitest';
-import { allowlistFor, LOOPBACK, NOCK_ALLOWED } from './vitest.allowlist.js';
+import { LOOPBACK, NOCK_ALLOWED, policyFor } from './vitest.allowlist.js';
 
 /**
  * The connection guard in `vitest.setup.js` (#783, #784). Each test opens a
@@ -80,25 +80,33 @@ describe('unit spec allowlist', () => {
     });
 });
 
-describe('allowlistFor', () => {
-    it('allows only loopback in a unit spec, whatever the Redis host', () => {
-        expect(allowlistFor('/repo/helpers/cache.spec.js', 'cache.example.net')).toBe(LOOPBACK);
+describe('policyFor', () => {
+    const unit = policyFor('/repo/helpers/cache.spec.js');
+    const integration = policyFor('/repo/users/user.routes.test.js');
+
+    it('holds a unit spec to loopback, whatever the Redis host, without arming nock', () => {
+        expect(unit.integration).toBe(false);
+        expect(unit.allowedHosts('cache.example.net')).toBe(LOOPBACK);
+        expect(unit.failure(2)).toMatch(/^A unit spec opened 2 network connection\(s\).*#783/);
     });
 
-    it('allows loopback and the lower-cased Redis host in an integration test', () => {
-        const allowed = allowlistFor('/repo/users/user.routes.test.js', 'Cache.Example.NET');
-
-        expect([...allowed]).toEqual([...LOOPBACK, 'cache.example.net']);
-    });
-
-    it('allows only loopback in an integration test without a Redis host', () => {
-        expect([...allowlistFor('/repo/users/user.routes.test.js', undefined)]).toEqual([
+    it('holds an integration test to loopback and the lower-cased Redis host, arming nock', () => {
+        expect(integration.integration).toBe(true);
+        expect([...integration.allowedHosts('Cache.Example.NET')]).toEqual([
             ...LOOPBACK,
+            'cache.example.net',
         ]);
+        expect(integration.failure(3)).toMatch(
+            /^An integration test opened 3 connection\(s\).*#784/,
+        );
     });
 
-    it('has no allowlist for any other file', () => {
-        expect(allowlistFor('/repo/helpers/itif.js', 'cache.example.net')).toBeUndefined();
+    it('holds an integration test without a Redis host to loopback', () => {
+        expect([...integration.allowedHosts(undefined)]).toEqual([...LOOPBACK]);
+    });
+
+    it('has no policy for any other file', () => {
+        expect(policyFor('/repo/helpers/itif.js')).toBeUndefined();
     });
 });
 
@@ -117,7 +125,7 @@ describe('NOCK_ALLOWED', () => {
 
 describe('integration test allowlist', () => {
     const integrationAllowlist = () =>
-        allowlistFor('/repo/users/user.routes.test.js', 'Cache.Example.NET');
+        policyFor('/repo/users/user.routes.test.js').allowedHosts('Cache.Example.NET');
 
     it('ignores a dial to the Redis host, whatever its case', () => {
         state.allowedHosts = integrationAllowlist();
