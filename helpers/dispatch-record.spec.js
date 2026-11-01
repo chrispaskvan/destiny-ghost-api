@@ -5,6 +5,7 @@ import DispatchRecord, {
     REPLACE,
 } from './dispatch-record.js';
 import cache from './cache.js';
+import { fakeRedis } from '../vitest.redis-lua.js';
 import log from './log.js';
 
 vi.mock('./cache.js', () => ({
@@ -24,28 +25,17 @@ const key = `dispatch:${claimCheckNumber}:${phoneNumber}`;
 const sid = `SM${'a'.repeat(32)}`;
 
 describe('DispatchRecord', () => {
-    /** @type {Map<string, string>} */
-    let store;
+    /** @type {ReturnType<typeof fakeRedis>} */
+    let redis;
     const read = () => DispatchRecord.read(claimCheckNumber, phoneNumber);
     const begin = (body, seen = null) =>
         DispatchRecord.begin(claimCheckNumber, phoneNumber, body, seen);
 
     beforeEach(() => {
-        store = new Map();
-        cache.get.mockImplementation(async k => store.get(k) ?? null);
-        /**
-         * A mirror of `REPLACE`, which Redis runs for real: it covers how the
-         * module calls the script and reads its answer, not the script.
-         */
-        cache.eval.mockImplementation(
-            async (script, { keys: [k], arguments: [expected, replacement] }) => {
-                expect(script).toBe(REPLACE);
-                if ((store.get(k) ?? '') !== expected) return 0;
-                if (replacement === '') store.delete(k);
-                else store.set(k, replacement);
-                return 1;
-            },
-        );
+        // The real `REPLACE`, run on an in-memory Redis (#777).
+        redis = fakeRedis();
+        cache.get.mockImplementation(redis.get);
+        cache.eval.mockImplementation(redis.eval);
         cache.withCommandOptions.mockImplementation(options => ({
             options,
             eval: cache.eval,
@@ -99,6 +89,7 @@ describe('DispatchRecord', () => {
                 arguments: ['', JSON.stringify(mine), String(DISPATCH_RECORD_TTL_SECONDS)],
             });
             await expect(read()).resolves.toEqual(mine);
+            expect(redis.ttl(key)).toBe(DISPATCH_RECORD_TTL_SECONDS);
         });
 
         it('should take over an attempt that is still what was read', async () => {
@@ -125,10 +116,10 @@ describe('DispatchRecord', () => {
         ])('should back off, writing nothing, when %s', async (_, arrange) => {
             await begin('first');
             const seen = await arrange();
-            const before = store.get(key);
+            const before = redis.call('GET', key);
 
             await expect(begin('second', seen)).resolves.toBeNull();
-            expect(store.get(key)).toBe(before);
+            expect(redis.call('GET', key)).toBe(before);
         });
 
         it('should reject when the attempt cannot be recorded', async () => {
@@ -164,7 +155,7 @@ describe('DispatchRecord', () => {
 
             await DispatchRecord.forget(claimCheckNumber, phoneNumber, mine);
 
-            expect(store.has(key)).toBe(false);
+            expect(redis.call('GET', key)).toBeNull();
             await expect(begin('again', null)).resolves.toMatchObject({ body: 'again' });
         });
     });

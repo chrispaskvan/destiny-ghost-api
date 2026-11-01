@@ -4,12 +4,16 @@ import cache from './cache.js';
 import log from './log.js';
 import {
     accept,
+    ACCEPT,
     keepAlive,
     operationIdFor,
     release,
+    RELEASE,
+    RENEW,
     reservationFor,
     reserve,
 } from './idempotency-keys.js';
+import { fakeRedis } from '../vitest.redis-lua.js';
 
 vi.mock('./cache.js', () => ({ default: { get: vi.fn(), set: vi.fn(), eval: vi.fn() } }));
 vi.mock('./log.js', () => ({ default: { warn: vi.fn() } }));
@@ -50,6 +54,29 @@ const stored = (overrides = {}) =>
         state: 'accepted',
         ...overrides,
     });
+const reservationKey = 'idempotency:notifications:x-api-key:xur-2026-10-09';
+/**
+ * A reservation as the module stores it.
+ * @param {'pending' | 'accepted'} state
+ * @param {Partial<typeof reservation>} [overrides]
+ */
+const held = (state, overrides = {}) => {
+    const { operationId, fingerprint, owner } = { ...reservation, ...overrides };
+
+    return JSON.stringify({ operationId, fingerprint, state, owner });
+};
+
+/**
+ * Runs `cache.eval` on an in-memory Redis, so the real `ACCEPT`, `RENEW` and
+ * `RELEASE` decide (#777).
+ */
+const useRedis = () => {
+    const redis = fakeRedis();
+
+    cache.eval.mockImplementation(redis.eval);
+
+    return redis;
+};
 
 describe('idempotency-keys', () => {
     beforeEach(() => {
@@ -155,17 +182,16 @@ describe('idempotency-keys', () => {
         ])(
             "should not let one request %s another's reservation for the same operation",
             async (_name, act) => {
+                const redis = useRedis();
                 const stale = reservationFor(request);
                 const current = reservationFor(request);
 
                 cache.set.mockResolvedValue(null);
                 await reserve(current);
 
-                const [[, held]] = cache.set.mock.calls;
+                const [[key, value]] = cache.set.mock.calls;
 
-                cache.eval.mockImplementation(async (_script, { arguments: [expected] }) =>
-                    expected === held ? 1 : 0,
-                );
+                redis.call('SET', key, value, 'EX', '60');
 
                 await expect(act(stale)).resolves.toBe(false);
                 await expect(act(current)).resolves.toBe(true);
@@ -244,62 +270,80 @@ describe('idempotency-keys', () => {
     });
 
     describe.each([
-        ['accept', accept],
-        ['release', release],
-    ])('%s', (_name, act) => {
+        ['accept', accept, ACCEPT],
+        ['release', release, RELEASE],
+    ])('%s', (_name, act, script) => {
+        /** @type {ReturnType<typeof fakeRedis>} */
+        let redis;
+
+        beforeEach(() => {
+            redis = useRedis();
+        });
+
         it('should act only on our own pending reservation', async () => {
-            cache.eval.mockResolvedValue(1);
+            redis.call('SET', reservationKey, held('pending'), 'EX', '60');
 
             await expect(act(reservation)).resolves.toBe(true);
 
-            const [, { keys, arguments: args }] = cache.eval.mock.calls[0];
+            const [[called, { keys, arguments: args }]] = cache.eval.mock.calls;
 
-            expect(keys).toEqual(['idempotency:notifications:x-api-key:xur-2026-10-09']);
-            expect(args[0]).toBe(
-                JSON.stringify({
-                    operationId: 'op-1',
-                    fingerprint: reservation.fingerprint,
-                    state: 'pending',
-                    owner: 'owner-1',
-                }),
-            );
+            expect(called).toBe(script);
+            expect(keys).toEqual([reservationKey]);
+            expect(args[0]).toBe(held('pending'));
         });
 
-        it('should report a reservation that is no longer ours', async () => {
-            cache.eval.mockResolvedValue(0);
+        it.each([
+            ['lapsed', null],
+            ['been reserved by another request since', held('pending', { owner: 'owner-2' })],
+            ['already been accepted', held('accepted')],
+        ])('should leave a reservation that has %s alone', async (_case, value) => {
+            if (value) redis.call('SET', reservationKey, value, 'EX', '60');
 
             await expect(act(reservation)).resolves.toBe(false);
+            expect(redis.call('GET', reservationKey)).toBe(value);
         });
     });
 
     describe('accept', () => {
         it('should keep the accepted operation for a day', async () => {
-            cache.eval.mockResolvedValue(1);
+            const redis = useRedis();
+
+            redis.call('SET', reservationKey, held('pending'), 'EX', '60');
 
             await accept(reservation);
 
-            const [, { arguments: args }] = cache.eval.mock.calls[0];
-
-            expect(JSON.parse(args[1])).toEqual({
+            expect(JSON.parse(String(redis.call('GET', reservationKey)))).toEqual({
                 operationId: 'op-1',
                 fingerprint: reservation.fingerprint,
                 state: 'accepted',
                 owner: 'owner-1',
             });
-            expect(args[2]).toBe('86400');
+            expect(redis.ttl(reservationKey)).toBe(86_400);
+        });
+    });
+
+    describe('release', () => {
+        it('should free the key for a retry', async () => {
+            const redis = useRedis();
+
+            redis.call('SET', reservationKey, held('pending'), 'EX', '60');
+
+            await release(reservation);
+
+            expect(redis.call('GET', reservationKey)).toBeNull();
         });
     });
 
     describe('keepAlive', () => {
-        const pending = JSON.stringify({
-            operationId: 'op-1',
-            fingerprint: reservation.fingerprint,
-            state: 'pending',
-            owner: 'owner-1',
-        });
+        const pending = held('pending');
+        /** @type {ReturnType<typeof fakeRedis>} */
+        let redis;
 
         beforeEach(() => {
             vi.useFakeTimers();
+            redis = useRedis();
+            // Five seconds from lapsing, so a renewal shows in the expiry.
+            redis.call('SET', reservationKey, pending, 'EX', '5');
         });
 
         afterEach(() => {
@@ -309,8 +353,6 @@ describe('idempotency-keys', () => {
         });
 
         it('should renew our own lease every 20 seconds until stopped', async () => {
-            cache.eval.mockResolvedValue(1);
-
             const stop = keepAlive(reservation);
 
             await vi.advanceTimersByTimeAsync(19_999);
@@ -321,8 +363,10 @@ describe('idempotency-keys', () => {
 
             const [, { keys, arguments: args }] = cache.eval.mock.calls[0];
 
-            expect(keys).toEqual(['idempotency:notifications:x-api-key:xur-2026-10-09']);
+            expect(cache.eval.mock.calls[0][0]).toBe(RENEW);
+            expect(keys).toEqual([reservationKey]);
             expect(args).toEqual([pending, '60']);
+            expect(redis.ttl(reservationKey)).toBe(60);
 
             stop();
             await vi.advanceTimersByTimeAsync(60_000);
@@ -330,7 +374,7 @@ describe('idempotency-keys', () => {
         });
 
         it('should stop renewing once the reservation is no longer ours', async () => {
-            cache.eval.mockResolvedValue(0);
+            redis.call('SET', reservationKey, held('pending', { owner: 'owner-2' }), 'EX', '5');
 
             keepAlive(reservation);
             await vi.advanceTimersByTimeAsync(60_000);
@@ -340,7 +384,7 @@ describe('idempotency-keys', () => {
         });
 
         it('should keep renewing after a renewal fails', async () => {
-            cache.eval.mockRejectedValueOnce(new Error('Redis unavailable')).mockResolvedValue(1);
+            cache.eval.mockRejectedValueOnce(new Error('Redis unavailable'));
 
             const stop = keepAlive(reservation);
 
