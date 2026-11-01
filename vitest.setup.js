@@ -12,8 +12,22 @@
  * Connections are recorded, not refused: refusing one would send the client
  * into its reconnect loop, which is its own way of keeping a worker alive.
  * The spec fails once its tests have run, naming what connected and from
- * where, so the import can be mocked. Integration tests (`*.test.js`) start a
- * real server, and are not checked.
+ * where, so the import can be mocked.
+ *
+ * Integration tests (`*.test.js`) start a real server, which reaches the
+ * shared Redis by design, so they are held to an allowlist instead (#784):
+ * loopback and the configured Redis host. They skip nock's simulated dials.
+ * For every HTTP request nock handles or refuses, its interceptor
+ * (`@mswjs/interceptors`) dials a mock socket through this same
+ * `Socket#connect`, with its own `lookup` that answers loopback for every
+ * name. That socket never reaches the network, so counting it would flag
+ * every request nock stopped. A request nock lets through gets a second,
+ * real dial without that `lookup`, and that one counts.
+ *
+ * Telling them apart at call time, not by waiting for the `connect` event,
+ * keeps a dial that has not finished connecting by `afterAll` from being
+ * missed. If a nock upgrade renames the mock lookup, every refused request
+ * starts failing the test loudly, rather than the guard passing quietly.
  */
 import net from 'node:net';
 import { afterAll, expect } from 'vitest';
@@ -22,10 +36,18 @@ const STATE = Symbol.for('destiny-ghost.unit-spec-connections');
 const LOOPBACK = new Set([undefined, '', 'localhost', '127.0.0.1', '::1', '0.0.0.0', '::']);
 
 /**
- * @typedef {{ connections: string[] }} State
- * @type {State}
+ * @typedef {Object} State
+ * @property {string[]} connections - connect calls (unit specs)
+ * @property {string[]} realConnections - real dials outside the allowlist (integration tests)
+ * @property {Set<unknown> | undefined} allowedHosts - set while an integration test runs
  */
-const state = /** @type {any} */ (globalThis)[STATE] ?? { connections: [] };
+
+/** @type {State} */
+const state = /** @type {any} */ (globalThis)[STATE] ?? {
+    connections: [],
+    realConnections: [],
+    allowedHosts: undefined,
+};
 
 /**
  * Where a connection was asked for: the host and port, from either the
@@ -34,15 +56,18 @@ const state = /** @type {any} */ (globalThis)[STATE] ?? { connections: [] };
  * `Socket#connect`, the first two passing their arguments already normalized
  * into an `[options, callback]` array - which is how ioredis connects.
  * @param {unknown[]} args
- * @returns {{ host: unknown, where: string }}
+ * @returns {{ host: unknown, simulated: boolean, where: string }}
  */
 const connectionOf = args => {
     const [first, second] = Array.isArray(args[0]) ? args[0] : args;
-    const { host, port, path } =
+    const { host, lookup, port, path } =
         first && typeof first === 'object'
-            ? /** @type {{ host?: unknown, port?: unknown, path?: unknown }} */ (first)
+            ? /** @type {{ host?: unknown, lookup?: unknown, port?: unknown, path?: unknown }} */ (
+                  first
+              )
             : {
                   host: typeof second === 'string' ? second : undefined,
+                  lookup: undefined,
                   port: first,
                   path: undefined,
               };
@@ -56,6 +81,7 @@ const connectionOf = args => {
 
     return {
         host: path ? 'localhost' : host,
+        simulated: typeof lookup === 'function' && lookup.name === 'mockLookup',
         where: `port ${String(port ?? path)} from ${frames.join(' <- ') || 'a dependency'}`,
     };
 };
@@ -69,10 +95,14 @@ const recorded = original =>
     /** @type {F} */ (
         /** @this {unknown} */
         function (/** @type {unknown[]} */ ...args) {
-            const { host, where } = connectionOf(args);
+            const { host, simulated, where } = connectionOf(args);
 
             if (!LOOPBACK.has(/** @type {string | undefined} */ (host))) {
                 state.connections.push(where);
+            }
+
+            if (state.allowedHosts && !simulated && !state.allowedHosts.has(host)) {
+                state.realConnections.push(`${String(host)} ${where}`);
             }
 
             return original.apply(this, args);
@@ -85,6 +115,32 @@ if (!(/** @type {any} */ (globalThis)[STATE])) {
 }
 
 const testPath = String(expect.getState().testPath ?? '');
+
+state.allowedHosts = undefined;
+
+if (testPath.endsWith('.test.js')) {
+    // Imported only here: it reads `settings/` as it loads, which unit specs never need.
+    const {
+        default: { redis: { host: redisHost } = {} },
+    } = await import('./helpers/config.js');
+
+    state.realConnections = [];
+    state.allowedHosts = new Set([...LOOPBACK, redisHost]);
+
+    afterAll(() => {
+        const { realConnections } = state;
+
+        state.realConnections = [];
+
+        if (realConnections.length) {
+            throw new Error(
+                `An integration test opened ${realConnections.length} connection(s) outside its allowlist (loopback, Redis); intercept them with nock or a mock, or allow and document them (#784):\n  ${[
+                    ...new Set(realConnections),
+                ].join('\n  ')}`,
+            );
+        }
+    });
+}
 
 if (testPath.endsWith('.spec.js')) {
     state.connections = [];

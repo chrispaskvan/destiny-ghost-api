@@ -11,13 +11,20 @@ const ipAddress = '127.0.0.1';
 beforeAll(async () => {
     process.env.PORT = 65534;
 
+    /**
+     * Refuse every outbound HTTP request but loopback, before the server
+     * starts, so startup is fenced too (#784). That includes the Bungie
+     * manifest-version checks `startServer()` fires: they are refused and
+     * logged as failed, and the grimoire cards come from the Destiny manifest
+     * database already on disk - run the dev server once to download it.
+     * Redis is the one real service this test reaches.
+     */
+    nock.disableNetConnect();
+    nock.enableNetConnect(ipAddress);
+
     const apiConnection = await startServer();
 
     baseUrl = `http://${ipAddress}:${apiConnection.port}`;
-
-    // ️️️Ensure that this component is isolated by preventing unknown calls.
-    nock.disableNetConnect();
-    nock.enableNetConnect(ipAddress);
 });
 
 describe('/destiny', () => {

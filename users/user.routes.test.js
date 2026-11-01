@@ -13,13 +13,19 @@ const origin = 'https://app.destiny-ghost.com';
 beforeAll(async () => {
     process.env.PORT = 65533;
 
+    /**
+     * Refuse every outbound HTTP request but loopback, before the server
+     * starts, so startup is fenced too (#784). That includes the Bungie
+     * manifest-version checks `startServer()` fires, which are refused and
+     * logged as failed; nothing here needs the manifest. Redis is the one
+     * real service this test reaches.
+     */
+    nock.disableNetConnect();
+    nock.enableNetConnect(ipAddress);
+
     const apiConnection = await startServer();
 
     baseUrl = `http://${ipAddress}:${apiConnection.port}`;
-
-    // Ensure that this component is isolated by preventing unknown calls.
-    nock.disableNetConnect();
-    nock.enableNetConnect(ipAddress);
 });
 
 /**
