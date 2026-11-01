@@ -22,6 +22,8 @@ export default defineConfig({
         },
         exclude: [...defaultExclude, '**/.claude/**'],
         pool: 'threads',
+        // Fails a unit spec that opens a network connection (#783).
+        setupFiles: ['./vitest.setup.js'],
         sequence: {
             hooks: 'parallel',
         },

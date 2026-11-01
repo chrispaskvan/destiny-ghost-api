@@ -66,7 +66,7 @@ Commit messages follow Conventional Commits (`fix(logging): …`, `chore(deps): 
 
 Vitest, with `chance` for randomized test data, `node-mocks-http` for req/res mocks, and `nock` for intercepting external HTTP in integration tests. Coverage thresholds in `vitest.config.js` auto-update when `pnpm coverage` runs, ratcheting them to the current coverage — treat them as a floor and don't let a change lower them.
 
-Enforcement is split between CI and git hooks: GitHub Actions runs lint, typecheck, and the OpenAPI check, while the Husky pre-push hook runs the full test suite locally.
+Enforcement is split between CI and git hooks: GitHub Actions runs lint, typecheck, and the OpenAPI check, while the Husky pre-push hook runs the unit specs locally, under a time limit (`scripts/with-timeout.js`) so a run that never exits fails the push instead of blocking it. Unit specs must not open network connections: `vitest.setup.js` fails one that does, naming what connected, which is usually a module that connects as it is imported (`helpers/cache.js`, `helpers/jobs.js`) and needs mocking.
 
 ### Test file naming convention
 
@@ -84,8 +84,10 @@ When adding tests:
 ## Commands
 
 ```sh
-pnpm test        # run the full suite once
-pnpm test:watch  # watch mode
+pnpm test              # run the full suite once
+pnpm test:unit         # unit specs only (*.spec.js); what the pre-push hook runs
+pnpm test:integration  # integration tests only (*.test.js); they reach real services
+pnpm test:watch        # watch mode
 pnpm lint        # biome check --write (auto-fix)
 pnpm typecheck   # tsc --noEmit against jsconfig.json
 pnpm swagger     # regenerate openapi.json from route JSDoc

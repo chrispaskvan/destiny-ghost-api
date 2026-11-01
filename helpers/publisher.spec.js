@@ -42,6 +42,15 @@ vi.mock('bullmq', () => ({
     },
 }));
 
+/**
+ * Both Redis clients connect as they are imported, so neither is real here
+ * (#783): BullMQ's (`jobs.js`), which the publisher hands to the queue the
+ * mock above replaces, and the shared one (`cache.js`), which the timing
+ * check below reaches by importing the notification service.
+ */
+vi.mock('./jobs.js', () => ({ default: {} }));
+vi.mock('./cache.js', () => ({ default: { withCommandOptions: vi.fn() } }));
+
 vi.mock('./application-insights.js', () => ({
     default: { trackMetric: vi.fn() },
 }));
