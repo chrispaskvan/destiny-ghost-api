@@ -16,7 +16,6 @@
  * real server, and are not checked.
  */
 import net from 'node:net';
-import tls from 'node:tls';
 import { afterAll, expect } from 'vitest';
 
 const STATE = Symbol.for('destiny-ghost.unit-spec-connections');
@@ -31,11 +30,14 @@ const state = /** @type {any} */ (globalThis)[STATE] ?? { connections: [] };
 /**
  * Where a connection was asked for: the host and port, from either the
  * options-object or the `(port, host)` form, and the repository's own frames.
+ * `net.connect()`, `net.createConnection()` and `tls.connect()` all end up in
+ * `Socket#connect`, the first two passing their arguments already normalized
+ * into an `[options, callback]` array - which is how ioredis connects.
  * @param {unknown[]} args
  * @returns {{ host: unknown, where: string }}
  */
 const connectionOf = args => {
-    const [first, second] = args;
+    const [first, second] = Array.isArray(args[0]) ? args[0] : args;
     const { host, port, path } =
         first && typeof first === 'object'
             ? /** @type {{ host?: unknown, port?: unknown, path?: unknown }} */ (first)
@@ -80,7 +82,6 @@ const recorded = original =>
 if (!(/** @type {any} */ (globalThis)[STATE])) {
     /** @type {any} */ (globalThis)[STATE] = state;
     net.Socket.prototype.connect = recorded(net.Socket.prototype.connect);
-    tls.connect = recorded(tls.connect);
 }
 
 const testPath = String(expect.getState().testPath ?? '');
