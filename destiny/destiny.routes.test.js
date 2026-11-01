@@ -12,16 +12,12 @@ beforeAll(async () => {
     process.env.PORT = 65534;
 
     /**
-     * Refuse every outbound HTTP request but loopback, before the server
-     * starts, so startup is fenced too (#784). That includes the Bungie
-     * manifest-version checks `startServer()` fires: they are refused and
-     * logged as failed, and the grimoire cards come from the Destiny manifest
-     * database already on disk - run the dev server once to download it.
-     * Redis is the one real service this test reaches.
+     * vitest.setup.js has already refused every outbound HTTP request but
+     * 127.0.0.1 (#784), so the Bungie manifest-version checks `startServer()`
+     * fires are refused and logged as failed. The grimoire cards come from the
+     * Destiny manifest database already on disk - see AGENTS.md for fetching
+     * it. Redis is the one real service this test reaches.
      */
-    nock.disableNetConnect();
-    nock.enableNetConnect(ipAddress);
-
     const apiConnection = await startServer();
 
     baseUrl = `http://${ipAddress}:${apiConnection.port}`;
@@ -60,5 +56,6 @@ afterEach(() => {
  */
 afterAll(async () => {
     await stopServer();
-    nock.enableNetConnect();
+    // nock stays closed (#784): the startup manifest checks are not awaited,
+    // and one can still fire after the server stops.
 });
