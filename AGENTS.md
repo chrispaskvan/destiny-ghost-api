@@ -83,6 +83,7 @@ When adding tests:
 * Use `*.spec.js` for logic that can be verified with mocked dependencies.
 * Use `*.test.js` only when the test must exercise the full HTTP stack.
 * Do not consolidate the two — they test different things at different levels.
+* Test a Redis Lua script by running it, not a JavaScript copy of it: route the spec's `cache.eval` to `fakeRedis()` from `vitest.redis-lua.js`, which runs the exported script in an in-process Lua VM. Its contract is to match Redis for what the repo's scripts use and to fail loudly, naming the gap, for anything else; when a new script needs more, add it to the fake with a test rather than working around it in the spec. It checks the script is Lua 5.1, as Redis runs, but its numbers follow Lua 5.3 (32-bit integers, `5.0` for a whole float), so keep a script's arithmetic and number formatting out of what a spec relies on (#777).
 
 ## Commands
 

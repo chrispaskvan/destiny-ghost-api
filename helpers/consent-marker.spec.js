@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Chance from 'chance';
+import { fakeRedis } from '../vitest.redis-lua.js';
 import cache from './cache.js';
 import mayDeliver from './consent.js';
 import log from './log.js';
@@ -26,37 +27,6 @@ vi.mock('./log.js', () => ({
 const chance = new Chance();
 const phoneNumber = chance.phone();
 const receivedAt = 1_700_000_000_000;
-
-/**
- * Stands in for the Lua above, so the reordering cases below can be driven
- * through the real `recordConsent`/`readConsent` pair.
- *
- * It mirrors the script rather than running it: Redis executes the real one,
- * and nothing here proves that body is correct. What these tests do cover is
- * that `receivedAt` reaches the script as the value it compares on, and that
- * the two functions agree on how a marker is stored and read back. The
- * atomicity itself is Redis's to keep.
- */
-const fakeRedis = () => {
-    /** @type {Map<string, Record<string, string>>} */
-    const store = new Map();
-
-    return {
-        store,
-        eval: vi.fn(async (_script, { keys: [key], arguments: [isSubscribed, stamp] }) => {
-            const current = store.get(key);
-
-            if (current && Number(current.receivedAt) > Number(stamp)) {
-                return 0;
-            }
-
-            store.set(key, { isSubscribed, receivedAt: stamp });
-
-            return 1;
-        }),
-        hGetAll: vi.fn(async key => store.get(key) ?? {}),
-    };
-};
 
 beforeEach(() => {
     vi.clearAllMocks();
@@ -86,22 +56,6 @@ describe('recordConsent', () => {
             keys: [`consent:${phoneNumber}`],
             arguments: ['0', String(receivedAt), String(CONSENT_MARKER_TTL_SECONDS)],
         });
-    });
-
-    /**
-     * The only assertion here that touches the script body. Redis runs the
-     * Lua, nothing in this file does, so the reordering tests below cannot
-     * tell a guarded script from an unguarded one - they drive a double that
-     * mirrors it. This pins the guard so it cannot be dropped silently; that
-     * it is *correct* rests on review, and on Redis running it atomically.
-     */
-    it('should decline inside the script rather than trusting the caller to order writes', () => {
-        const script = RECORD_CONSENT.replace(/\s+/g, ' ');
-
-        expect(script).toContain("redis.call('HGET', KEYS[1], 'receivedAt')");
-        expect(script).toContain(
-            'if current and tonumber(current) > tonumber(ARGV[2]) then return 0',
-        );
     });
 
     it('should record a START as the opposite intent', async () => {
@@ -265,7 +219,7 @@ describe('readConsent', () => {
  * The seam the other specs cannot see: `consent.spec.js` mocks this module and
  * this file's own tests stop at its boundary, so nothing otherwise exercises a
  * marker being written by one function and acted on by the gate. Real marker,
- * real gate, fake Redis, stubbed documents.
+ * real gate, real `RECORD_CONSENT` on an in-memory Redis, stubbed documents.
  */
 describe('with the delivery gate', () => {
     /** @type {ReturnType<typeof fakeRedis>} */
@@ -314,6 +268,10 @@ describe('with the delivery gate', () => {
     });
 });
 
+/**
+ * These run the real `RECORD_CONSENT` (#777), so they are what holds its
+ * guard in place. Redis running it atomically is what makes the guard enough.
+ */
 describe('when two acknowledgements for one number race', () => {
     /** @type {ReturnType<typeof fakeRedis>} */
     let redis;
@@ -322,6 +280,12 @@ describe('when two acknowledgements for one number race', () => {
         redis = fakeRedis();
         cache.eval.mockImplementation(redis.eval);
         cache.hGetAll.mockImplementation(redis.hGetAll);
+    });
+
+    it('should hold the marker for CONSENT_MARKER_TTL_SECONDS', async () => {
+        await recordConsent(phoneNumber, false, receivedAt);
+
+        expect(redis.ttl(`consent:${phoneNumber}`)).toBe(CONSENT_MARKER_TTL_SECONDS);
     });
 
     it('should keep the newer intent when an older write lands last', async () => {

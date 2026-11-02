@@ -6,14 +6,13 @@ import ClaimCheck, {
     claimCheckExpiration,
     DUPLICATE,
     ERROR,
-    legacy,
     PENDING,
-    ranks,
     RECORD_PENDING,
     SKIPPED,
 } from './claim-check.js';
 import cache from './cache.js';
 import log from './log.js';
+import { fakeRedis } from '../vitest.redis-lua.js';
 
 vi.mock('./cache.js', () => ({
     default: {
@@ -35,77 +34,6 @@ const testClaimCheckId = 'test-claim-check-id';
 const sid = `SM${'a'.repeat(32)}`;
 const otherSid = `SM${'b'.repeat(32)}`;
 
-/**
- * Stands in for Redis, running a mirror of `ADVANCE` so the ordering cases
- * below can be driven through the real `addPhoneNumber`/`advance`/
- * `getClaimCheck` trio.
- *
- * It mirrors the script rather than running it: Redis executes the real one,
- * and nothing here proves that body is correct. What these tests do cover is
- * that the three methods agree on how an entry is stored and read back, and
- * that the rules they rely on hold. The atomicity itself is Redis's to keep.
- */
-const fakeRedis = () => {
-    /** @type {Map<string, Map<string, string>>} */
-    const store = new Map();
-    const hash = key => store.get(key) ?? store.set(key, new Map()).get(key);
-
-    return {
-        store,
-        hGetAll: vi.fn(async key => Object.fromEntries(store.get(key) ?? [])),
-        eval: vi.fn(async (script, options) =>
-            script === ADVANCE ? advance(options) : recordPending(options),
-        ),
-    };
-
-    function recordPending({ keys: [key], arguments: [field, json] }) {
-        if (!hash(key).has(field)) hash(key).set(field, json);
-
-        return 1;
-    }
-
-    function advance({ keys: [key], arguments: [field, json] }) {
-        const stored = store.get(key)?.get(field);
-
-        if (stored === undefined) return 0;
-
-        let current;
-
-        try {
-            current = JSON.parse(stored);
-        } catch {
-            current = { status: legacy[stored] ?? stored };
-        }
-
-        let entry = JSON.parse(json);
-        const rank = ranks[entry.status];
-
-        if (rank === undefined) return 0;
-        if (current.sid && entry.sid && current.sid !== entry.sid) return 0;
-
-        const currentRank = ranks[current.status] ?? -1;
-
-        if (
-            entry.status === 'read' &&
-            currentRank === ranks.delivered &&
-            current.status !== 'delivered'
-        ) {
-            return 0;
-        }
-
-        if (rank <= currentRank) {
-            if (current.sid || !entry.sid) return 0;
-            entry = { ...current, sid: entry.sid };
-        } else if (!entry.sid && current.sid) {
-            entry.sid = current.sid;
-        }
-
-        hash(key).set(field, JSON.stringify(entry));
-
-        return 1;
-    }
-};
-
 describe('ClaimCheck', () => {
     afterEach(() => {
         vi.useRealTimers();
@@ -121,6 +49,7 @@ describe('ClaimCheck', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        // The real `ADVANCE` and `RECORD_PENDING`, on an in-memory Redis (#777).
         redis = fakeRedis();
         cache.eval.mockImplementation(redis.eval);
         cache.hGetAll.mockImplementation(redis.hGetAll);
@@ -175,6 +104,7 @@ describe('ClaimCheck', () => {
                 ],
             });
             await expect(entryOf(testPhoneNumber)).resolves.toEqual({ status: PENDING });
+            expect(redis.ttl(testClaimCheckId)).toBe(claimCheckExpiration);
         });
 
         it('should keep what a resumed broadcast already recorded', async () => {
@@ -422,6 +352,14 @@ describe('ClaimCheck', () => {
             ).resolves.toBe(false);
         });
 
+        it("should refresh the receipt's expiry when it moves a recipient", async () => {
+            redis.call('EXPIRE', testClaimCheckId, '5');
+
+            await ClaimCheck.advance(testClaimCheckId, testPhoneNumber, { status: 'queued', sid });
+
+            expect(redis.ttl(testClaimCheckId)).toBe(claimCheckExpiration);
+        });
+
         it('should move a recipient through every stage in order', async () => {
             for (const status of ['queued', 'sending', 'sent', 'delivered', 'read']) {
                 await expect(
@@ -594,7 +532,7 @@ describe('ClaimCheck', () => {
         it.each([SKIPPED, ERROR, DUPLICATE])(
             'should not record %s over a Twilio status from before entries were JSON',
             async status => {
-                redis.store.get(testClaimCheckId).set(testPhoneNumber, 'sent');
+                redis.call('HSET', testClaimCheckId, testPhoneNumber, 'sent');
 
                 await expect(
                     ClaimCheck.advance(testClaimCheckId, testPhoneNumber, { status }),
@@ -636,15 +574,21 @@ describe('ClaimCheck', () => {
             await expect(entryOf(testPhoneNumber2)).resolves.toBeUndefined();
         });
 
+        /**
+         * Declined by the script, not failed in it: a status with no rank
+         * would otherwise break its comparisons, and every report Twilio adds
+         * a status for would log as a failed write.
+         */
         it('should ignore a status it does not know', async () => {
             await expect(
                 ClaimCheck.advance(testClaimCheckId, testPhoneNumber, { status: 'receiving' }),
             ).resolves.toBe(false);
             await expect(entryOf(testPhoneNumber)).resolves.toEqual({ status: PENDING });
+            expect(log.warn).not.toHaveBeenCalled();
         });
 
         it('should move an entry written before entries were JSON', async () => {
-            redis.store.get(testClaimCheckId).set(testPhoneNumber, 'sent');
+            redis.call('HSET', testClaimCheckId, testPhoneNumber, 'sent');
 
             await expect(
                 ClaimCheck.advance(testClaimCheckId, testPhoneNumber, { status: 'queued', sid }),
@@ -652,8 +596,27 @@ describe('ClaimCheck', () => {
             await expect(entryOf(testPhoneNumber)).resolves.toEqual({ status: 'sent', sid });
         });
 
+        /**
+         * A bare `queued` meant our queue as well as Twilio's, and is read as
+         * ours (`legacy`), so this operation's own outcome may replace it.
+         */
+        it("should let this operation's outcome replace a bare queued from before entries were JSON", async () => {
+            redis.call('HSET', testClaimCheckId, testPhoneNumber, 'queued');
+
+            await expect(
+                ClaimCheck.advance(testClaimCheckId, testPhoneNumber, {
+                    status: SKIPPED,
+                    reason: 'opted-out',
+                }),
+            ).resolves.toBe(true);
+            await expect(entryOf(testPhoneNumber)).resolves.toEqual({
+                status: SKIPPED,
+                reason: 'opted-out',
+            });
+        });
+
         it("should move a bare queued from before entries were JSON on Twilio's report", async () => {
-            redis.store.get(testClaimCheckId).set(testPhoneNumber, 'queued');
+            redis.call('HSET', testClaimCheckId, testPhoneNumber, 'queued');
 
             await expect(
                 ClaimCheck.advance(testClaimCheckId, testPhoneNumber, { status: 'queued', sid }),

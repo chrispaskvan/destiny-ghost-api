@@ -251,4 +251,14 @@ const release = async reservation =>
         arguments: [valueFor(reservation, 'pending')],
     })) === 1;
 
-export { accept, keepAlive, operationIdFor, release, reservationFor, reserve };
+export {
+    accept,
+    ACCEPT,
+    keepAlive,
+    operationIdFor,
+    release,
+    RELEASE,
+    RENEW,
+    reservationFor,
+    reserve,
+};
