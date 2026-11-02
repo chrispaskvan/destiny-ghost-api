@@ -25,9 +25,43 @@ import luaparse from 'luaparse';
  *
  * A command the fake doesn't implement fails the script, naming it, rather
  * than doing nothing.
+ *
+ * What it can't match: numbers. Redis's Lua 5.1 has only doubles. fengari's
+ * 5.3 also has integers, 32-bit ones that wrap on overflow, and prints a
+ * whole float as `5.0` where Redis prints `5`. So arithmetic past 2^31, or
+ * building a string from a computed number, can differ from Redis. None of
+ * the repo's scripts does either; keep numbers as strings where you can, and
+ * compare with `tonumber`. Numbers passed to `redis.call` and decoded by
+ * `cjson` are handled the 5.1 way.
  */
 
-const { lua, lauxlib, lualib, to_jsstring, to_luastring } = fengari;
+const { lua, lauxlib, lualib, luaconf, to_jsstring, to_luastring } = fengari;
+
+/**
+ * String escapes added after 5.1, which luaparse accepts even in 5.1 mode.
+ * Lua 5.1 reads an unknown escape as the character alone, so on Redis
+ * `'\x41'` is `'x41'`, not `'A'`.
+ */
+const NEWER_ESCAPES = new Set(['x', 'z', 'u']);
+
+/**
+ * luaparse's hook for each string literal: throws on an escape 5.1 lacks.
+ * Long strings (`[[...]]`) process no escapes, so they are skipped.
+ * @param {{ type: string, raw?: string, loc?: { start: { line: number, column: number } } }} node
+ */
+const rejectNewerEscapes = node => {
+    if (node.type !== 'StringLiteral' || !node.raw || node.raw.startsWith('[')) return;
+
+    for (const [, escaped] of node.raw.matchAll(/\\([\s\S])/g)) {
+        if (NEWER_ESCAPES.has(escaped)) {
+            const { line, column } = node.loc?.start ?? { line: 0, column: 0 };
+
+            throw new SyntaxError(
+                `[${line}:${column + 1}] escape '\\${escaped}' is not Lua 5.1 near ${node.raw}`,
+            );
+        }
+    }
+};
 
 /**
  * Throws if `script` is not valid Lua 5.1, naming where it stops parsing.
@@ -35,7 +69,11 @@ const { lua, lauxlib, lualib, to_jsstring, to_luastring } = fengari;
  */
 export const assertLua51 = script => {
     try {
-        luaparse.parse(script, { luaVersion: '5.1' });
+        luaparse.parse(script, {
+            luaVersion: '5.1',
+            locations: true,
+            onCreateNode: rejectNewerEscapes,
+        });
     } catch (error) {
         // luaparse throws a SyntaxError carrying `[line:column] reason`.
         const { message } = /** @type {SyntaxError} */ (error);
@@ -47,12 +85,17 @@ export const assertLua51 = script => {
 /** `cjson.null`, pushed into Lua as a light userdata with this identity. */
 const CJSON_NULL = Object.freeze({});
 
-/** The libraries Redis opens for scripts, and the 5.3 additions to remove. */
+/**
+ * The libraries Redis opens for scripts, and the 5.3 additions to remove.
+ * `table.unpack` goes too, after it has become the global `unpack`, its 5.1
+ * name. Other 5.1 functions 5.3 dropped (`math.pow`, `table.getn`, ...) are
+ * simply missing, so a script using one fails here rather than passing.
+ */
 const LIBRARIES = [
     ['_G', lualib.luaopen_base, ['rawlen']],
     ['string', lualib.luaopen_string, ['pack', 'packsize', 'unpack']],
-    ['table', lualib.luaopen_table, ['move']],
-    ['math', lualib.luaopen_math, ['tointeger', 'type', 'ult']],
+    ['table', lualib.luaopen_table, ['move', 'pack', 'unpack']],
+    ['math', lualib.luaopen_math, ['maxinteger', 'mininteger', 'tointeger', 'type', 'ult']],
 ];
 
 /** Redis's guard against scripts touching globals, set after setup. */
@@ -84,6 +127,29 @@ const fail = message => {
 };
 
 /**
+ * Parses an integer argument as Redis does: digits only, so not `''`,
+ * `'1.5'` or `'1e3'`.
+ * @param {string} value
+ * @returns {number}
+ */
+const integerArgument = value =>
+    /^-?\d+$/.test(value) ? Number(value) : fail('ERR value is not an integer or out of range');
+
+/**
+ * Pushes a number as 5.1 would hold it. A whole number fits fengari's 32-bit
+ * integers or goes in as a float; pushing a larger one as an integer fails.
+ * @param {any} L
+ * @param {number} value
+ */
+const pushNumber = (L, value) => {
+    if (Number.isInteger(value) && Math.abs(value) <= luaconf.LUA_MAXINTEGER) {
+        lua.lua_pushinteger(L, value);
+    } else {
+        lua.lua_pushnumber(L, value);
+    }
+};
+
+/**
  * Raises `error` inside Lua, as the error a script sees. `lua_error` never
  * returns; a C function returns its result, by convention.
  * @param {any} L
@@ -112,7 +178,7 @@ const pushReply = (L, reply) => {
     if (reply === null) {
         lua.lua_pushboolean(L, false);
     } else if (typeof reply === 'number') {
-        lua.lua_pushinteger(L, reply);
+        pushNumber(L, reply);
     } else if (typeof reply === 'string') {
         lua.lua_pushstring(L, to_luastring(reply));
     } else if (Array.isArray(reply)) {
@@ -179,8 +245,7 @@ const pushJson = (L, value) => {
     } else if (typeof value === 'boolean') {
         lua.lua_pushboolean(L, value);
     } else if (typeof value === 'number') {
-        if (Number.isInteger(value)) lua.lua_pushinteger(L, value);
-        else lua.lua_pushnumber(L, value);
+        pushNumber(L, value);
     } else if (typeof value === 'string') {
         lua.lua_pushstring(L, to_luastring(value));
     } else if (Array.isArray(value)) {
@@ -264,6 +329,32 @@ const jsonFrom = (L, index) => {
     }
 
     return fail(`Cannot serialise ${to_jsstring(lua.lua_typename(L, type))}`);
+};
+
+/**
+ * The error reply for a failed script, from the error value it raised: a
+ * string, an `{ err = ... }` table as Redis reads one, or, for anything
+ * else, its type. A message that already carries a Redis error code (a
+ * command's `ERR ...`, `WRONGTYPE ...`) keeps it rather than gaining another.
+ * @param {any} L
+ * @returns {string}
+ */
+const errorFrom = L => {
+    const type = lua.lua_type(L, -1);
+    let message;
+
+    if (type === lua.LUA_TSTRING || type === lua.LUA_TNUMBER) {
+        message = stringAt(L, -1);
+    } else if (
+        type === lua.LUA_TTABLE &&
+        lua.lua_getfield(L, -1, to_luastring('err')) === lua.LUA_TSTRING
+    ) {
+        message = stringAt(L, -1);
+    } else {
+        message = `(error object is a ${to_jsstring(lua.lua_typename(L, type))} value)`;
+    }
+
+    return /^[A-Z]+ /.test(message) ? message : `ERR ${message}`;
 };
 
 /**
@@ -364,11 +455,11 @@ export const fakeRedis = () => {
                 );
             }
 
-            store.set(key, {
-                type: 'string',
-                value,
-                ...(seconds !== undefined && { ttl: Number(seconds) }),
-            });
+            const ttl = seconds === undefined ? undefined : integerArgument(seconds);
+
+            if (ttl !== undefined && ttl <= 0) fail("ERR invalid expire time in 'set' command");
+
+            store.set(key, { type: 'string', value, ...(ttl !== undefined && { ttl }) });
 
             return { ok: 'OK' };
         },
@@ -381,10 +472,9 @@ export const fakeRedis = () => {
             arity('EXPIRE', args, n => n === 2);
 
             const [key, seconds] = args;
+            const ttl = integerArgument(seconds);
             const entry = store.get(key);
-            const ttl = Number(seconds);
 
-            if (!Number.isInteger(ttl)) fail('ERR value is not an integer or out of range');
             if (!entry) return 0;
             if (ttl <= 0) store.delete(key);
             else entry.ttl = ttl;
@@ -516,6 +606,10 @@ export const fakeRedis = () => {
 
         for (const [name, open, newer] of LIBRARIES) {
             lauxlib.luaL_requiref(L, to_luastring(name), open, 1);
+            if (name === 'table') {
+                lua.lua_getfield(L, -1, to_luastring('unpack'));
+                lua.lua_setglobal(L, to_luastring('unpack'));
+            }
             for (const field of newer) {
                 lua.lua_pushnil(L);
                 lua.lua_setfield(L, -2, to_luastring(field));
@@ -543,7 +637,7 @@ export const fakeRedis = () => {
                     lua.LUA_OK ||
                 lua.lua_pcall(L, 0, 1, 0) !== lua.LUA_OK
             ) {
-                fail(`ERR ${stringAt(L, -1)}`);
+                fail(errorFrom(L));
             }
         }
 

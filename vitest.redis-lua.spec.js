@@ -8,6 +8,9 @@ describe('assertLua51', () => {
         ['tonumber comparisons', 'return tonumber(ARGV[1]) > tonumber(ARGV[2])'],
         ['"//" inside a string', "return '7 // 2'"],
         ['"//" inside a comment', '-- 7 // 2\nreturn 1'],
+        ['an escaped backslash before x', "return '\\\\x41'"],
+        ['"\\x" in a long string, which takes no escapes', 'return [[\\x41]]'],
+        ['5.1 escapes', "return '\\n\\t\\65\\\\'"],
     ])('accepts %s', (_name, script) => {
         expect(() => assertLua51(script)).not.toThrow();
     });
@@ -18,6 +21,9 @@ describe('assertLua51', () => {
         ['bitwise and', 'return 1 & 2'],
         ['bitwise or', 'return 1 | 2'],
         ['shifts', 'return 1 << 2'],
+        ['a hex escape', "return '\\x41'"],
+        ['a \\z escape', "return 'a\\z   b'"],
+        ['a unicode escape', "return '\\u{41}'"],
     ])('rejects %s, which Lua 5.1 lacks', (_name, script) => {
         expect(() => assertLua51(script)).toThrow(/^Not Lua 5\.1, which Redis runs: \[\d+:\d+\]/);
     });
@@ -73,6 +79,24 @@ describe('fakeRedis', () => {
             await expect(redis.eval("\nerror('boom')")).rejects.toThrow('ERR user_script:2: boom');
         });
 
+        it.each([
+            ['an { err } table', "error({ err = 'NOPE not today' })", 'NOPE not today'],
+            ['an { err } table without a code', "error({ err = 'nope' })", 'ERR nope'],
+            ['any other table', 'error({})', 'ERR (error object is a table value)'],
+            ['nil', 'error()', 'ERR (error object is a nil value)'],
+        ])(
+            'rejects with a readable message when a script raises %s',
+            async (_name, script, message) => {
+                await expect(redis.eval(script)).rejects.toThrow(new Error(message));
+            },
+        );
+
+        it("keeps a failed command's error code rather than adding another", async () => {
+            await expect(redis.eval("redis.call('EXPIRE', 'k', '1.5')")).rejects.toThrow(
+                new Error('ERR value is not an integer or out of range'),
+            );
+        });
+
         it('parses the script as Lua 5.1 before running it', async () => {
             await expect(redis.eval("redis.call('SET', 'k', 'v') return 7 // 2")).rejects.toThrow(
                 /^Not Lua 5\.1/,
@@ -87,6 +111,10 @@ describe('fakeRedis', () => {
             'string.pack',
             'string.unpack',
             'table.move',
+            'table.pack',
+            'table.unpack',
+            'math.maxinteger',
+            'math.mininteger',
         ])('removes %s, which Lua 5.1 lacks', async name => {
             await expect(redis.eval(`return ${name} == nil`)).resolves.toBe(1);
         });
@@ -99,6 +127,13 @@ describe('fakeRedis', () => {
                 );
             },
         );
+
+        it("has 5.1's global unpack", async () => {
+            await expect(redis.eval("return { unpack({ 'a', 'b' }) }")).resolves.toEqual([
+                'a',
+                'b',
+            ]);
+        });
 
         it('rejects a script that sets a global', async () => {
             await expect(redis.eval('x = 1')).rejects.toThrow('Attempt to modify a readonly table');
@@ -166,6 +201,23 @@ describe('fakeRedis', () => {
     });
 
     describe('commands', () => {
+        it.each([
+            ['not an integer', 'abc', 'ERR value is not an integer or out of range'],
+            ['a float', '1.5', 'ERR value is not an integer or out of range'],
+            ['in exponent form', '1e3', 'ERR value is not an integer or out of range'],
+            ['zero', '0', "ERR invalid expire time in 'set' command"],
+            ['negative', '-5', "ERR invalid expire time in 'set' command"],
+        ])('SET rejects an EX that is %s, writing nothing', (_name, seconds, message) => {
+            expect(() => redis.call('SET', 'k', 'v', 'EX', seconds)).toThrow(new Error(message));
+            expect(redis.call('GET', 'k')).toBeNull();
+        });
+
+        it('EXPIRE rejects an expiry in exponent form', () => {
+            redis.call('SET', 'k', 'v');
+
+            expect(() => redis.call('EXPIRE', 'k', '1e3')).toThrow('not an integer');
+        });
+
         it('SET without EX clears an earlier expiry', () => {
             redis.call('SET', 'k', 'a', 'EX', '60');
             redis.call('SET', 'k', 'b');
@@ -228,6 +280,14 @@ describe('fakeRedis', () => {
                     { arguments: ['{"s":"x","n":2,"list":["a","b"]}'] },
                 ),
             ).resolves.toEqual(['table', 'x', 2, 'a', 2]);
+        });
+
+        it('decodes a whole number past 32 bits, as Redis keeps it as a double', async () => {
+            await expect(
+                redis.eval('local t = cjson.decode(ARGV[1]) return { t.at, cjson.encode(t) }', {
+                    arguments: ['{"at":1700000000000}'],
+                }),
+            ).resolves.toEqual([1_700_000_000_000, '{"at":1700000000000}']);
         });
 
         it('decodes null as cjson.null, which is truthy', async () => {

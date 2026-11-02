@@ -384,9 +384,7 @@ export {
     claimCheckExpiration,
     DUPLICATE,
     ERROR,
-    legacy,
     PENDING,
-    ranks,
     RECORD_PENDING,
     SKIPPED,
 };

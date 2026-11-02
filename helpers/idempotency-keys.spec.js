@@ -189,9 +189,9 @@ describe('idempotency-keys', () => {
                 cache.set.mockResolvedValue(null);
                 await reserve(current);
 
-                const [[key, value]] = cache.set.mock.calls;
+                const [[key, value, { expiration }]] = cache.set.mock.calls;
 
-                redis.call('SET', key, value, 'EX', '60');
+                redis.call('SET', key, value, 'EX', String(expiration.value));
 
                 await expect(act(stale)).resolves.toBe(false);
                 await expect(act(current)).resolves.toBe(true);
