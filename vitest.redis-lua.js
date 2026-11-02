@@ -128,26 +128,70 @@ const LIBRARIES = [
  */
 const UNIMPLEMENTED_GLOBALS = ['bit', 'struct', 'cmsgpack', 'loadstring', 'gcinfo'];
 
-/** Redis's guard against scripts touching globals, set after setup. */
-const PROTECT_GLOBALS = `
+/**
+ * Builds the read-only environment a script runs in, and returns it; it
+ * becomes the script's `_ENV`. Redis makes the globals table, and every
+ * table reachable from it, read-only, so a script can neither set a global
+ * nor change a library (`redis.call = nil`). fengari has no read-only
+ * tables, so the script sees read-only views instead: reads reach the real
+ * table, writes fail. `KEYS` and `ARGV` stay writable, as in Redis, which
+ * builds them fresh for each call.
+ *
+ * Reading a missing global is an error, as in Redis; one Redis has and the
+ * fake doesn't, or a missing `redis.*` function, names the gap.
+ *
+ * Not matched: `rawset` on a view writes to the view, and a chunk built with
+ * `load` sees the real globals.
+ */
+const SANDBOX = `
 local unimplemented = { ${UNIMPLEMENTED_GLOBALS.map(name => `${name} = true`).join(', ')} }
 
-setmetatable(redis, {
-    __index = function(_, name)
-        error("the fake Redis in vitest.redis-lua.js does not implement redis." .. tostring(name), 2)
-    end,
-})
-setmetatable(_G, {
-    __index = function(_, name)
-        if unimplemented[name] then
-            error("the fake Redis in vitest.redis-lua.js does not implement '" .. tostring(name) .. "'", 2)
-        end
-        error("Script attempted to access nonexistent global variable '" .. tostring(name) .. "'", 2)
-    end,
-    __newindex = function(_, name)
-        error("Attempt to modify a readonly table: '" .. tostring(name) .. "'", 2)
-    end,
-})
+local function deny(_, name)
+    error("Attempt to modify a readonly table: '" .. tostring(name) .. "'", 2)
+end
+
+-- A read-only view of t. missing(name), when given, runs for an absent
+-- name; it is called, not tail-called, so its error level 3 is the script.
+local function readonly(t, missing)
+    return setmetatable({}, {
+        __index = function(_, name)
+            local value = t[name]
+
+            if value == nil and missing then
+                missing(name)
+            end
+
+            return value
+        end,
+        __newindex = deny,
+        __pairs = function() return next, t, nil end,
+        __len = function() return #t end,
+        __metatable = false,
+    })
+end
+
+local globals = {}
+
+for name, value in pairs(_G) do
+    globals[name] = value
+end
+for _, name in ipairs({ 'string', 'table', 'math', 'coroutine', 'cjson' }) do
+    globals[name] = readonly(_G[name])
+end
+globals.redis = readonly(redis, function(name)
+    error("the fake Redis in vitest.redis-lua.js does not implement redis." .. tostring(name), 3)
+end)
+
+local env = readonly(globals, function(name)
+    if unimplemented[name] then
+        error("the fake Redis in vitest.redis-lua.js does not implement '" .. tostring(name) .. "'", 3)
+    end
+    error("Script attempted to access nonexistent global variable '" .. tostring(name) .. "'", 3)
+end)
+
+globals._G = env
+
+return env
 `;
 
 const WRONGTYPE = 'WRONGTYPE Operation against a key holding the wrong kind of value';
@@ -167,14 +211,44 @@ const fail = message => {
     throw new Error(message);
 };
 
+const INT64_MAX = 9_223_372_036_854_775_807n;
+const INT64_MIN = -INT64_MAX - 1n;
+
+/** `LLONG_MAX / 1000`: the most seconds Redis turns into milliseconds. */
+const MAX_SECONDS = INT64_MAX / 1000n;
+
 /**
- * Parses an integer argument as Redis does: digits only, so not `''`,
- * `'1.5'` or `'1e3'`.
+ * Parses an integer argument as Redis's `string2ll` does: only the canonical
+ * spelling (`0`, or digits not starting with `0`, with an optional `-`), so
+ * not `''`, `'1.5'`, `'1e3'`, `'-0'`, `'007'` or `'+5'`, and only within
+ * the signed 64-bit range.
  * @param {string} value
+ * @returns {bigint}
+ */
+const integerArgument = value => {
+    const number = /^(0|-?[1-9]\d*)$/.test(value) && value.length < 21 ? BigInt(value) : undefined;
+
+    return number !== undefined && number <= INT64_MAX && number >= INT64_MIN
+        ? number
+        : fail('ERR value is not an integer or out of range');
+};
+
+/**
+ * When an expiry of `seconds` from now falls, in epoch milliseconds, refusing
+ * one that overflows Redis's 64-bit milliseconds, as EXPIRE and SET ... EX do.
+ * @param {bigint} seconds
+ * @param {string} command - named in the error, as Redis names it
  * @returns {number}
  */
-const integerArgument = value =>
-    /^-?\d+$/.test(value) ? Number(value) : fail('ERR value is not an integer or out of range');
+const expiryFrom = (seconds, command) => {
+    const now = BigInt(Date.now());
+
+    if (seconds > MAX_SECONDS || seconds < -MAX_SECONDS || seconds * 1000n > INT64_MAX - now) {
+        fail(`ERR invalid expire time in '${command}' command`);
+    }
+
+    return Number(now + seconds * 1000n);
+};
 
 /**
  * Pushes a number as 5.1 would hold it. A whole number fits fengari's 32-bit
@@ -558,9 +632,6 @@ export const fakeRedis = () => {
         return entry;
     };
 
-    /** @param {number} seconds */
-    const expiresIn = seconds => Date.now() + seconds * 1000;
-
     /**
      * @param {string} key
      * @param {Entry['type']} type
@@ -607,7 +678,7 @@ export const fakeRedis = () => {
             arity('SET', args, n => n >= 2);
 
             const [key, value, ...options] = args;
-            /** @type {number | undefined} */
+            /** @type {bigint | undefined} */
             let ttl;
 
             for (let i = 0; i < options.length; i++) {
@@ -620,12 +691,14 @@ export const fakeRedis = () => {
                 ttl = integerArgument(options[++i]);
             }
 
-            if (ttl !== undefined && ttl <= 0) fail("ERR invalid expire time in 'set' command");
+            if (ttl !== undefined && ttl <= 0n) fail("ERR invalid expire time in 'set' command");
+
+            const expiresAt = ttl === undefined ? undefined : expiryFrom(ttl, 'set');
 
             store.set(key, {
                 type: 'string',
                 value,
-                ...(ttl !== undefined && { expiresAt: expiresIn(ttl) }),
+                ...(expiresAt !== undefined && { expiresAt }),
             });
 
             return { ok: 'OK' };
@@ -639,12 +712,13 @@ export const fakeRedis = () => {
             arity('EXPIRE', args, n => n === 2);
 
             const [key, seconds] = args;
-            const ttl = integerArgument(seconds);
+            const expiresAt = expiryFrom(integerArgument(seconds), 'expire');
             const entry = live(key);
 
             if (!entry) return 0;
-            if (ttl <= 0) store.delete(key);
-            else entry.expiresAt = expiresIn(ttl);
+            // Already past, as a zero or negative expiry is: Redis deletes it.
+            if (expiresAt <= Date.now()) store.delete(key);
+            else entry.expiresAt = expiresAt;
 
             return 1;
         },
@@ -849,20 +923,30 @@ export const fakeRedis = () => {
         setStrings(L, 'KEYS', keyStrings);
         setStrings(L, 'ARGV', argStrings);
 
-        for (const [chunk, name] of [
-            [PROTECT_GLOBALS, '=protect_globals'],
-            [script, '=user_script'],
-        ]) {
+        /**
+         * Loads and runs a chunk, leaving its one result on the stack. With
+         * `env`, the stack index of a table, that table is its `_ENV`.
+         * @param {string} chunk
+         * @param {string} name
+         * @param {number} [env]
+         */
+        const run = (chunk, name, env) => {
             const source = to_luastring(chunk);
 
             if (
-                lauxlib.luaL_loadbuffer(L, source, source.length, to_luastring(name)) !==
-                    lua.LUA_OK ||
-                lua.lua_pcall(L, 0, 1, 0) !== lua.LUA_OK
+                lauxlib.luaL_loadbuffer(L, source, source.length, to_luastring(name)) !== lua.LUA_OK
             ) {
                 fail(errorFrom(L));
             }
-        }
+            if (env !== undefined) {
+                lua.lua_pushvalue(L, env);
+                lua.lua_setupvalue(L, -2, 1);
+            }
+            if (lua.lua_pcall(L, 0, 1, 0) !== lua.LUA_OK) fail(errorFrom(L));
+        };
+
+        run(SANDBOX, '=sandbox');
+        run(script, '=user_script', lua.lua_gettop(L));
 
         return replyFrom(L, -1);
     };

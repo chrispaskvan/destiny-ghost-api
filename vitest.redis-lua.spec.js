@@ -197,6 +197,59 @@ describe('fakeRedis', () => {
             await expect(redis.eval('x = 1')).rejects.toThrow('Attempt to modify a readonly table');
         });
 
+        it.each([
+            ['an existing global', "_VERSION = 'changed'"],
+            ['KEYS itself', 'KEYS = {}'],
+            ['a global through _G', '_G.x = 1'],
+            ['redis.call', 'redis.call = nil'],
+            ['a string function', 'string.upper = nil'],
+            ['a math field', 'math.pi = 3'],
+            ['a table function', 'table.insert = nil'],
+            ['a coroutine function', 'coroutine.wrap = nil'],
+            ['a cjson function', 'cjson.encode = nil'],
+        ])(
+            'rejects a script that overwrites %s, as Redis keeps them read-only',
+            async (_name, script) => {
+                await expect(redis.eval(script)).rejects.toThrow(
+                    /^ERR user_script:1: Attempt to modify a readonly table/,
+                );
+            },
+        );
+
+        it('lets a script change KEYS and ARGV, which Redis builds fresh for each call', async () => {
+            await expect(
+                redis.eval("KEYS[1] = 'changed' ARGV[2] = 'added' return { KEYS[1], #ARGV }", {
+                    keys: ['k'],
+                    arguments: ['a'],
+                }),
+            ).resolves.toEqual(['changed', 2]);
+        });
+
+        it('lets a script read the read-only libraries as tables', async () => {
+            await expect(
+                redis.eval(
+                    'local n = 0 for _ in pairs(string) do n = n + 1 end return { n > 0, _G._VERSION, _G == _G._G }',
+                ),
+            ).resolves.toEqual([1, 'Lua 5.1', 1]);
+        });
+
+        it.each([
+            [
+                'a missing global',
+                'return nope',
+                "Script attempted to access nonexistent global variable 'nope'",
+            ],
+            ['an unimplemented global', 'return bit', "does not implement 'bit'"],
+            [
+                'an unimplemented redis function',
+                "return redis.sha1hex('x')",
+                'does not implement redis.sha1hex',
+            ],
+        ])('points the error for %s at the script', async (_name, script, message) => {
+            await expect(redis.eval(script)).rejects.toThrow(`ERR user_script:1: `);
+            await expect(redis.eval(script)).rejects.toThrow(message);
+        });
+
         it('starts each script from a fresh state', async () => {
             await redis.eval('local t = cjson.decode(\'{"a":1}\') return 1');
             await expect(redis.eval('return t')).rejects.toThrow('nonexistent global');
@@ -394,6 +447,17 @@ describe('fakeRedis', () => {
             ['in exponent form', '1e3', 'ERR value is not an integer or out of range'],
             ['zero', '0', "ERR invalid expire time in 'set' command"],
             ['negative', '-5', "ERR invalid expire time in 'set' command"],
+            ['-0', '-0', 'ERR value is not an integer or out of range'],
+            [
+                'past 64-bit milliseconds',
+                '9223372036854776',
+                "ERR invalid expire time in 'set' command",
+            ],
+            [
+                'past 64-bit milliseconds once the time now is added',
+                '9223372036854775',
+                "ERR invalid expire time in 'set' command",
+            ],
         ])('SET rejects an EX that is %s, leaving the key as it was', (_name, seconds, message) => {
             redis.call('SET', 'k', 'old', 'EX', '60');
 
@@ -406,6 +470,42 @@ describe('fakeRedis', () => {
             redis.call('SET', 'k', 'v');
 
             expect(() => redis.call('EXPIRE', 'k', '1e3')).toThrow('not an integer');
+        });
+
+        it.each([
+            ['-0', '-0', 'ERR value is not an integer or out of range'],
+            ['a leading zero', '007', 'ERR value is not an integer or out of range'],
+            ['a plus sign', '+5', 'ERR value is not an integer or out of range'],
+            ['past 64 bits', '9223372036854775808', 'ERR value is not an integer or out of range'],
+            ['310 digits', '9'.repeat(310), 'ERR value is not an integer or out of range'],
+            [
+                'more seconds than fit in 64-bit milliseconds',
+                '9223372036854776',
+                "ERR invalid expire time in 'expire' command",
+            ],
+            [
+                'as many negative',
+                '-9223372036854776',
+                "ERR invalid expire time in 'expire' command",
+            ],
+            [
+                'an expiry that overflows once the time now is added',
+                '9223372036854775',
+                "ERR invalid expire time in 'expire' command",
+            ],
+        ])('EXPIRE rejects %s, leaving the key as it was', (_name, seconds, message) => {
+            redis.call('SET', 'k', 'v', 'EX', '60');
+
+            expect(() => redis.call('EXPIRE', 'k', seconds)).toThrow(new Error(message));
+            expect(redis.call('GET', 'k')).toBe('v');
+            expect(redis.ttl('k')).toBe(60);
+        });
+
+        it('EXPIRE takes the most negative expiry that fits, deleting the key', () => {
+            redis.call('SET', 'k', 'v');
+
+            expect(redis.call('EXPIRE', 'k', '-9223372036854775')).toBe(1);
+            expect(redis.call('GET', 'k')).toBeNull();
         });
 
         it('SET without EX clears an earlier expiry, keeping the key', () => {
