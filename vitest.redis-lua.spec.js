@@ -51,13 +51,20 @@ describe('fakeRedis', () => {
             await expect(redis.eval('return #KEYS + #ARGV')).resolves.toBe(0);
         });
 
-        it('rejects a non-string argument, as node-redis does, before running', async () => {
-            await expect(redis.eval('return 1', { arguments: ['a', 60] })).rejects.toThrow(
-                new TypeError(
-                    '"arguments[1]" must be of type "string | Buffer", got number instead.',
-                ),
-            );
-        });
+        it.each([
+            ['an argument', { keys: ['k'], arguments: ['a', 60] }, 5],
+            ['a key', { keys: ['k', 1] }, 4],
+        ])(
+            'rejects a non-string %s before running, numbered as node-redis numbers it',
+            async (_name, options, index) => {
+                // EVAL, the script and the key count come first.
+                await expect(redis.eval('return 1', options)).rejects.toThrow(
+                    new TypeError(
+                        `"arguments[${index}]" must be of type "string | Buffer", got number instead.`,
+                    ),
+                );
+            },
+        );
 
         it.each([
             ['true', 'return true', 1],
@@ -164,6 +171,21 @@ describe('fakeRedis', () => {
             await expect(redis.eval('return _VERSION')).resolves.toBe('Lua 5.1');
         });
 
+        it.each(['bit', 'struct', 'cmsgpack', 'loadstring', 'gcinfo'])(
+            'names %s, which Redis has, as not implemented here',
+            async name => {
+                await expect(redis.eval(`return ${name}`)).rejects.toThrow(
+                    `the fake Redis in vitest.redis-lua.js does not implement '${name}'`,
+                );
+            },
+        );
+
+        it('names a redis.* function it does not provide as not implemented here', async () => {
+            await expect(redis.eval("return redis.sha1hex('x')")).rejects.toThrow(
+                'does not implement redis.sha1hex',
+            );
+        });
+
         it("has 5.1's global unpack", async () => {
             await expect(redis.eval("return { unpack({ 'a', 'b' }) }")).resolves.toEqual([
                 'a',
@@ -250,6 +272,61 @@ describe('fakeRedis', () => {
         });
     });
 
+    describe('redis.pcall, error_reply and status_reply', () => {
+        it('pcall returns a reply as call does', async () => {
+            await expect(redis.eval("return redis.pcall('SET', 'k', 'v').ok")).resolves.toBe('OK');
+        });
+
+        it.each([
+            [
+                'a failed command',
+                "redis.pcall('EXPIRE', 'k', '1.5')",
+                'ERR value is not an integer or out of range',
+            ],
+            [
+                'an argument of the wrong type',
+                "redis.pcall('GET', {})",
+                'ERR Lua redis lib command arguments must be strings or integers',
+            ],
+            [
+                'an unimplemented command',
+                "redis.pcall('ZADD', 'z', 1, 'm')",
+                "ERR the fake Redis in vitest.redis-lua.js does not implement 'ZADD'",
+            ],
+        ])(
+            'pcall returns the { err } table for %s rather than raising it',
+            async (_name, expr, message) => {
+                await expect(
+                    redis.eval(`local e = ${expr} return { type(e), e.err }`),
+                ).resolves.toEqual(['table', message]);
+            },
+        );
+
+        it.each([
+            ['with its own code', 'NOPE bad input', 'NOPE bad input'],
+            ['without a code, gaining ERR', 'oops', 'ERR oops'],
+            ['with a leading -', '-NOPE bad', 'NOPE bad'],
+            ['taking its first word as the code, whatever its case', 'My error', 'My error'],
+        ])('error_reply makes an error reply %s', async (_name, text, message) => {
+            await expect(
+                redis.eval('return redis.error_reply(ARGV[1])', { arguments: [text] }),
+            ).rejects.toThrow(new Error(message));
+        });
+
+        it('status_reply makes a status reply', async () => {
+            await expect(redis.eval("return redis.status_reply('FINE')")).resolves.toBe('FINE');
+        });
+
+        it.each(['error_reply', 'status_reply'])(
+            '%s gives an error table when not given one string',
+            async name => {
+                await expect(redis.eval(`return redis.${name}()`)).rejects.toThrow(
+                    new Error('ERR wrong number or type of arguments'),
+                );
+            },
+        );
+    });
+
     describe('expiry', () => {
         beforeEach(() => {
             vi.useFakeTimers();
@@ -259,15 +336,15 @@ describe('fakeRedis', () => {
             vi.useRealTimers();
         });
 
-        it('expires a key once its time has passed, and not before', async () => {
+        it('expires a key once its time has passed, keeping it through its last millisecond', async () => {
             redis.call('SET', 'k', 'v', 'EX', '10');
 
-            await vi.advanceTimersByTimeAsync(9_999);
+            await vi.advanceTimersByTimeAsync(10_000);
             expect(redis.call('GET', 'k')).toBe('v');
 
             await vi.advanceTimersByTimeAsync(1);
             expect(redis.call('GET', 'k')).toBeNull();
-            expect(redis.ttl('k')).toBeUndefined();
+            expect(redis.ttl('k')).toBe(-2);
         });
 
         it('counts the remaining time down, rounded as Redis rounds TTL', async () => {
@@ -287,7 +364,7 @@ describe('fakeRedis', () => {
             await vi.advanceTimersByTimeAsync(5_000);
             expect(redis.call('EXPIRE', 'h', '10')).toBe(1);
 
-            await vi.advanceTimersByTimeAsync(9_999);
+            await vi.advanceTimersByTimeAsync(10_000);
             expect(redis.call('HGET', 'h', 'f')).toBe('v');
 
             await vi.advanceTimersByTimeAsync(1);
@@ -296,7 +373,7 @@ describe('fakeRedis', () => {
 
         it('treats an expired key as missing in a script and in DEL', async () => {
             redis.call('SET', 'k', 'v', 'EX', '1');
-            await vi.advanceTimersByTimeAsync(1_000);
+            await vi.advanceTimersByTimeAsync(1_001);
 
             await expect(redis.eval("return redis.call('GET', 'k') == false")).resolves.toBe(1);
             expect(redis.call('DEL', 'k')).toBe(0);
@@ -331,11 +408,42 @@ describe('fakeRedis', () => {
             expect(() => redis.call('EXPIRE', 'k', '1e3')).toThrow('not an integer');
         });
 
-        it('SET without EX clears an earlier expiry', () => {
+        it('SET without EX clears an earlier expiry, keeping the key', () => {
             redis.call('SET', 'k', 'a', 'EX', '60');
             redis.call('SET', 'k', 'b');
 
-            expect(redis.ttl('k')).toBeUndefined();
+            expect(redis.ttl('k')).toBe(-1);
+            expect(redis.call('GET', 'k')).toBe('b');
+        });
+
+        it('ttl answers -2 for a key that does not exist, as Redis does', () => {
+            expect(redis.ttl('missing')).toBe(-2);
+        });
+
+        it.each([
+            ['NX', ['NX'], 'not NX'],
+            ['GET', ['GET'], 'not GET'],
+            ['KEEPTTL', ['KEEPTTL'], 'not KEEPTTL'],
+            ['NX after EX', ['EX', '10', 'NX'], 'not NX'],
+        ])('SET names an option it does not implement: %s', (_name, options, message) => {
+            expect(() => redis.call('SET', 'k', 'v', ...options)).toThrow(message);
+        });
+
+        it.each([
+            ['EX without seconds', ['EX']],
+            ['EX twice', ['EX', '10', 'EX', '20']],
+        ])('SET rejects %s as a syntax error', (_name, options) => {
+            expect(() => redis.call('SET', 'k', 'v', ...options)).toThrow(
+                new Error('ERR syntax error'),
+            );
+        });
+
+        it('call takes only strings, as node-redis does, so the store holds only strings', () => {
+            expect(() => redis.call('HSET', 'h', 'f', /** @type {any} */ (1))).toThrow(
+                new TypeError(
+                    '"arguments[3]" must be of type "string | Buffer", got number instead.',
+                ),
+            );
         });
 
         it('DEL returns how many keys it removed', () => {
@@ -442,6 +550,25 @@ describe('fakeRedis', () => {
             await expect(redis.eval('return cjson.encode({ f = tostring })')).rejects.toThrow(
                 'Cannot serialise function',
             );
+        });
+
+        it('refuses a table key that is neither a number nor a string', async () => {
+            await expect(redis.eval('return cjson.encode({ [true] = 1 })')).rejects.toThrow(
+                'Cannot serialise boolean: table key must be a number or string',
+            );
+        });
+
+        it.each([
+            ['0.1 + 0.2', '0.3'],
+            ['1.5', '1.5'],
+            ['tonumber("12345678901234")', '12345678901234'],
+            ['tonumber("1700000000123456")', '1.7000000001235e+15'],
+            ['tonumber("1e14")', '1e+14'],
+            ['0.00001', '1e-05'],
+            ['0.0001', '0.0001'],
+            ['-2.5', '-2.5'],
+        ])('encodes %s to 14 significant digits, as Redis cjson does', async (expr, json) => {
+            await expect(redis.eval(`return cjson.encode({ ${expr} })`)).resolves.toBe(`[${json}]`);
         });
 
         it('encodes a sparse array with null in its gaps', async () => {

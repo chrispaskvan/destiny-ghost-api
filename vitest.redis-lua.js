@@ -8,35 +8,39 @@ import luaparse from 'luaparse';
  *
  * `fakeRedis()` is a small in-memory Redis: `eval` runs the real script in a
  * Lua VM (fengari), against a store that plain commands (`get`, `hGetAll`)
- * read too. It mimics what Redis does to a script, not just what the
- * scripts happen to need today:
+ * read too.
  *
- * Where it says what Redis does, that is Redis 7.2's `script_lua.c`.
+ * Its contract: match Redis for everything the repo's scripts use, and fail
+ * loudly, naming the gap, for anything else. It is not a full Redis; when a
+ * new script needs more, add it here, with a test. Where this says what
+ * Redis does, that is Redis 7.2 (`script_lua.c`, `lua_cjson.c`, `db.c`).
  *
- * - Redis runs Lua 5.1 and fengari runs 5.3, so every script is parsed as 5.1
- *   first, and the library functions 5.3 added are removed. `_VERSION` reads
- *   `Lua 5.1`.
- * - Only the libraries Redis loads are open: base (with `coroutine`, which
- *   5.1's base opens), string, table and math, plus `redis.call` and `cjson`.
- *   `dofile`, `loadfile` and `print` are gone, as Redis removes them. Globals
- *   are read-only, and reading a missing one is an error.
- * - Replies convert between Redis and Lua the way Redis converts them:
+ * What matches:
+ * - Lua 5.1: every script is parsed as 5.1 first (fengari runs 5.3), the
+ *   library functions 5.3 added are removed, and `_VERSION` reads `Lua 5.1`.
+ * - The environment: base (with `coroutine`, which 5.1's base opens),
+ *   string, table and math, without the `dofile`, `loadfile` and `print`
+ *   Redis removes. Globals are read-only, and reading a missing one is an
+ *   error. `redis.call`, `redis.pcall`, `redis.error_reply` and
+ *   `redis.status_reply`.
+ * - Replies, converted both ways as Redis converts them:
  *   - a missing value is `false` in Lua, and a status reply `{ ok = 'OK' }`;
- *   - a failed command raises `{ err = 'CODE message' }`, so `pcall` sees
- *     the table Redis raises;
+ *   - a failed command raises `{ err = 'CODE message' }`, which `pcall`
+ *     catches and `redis.pcall` returns;
  *   - a returned number comes back truncated to an integer;
  *   - an `{ err }` table inside a returned array becomes an `Error` element.
- * - Keys expire, lazily, against `Date.now()`, so Vitest's fake timers drive
- *   them.
- * - `cjson` follows Redis's: `cjson.null` is a distinct value, truthy in
- *   Lua; `encode` escapes `/` and writes a sparse array with `null` in its
- *   gaps, refusing one that is too sparse.
+ * - Keys expire against `Date.now()`, lazily, so Vitest's fake timers drive
+ *   them. A key outlives its expiry's exact millisecond, as in Redis.
+ * - `cjson`: `cjson.null` is a distinct value, truthy in Lua. `encode`
+ *   escapes `/`, writes numbers to 14 significant digits, and writes a
+ *   sparse array with `null` in its gaps, refusing one that is too sparse.
  * - `eval` takes node-redis's `{ keys, arguments }` and, like node-redis,
- *   rejects an argument that isn't a string.
+ *   rejects an argument that isn't a string, numbering it as node-redis does.
  *
- * A command the fake doesn't implement fails the script, naming it, rather
- * than doing nothing. So does a reply Redis has no defined conversion for
- * (a returned `math.huge` or `0/0`).
+ * What fails loudly, naming the gap: a command, or a `SET` option, the fake
+ * doesn't implement; a Redis global or `redis.*` function it doesn't provide
+ * (`bit`, `struct`, `cmsgpack`, `loadstring`, `redis.sha1hex`, ...); and a
+ * reply Redis has no defined conversion for (a returned `math.huge`).
  *
  * What it can't match: numbers inside the script. Redis's Lua 5.1 has only
  * doubles. fengari's 5.3 also has integers, 32-bit ones that wrap on
@@ -46,8 +50,12 @@ import luaparse from 'luaparse';
  * Redis. None of the repo's scripts does either. Keep numbers as strings
  * where you can, and compare them with `tonumber`. Numbers passed to
  * `redis.call` are fine: Redis writes an integer exactly and anything else
- * in its shortest round-trip form, as JavaScript's `String()` does. `load`
- * also accepts a string here, where 5.1's takes only a function.
+ * in its shortest round-trip form, as JavaScript's `String()` does.
+ *
+ * Also not matched: `load` accepts a string here, where 5.1's takes only a
+ * function; and the 5.1 library functions 5.3 dropped (`math.pow`,
+ * `table.getn`, ...) are missing, so a script calling one fails as a call to
+ * nil rather than naming the gap.
  */
 
 const { lua, lauxlib, lualib, luaconf, to_jsstring, to_luastring } = fengari;
@@ -114,10 +122,26 @@ const LIBRARIES = [
     ['math', lualib.luaopen_math, ['maxinteger', 'mininteger', 'tointeger', 'type', 'ult']],
 ];
 
+/**
+ * Globals Redis provides that the fake doesn't, so reading one names the gap
+ * rather than reading like Redis's own error for a global that doesn't exist.
+ */
+const UNIMPLEMENTED_GLOBALS = ['bit', 'struct', 'cmsgpack', 'loadstring', 'gcinfo'];
+
 /** Redis's guard against scripts touching globals, set after setup. */
 const PROTECT_GLOBALS = `
+local unimplemented = { ${UNIMPLEMENTED_GLOBALS.map(name => `${name} = true`).join(', ')} }
+
+setmetatable(redis, {
+    __index = function(_, name)
+        error("the fake Redis in vitest.redis-lua.js does not implement redis." .. tostring(name), 2)
+    end,
+})
 setmetatable(_G, {
     __index = function(_, name)
+        if unimplemented[name] then
+            error("the fake Redis in vitest.redis-lua.js does not implement '" .. tostring(name) .. "'", 2)
+        end
         error("Script attempted to access nonexistent global variable '" .. tostring(name) .. "'", 2)
     end,
     __newindex = function(_, name)
@@ -182,11 +206,20 @@ const withCode = message => (/^[A-Z]+ /.test(message) ? message : `ERR ${message
  * @returns {number}
  */
 const raiseReplyError = (L, error) => {
-    lua.lua_createtable(L, 0, 1);
-    lua.lua_pushstring(L, to_luastring(withCode(/** @type {Error} */ (error).message)));
-    lua.lua_setfield(L, -2, to_luastring('err'));
+    pushErrorTable(L, withCode(/** @type {Error} */ (error).message));
 
     return lua.lua_error(L);
+};
+
+/**
+ * Pushes an error as the `{ err = 'CODE message' }` table Redis builds.
+ * @param {any} L
+ * @param {string} message - already carrying its code
+ */
+const pushErrorTable = (L, message) => {
+    lua.lua_createtable(L, 0, 1);
+    lua.lua_pushstring(L, to_luastring(message));
+    lua.lua_setfield(L, -2, to_luastring('err'));
 };
 
 /**
@@ -319,6 +352,44 @@ const pushJson = (L, value) => {
 };
 
 /**
+ * A number as C's `%.14g` writes it, which is how Redis's cjson encodes
+ * numbers: 14 significant digits, trailing zeros dropped, and an exponent
+ * outside -4..13.
+ * @param {number} number
+ * @returns {string}
+ */
+const formatG14 = number => {
+    const trim = /** @param {string} digits */ digits =>
+        digits.includes('.') ? digits.replace(/\.?0+$/, '') : digits;
+    const [mantissa, exponent] = number.toExponential(13).split('e');
+    const power = Number(exponent);
+
+    if (power < -4 || power >= 14) {
+        const sign = power < 0 ? '-' : '+';
+
+        return `${trim(mantissa)}e${sign}${String(Math.abs(power)).padStart(2, '0')}`;
+    }
+
+    return trim(number.toFixed(13 - power));
+};
+
+/**
+ * JSON text as Redis's cjson writes it: `/` escaped, numbers by `formatG14`.
+ * @param {unknown} value - as `jsonFrom` returns it
+ * @returns {string}
+ */
+const toJson = value => {
+    if (value === null || typeof value === 'boolean') return String(value);
+    if (typeof value === 'number') return formatG14(value);
+    if (typeof value === 'string') return JSON.stringify(value).replaceAll('/', '\\/');
+    if (Array.isArray(value)) return `[${value.map(toJson).join(',')}]`;
+
+    const members = Object.entries(/** @type {object} */ (value));
+
+    return `{${members.map(([key, item]) => `${toJson(key)}:${toJson(item)}`).join(',')}}`;
+};
+
+/**
  * Reads a Lua value for `cjson.encode`, with Redis's cjson defaults. A table
  * whose keys are all positive integers is an array, `null` in any gap; one
  * whose largest key is over 10 and over twice its count is refused as too
@@ -356,10 +427,15 @@ const jsonFrom = (L, index) => {
             while (lua.lua_next(L, at)) {
                 // Read a number key without lua_tolstring, which would
                 // convert it in place and break lua_next.
-                const key =
-                    lua.lua_type(L, -2) === lua.LUA_TNUMBER
-                        ? lua.lua_tonumber(L, -2)
-                        : stringAt(L, -2);
+                const keyType = lua.lua_type(L, -2);
+
+                if (keyType !== lua.LUA_TNUMBER && keyType !== lua.LUA_TSTRING) {
+                    fail(
+                        `Cannot serialise ${to_jsstring(lua.lua_typename(L, keyType))}: table key must be a number or string`,
+                    );
+                }
+
+                const key = keyType === lua.LUA_TNUMBER ? lua.lua_tonumber(L, -2) : stringAt(L, -2);
 
                 entries.push([key, jsonFrom(L, -1)]);
                 lua.lua_pop(L, 1);
@@ -447,16 +523,18 @@ const setStrings = (L, name, values) => {
 
 /**
  * Checks arguments the way node-redis's encoder does, before anything is sent.
+ * It numbers every word of the command, so `offset` is where `values` start.
  * @param {unknown[]} values
+ * @param {number} [offset]
  * @returns {string[]}
  */
-const encoded = values =>
+const encoded = (values, offset = 0) =>
     values.map((value, i) => {
         if (typeof value === 'string') return value;
         if (value instanceof Buffer) return value.toString();
 
         throw new TypeError(
-            `"arguments[${i}]" must be of type "string | Buffer", got ${typeof value} instead.`,
+            `"arguments[${offset + i}]" must be of type "string | Buffer", got ${typeof value} instead.`,
         );
     });
 
@@ -471,7 +549,7 @@ export const fakeRedis = () => {
     const live = key => {
         const entry = store.get(key);
 
-        if (entry?.expiresAt !== undefined && entry.expiresAt <= Date.now()) {
+        if (entry?.expiresAt !== undefined && entry.expiresAt < Date.now()) {
             store.delete(key);
 
             return undefined;
@@ -526,17 +604,21 @@ export const fakeRedis = () => {
             return /** @type {string | undefined} */ (entryOf(args[0], 'string')?.value) ?? null;
         },
         SET: (...args) => {
-            arity('SET', args, n => n === 2 || n === 4);
+            arity('SET', args, n => n >= 2);
 
-            const [key, value, option, seconds] = args;
+            const [key, value, ...options] = args;
+            /** @type {number | undefined} */
+            let ttl;
 
-            if (option !== undefined && option.toUpperCase() !== 'EX') {
-                fail(
-                    `ERR the fake Redis implements only SET key value [EX seconds], not ${option}`,
-                );
+            for (let i = 0; i < options.length; i++) {
+                if (options[i].toUpperCase() !== 'EX') {
+                    fail(
+                        `ERR the fake Redis implements only SET key value [EX seconds], not ${options[i]}`,
+                    );
+                }
+                if (ttl !== undefined || i + 1 === options.length) fail('ERR syntax error');
+                ttl = integerArgument(options[++i]);
             }
-
-            const ttl = seconds === undefined ? undefined : integerArgument(seconds);
 
             if (ttl !== undefined && ttl <= 0) fail("ERR invalid expire time in 'set' command");
 
@@ -604,23 +686,30 @@ export const fakeRedis = () => {
     };
 
     /**
-     * Runs one command, as `redis.call` would.
+     * Runs one command, as `redis.call` would. Like node-redis, it takes only
+     * strings, so the store holds only what Redis would.
      * @param {string} name
      * @param {...string} args
      * @returns {Reply}
      */
     const call = (name, ...args) => {
-        const command = commands[name.toUpperCase()];
+        const [word, ...rest] = encoded([name, ...args]);
+        const command = commands[word.toUpperCase()];
 
         if (!command) {
-            fail(`ERR the fake Redis in vitest.redis-lua.js does not implement '${name}'`);
+            fail(`ERR the fake Redis in vitest.redis-lua.js does not implement '${word}'`);
         }
 
-        return command(...args);
+        return command(...rest);
     };
 
-    /** @param {any} L */
-    const redisCall = L => {
+    /**
+     * The arguments of a `redis.call` or `redis.pcall`, as Redis takes them:
+     * strings, and numbers written as Redis writes them.
+     * @param {any} L
+     * @returns {string[]}
+     */
+    const commandFrom = L => {
         const args = [];
 
         for (let i = 1; i <= lua.lua_gettop(L); i++) {
@@ -631,21 +720,63 @@ export const fakeRedis = () => {
             } else if (type === lua.LUA_TSTRING) {
                 args.push(stringAt(L, i));
             } else {
-                return raiseReplyError(
-                    L,
-                    new Error('Lua redis lib command arguments must be strings or integers'),
-                );
+                fail('Lua redis lib command arguments must be strings or integers');
             }
         }
 
+        return args;
+    };
+
+    /**
+     * `redis.call` raises a failed command's `{ err }` table; `redis.pcall`
+     * returns it.
+     * @param {boolean} raises
+     * @returns {(L: any) => number}
+     */
+    const commandFunction = raises => L => {
         let reply;
 
         try {
-            reply = call(args[0] ?? '', ...args.slice(1));
+            const [name = '', ...args] = commandFrom(L);
+
+            reply = call(name, ...args);
         } catch (error) {
-            return raiseReplyError(L, error);
+            if (raises) return raiseReplyError(L, error);
+            pushErrorTable(L, withCode(/** @type {Error} */ (error).message));
+
+            return 1;
         }
         pushReply(L, reply);
+
+        return 1;
+    };
+
+    /**
+     * `redis.error_reply` and `redis.status_reply`: a one-field table, or an
+     * `{ err }` table when not given a single string.
+     * @param {'err' | 'ok'} field
+     * @returns {(L: any) => number}
+     */
+    const replyFunction = field => L => {
+        if (lua.lua_gettop(L) !== 1 || lua.lua_type(L, 1) !== lua.LUA_TSTRING) {
+            pushErrorTable(L, 'ERR wrong number or type of arguments');
+
+            return 1;
+        }
+
+        const text = stringAt(L, 1);
+
+        if (field === 'ok') {
+            lua.lua_createtable(L, 0, 1);
+            lua.lua_pushstring(L, to_luastring(text));
+            lua.lua_setfield(L, -2, to_luastring('ok'));
+        } else {
+            // Redis takes the first word as the code, or adds ERR when
+            // there is only one.
+            const message = text.replace(/^-/, '');
+
+            pushErrorTable(L, message.includes(' ') ? message : `ERR ${message}`);
+        }
 
         return 1;
     };
@@ -666,8 +797,7 @@ export const fakeRedis = () => {
         let json;
 
         try {
-            // Redis's cjson escapes "/", which JSON.stringify leaves alone.
-            json = JSON.stringify(jsonFrom(L, 1)).replaceAll('/', '\\/');
+            json = toJson(jsonFrom(L, 1));
         } catch (error) {
             return raise(L, error);
         }
@@ -682,8 +812,9 @@ export const fakeRedis = () => {
      * @param {{ keys?: unknown[], arguments?: unknown[] }} [options]
      */
     const evaluate = async (script, { keys = [], arguments: argv = [] } = {}) => {
-        const keyStrings = encoded(keys);
-        const argStrings = encoded(argv);
+        // node-redis sends EVAL, the script and the key count first.
+        const keyStrings = encoded(keys, 3);
+        const argStrings = encoded(argv, 3 + keys.length);
 
         assertLua51(script);
 
@@ -704,7 +835,12 @@ export const fakeRedis = () => {
 
         lua.lua_pushstring(L, to_luastring('Lua 5.1'));
         lua.lua_setglobal(L, to_luastring('_VERSION'));
-        setLibrary(L, 'redis', { call: redisCall });
+        setLibrary(L, 'redis', {
+            call: commandFunction(true),
+            pcall: commandFunction(false),
+            error_reply: replyFunction('err'),
+            status_reply: replyFunction('ok'),
+        });
         setLibrary(L, 'cjson', { decode, encode });
         lua.lua_getglobal(L, to_luastring('cjson'));
         lua.lua_pushlightuserdata(L, CJSON_NULL);
@@ -746,16 +882,18 @@ export const fakeRedis = () => {
             );
         },
         /**
-         * Seconds until `key` expires, rounded as Redis's TTL rounds them, or
-         * `undefined` when it has no expiry or no longer exists.
+         * Seconds until `key` expires, rounded as Redis's TTL rounds them;
+         * as Redis's TTL does, -1 when it has no expiry and -2 when it
+         * doesn't exist.
          * @param {string} key
          */
         ttl: key => {
-            const expiresAt = live(key)?.expiresAt;
+            const entry = live(key);
 
-            return expiresAt === undefined
-                ? undefined
-                : Math.round((expiresAt - Date.now()) / 1000);
+            if (!entry) return -2;
+            if (entry.expiresAt === undefined) return -1;
+
+            return Math.round((entry.expiresAt - Date.now()) / 1000);
         },
     };
 };

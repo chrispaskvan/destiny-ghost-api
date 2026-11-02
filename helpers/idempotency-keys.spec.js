@@ -78,6 +78,7 @@ const useRedis = () => {
  */
 const reserveIn = async (redis, held = reservation) => {
     cache.set.mockImplementationOnce(async (key, value, { expiration }) => {
+        expect(redis.call('GET', key), `reserveIn needs a free key, but ${key} is held`).toBeNull();
         redis.call('SET', key, value, 'EX', String(expiration.value));
 
         return null;
@@ -400,8 +401,12 @@ describe('idempotency-keys', () => {
             await vi.advanceTimersByTimeAsync(5 * 60_000);
             expect(redis.call('GET', reservationKey)).toBe(pending);
 
+            // The last renewal's lease runs out; Redis keeps the key through
+            // its final millisecond.
             stop();
             await vi.advanceTimersByTimeAsync(60_000);
+            expect(redis.call('GET', reservationKey)).toBe(pending);
+            await vi.advanceTimersByTimeAsync(1);
             expect(redis.call('GET', reservationKey)).toBeNull();
         });
 
