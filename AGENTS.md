@@ -68,6 +68,8 @@ Vitest, with `chance` for randomized test data, `node-mocks-http` for req/res mo
 
 Enforcement is split between CI and git hooks: GitHub Actions runs lint, typecheck, and the OpenAPI check, while the Husky pre-push hook runs the unit specs locally, under a time limit (`scripts/with-timeout.js`) so a run that never exits fails the push instead of blocking it. `vitest.setup.js` holds every test file to an allowlist of hosts and fails a file that connects anywhere else, naming what connected. Unit specs may reach only loopback; a spec that fails is usually loading a module that connects as it is imported (`helpers/cache.js`, `helpers/jobs.js`), which needs mocking. Integration tests may also reach the configured Redis host. The guard ignores the simulated sockets nock dials for the requests it intercepts or refuses.
 
+`vite` is a direct devDependency, though no file imports it, only to keep rolldown past 1.0.0-rc.16: Vite bundles `vitest.config.js` with rolldown at startup, and rc.16's native binding sometimes never finished, hanging Vitest before any test loaded (#789). Vite 8.3.5 brings rolldown 1.2.16. Bump `vite` together with `vitest`, and don't remove it as unused. If startup hangs come back, `--configLoader runner` skips the bundling.
+
 ### Test file naming convention
 
 Two suffixes distinguish test types:
