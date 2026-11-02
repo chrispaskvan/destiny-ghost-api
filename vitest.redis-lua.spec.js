@@ -207,9 +207,12 @@ describe('fakeRedis', () => {
             ['in exponent form', '1e3', 'ERR value is not an integer or out of range'],
             ['zero', '0', "ERR invalid expire time in 'set' command"],
             ['negative', '-5', "ERR invalid expire time in 'set' command"],
-        ])('SET rejects an EX that is %s, writing nothing', (_name, seconds, message) => {
-            expect(() => redis.call('SET', 'k', 'v', 'EX', seconds)).toThrow(new Error(message));
-            expect(redis.call('GET', 'k')).toBeNull();
+        ])('SET rejects an EX that is %s, leaving the key as it was', (_name, seconds, message) => {
+            redis.call('SET', 'k', 'old', 'EX', '60');
+
+            expect(() => redis.call('SET', 'k', 'new', 'EX', seconds)).toThrow(new Error(message));
+            expect(redis.call('GET', 'k')).toBe('old');
+            expect(redis.ttl('k')).toBe(60);
         });
 
         it('EXPIRE rejects an expiry in exponent form', () => {
