@@ -87,6 +87,7 @@
         "stream-json": "^3.8.0",
         "swagger-jsdoc": "^6.3.0",
         "typescript": "^7.0.2",
+        "vite": "^8.3.5",
         "vitest": "^5.0.5"
     },
     "pnpm": {
