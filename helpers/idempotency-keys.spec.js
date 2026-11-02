@@ -55,16 +55,6 @@ const stored = (overrides = {}) =>
         ...overrides,
     });
 const reservationKey = 'idempotency:notifications:x-api-key:xur-2026-10-09';
-/**
- * A reservation as the module stores it.
- * @param {'pending' | 'accepted'} state
- * @param {Partial<typeof reservation>} [overrides]
- */
-const held = (state, overrides = {}) => {
-    const { operationId, fingerprint, owner } = { ...reservation, ...overrides };
-
-    return JSON.stringify({ operationId, fingerprint, state, owner });
-};
 
 /**
  * Runs `cache.eval` on an in-memory Redis, so the real `ACCEPT`, `RENEW` and
@@ -76,6 +66,24 @@ const useRedis = () => {
     cache.eval.mockImplementation(redis.eval);
 
     return redis;
+};
+
+/**
+ * Reserves through the real `reserve`, landing what it writes in `redis`,
+ * with the expiry it asks for. Only for a free key: it doesn't play out
+ * `NX`/`GET` (the `reserve` tests cover those against `cache.set`), so the
+ * value the scripts compare against is the module's own, not a copy.
+ * @param {ReturnType<typeof fakeRedis>} redis
+ * @param {typeof reservation} [held]
+ */
+const reserveIn = async (redis, held = reservation) => {
+    cache.set.mockImplementationOnce(async (key, value, { expiration }) => {
+        redis.call('SET', key, value, 'EX', String(expiration.value));
+
+        return null;
+    });
+
+    await expect(reserve(held)).resolves.toEqual({ outcome: 'reserved' });
 };
 
 describe('idempotency-keys', () => {
@@ -186,12 +194,7 @@ describe('idempotency-keys', () => {
                 const stale = reservationFor(request);
                 const current = reservationFor(request);
 
-                cache.set.mockResolvedValue(null);
-                await reserve(current);
-
-                const [[key, value, { expiration }]] = cache.set.mock.calls;
-
-                redis.call('SET', key, value, 'EX', String(expiration.value));
+                await reserveIn(redis, current);
 
                 await expect(act(stale)).resolves.toBe(false);
                 await expect(act(current)).resolves.toBe(true);
@@ -281,7 +284,8 @@ describe('idempotency-keys', () => {
         });
 
         it('should act only on our own pending reservation', async () => {
-            redis.call('SET', reservationKey, held('pending'), 'EX', '60');
+            await reserveIn(redis);
+            const pending = redis.call('GET', reservationKey);
 
             await expect(act(reservation)).resolves.toBe(true);
 
@@ -289,18 +293,28 @@ describe('idempotency-keys', () => {
 
             expect(called).toBe(script);
             expect(keys).toEqual([reservationKey]);
-            expect(args[0]).toBe(held('pending'));
+            expect(args[0]).toBe(pending);
         });
 
         it.each([
-            ['lapsed', null],
-            ['been reserved by another request since', held('pending', { owner: 'owner-2' })],
-            ['already been accepted', held('accepted')],
-        ])('should leave a reservation that has %s alone', async (_case, value) => {
-            if (value) redis.call('SET', reservationKey, value, 'EX', '60');
+            ['lapsed', async () => {}],
+            [
+                'been reserved by another request since',
+                () => reserveIn(redis, { ...reservation, owner: 'owner-2' }),
+            ],
+            [
+                'already been accepted',
+                async () => {
+                    await reserveIn(redis);
+                    await accept(reservation);
+                },
+            ],
+        ])('should leave a reservation that has %s alone', async (_case, arrange) => {
+            await arrange();
+            const before = redis.call('GET', reservationKey);
 
             await expect(act(reservation)).resolves.toBe(false);
-            expect(redis.call('GET', reservationKey)).toBe(value);
+            expect(redis.call('GET', reservationKey)).toBe(before);
         });
     });
 
@@ -308,8 +322,7 @@ describe('idempotency-keys', () => {
         it('should keep the accepted operation for a day', async () => {
             const redis = useRedis();
 
-            redis.call('SET', reservationKey, held('pending'), 'EX', '60');
-
+            await reserveIn(redis);
             await accept(reservation);
 
             expect(JSON.parse(String(redis.call('GET', reservationKey)))).toEqual({
@@ -326,8 +339,7 @@ describe('idempotency-keys', () => {
         it('should free the key for a retry', async () => {
             const redis = useRedis();
 
-            redis.call('SET', reservationKey, held('pending'), 'EX', '60');
-
+            await reserveIn(redis);
             await release(reservation);
 
             expect(redis.call('GET', reservationKey)).toBeNull();
@@ -335,15 +347,20 @@ describe('idempotency-keys', () => {
     });
 
     describe('keepAlive', () => {
-        const pending = held('pending');
         /** @type {ReturnType<typeof fakeRedis>} */
         let redis;
+        /** What `reserve` stored, which each renewal must match. */
+        let pending;
 
-        beforeEach(() => {
+        /**
+         * The real lease, on the fake clock: `reserve` takes the key for 60
+         * seconds, and it lapses unless a renewal lands first.
+         */
+        beforeEach(async () => {
             vi.useFakeTimers();
             redis = useRedis();
-            // Five seconds from lapsing, so a renewal shows in the expiry.
-            redis.call('SET', reservationKey, pending, 'EX', '5');
+            await reserveIn(redis);
+            pending = redis.call('GET', reservationKey);
         });
 
         afterEach(() => {
@@ -357,24 +374,40 @@ describe('idempotency-keys', () => {
 
             await vi.advanceTimersByTimeAsync(19_999);
             expect(cache.eval).not.toHaveBeenCalled();
+            expect(redis.ttl(reservationKey)).toBe(40);
 
-            await vi.advanceTimersByTimeAsync(40_001);
-            expect(cache.eval).toHaveBeenCalledTimes(3);
+            await vi.advanceTimersByTimeAsync(1);
+            expect(cache.eval).toHaveBeenCalledOnce();
+            expect(redis.ttl(reservationKey)).toBe(60);
 
-            const [, { keys, arguments: args }] = cache.eval.mock.calls[0];
+            const [[script, { keys, arguments: args }]] = cache.eval.mock.calls;
 
-            expect(cache.eval.mock.calls[0][0]).toBe(RENEW);
+            expect(script).toBe(RENEW);
             expect(keys).toEqual([reservationKey]);
             expect(args).toEqual([pending, '60']);
-            expect(redis.ttl(reservationKey)).toBe(60);
+
+            await vi.advanceTimersByTimeAsync(40_000);
+            expect(cache.eval).toHaveBeenCalledTimes(3);
 
             stop();
             await vi.advanceTimersByTimeAsync(60_000);
             expect(cache.eval).toHaveBeenCalledTimes(3);
         });
 
+        it('should hold the key past its first lease for as long as it renews', async () => {
+            const stop = keepAlive(reservation);
+
+            await vi.advanceTimersByTimeAsync(5 * 60_000);
+            expect(redis.call('GET', reservationKey)).toBe(pending);
+
+            stop();
+            await vi.advanceTimersByTimeAsync(60_000);
+            expect(redis.call('GET', reservationKey)).toBeNull();
+        });
+
         it('should stop renewing once the reservation is no longer ours', async () => {
-            redis.call('SET', reservationKey, held('pending', { owner: 'owner-2' }), 'EX', '5');
+            redis.call('DEL', reservationKey);
+            await reserveIn(redis, { ...reservation, owner: 'owner-2' });
 
             keepAlive(reservation);
             await vi.advanceTimersByTimeAsync(60_000);
@@ -392,6 +425,8 @@ describe('idempotency-keys', () => {
 
             expect(cache.eval).toHaveBeenCalledTimes(2);
             expect(log.warn).toHaveBeenCalledOnce();
+            // The second renewal landed inside the first lease, and reset it.
+            expect(redis.ttl(reservationKey)).toBe(60);
             stop();
         });
     });

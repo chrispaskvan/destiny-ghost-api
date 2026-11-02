@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { assertLua51, fakeRedis } from './vitest.redis-lua.js';
 
 describe('assertLua51', () => {
@@ -67,9 +67,27 @@ describe('fakeRedis', () => {
             ['a string', "return 'x'", 'x'],
             ['an array, up to the first nil', 'return { 1, "a", { 2 }, nil, 5 }', [1, 'a', [2]]],
             ['a status table', "return { ok = 'OK' }", 'OK'],
+            [
+                'an array holding a status and an error',
+                "return { 1, { ok = 'OK' }, { err = 'NOPE inner' } }",
+                [1, 'OK', new Error('NOPE inner')],
+            ],
         ])('converts a returned %s the way Redis does', async (_name, script, reply) => {
             await expect(redis.eval(script)).resolves.toEqual(reply);
         });
+
+        it.each([
+            ['math.huge', 'Infinity'],
+            ['-math.huge', '-Infinity'],
+            ['0/0', 'NaN'],
+        ])(
+            'refuses to reply with %s, which Redis has no defined conversion for',
+            async (expr, shown) => {
+                await expect(redis.eval(`return ${expr}`)).rejects.toThrow(
+                    `cannot reply with ${shown}`,
+                );
+            },
+        );
 
         it('rejects with the message of a returned error table', async () => {
             await expect(redis.eval("return { err = 'nope' }")).rejects.toThrow('nope');
@@ -119,14 +137,32 @@ describe('fakeRedis', () => {
             await expect(redis.eval(`return ${name} == nil`)).resolves.toBe(1);
         });
 
-        it.each(['rawlen', 'utf8', 'io', 'os', 'debug', 'package', 'require', 'coroutine'])(
-            'has no global %s, as Redis has none',
-            async name => {
-                await expect(redis.eval(`return ${name}`)).rejects.toThrow(
-                    `Script attempted to access nonexistent global variable '${name}'`,
-                );
-            },
-        );
+        it.each([
+            'rawlen',
+            'utf8',
+            'io',
+            'os',
+            'debug',
+            'package',
+            'require',
+            'dofile',
+            'loadfile',
+            'print',
+        ])('has no global %s, as Redis has none', async name => {
+            await expect(redis.eval(`return ${name}`)).rejects.toThrow(
+                `Script attempted to access nonexistent global variable '${name}'`,
+            );
+        });
+
+        it("opens coroutine, as 5.1's base library does, without 5.3's isyieldable", async () => {
+            await expect(
+                redis.eval('return { type(coroutine.wrap), coroutine.isyieldable == nil }'),
+            ).resolves.toEqual(['function', 1]);
+        });
+
+        it('reports itself as Lua 5.1', async () => {
+            await expect(redis.eval('return _VERSION')).resolves.toBe('Lua 5.1');
+        });
 
         it("has 5.1's global unpack", async () => {
             await expect(redis.eval("return { unpack({ 'a', 'b' }) }")).resolves.toEqual([
@@ -197,6 +233,80 @@ describe('fakeRedis', () => {
 
         it('takes command names in any case', async () => {
             await expect(redis.eval("return redis.call('get', 'k')")).resolves.toBeNull();
+        });
+
+        it('raises a failed command as the { err } table Redis 7 raises', async () => {
+            await expect(
+                redis.eval(
+                    "local ok, e = pcall(redis.call, 'EXPIRE', 'k', '1.5') return { tostring(ok), type(e), e.err }",
+                ),
+            ).resolves.toEqual(['false', 'table', 'ERR value is not an integer or out of range']);
+        });
+
+        it('gives an argument of the wrong type an ERR code', async () => {
+            await expect(
+                redis.eval("local ok, e = pcall(redis.call, 'GET', {}) return e.err"),
+            ).resolves.toBe('ERR Lua redis lib command arguments must be strings or integers');
+        });
+    });
+
+    describe('expiry', () => {
+        beforeEach(() => {
+            vi.useFakeTimers();
+        });
+
+        afterEach(() => {
+            vi.useRealTimers();
+        });
+
+        it('expires a key once its time has passed, and not before', async () => {
+            redis.call('SET', 'k', 'v', 'EX', '10');
+
+            await vi.advanceTimersByTimeAsync(9_999);
+            expect(redis.call('GET', 'k')).toBe('v');
+
+            await vi.advanceTimersByTimeAsync(1);
+            expect(redis.call('GET', 'k')).toBeNull();
+            expect(redis.ttl('k')).toBeUndefined();
+        });
+
+        it('counts the remaining time down, rounded as Redis rounds TTL', async () => {
+            redis.call('SET', 'k', 'v', 'EX', '60');
+
+            await vi.advanceTimersByTimeAsync(20_400);
+            expect(redis.ttl('k')).toBe(40);
+
+            await vi.advanceTimersByTimeAsync(200);
+            expect(redis.ttl('k')).toBe(39);
+        });
+
+        it('lets EXPIRE extend a key, and finds nothing to extend once it has gone', async () => {
+            redis.call('HSET', 'h', 'f', 'v');
+            redis.call('EXPIRE', 'h', '10');
+
+            await vi.advanceTimersByTimeAsync(5_000);
+            expect(redis.call('EXPIRE', 'h', '10')).toBe(1);
+
+            await vi.advanceTimersByTimeAsync(9_999);
+            expect(redis.call('HGET', 'h', 'f')).toBe('v');
+
+            await vi.advanceTimersByTimeAsync(1);
+            expect(redis.call('EXPIRE', 'h', '10')).toBe(0);
+        });
+
+        it('treats an expired key as missing in a script and in DEL', async () => {
+            redis.call('SET', 'k', 'v', 'EX', '1');
+            await vi.advanceTimersByTimeAsync(1_000);
+
+            await expect(redis.eval("return redis.call('GET', 'k') == false")).resolves.toBe(1);
+            expect(redis.call('DEL', 'k')).toBe(0);
+        });
+
+        it('lets a key without an expiry live on', async () => {
+            redis.call('SET', 'k', 'v');
+            await vi.advanceTimersByTimeAsync(365 * 86_400_000);
+
+            expect(redis.call('GET', 'k')).toBe('v');
         });
     });
 
@@ -329,9 +439,27 @@ describe('fakeRedis', () => {
         });
 
         it('refuses to encode a function', async () => {
-            await expect(redis.eval('return cjson.encode({ f = print })')).rejects.toThrow(
+            await expect(redis.eval('return cjson.encode({ f = tostring })')).rejects.toThrow(
                 'Cannot serialise function',
             );
+        });
+
+        it('encodes a sparse array with null in its gaps', async () => {
+            await expect(redis.eval('return cjson.encode({ 1, 2, nil, 4 })')).resolves.toBe(
+                '[1,2,null,4]',
+            );
+        });
+
+        it('refuses an array too sparse to encode', async () => {
+            await expect(
+                redis.eval('local t = {} t[1] = 1 t[20] = 2 return cjson.encode(t)'),
+            ).rejects.toThrow('excessively sparse array');
+        });
+
+        it('encodes a table with any non-index key as an object', async () => {
+            const json = await redis.eval("return cjson.encode({ 1, a = 'b' })");
+
+            expect(JSON.parse(String(json))).toEqual({ 1: 1, a: 'b' });
         });
     });
 });
