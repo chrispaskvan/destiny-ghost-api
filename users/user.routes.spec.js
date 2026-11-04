@@ -21,10 +21,10 @@ const { postmasterConfirm, postmasterRegister } = vi.hoisted(() => ({
  * written out, verification tokens and all, so what it carries is asserted
  * rather than assumed.
  */
-const { logInfo } = vi.hoisted(() => ({ logInfo: vi.fn() }));
+const { logInfo, logWarn } = vi.hoisted(() => ({ logInfo: vi.fn(), logWarn: vi.fn() }));
 
 vi.mock('../helpers/log.js', () => ({
-    default: { error: vi.fn(), info: logInfo, warn: vi.fn() },
+    default: { error: vi.fn(), info: logInfo, warn: logWarn },
 }));
 vi.mock('../helpers/postmaster.js', () => ({
     default: class {
@@ -453,15 +453,25 @@ describe('UserRouter', () => {
                 userRouter(signUpRequest({ ...validBody }), res, next);
             }));
 
-        it('should name the channels whose verification message did not go out', () =>
+        it('should answer 204 even when a verification message did not go out', () =>
             new Promise((done, reject) => {
                 notificationService.sendMessage.mockRejectedValueOnce(new Error('twilio'));
 
                 res.on('end', () => {
                     try {
-                        expect(res.statusCode).toEqual(StatusCodes.OK);
-                        expect(res._getJSONData()).toEqual({ undelivered: ['phone'] });
-                        expect(postmasterRegister).toHaveBeenCalled();
+                        /**
+                         * The same answer as a conflict, which sends nothing: a
+                         * caller can make the SMS fail at will (a number that
+                         * texted STOP), so a different answer here would tell
+                         * them whether the email address is registered.
+                         */
+                        expect(res.statusCode).toEqual(StatusCodes.NO_CONTENT);
+                        expect(res._getData()).toEqual('');
+                        expect(logWarn).toHaveBeenCalledWith(
+                            { displayName: 'test-user', membershipType: 2, undelivered: ['phone'] },
+                            'User signed up, but not every verification message was sent',
+                        );
+                        expect(signUpEvent()).toBeUndefined();
                         done();
                     } catch (err) {
                         reject(err);

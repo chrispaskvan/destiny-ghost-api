@@ -828,34 +828,8 @@
         },
         "description": "Sign up for the service with a first name, last name, phone number, and email address. These are the only accepted fields; every other property of an account is server-owned and assigned during verification, so a request carrying one is rejected rather than ignored.\n",
         "responses": {
-          "200": {
-            "description": "Signed up, but a verification message could not be sent on the channels listed. Any code that was sent is still valid. Signing up again sends new codes on both channels and replaces the earlier ones.\n",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "required": [
-                    "undelivered"
-                  ],
-                  "properties": {
-                    "undelivered": {
-                      "type": "array",
-                      "minItems": 1,
-                      "items": {
-                        "type": "string",
-                        "enum": [
-                          "phone",
-                          "email"
-                        ]
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          },
           "204": {
-            "description": "No Content. Returned whether or not the address was already registered, so a conflict is not disclosed.\n"
+            "description": "No Content. Returned whether or not the address was already registered, and whether or not the verification messages could be sent, so a conflict is not disclosed. Signing up again sends new codes on both channels and replaces the earlier ones.\n"
           },
           "403": {
             "description": "Forbidden. Missing or invalid CSRF token."

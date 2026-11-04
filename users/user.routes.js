@@ -582,30 +582,12 @@ const routes = ({
      *        is server-owned and assigned during verification, so a request carrying one is
      *        rejected rather than ignored.
      *      responses:
-     *        200:
-     *          description: >
-     *            Signed up, but a verification message could not be sent on the channels
-     *            listed. Any code that was sent is still valid. Signing up again sends new
-     *            codes on both channels and replaces the earlier ones.
-     *          content:
-     *            application/json:
-     *              schema:
-     *                type: object
-     *                required:
-     *                  - undelivered
-     *                properties:
-     *                  undelivered:
-     *                    type: array
-     *                    minItems: 1
-     *                    items:
-     *                      type: string
-     *                      enum:
-     *                        - phone
-     *                        - email
      *        204:
      *          description: >
-     *            No Content. Returned whether or not the address was already registered, so a
-     *            conflict is not disclosed.
+     *            No Content. Returned whether or not the address was already registered, and
+     *            whether or not the verification messages could be sent, so a conflict is not
+     *            disclosed. Signing up again sends new codes on both channels and replaces the
+     *            earlier ones.
      *        403:
      *          description: Forbidden. Missing or invalid CSRF token.
      *        422:
@@ -657,20 +639,25 @@ const routes = ({
                 throw err;
             }
 
-            log.info(
-                { displayName, membershipType },
-                signedUp ? 'User signed up' : 'User sign up failed due to conflicts',
-            );
-
-            /**
-             * A body appears only when a send failed, which implies there was
-             * no conflict. A caller cannot reliably make a send fail, so this
-             * discloses little, and it lets them resend what did not arrive.
-             */
             if (signedUp?.undelivered.length) {
-                return res.status(StatusCodes.OK).json({ undelivered: signedUp.undelivered });
+                log.warn(
+                    { displayName, membershipType, undelivered: signedUp.undelivered },
+                    'User signed up, but not every verification message was sent',
+                );
+            } else {
+                log.info(
+                    { displayName, membershipType },
+                    signedUp ? 'User signed up' : 'User sign up failed due to conflicts',
+                );
             }
 
+            /**
+             * 204 whatever happened to the messages. A conflict sends nothing,
+             * so any answer that depended on how a send went would tell the
+             * caller whether the address or number is already registered, and
+             * a caller can make a send fail at will: a phone that has texted
+             * STOP is refused by Twilio every time.
+             */
             return res.status(StatusCodes.NO_CONTENT).end();
         },
     );

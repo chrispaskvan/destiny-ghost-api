@@ -648,7 +648,7 @@ class UserController {
 
         /**
          * Settled independently: one channel failing neither stops the other
-         * nor undoes the save, and the caller is told which to resend.
+         * nor undoes the save.
          */
         const [sms, email] = await Promise.allSettled([
             this.notifications.sendMessage(
@@ -687,35 +687,50 @@ class UserController {
             }
         }
 
-        if (undelivered.length < 2) {
-            await this.#saveReceipts(user, receipts);
+        if (Object.keys(receipts).length) {
+            await this.#amendSignUp(user, saved => ({ ...saved, ...receipts }), {
+                context: { sid: receipts.message?.sid, messageId: receipts.postmark?.messageId },
+                skipped: 'The saved sign-up has changed; not saving its receipts.',
+                failed: 'Failed to save sign-up delivery receipts.',
+            });
+        } else {
+            /**
+             * Nothing went out, so the codes just saved reached nobody. Put
+             * back whatever the user held before, so a retried sign-up that
+             * fails outright does not cost them codes that still work.
+             */
+            await this.#amendSignUp(user, () => bungieUser?.membership, {
+                context: {},
+                skipped: 'The saved sign-up has changed; not restoring the previous codes.',
+                failed: 'Failed to restore the previous sign-up codes.',
+            });
         }
 
         return { undelivered };
     }
 
     /**
-     * Add the delivery receipts to the saved sign-up. They are kept for
-     * billing.
+     * Change the `membership` of a sign-up already saved: add its delivery
+     * receipts, which are kept for billing, or put back the codes it replaced
+     * when none of its own went out.
      *
-     * Best effort: the messages are already out, so failing the request now
-     * would only invite a retry that sends, and bills, them again. A receipt
-     * that cannot be saved is logged with the provider's ids instead, which is
-     * enough to reconcile it.
+     * Best effort, because the outcome of the sends is already settled:
+     * failing the request now would only invite a retry that sends, and
+     * bills, the messages again. A failure is logged with `context`, which for
+     * receipts carries the provider's ids, enough to reconcile them.
      *
-     * Written onto a fresh read rather than the document `signUp` built, so a
+     * Applied to a fresh read rather than the document `signUp` built, so a
      * `join` that landed while the messages were sending is kept, and the read
      * brings the ETag that guards this write against anything later. A read
-     * holding other tokens means a newer sign-up replaced them; restoring
-     * these would leave the user with codes that no longer match what they
-     * were last sent.
+     * holding other tokens means a newer sign-up replaced them, and changing
+     * it would leave the user with codes that no longer match what they were
+     * last sent.
      * @param {MutableUser} user - the sign-up as it was saved
-     * @param {Membership} receipts - one per channel that sent
+     * @param {(saved: Membership | undefined) => Membership | undefined} amend
+     * @param {{ context: Record<string, unknown>, skipped: string, failed: string }} messages
      * @returns {Promise<void>}
      */
-    async #saveReceipts(user, { message, postmark }) {
-        const ids = { sid: message?.sid, messageId: postmark?.messageId };
-
+    async #amendSignUp(user, amend, { context, skipped, failed }) {
         try {
             const current = /** @type {MutableUser | undefined} */ (
                 await this.users.getUserByDisplayName(
@@ -726,20 +741,16 @@ class UserController {
             );
 
             if (!current || current.membership?.tokens?.blob !== user.membership?.tokens?.blob) {
-                log.warn(ids, 'The saved sign-up has changed; not saving its receipts.');
+                log.warn(context, skipped);
 
                 return;
             }
 
-            current.membership = {
-                ...current.membership,
-                ...(message && { message }),
-                ...(postmark && { postmark }),
-            };
+            current.membership = amend(current.membership);
 
             await this.users.updateUser(/** @type {User} */ (/** @type {unknown} */ (current)));
         } catch (err) {
-            log.error({ err, ...ids }, 'Failed to save sign-up delivery receipts.');
+            log.error({ err, ...context }, failed);
         }
     }
 

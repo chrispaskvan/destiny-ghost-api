@@ -802,11 +802,9 @@ describe('UserController', () => {
 
             beforeEach(() => {
                 stored = undefined;
-                userService.getUserByDisplayName.mockImplementation((_name, _type, skipCache) =>
+                userService.getUserByDisplayName.mockImplementation(() =>
                     Promise.resolve(
-                        skipCache && stored
-                            ? { ...structuredClone(stored), _etag: chance.guid() }
-                            : undefined,
+                        stored ? { ...structuredClone(stored), _etag: chance.guid() } : undefined,
                     ),
                 );
                 userService.getUserByEmailAddress.mockResolvedValue(undefined);
@@ -897,10 +895,44 @@ describe('UserController', () => {
                 await expect(signUp()).resolves.toEqual({ undelivered: ['phone', 'email'] });
 
                 /**
-                 * Nothing went out, so there is nothing to bill and no reason
-                 * for a second write.
+                 * Nothing went out, so there is nothing to bill, and the codes
+                 * just saved reached nobody: the user is back to holding none.
                  */
-                expect(userService.updateUser).toHaveBeenCalledTimes(1);
+                expect(stored.membership).toBeUndefined();
+            });
+
+            it('should keep the codes of an earlier sign-up when nothing goes out', async () => {
+                const earlier = {
+                    tokens: { blob: 'earlier-blob', code: '111111', timeStamp: getEpoch() },
+                    message: { sid: 'SM-earlier' },
+                };
+
+                stored = { displayName, membershipType, membership: earlier };
+                notificationService.sendMessage.mockRejectedValueOnce(new Error('twilio'));
+                userController.postmaster.register.mockRejectedValueOnce(new Error('smtp'));
+
+                await signUp();
+
+                expect(stored.membership).toEqual(earlier);
+            });
+
+            it('should not restore earlier codes over a newer sign-up', async () => {
+                const newer = { blob: 'newer-blob', code: '654321', timeStamp: 1 };
+
+                notificationService.sendMessage.mockImplementationOnce(() => {
+                    stored.membership.tokens = newer;
+
+                    return Promise.reject(new Error('twilio'));
+                });
+                userController.postmaster.register.mockRejectedValueOnce(new Error('smtp'));
+
+                await signUp();
+
+                expect(stored.membership.tokens).toEqual(newer);
+                expect(logWarn).toHaveBeenCalledWith(
+                    {},
+                    'The saved sign-up has changed; not restoring the previous codes.',
+                );
             });
 
             it('should save the receipts after sending, for billing', async () => {
