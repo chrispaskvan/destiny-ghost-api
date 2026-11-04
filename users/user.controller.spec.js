@@ -245,6 +245,73 @@ describe('UserController', () => {
         });
     });
 
+    describe('verification token TTL', () => {
+        const code = '123456';
+        /**
+         * `getEpoch` has one-second resolution and keeps running between
+         * minting the timestamp here and checking it in the controller, so
+         * each case stays a few seconds clear of the boundary.
+         */
+        const tokensAged = seconds => ({ code, timeStamp: getEpoch() - seconds });
+        const controllerWith = tokenTtlSeconds =>
+            new UserController({
+                destinyService,
+                notificationService,
+                tokenTtlSeconds,
+                userService,
+                worldRepository,
+            });
+        const join = (controller, seconds) => {
+            userService.getUserByEmailAddressToken.mockResolvedValueOnce({
+                membership: { tokens: tokensAged(seconds) },
+            });
+
+            return controller.join({ tokens: { emailAddress: 'some-blob', phoneNumber: code } });
+        };
+        const decipher = (controller, seconds) => {
+            userService.getUserByDisplayName.mockResolvedValueOnce({
+                membership: { tokens: tokensAged(seconds) },
+            });
+
+            return controller.decipher({ displayName, membershipType, channel: 'phone', code });
+        };
+
+        describe('when none is configured', () => {
+            it('should accept a token up to 15 minutes old', async () => {
+                await expect(join(controllerWith(undefined), 895)).resolves.toBeDefined();
+                await expect(decipher(controllerWith(undefined), 895)).resolves.toBeDefined();
+            });
+
+            it('should reject a token older than 15 minutes', async () => {
+                await expect(join(controllerWith(undefined), 905)).resolves.toBeUndefined();
+                await expect(decipher(controllerWith(undefined), 905)).rejects.toThrow(
+                    'token expired',
+                );
+            });
+        });
+
+        describe('when one is configured', () => {
+            it('should accept a token inside it', async () => {
+                await expect(join(controllerWith(600), 595)).resolves.toBeDefined();
+                await expect(decipher(controllerWith(600), 595)).resolves.toBeDefined();
+            });
+
+            it('should reject a token older than it', async () => {
+                await expect(join(controllerWith(600), 605)).resolves.toBeUndefined();
+                await expect(decipher(controllerWith(600), 605)).rejects.toThrow('token expired');
+            });
+        });
+
+        it.each([0, -1, 1.5, '900', null, Number.NaN])(
+            'should refuse to start with %s',
+            tokenTtlSeconds => {
+                expect(() => controllerWith(tokenTtlSeconds)).toThrow(
+                    'tokenTtlSeconds must be a positive integer',
+                );
+            },
+        );
+    });
+
     describe('join', () => {
         describe('when the request is missing an email address token', () => {
             it('should return undefined without querying the user service', async () => {

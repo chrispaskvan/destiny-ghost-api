@@ -4,7 +4,7 @@ These diagrams reflect the actual implemented behavior of the API (routes, contr
 
 * **Auth is a session cookie, not a bearer token.** The frontend never holds or forwards a Bungie access token. It's exchanged server-side, and an httpOnly session cookie is what authenticates every subsequent `bungieOAuth`-secured request.
 * **`PATCH /users`, not `PATCH /users/{userId}`.** The user is identified entirely by the session cookie; there is no path parameter.
-* **Registration is a single combined two-factor step**, not two independent ones. `POST /users/signUp` fires an SMS code and an emailed link from one shared 5-minute-TTL token pair; `POST /users/join` validates both together in one call.
+* **Registration is a single combined two-factor step**, not two independent ones. `POST /users/signUp` fires an SMS code and an emailed link from one token pair with a shared TTL (15 minutes by default; `tokenTtlSeconds` in the optional `settings/users.json` changes it); `POST /users/join` validates both together in one call.
 
 Admin/back-office endpoints (manifest upload, inventory, notification broadcast triggers) are gated by the `Destiny-Ghost-Authorization` API key, not user login, and are out of scope for these diagrams.
 
@@ -65,7 +65,7 @@ sequenceDiagram
         User->>WebApp: Enter first/last name, phone, email
         WebApp->>API: POST /users/signUp (firstName, lastName, phoneNumber, emailAddress)
         API->>API: Normalize phone to E.164 (rejects CN/KP/RU region codes)
-        API->>API: Generate one token pair: SMS code + email blob, shared 5-min TTL
+        API->>API: Generate one token pair: SMS code + email blob, shared TTL (15 min default)
         par Send SMS
             API->>SMS: Send "Enter [code] to verify your phone number"
             SMS-->>User: Deliver SMS
@@ -82,7 +82,7 @@ sequenceDiagram
         WebApp-->>User: Prompt for the SMS code
         User->>WebApp: Enter SMS code
         WebApp->>API: POST /users/join (tokens: emailAddress=[blob], phoneNumber=[code])
-        API->>API: Validate both against the 5-min TTL token pair
+        API->>API: Validate both against the token pair's TTL
         API->>API: Set dateRegistered and seed notifications (Orders, Banshee-44, Lord Saladin, Xur, all disabled)
         API-->>WebApp: 200 success, or 400 if expired/mismatched (resubmit signUp to retry)
     end

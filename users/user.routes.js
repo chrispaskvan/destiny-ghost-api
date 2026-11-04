@@ -126,6 +126,7 @@ function signIn(req, res, user, next) {
  * @property {AuthenticationController} authenticationController
  * @property {import('../destiny/destiny.service.js').default} destinyService
  * @property {import('../notifications/notification.service.js').default} notificationService
+ * @property {number} [tokenTtlSeconds] - see `UserController`
  * @property {import('./user.service.js').default} userService
  * @property {import('../helpers/world2.js').default} worldRepository
  */
@@ -137,6 +138,7 @@ const routes = ({
     authenticationController,
     destinyService,
     notificationService,
+    tokenTtlSeconds,
     userService,
     worldRepository,
 }) => {
@@ -144,6 +146,7 @@ const routes = ({
     const userController = new UserController({
         destinyService,
         notificationService,
+        tokenTtlSeconds,
         userService,
         worldRepository,
     });
