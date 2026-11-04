@@ -779,6 +779,39 @@ describe('UserController', () => {
 
                 expect(user).toBeUndefined();
             });
+
+            it('should send and save nothing for an account that is already registered', async () => {
+                userService.getUserByDisplayName.mockResolvedValueOnce({
+                    displayName,
+                    membershipType,
+                    dateRegistered: Temporal.Now.instant().toString(),
+                    emailAddress: 'verified@example.com',
+                    phoneNumber: '+15555550100',
+                });
+                userService.getUserByEmailAddress.mockResolvedValue(undefined);
+                userService.getUserByPhoneNumber.mockResolvedValue(undefined);
+
+                /**
+                 * The new address and number are unclaimed, so only the
+                 * account's own registration stops this. Letting it through
+                 * would replace verified contact with contact nobody checked.
+                 */
+                const user = await userController.signUp({
+                    displayName,
+                    membershipType,
+                    contact: {
+                        firstName: 'Ada',
+                        lastName: 'Lovelace',
+                        emailAddress: 'unverified@example.com',
+                        phoneNumber,
+                    },
+                });
+
+                expect(user).toBeUndefined();
+                expect(userService.updateUser).not.toHaveBeenCalled();
+                expect(notificationService.sendMessage).not.toHaveBeenCalled();
+                expect(userController.postmaster.register).not.toHaveBeenCalled();
+            });
         });
 
         describe('delivery', () => {
@@ -873,7 +906,7 @@ describe('UserController', () => {
 
                 expect(userController.postmaster.register).toHaveBeenCalled();
                 expect(logError).toHaveBeenCalledWith(
-                    { err, channel: 'phone' },
+                    { err, channel: 'phone', displayName, membershipType },
                     'Failed to send a sign-up verification message.',
                 );
             });
@@ -894,45 +927,33 @@ describe('UserController', () => {
 
                 await expect(signUp()).resolves.toEqual({ undelivered: ['phone', 'email'] });
 
-                /**
-                 * Nothing went out, so there is nothing to bill, and the codes
-                 * just saved reached nobody: the user is back to holding none.
-                 */
-                expect(stored.membership).toBeUndefined();
+                /** Nothing went out, so there is nothing to bill. */
+                expect(userService.updateUser).toHaveBeenCalledTimes(1);
             });
 
-            it('should keep the codes of an earlier sign-up when nothing goes out', async () => {
-                const earlier = {
-                    tokens: { blob: 'earlier-blob', code: '111111', timeStamp: getEpoch() },
-                    message: { sid: 'SM-earlier' },
+            it("should not bring back an earlier sign-up's codes when nothing goes out", async () => {
+                stored = {
+                    displayName,
+                    membershipType,
+                    emailAddress: 'earlier@example.com',
+                    membership: {
+                        tokens: { blob: 'earlier-blob', code: '111111', timeStamp: getEpoch() },
+                    },
                 };
-
-                stored = { displayName, membershipType, membership: earlier };
                 notificationService.sendMessage.mockRejectedValueOnce(new Error('twilio'));
                 userController.postmaster.register.mockRejectedValueOnce(new Error('smtp'));
 
                 await signUp();
 
-                expect(stored.membership).toEqual(earlier);
-            });
-
-            it('should not restore earlier codes over a newer sign-up', async () => {
-                const newer = { blob: 'newer-blob', code: '654321', timeStamp: 1 };
-
-                notificationService.sendMessage.mockImplementationOnce(() => {
-                    stored.membership.tokens = newer;
-
-                    return Promise.reject(new Error('twilio'));
-                });
-                userController.postmaster.register.mockRejectedValueOnce(new Error('smtp'));
-
-                await signUp();
-
-                expect(stored.membership.tokens).toEqual(newer);
-                expect(logWarn).toHaveBeenCalledWith(
-                    {},
-                    'The saved sign-up has changed; not restoring the previous codes.',
-                );
+                /**
+                 * The earlier codes reached the earlier contact. Paired with
+                 * the contact just saved, they would register an address and
+                 * number nobody verified. A send that failed may also have
+                 * been delivered, so the new codes stay.
+                 */
+                expect(stored.emailAddress).toEqual(contact.emailAddress);
+                expect(stored.membership.tokens.blob).not.toEqual('earlier-blob');
+                expect(stored.membership.tokens.code).not.toEqual('111111');
             });
 
             it('should save the receipts after sending, for billing', async () => {
@@ -976,7 +997,7 @@ describe('UserController', () => {
                 expect(stored.membership.message).toEqual(sms);
             });
 
-            it('should not restore its tokens over a newer sign-up', async () => {
+            it('should not save its receipts onto a newer sign-up', async () => {
                 const newer = { blob: 'newer-blob', code: '654321', timeStamp: 1 };
 
                 notificationService.sendMessage.mockImplementationOnce(() => {
@@ -990,7 +1011,7 @@ describe('UserController', () => {
                 expect(userService.updateUser).toHaveBeenCalledTimes(1);
                 expect(stored.membership.tokens).toEqual(newer);
                 expect(logWarn).toHaveBeenCalledWith(
-                    { sid: sms.sid, messageId: email.messageId },
+                    { displayName, membershipType, sid: sms.sid, messageId: email.messageId },
                     'The saved sign-up has changed; not saving its receipts.',
                 );
             });
@@ -1013,7 +1034,13 @@ describe('UserController', () => {
                 await expect(signUp()).resolves.toEqual({ undelivered: [] });
 
                 expect(logError).toHaveBeenCalledWith(
-                    { err, sid: sms.sid, messageId: email.messageId },
+                    {
+                        err,
+                        displayName,
+                        membershipType,
+                        sid: sms.sid,
+                        messageId: email.messageId,
+                    },
                     'Failed to save sign-up delivery receipts.',
                 );
             });
