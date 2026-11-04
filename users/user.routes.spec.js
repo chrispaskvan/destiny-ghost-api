@@ -453,6 +453,24 @@ describe('UserRouter', () => {
                 userRouter(signUpRequest({ ...validBody }), res, next);
             }));
 
+        it('should name the channels whose verification message did not go out', () =>
+            new Promise((done, reject) => {
+                notificationService.sendMessage.mockRejectedValueOnce(new Error('twilio'));
+
+                res.on('end', () => {
+                    try {
+                        expect(res.statusCode).toEqual(StatusCodes.OK);
+                        expect(res._getJSONData()).toEqual({ undelivered: ['phone'] });
+                        expect(postmasterRegister).toHaveBeenCalled();
+                        done();
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
+
+                userRouter(signUpRequest({ ...validBody }), res, next);
+            }));
+
         it('should log a successful sign-up without the tokens it just minted', () =>
             new Promise((done, reject) => {
                 res.on('end', () => {

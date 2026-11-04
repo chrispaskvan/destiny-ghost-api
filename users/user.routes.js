@@ -582,6 +582,26 @@ const routes = ({
      *        is server-owned and assigned during verification, so a request carrying one is
      *        rejected rather than ignored.
      *      responses:
+     *        200:
+     *          description: >
+     *            Signed up, but a verification message could not be sent on the channels
+     *            listed. Any code that was sent is still valid. Signing up again sends new
+     *            codes on both channels and replaces the earlier ones.
+     *          content:
+     *            application/json:
+     *              schema:
+     *                type: object
+     *                required:
+     *                  - undelivered
+     *                properties:
+     *                  undelivered:
+     *                    type: array
+     *                    minItems: 1
+     *                    items:
+     *                      type: string
+     *                      enum:
+     *                        - phone
+     *                        - email
      *        204:
      *          description: >
      *            No Content. Returned whether or not the address was already registered, so a
@@ -618,10 +638,10 @@ const routes = ({
                 return res.status(StatusCodes.UNPROCESSABLE_ENTITY).json({ error: message });
             }
 
-            let newUser;
+            let signedUp;
 
             try {
-                newUser = await userController.signUp({ displayName, membershipType, contact });
+                signedUp = await userController.signUp({ displayName, membershipType, contact });
             } catch (err) {
                 /**
                  * `#cleanPhoneNumber` throws on an unparseable number or a
@@ -639,8 +659,17 @@ const routes = ({
 
             log.info(
                 { displayName, membershipType },
-                newUser ? 'User signed up' : 'User sign up failed due to conflicts',
+                signedUp ? 'User signed up' : 'User sign up failed due to conflicts',
             );
+
+            /**
+             * A body appears only when a send failed, which implies there was
+             * no conflict. A caller cannot reliably make a send fail, so this
+             * discloses little, and it lets them resend what did not arrive.
+             */
+            if (signedUp?.undelivered.length) {
+                return res.status(StatusCodes.OK).json({ undelivered: signedUp.undelivered });
+            }
 
             return res.status(StatusCodes.NO_CONTENT).end();
         },

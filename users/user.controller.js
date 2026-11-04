@@ -588,7 +588,9 @@ class UserController {
      * @param {string} param0.displayName
      * @param {number} param0.membershipType
      * @param {{ firstName: string, lastName: string, phoneNumber: string, emailAddress: string }} param0.contact
-     * @returns {Promise<MutableUser | undefined>}
+     * @returns {Promise<{ undelivered: Array<'phone' | 'email'> } | undefined>} the channels
+     * whose verification message could not be sent; `undefined` when the
+     * address or number belongs to a registered user, and nothing was sent
      */
     async signUp({ displayName, membershipType, contact }) {
         const bungieUser = /** @type {MutableUser | undefined} */ (
@@ -636,7 +638,19 @@ class UserController {
 
         const iconUrl = await this.world.getVendorIcon(postmasterHash);
         const membership = /** @type {Membership} */ (user.membership);
-        const promises = [
+
+        /**
+         * Saved before anything is sent, so every code that reaches the user
+         * is one `join` can check. Sending first left a delivered code
+         * unsaved whenever the other channel or this write failed (#571).
+         */
+        await this.users.updateUser(/** @type {User} */ (/** @type {unknown} */ (user)));
+
+        /**
+         * Settled independently: one channel failing neither stops the other
+         * nor undoes the save, and the caller is told which to resend.
+         */
+        const [sms, email] = await Promise.allSettled([
             this.notifications.sendMessage(
                 UserController.#buildVerificationMessage(
                     /** @type {string} */ (membership.tokens?.code),
@@ -651,16 +665,82 @@ class UserController {
                 iconUrl,
                 '/register',
             ),
-        ];
+        ]);
 
-        const [message, postMark] = await Promise.all(promises);
+        /** @type {Membership} */
+        const receipts = {};
+        /** @type {Array<'phone' | 'email'>} */
+        const undelivered = [];
 
-        membership.message = message;
-        membership.postmark = postMark;
+        for (const [channel, outcome, field] of /** @type {const} */ ([
+            ['phone', sms, 'message'],
+            ['email', email, 'postmark'],
+        ])) {
+            if (outcome.status === 'fulfilled') {
+                receipts[field] = outcome.value;
+            } else {
+                undelivered.push(channel);
+                log.error(
+                    { err: outcome.reason, channel },
+                    'Failed to send a sign-up verification message.',
+                );
+            }
+        }
 
-        await this.users.updateUser(/** @type {User} */ (/** @type {unknown} */ (user)));
+        if (undelivered.length < 2) {
+            await this.#saveReceipts(user, receipts);
+        }
 
-        return user;
+        return { undelivered };
+    }
+
+    /**
+     * Add the delivery receipts to the saved sign-up. They are kept for
+     * billing.
+     *
+     * Best effort: the messages are already out, so failing the request now
+     * would only invite a retry that sends, and bills, them again. A receipt
+     * that cannot be saved is logged with the provider's ids instead, which is
+     * enough to reconcile it.
+     *
+     * Written onto a fresh read rather than the document `signUp` built, so a
+     * `join` that landed while the messages were sending is kept, and the read
+     * brings the ETag that guards this write against anything later. A read
+     * holding other tokens means a newer sign-up replaced them; restoring
+     * these would leave the user with codes that no longer match what they
+     * were last sent.
+     * @param {MutableUser} user - the sign-up as it was saved
+     * @param {Membership} receipts - one per channel that sent
+     * @returns {Promise<void>}
+     */
+    async #saveReceipts(user, { message, postmark }) {
+        const ids = { sid: message?.sid, messageId: postmark?.messageId };
+
+        try {
+            const current = /** @type {MutableUser | undefined} */ (
+                await this.users.getUserByDisplayName(
+                    /** @type {string} */ (user.displayName),
+                    /** @type {number} */ (user.membershipType),
+                    true,
+                )
+            );
+
+            if (!current || current.membership?.tokens?.blob !== user.membership?.tokens?.blob) {
+                log.warn(ids, 'The saved sign-up has changed; not saving its receipts.');
+
+                return;
+            }
+
+            current.membership = {
+                ...current.membership,
+                ...(message && { message }),
+                ...(postmark && { postmark }),
+            };
+
+            await this.users.updateUser(/** @type {User} */ (/** @type {unknown} */ (current)));
+        } catch (err) {
+            log.error({ err, ...ids }, 'Failed to save sign-up delivery receipts.');
+        }
     }
 
     /**

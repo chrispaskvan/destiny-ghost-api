@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Chance from 'chance';
 import getEpoch from '../helpers/get-epoch.js';
 import { get, post } from '../helpers/bungie.request.js';
@@ -7,7 +7,12 @@ import UserController from './user.controller.js';
 import UserService from './user.service.js';
 import InvalidPhoneNumberError from './invalid-phone-number.error.js';
 
+const { logError, logWarn } = vi.hoisted(() => ({ logError: vi.fn(), logWarn: vi.fn() }));
+
 vi.mock('../helpers/bungie.request.js');
+vi.mock('../helpers/log.js', () => ({
+    default: { error: logError, info: vi.fn(), warn: logWarn },
+}));
 vi.mock('../helpers/postmaster.js', () => ({
     default: class {
         register = vi.fn();
@@ -773,6 +778,212 @@ describe('UserController', () => {
                 });
 
                 expect(user).toBeUndefined();
+            });
+        });
+
+        describe('delivery', () => {
+            const contact = {
+                firstName: 'Ada',
+                lastName: 'Lovelace',
+                emailAddress: 'ada@example.com',
+                phoneNumber,
+            };
+            const sms = { sid: 'SM-test-sid' };
+            const email = { messageId: '<test-message-id@example.com>' };
+            const signUp = () => userController.signUp({ displayName, membershipType, contact });
+
+            /**
+             * What Cosmos holds: each `updateUser` replaces it, and a read
+             * that skips the cache returns a copy with a fresh ETag. The
+             * receipts are saved onto that read, so the specs below can see
+             * whether a write in between survives.
+             */
+            let stored;
+
+            beforeEach(() => {
+                stored = undefined;
+                userService.getUserByDisplayName.mockImplementation((_name, _type, skipCache) =>
+                    Promise.resolve(
+                        skipCache && stored
+                            ? { ...structuredClone(stored), _etag: chance.guid() }
+                            : undefined,
+                    ),
+                );
+                userService.getUserByEmailAddress.mockResolvedValue(undefined);
+                userService.getUserByPhoneNumber.mockResolvedValue(undefined);
+                userService.updateUser.mockImplementation(user => {
+                    stored = structuredClone(user);
+
+                    return Promise.resolve(user);
+                });
+                notificationService.sendMessage.mockResolvedValue(sms);
+                userController.postmaster.register.mockResolvedValue(email);
+            });
+
+            /**
+             * These mocks are shared with the rest of the file, and
+             * `clearMocks` resets calls, not implementations or a `Once`
+             * value a failing case left unused.
+             */
+            afterEach(() => {
+                userService.getUserByDisplayName.mockReset();
+                userService.updateUser
+                    .mockReset()
+                    .mockImplementation(user => Promise.resolve(user));
+                notificationService.sendMessage.mockReset().mockResolvedValue();
+            });
+
+            it('should save the tokens before sending either message', async () => {
+                await signUp();
+
+                const [firstWrite] = userService.updateUser.mock.invocationCallOrder;
+                const [firstSms] = notificationService.sendMessage.mock.invocationCallOrder;
+                const [firstEmail] = userController.postmaster.register.mock.invocationCallOrder;
+
+                expect(firstWrite).toBeLessThan(firstSms);
+                expect(firstWrite).toBeLessThan(firstEmail);
+
+                const [persisted] = userService.updateUser.mock.calls[0];
+
+                expect(persisted.membership.tokens).toEqual(
+                    expect.objectContaining({
+                        blob: expect.any(String),
+                        code: expect.any(String),
+                    }),
+                );
+            });
+
+            it('should send nothing when the tokens cannot be saved', async () => {
+                userService.updateUser.mockRejectedValueOnce(new Error('cosmos unavailable'));
+
+                await expect(signUp()).rejects.toThrow('cosmos unavailable');
+
+                expect(notificationService.sendMessage).not.toHaveBeenCalled();
+                expect(userController.postmaster.register).not.toHaveBeenCalled();
+            });
+
+            it('should report nothing undelivered when both messages go out', async () => {
+                await expect(signUp()).resolves.toEqual({ undelivered: [] });
+            });
+
+            it('should still send the email when the SMS fails', async () => {
+                const err = new Error('twilio unavailable');
+
+                notificationService.sendMessage.mockRejectedValueOnce(err);
+
+                await expect(signUp()).resolves.toEqual({ undelivered: ['phone'] });
+
+                expect(userController.postmaster.register).toHaveBeenCalled();
+                expect(logError).toHaveBeenCalledWith(
+                    { err, channel: 'phone' },
+                    'Failed to send a sign-up verification message.',
+                );
+            });
+
+            it('should still send the SMS when the email fails', async () => {
+                userController.postmaster.register.mockRejectedValueOnce(
+                    new Error('smtp unavailable'),
+                );
+
+                await expect(signUp()).resolves.toEqual({ undelivered: ['email'] });
+
+                expect(notificationService.sendMessage).toHaveBeenCalled();
+            });
+
+            it('should report both channels when neither message goes out', async () => {
+                notificationService.sendMessage.mockRejectedValueOnce(new Error('twilio'));
+                userController.postmaster.register.mockRejectedValueOnce(new Error('smtp'));
+
+                await expect(signUp()).resolves.toEqual({ undelivered: ['phone', 'email'] });
+
+                /**
+                 * Nothing went out, so there is nothing to bill and no reason
+                 * for a second write.
+                 */
+                expect(userService.updateUser).toHaveBeenCalledTimes(1);
+            });
+
+            it('should save the receipts after sending, for billing', async () => {
+                await signUp();
+
+                expect(userService.updateUser).toHaveBeenCalledTimes(2);
+
+                const [receipts] = userService.updateUser.mock.calls[1];
+
+                expect(receipts.membership.message).toEqual(sms);
+                expect(receipts.membership.postmark).toEqual(email);
+                expect(receipts.membership.tokens).toEqual(stored.membership.tokens);
+                /**
+                 * Saved onto a fresh read, whose ETag guards the write against
+                 * anything that changed the document since.
+                 */
+                expect(receipts._etag).toEqual(expect.any(String));
+            });
+
+            it('should save a receipt only for the channel that sent', async () => {
+                userController.postmaster.register.mockRejectedValueOnce(new Error('smtp'));
+
+                await signUp();
+
+                const [receipts] = userService.updateUser.mock.calls[1];
+
+                expect(receipts.membership.message).toEqual(sms);
+                expect(receipts.membership).not.toHaveProperty('postmark');
+            });
+
+            it('should not undo a join that lands while the messages are sending', async () => {
+                notificationService.sendMessage.mockImplementationOnce(() => {
+                    stored.dateRegistered = '2026-11-03T00:00:00.000Z';
+
+                    return Promise.resolve(sms);
+                });
+
+                await signUp();
+
+                expect(stored.dateRegistered).toEqual('2026-11-03T00:00:00.000Z');
+                expect(stored.membership.message).toEqual(sms);
+            });
+
+            it('should not restore its tokens over a newer sign-up', async () => {
+                const newer = { blob: 'newer-blob', code: '654321', timeStamp: 1 };
+
+                notificationService.sendMessage.mockImplementationOnce(() => {
+                    stored.membership.tokens = newer;
+
+                    return Promise.resolve(sms);
+                });
+
+                await expect(signUp()).resolves.toEqual({ undelivered: [] });
+
+                expect(userService.updateUser).toHaveBeenCalledTimes(1);
+                expect(stored.membership.tokens).toEqual(newer);
+                expect(logWarn).toHaveBeenCalledWith(
+                    { sid: sms.sid, messageId: email.messageId },
+                    'The saved sign-up has changed; not saving its receipts.',
+                );
+            });
+
+            it('should still succeed when the receipts cannot be saved', async () => {
+                const err = new Error('precondition failed');
+
+                userService.updateUser
+                    .mockImplementationOnce(user => {
+                        stored = structuredClone(user);
+
+                        return Promise.resolve(user);
+                    })
+                    .mockRejectedValueOnce(err);
+
+                /**
+                 * Both messages are out. Failing the request now would only
+                 * invite a retry that sends, and bills, them again.
+                 */
+                await expect(signUp()).resolves.toEqual({ undelivered: [] });
+
+                expect(logError).toHaveBeenCalledWith(
+                    { err, sid: sms.sid, messageId: email.messageId },
+                    'Failed to save sign-up delivery receipts.',
+                );
             });
         });
     });
