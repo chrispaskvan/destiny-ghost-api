@@ -812,6 +812,26 @@ describe('UserController', () => {
                 expect(notificationService.sendMessage).not.toHaveBeenCalled();
                 expect(userController.postmaster.register).not.toHaveBeenCalled();
             });
+            it('should still reject an unusable phone number from a registered account', async () => {
+                userService.getUserByDisplayName.mockResolvedValueOnce({
+                    displayName,
+                    membershipType,
+                    dateRegistered: Temporal.Now.instant().toString(),
+                });
+
+                await expect(
+                    userController.signUp({
+                        displayName,
+                        membershipType,
+                        contact: {
+                            firstName: 'Ada',
+                            lastName: 'Lovelace',
+                            emailAddress: 'ada@example.com',
+                            phoneNumber: '+86 10 1234 5678',
+                        },
+                    }),
+                ).rejects.toBeInstanceOf(InvalidPhoneNumberError);
+            });
         });
 
         describe('delivery', () => {
@@ -858,6 +878,8 @@ describe('UserController', () => {
              */
             afterEach(() => {
                 userService.getUserByDisplayName.mockReset();
+                userService.getUserByEmailAddress.mockReset();
+                userService.getUserByPhoneNumber.mockReset();
                 userService.updateUser
                     .mockReset()
                     .mockImplementation(user => Promise.resolve(user));

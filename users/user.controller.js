@@ -599,10 +599,19 @@ class UserController {
         );
 
         /**
+         * Phone normalization stays ahead of the lookups below: its E.164
+         * output is what a stored number is matched against, and it carries
+         * the barred-region check.
+         */
+        const phoneNumber = UserController.#cleanPhoneNumber(contact.phoneNumber);
+
+        /**
          * Sign-up is first registration only. A registered account changes
          * its contact through `PATCH /users` and the cipher checks; letting it
          * through here would replace verified contact with unverified
-         * contact before anything is checked.
+         * contact before anything is checked. Checked after the phone
+         * number, so a number that cannot be used still answers 422: that
+         * describes the caller's own input, not anyone's registration.
          */
         if (bungieUser?.dateRegistered) {
             return undefined;
@@ -615,12 +624,7 @@ class UserController {
          * body never reaches the document, so a field the stored record
          * happens to lack - `dateRegistered`, `notifications`, `isSubscribed` -
          * cannot ride in on it.
-         *
-         * Phone normalization stays ahead of the lookup below: its E.164
-         * output is what a stored number is matched against, and it carries
-         * the barred-region check.
          */
-        const phoneNumber = UserController.#cleanPhoneNumber(contact.phoneNumber);
         const user = /** @type {MutableUser} */ ({
             ...bungieUser,
             emailAddress: contact.emailAddress,
