@@ -615,12 +615,34 @@ class UserController {
      * @param {string} param0.displayName
      * @param {number} param0.membershipType
      * @param {{ firstName: string, lastName: string, phoneNumber: string, emailAddress: string }} param0.contact
-     * @returns {Promise<MutableUser | undefined>}
+     * @returns {Promise<{ undelivered: Array<'phone' | 'email'> } | undefined>} the channels
+     * whose verification message could not be sent; `undefined` when this
+     * account is already registered, or the address or number belongs to a
+     * registered user, and nothing was sent or saved
      */
     async signUp({ displayName, membershipType, contact }) {
         const bungieUser = /** @type {MutableUser | undefined} */ (
             await this.users.getUserByDisplayName(displayName, membershipType)
         );
+
+        /**
+         * Phone normalization stays ahead of the lookups below: its E.164
+         * output is what a stored number is matched against, and it carries
+         * the barred-region check.
+         */
+        const phoneNumber = UserController.#cleanPhoneNumber(contact.phoneNumber);
+
+        /**
+         * Sign-up is first registration only. A registered account changes
+         * its contact through `PATCH /users` and the cipher checks; letting it
+         * through here would replace verified contact with unverified
+         * contact before anything is checked. Checked after the phone
+         * number, so a number that cannot be used still answers 422: that
+         * describes the caller's own input, not anyone's registration.
+         */
+        if (bungieUser?.dateRegistered) {
+            return undefined;
+        }
 
         /**
          * Assembled from three trusted sources rather than merged onto the
@@ -629,12 +651,7 @@ class UserController {
          * body never reaches the document, so a field the stored record
          * happens to lack - `dateRegistered`, `notifications`, `isSubscribed` -
          * cannot ride in on it.
-         *
-         * Phone normalization stays ahead of the lookup below: its E.164
-         * output is what a stored number is matched against, and it carries
-         * the barred-region check.
          */
-        const phoneNumber = UserController.#cleanPhoneNumber(contact.phoneNumber);
         const user = /** @type {MutableUser} */ ({
             ...bungieUser,
             emailAddress: contact.emailAddress,
@@ -663,7 +680,19 @@ class UserController {
 
         const iconUrl = await this.world.getVendorIcon(postmasterHash);
         const membership = /** @type {Membership} */ (user.membership);
-        const promises = [
+
+        /**
+         * Saved before anything is sent, so every code that reaches the user
+         * is one `join` can check. Sending first left a delivered code
+         * unsaved whenever the other channel or this write failed (#571).
+         */
+        await this.users.updateUser(/** @type {User} */ (/** @type {unknown} */ (user)));
+
+        /**
+         * Settled independently: one channel failing neither stops the other
+         * nor undoes the save.
+         */
+        const [sms, email] = await Promise.allSettled([
             this.notifications.sendMessage(
                 UserController.#buildVerificationMessage(
                     /** @type {string} */ (membership.tokens?.code),
@@ -678,16 +707,88 @@ class UserController {
                 iconUrl,
                 '/register',
             ),
-        ];
+        ]);
 
-        const [message, postMark] = await Promise.all(promises);
+        /** @type {Membership} */
+        const receipts = {};
+        /** @type {Array<'phone' | 'email'>} */
+        const undelivered = [];
 
-        membership.message = message;
-        membership.postmark = postMark;
+        for (const [channel, outcome, field] of /** @type {const} */ ([
+            ['phone', sms, 'message'],
+            ['email', email, 'postmark'],
+        ])) {
+            if (outcome.status === 'fulfilled') {
+                receipts[field] = outcome.value;
+            } else {
+                undelivered.push(channel);
+                log.error(
+                    { err: outcome.reason, channel, displayName, membershipType },
+                    'Failed to send a sign-up verification message.',
+                );
+            }
+        }
 
-        await this.users.updateUser(/** @type {User} */ (/** @type {unknown} */ (user)));
+        /**
+         * When nothing went out, the codes just saved stay: the user signs up
+         * again. Putting back an earlier sign-up's codes would let them
+         * register the contact saved above, which those codes never reached;
+         * and a send that failed may still have been delivered.
+         */
+        if (Object.keys(receipts).length) {
+            await this.#saveReceipts(
+                { displayName, membershipType, blob: membership.tokens?.blob },
+                receipts,
+            );
+        }
 
-        return user;
+        return { undelivered };
+    }
+
+    /**
+     * Add a sign-up's delivery receipts, which are kept for billing, to the
+     * sign-up already saved.
+     *
+     * Best effort, because the outcome of the sends is already settled:
+     * failing the request now would only invite a retry that sends, and
+     * bills, the messages again. A failure is logged with the account and the
+     * provider's ids, enough to reconcile them.
+     *
+     * Applied to a fresh read rather than the document `signUp` built, so a
+     * `join` that landed while the messages were sending is kept, and the read
+     * brings the ETag that guards this write against anything later. A read
+     * holding other tokens means a newer sign-up replaced them, and these
+     * receipts are not for the messages it sent.
+     * @param {{ displayName: string, membershipType: number, blob?: string }} signUp -
+     * the account, and the email token of the sign-up as it was saved
+     * @param {Membership} receipts - `message` and/or `postmark`
+     * @returns {Promise<void>}
+     */
+    async #saveReceipts({ displayName, membershipType, blob }, receipts) {
+        const context = {
+            displayName,
+            membershipType,
+            sid: receipts.message?.sid,
+            messageId: receipts.postmark?.messageId,
+        };
+
+        try {
+            const current = /** @type {MutableUser | undefined} */ (
+                await this.users.getUserByDisplayName(displayName, membershipType, true)
+            );
+
+            if (!current || current.membership?.tokens?.blob !== blob) {
+                log.warn(context, 'The saved sign-up has changed; not saving its receipts.');
+
+                return;
+            }
+
+            current.membership = { ...current.membership, ...receipts };
+
+            await this.users.updateUser(/** @type {User} */ (/** @type {unknown} */ (current)));
+        } catch (err) {
+            log.error({ err, ...context }, 'Failed to save sign-up delivery receipts.');
+        }
     }
 
     /**

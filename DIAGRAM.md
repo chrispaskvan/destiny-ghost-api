@@ -73,7 +73,7 @@ sequenceDiagram
             API->>Email: Send link WEBSITE/register?token=[blob]
             Email-->>User: Deliver email
         end
-        API-->>WebApp: 204 (conflicting registrations are not disclosed)
+        API-->>WebApp: 204 whether or not the messages were sent, and on any conflict, including an already-registered account (nothing is sent to it)
     end
 
     rect rgba(80, 200, 120, 0.15)

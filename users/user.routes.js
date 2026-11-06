@@ -587,8 +587,11 @@ const routes = ({
      *      responses:
      *        204:
      *          description: >
-     *            No Content. Returned whether or not the address was already registered, so a
-     *            conflict is not disclosed.
+     *            No Content. Returned whether or not this account, address or number was
+     *            already registered, and whether or not the verification messages could be
+     *            sent, so a conflict is not disclosed. A registered account changes its
+     *            contact with PATCH /users instead; signing up sends it nothing. Signing up
+     *            again sends new codes on both channels and replaces the earlier ones.
      *        403:
      *          description: Forbidden. Missing or invalid CSRF token.
      *        422:
@@ -621,10 +624,10 @@ const routes = ({
                 return res.status(StatusCodes.UNPROCESSABLE_ENTITY).json({ error: message });
             }
 
-            let newUser;
+            let signedUp;
 
             try {
-                newUser = await userController.signUp({ displayName, membershipType, contact });
+                signedUp = await userController.signUp({ displayName, membershipType, contact });
             } catch (err) {
                 /**
                  * `#cleanPhoneNumber` throws on an unparseable number or a
@@ -640,11 +643,25 @@ const routes = ({
                 throw err;
             }
 
-            log.info(
-                { displayName, membershipType },
-                newUser ? 'User signed up' : 'User sign up failed due to conflicts',
-            );
+            if (signedUp?.undelivered.length) {
+                log.warn(
+                    { displayName, membershipType, undelivered: signedUp.undelivered },
+                    'User signed up, but not every verification message was sent',
+                );
+            } else {
+                log.info(
+                    { displayName, membershipType },
+                    signedUp ? 'User signed up' : 'User sign up failed due to conflicts',
+                );
+            }
 
+            /**
+             * 204 whatever happened to the messages. A conflict sends nothing,
+             * so any answer that depended on how a send went would tell the
+             * caller whether the address or number is already registered, and
+             * a caller can make a send fail at will: a phone that has texted
+             * STOP is refused by Twilio every time.
+             */
             return res.status(StatusCodes.NO_CONTENT).end();
         },
     );
