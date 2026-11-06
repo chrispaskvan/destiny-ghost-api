@@ -39,7 +39,12 @@ import schema from '../graphql/schema.js';
 import root from '../graphql/root.js';
 import pool from '../helpers/pool.js';
 import McpRouter from '../mcp/mcp.routes.js';
-import rateLimiterMiddleware from '../helpers/rate-limiter.middleware.js';
+import rateLimiterMiddleware, {
+    allowCipherAttempt,
+    cipherRateLimiterMiddleware,
+    resendRateLimiterMiddleware,
+    signUpRateLimiterMiddleware,
+} from '../helpers/rate-limiter.middleware.js';
 
 const {
     documents: { authenticationKey, host },
@@ -160,9 +165,15 @@ export default () => {
     routes.use('/notifications', notificationRouter);
 
     const userRouter = UserRouter({
+        allowCipherAttempt,
         authenticationController,
         destinyService,
         notificationService,
+        rateLimiters: {
+            signUp: signUpRateLimiterMiddleware,
+            resend: resendRateLimiterMiddleware,
+            cipher: cipherRateLimiterMiddleware,
+        },
         /**
          * Optional `settings/users.json`; without it the controller's
          * default applies.

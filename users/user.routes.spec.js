@@ -72,10 +72,20 @@ const worldRepository = {
     getVendorIcon: vi.fn(() => 'https://example.com/icon.png'),
 };
 
+const allowCipherAttempt = vi.fn().mockResolvedValue(true);
+/** Stand-ins for the per-account limits; their own specs are with the limiter. */
+const rateLimiters = {
+    signUp: vi.fn((_req, _res, next) => next()),
+    resend: vi.fn((_req, _res, next) => next()),
+    cipher: vi.fn((_req, _res, next) => next()),
+};
+
 let userRouter;
 
 beforeEach(() => {
     userRouter = UserRouter({
+        allowCipherAttempt,
+        rateLimiters,
         authenticationController,
         destinyService,
         notificationService,
@@ -911,6 +921,8 @@ describe('UserRouter', () => {
                     }),
                 };
                 const router = UserRouter({
+                    allowCipherAttempt,
+                    rateLimiters,
                     authenticationController,
                     destinyService,
                     notificationService,
@@ -1243,6 +1255,231 @@ describe('UserRouter', () => {
                 expect(res._isEndCalled()).toEqual(false);
             });
         });
+
+        describe('limits', () => {
+            const ciphersRequest = body =>
+                createRequest({
+                    method: 'POST',
+                    url: '/current/ciphers',
+                    headers: { 'x-csrf-token': csrfToken },
+                    session: { csrfToken, displayName, membershipType, membershipId: 'm-1' },
+                    body,
+                });
+
+            it('should reject a bad channel before spending the limit', async () => {
+                const done = new Promise(resolve => res.on('end', resolve));
+
+                userRouter(ciphersRequest({ channel: 'sms' }), res, next);
+                await done;
+
+                expect(res.statusCode).toEqual(StatusCodes.BAD_REQUEST);
+                expect(rateLimiters.cipher).not.toHaveBeenCalled();
+            });
+
+            it('should stop at the cipher limit before reading, saving or sending', async () => {
+                rateLimiters.cipher.mockImplementationOnce((_req, limited) =>
+                    limited.status(StatusCodes.TOO_MANY_REQUESTS).end(),
+                );
+
+                const done = new Promise(resolve => res.on('end', resolve));
+
+                userRouter(ciphersRequest({ channel: 'phone' }), res, next);
+                await done;
+
+                expect(res.statusCode).toEqual(StatusCodes.TOO_MANY_REQUESTS);
+                expect(rateLimiters.resend).not.toHaveBeenCalled();
+                expect(userService.getUserByDisplayName).not.toHaveBeenCalled();
+                expect(userService.updateUser).not.toHaveBeenCalled();
+                expect(notificationService.sendMessage).not.toHaveBeenCalled();
+            });
+        });
+    });
+
+    describe('POST /users/signUp/resend', () => {
+        const session = { csrfToken, displayName, membershipType, membershipId: 'm-1' };
+        const resendRequest = body =>
+            createRequest({
+                method: 'POST',
+                url: '/signUp/resend',
+                headers: { 'x-csrf-token': csrfToken },
+                session,
+                body,
+            });
+        const ended = () => new Promise(resolve => res.on('end', resolve));
+
+        beforeEach(() => {
+            userService.updateUser.mockResolvedValue(undefined);
+        });
+
+        it.each([
+            [
+                'there is no pending sign-up',
+                () => userService.getUserByDisplayName.mockResolvedValue(undefined),
+            ],
+            [
+                'the resend goes out',
+                () =>
+                    userService.getUserByDisplayName.mockResolvedValue({
+                        displayName,
+                        membershipType,
+                        phoneNumber: '+15555550100',
+                        membership: {
+                            tokens: {
+                                blob: 'b',
+                                code: '424242',
+                                timeStamp: Number.MAX_SAFE_INTEGER,
+                            },
+                        },
+                    }),
+            ],
+            [
+                'the send fails',
+                () => {
+                    userService.getUserByDisplayName.mockResolvedValue({
+                        displayName,
+                        membershipType,
+                        phoneNumber: '+15555550100',
+                        membership: {
+                            tokens: {
+                                blob: 'b',
+                                code: '424242',
+                                timeStamp: Number.MAX_SAFE_INTEGER,
+                            },
+                        },
+                    });
+                    notificationService.sendMessage.mockRejectedValueOnce(new Error('21610'));
+                },
+            ],
+        ])('should answer 204 when %s', async (_, arrange) => {
+            arrange();
+
+            const done = ended();
+
+            userRouter(resendRequest({ channel: 'phone' }), res, next);
+            await done;
+
+            /**
+             * The same answer every time: whether a sign-up was saved is what
+             * the conflict check decided, and a send can be made to fail.
+             */
+            expect(res.statusCode).toEqual(StatusCodes.NO_CONTENT);
+            expect(res._getData()).toEqual('');
+        });
+
+        it.each([undefined, 'sms', 'Phone'])(
+            'should reject channel %j before spending the limit',
+            async channel => {
+                const done = ended();
+
+                userRouter(resendRequest({ channel }), res, next);
+                await done;
+
+                expect(res.statusCode).toEqual(StatusCodes.BAD_REQUEST);
+                expect(rateLimiters.resend).not.toHaveBeenCalled();
+                expect(userService.getUserByDisplayName).not.toHaveBeenCalled();
+            },
+        );
+
+        it('should stop at the resend limit before reading or sending', async () => {
+            rateLimiters.resend.mockImplementationOnce((_req, limited) =>
+                limited.status(StatusCodes.TOO_MANY_REQUESTS).end(),
+            );
+
+            const done = ended();
+
+            userRouter(resendRequest({ channel: 'email' }), res, next);
+            await done;
+
+            expect(res.statusCode).toEqual(StatusCodes.TOO_MANY_REQUESTS);
+            expect(userService.getUserByDisplayName).not.toHaveBeenCalled();
+            expect(postmasterRegister).not.toHaveBeenCalled();
+        });
+
+        it('should forward a bad CSRF token without spending the limit', async () => {
+            next.mockClear();
+
+            userRouter(
+                createRequest({
+                    method: 'POST',
+                    url: '/signUp/resend',
+                    headers: { 'x-csrf-token': 'wrong-token' },
+                    session,
+                    body: { channel: 'phone' },
+                }),
+                res,
+                next,
+            );
+
+            await vi.waitFor(() => {
+                expect(next).toHaveBeenCalledWith(
+                    expect.objectContaining({ statusCode: StatusCodes.FORBIDDEN }),
+                );
+            });
+            expect(rateLimiters.resend).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('POST /users/signUp rate limit', () => {
+        it.each([
+            ['an unusable phone number', { phoneNumber: '+86 10 1234 5678' }],
+            ['a missing field', { lastName: undefined }],
+        ])('should answer 422 for %s without spending the limit', async (_, change) => {
+            const done = new Promise(resolve => res.on('end', resolve));
+
+            userRouter(
+                createRequest({
+                    method: 'POST',
+                    url: '/signUp',
+                    headers: { 'x-csrf-token': csrfToken },
+                    session: { csrfToken, displayName, membershipType },
+                    body: {
+                        firstName: 'Ada',
+                        lastName: 'Lovelace',
+                        phoneNumber: '+12085550123',
+                        emailAddress: 'ada@example.com',
+                        ...change,
+                    },
+                }),
+                res,
+                next,
+            );
+            await done;
+
+            expect(res.statusCode).toEqual(StatusCodes.UNPROCESSABLE_ENTITY);
+            expect(rateLimiters.signUp).not.toHaveBeenCalled();
+        });
+
+        it('should stop at the sign-up limit before reading, saving or sending', async () => {
+            rateLimiters.signUp.mockImplementationOnce((_req, limited) =>
+                limited.status(StatusCodes.TOO_MANY_REQUESTS).end(),
+            );
+
+            const done = new Promise(resolve => res.on('end', resolve));
+
+            userRouter(
+                createRequest({
+                    method: 'POST',
+                    url: '/signUp',
+                    headers: { 'x-csrf-token': csrfToken },
+                    session: { csrfToken, displayName, membershipType, membershipId: 'm-1' },
+                    body: {
+                        firstName: 'Ada',
+                        lastName: 'Lovelace',
+                        phoneNumber: '+12085550123',
+                        emailAddress: 'ada@example.com',
+                    },
+                }),
+                res,
+                next,
+            );
+            await done;
+
+            expect(res.statusCode).toEqual(StatusCodes.TOO_MANY_REQUESTS);
+            expect(rateLimiters.signUp).toHaveBeenCalledOnce();
+            expect(userService.getUserByDisplayName).not.toHaveBeenCalled();
+            expect(userService.updateUser).not.toHaveBeenCalled();
+            expect(notificationService.sendMessage).not.toHaveBeenCalled();
+        });
     });
 
     describe('POST /users/current/cryptarch', () => {
@@ -1266,6 +1503,7 @@ describe('UserRouter', () => {
                     const user = {
                         displayName,
                         membershipType,
+                        dateRegistered: Temporal.Now.instant().toString(),
                         membership: {
                             tokens: {
                                 code,
@@ -1315,6 +1553,7 @@ describe('UserRouter', () => {
                     const user = {
                         displayName,
                         membershipType,
+                        dateRegistered: Temporal.Now.instant().toString(),
                         membership: {
                             tokens: {
                                 blob,
@@ -1376,6 +1615,37 @@ describe('UserRouter', () => {
                 }));
         });
 
+        describe("when the code's attempts are spent", () => {
+            it('should answer 429 and ask for a new code', async () => {
+                allowCipherAttempt.mockResolvedValueOnce(false);
+                userService.getUserByDisplayName.mockResolvedValueOnce({
+                    displayName,
+                    membershipType,
+                    dateRegistered: Temporal.Now.instant().toString(),
+                    membership: { tokens: { code: '123456', timeStamp: Number.MAX_SAFE_INTEGER } },
+                });
+
+                const done = new Promise(resolve => res.on('end', resolve));
+
+                userRouter(
+                    createRequest({
+                        method: 'POST',
+                        url: '/current/cryptarch',
+                        headers: { 'x-csrf-token': csrfToken },
+                        body: { channel: 'phone', code: '123456' },
+                        session: { csrfToken, displayName, membershipType },
+                    }),
+                    res,
+                    next,
+                );
+                await done;
+
+                expect(res.statusCode).toEqual(StatusCodes.TOO_MANY_REQUESTS);
+                expect(res._getData()).toContain('Request a new code');
+                expect(res.getHeader('Retry-After')).toBeUndefined();
+            });
+        });
+
         describe('when the user cannot be read', () => {
             it('should forward the error rather than call the code invalid', async () => {
                 const req = createRequest({
@@ -1420,6 +1690,7 @@ describe('UserRouter', () => {
                     const user = {
                         displayName,
                         membershipType,
+                        dateRegistered: Temporal.Now.instant().toString(),
                         membership: {
                             tokens: {
                                 code: 'correct-code',
@@ -1465,6 +1736,7 @@ describe('UserRouter', () => {
                     const user = {
                         displayName,
                         membershipType,
+                        dateRegistered: Temporal.Now.instant().toString(),
                         membership: {
                             tokens: {
                                 code,
@@ -1494,6 +1766,8 @@ describe('UserRouter', () => {
                      * the configured TTL reaches the controller.
                      */
                     UserRouter({
+                        allowCipherAttempt,
+                        rateLimiters,
                         authenticationController,
                         destinyService,
                         notificationService,

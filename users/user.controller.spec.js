@@ -5,13 +5,19 @@ import { get, post } from '../helpers/bungie.request.js';
 import DestinyService from '../destiny/destiny.service.js';
 import UserController from './user.controller.js';
 import UserService from './user.service.js';
+import CipherAttemptsExceededError from './cipher-attempts-exceeded.error.js';
+import InvalidCipherError from './invalid-cipher.error.js';
 import InvalidPhoneNumberError from './invalid-phone-number.error.js';
 
-const { logError, logWarn } = vi.hoisted(() => ({ logError: vi.fn(), logWarn: vi.fn() }));
+const { logError, logInfo, logWarn } = vi.hoisted(() => ({
+    logError: vi.fn(),
+    logInfo: vi.fn(),
+    logWarn: vi.fn(),
+}));
 
 vi.mock('../helpers/bungie.request.js');
 vi.mock('../helpers/log.js', () => ({
-    default: { error: logError, info: vi.fn(), warn: logWarn },
+    default: { error: logError, info: logInfo, warn: logWarn },
 }));
 vi.mock('../helpers/postmaster.js', () => ({
     default: class {
@@ -38,6 +44,7 @@ const destinyService = {
 const notificationService = {
     sendMessage: vi.fn().mockResolvedValue(),
 };
+const allowCipherAttempt = vi.fn().mockResolvedValue(true);
 const userService = {
     createAnonymousUser: vi.fn().mockImplementation(user => Promise.resolve(user)),
     deleteUserMessages: vi.fn().mockResolvedValue(),
@@ -62,6 +69,7 @@ let userController;
 
 beforeEach(() => {
     userController = new UserController({
+        allowCipherAttempt,
         destinyService,
         notificationService,
         userService,
@@ -261,6 +269,7 @@ describe('UserController', () => {
         const tokensAged = seconds => ({ code, timeStamp: getEpoch() - seconds });
         const controllerWith = tokenTtlSeconds =>
             new UserController({
+                allowCipherAttempt,
                 destinyService,
                 notificationService,
                 tokenTtlSeconds,
@@ -276,6 +285,7 @@ describe('UserController', () => {
         };
         const decipher = (controller, seconds) => {
             userService.getUserByDisplayName.mockResolvedValueOnce({
+                dateRegistered: '2026-01-01T00:00:00.000Z',
                 membership: { tokens: tokensAged(seconds) },
             });
 
@@ -308,7 +318,11 @@ describe('UserController', () => {
             });
         });
 
-        it.each([0, -1, 1.5, '900', null, Number.NaN])(
+        it('should accept a day', () => {
+            expect(() => controllerWith(24 * 60 * 60)).not.toThrow();
+        });
+
+        it.each([0, -1, 1.5, '900', null, Number.NaN, 24 * 60 * 60 + 1])(
             'should refuse to start with %s',
             tokenTtlSeconds => {
                 expect(() => controllerWith(tokenTtlSeconds)).toThrow(
@@ -983,6 +997,12 @@ describe('UserController', () => {
                 expect(userController.postmaster.register).not.toHaveBeenCalled();
             });
 
+            it('should still send both when the manifest is unavailable', async () => {
+                worldRepository.getVendorIcon.mockRejectedValueOnce(new Error('503'));
+
+                await expect(signUp()).resolves.toEqual({ undelivered: [] });
+            });
+
             it('should report nothing undelivered when both messages go out', async () => {
                 await expect(signUp()).resolves.toEqual({ undelivered: [] });
             });
@@ -1142,6 +1162,7 @@ describe('UserController', () => {
             userService.getUserByDisplayName.mockResolvedValueOnce({
                 displayName,
                 membershipType,
+                dateRegistered: '2026-01-01T00:00:00.000Z',
                 membership: { tokens: { code: '123456', timeStamp: getEpoch() } },
             });
 
@@ -1156,6 +1177,293 @@ describe('UserController', () => {
                 displayName,
                 membershipType,
                 true,
+            );
+        });
+
+        it('should not construct without an attempt limit', () => {
+            /** Without one, cryptarch would allow unlimited guesses. */
+            expect(
+                () =>
+                    new UserController({
+                        destinyService,
+                        notificationService,
+                        userService,
+                        worldRepository,
+                    }),
+            ).toThrow(new TypeError('allowCipherAttempt is required'));
+        });
+
+        describe('attempts', () => {
+            const timeStamp = getEpoch();
+            const attempt = code =>
+                userController.decipher({ displayName, membershipType, channel: 'phone', code });
+
+            beforeEach(() => {
+                userService.getUserByDisplayName.mockResolvedValue({
+                    displayName,
+                    membershipType,
+                    dateRegistered: '2026-01-01T00:00:00.000Z',
+                    membership: { tokens: { code: '123456', timeStamp } },
+                });
+            });
+
+            afterEach(() => {
+                userService.getUserByDisplayName.mockReset();
+                allowCipherAttempt.mockReset().mockResolvedValue(true);
+            });
+
+            it("should spend one of the code's attempts, keyed on its account and token", async () => {
+                await attempt('123456');
+
+                expect(allowCipherAttempt).toHaveBeenCalledExactlyOnceWith(
+                    expect.stringMatching(
+                        new RegExp(`^${membershipType}:${displayName}:[0-9a-f]{64}$`),
+                    ),
+                );
+                /** The code itself never reaches Redis. */
+                expect(allowCipherAttempt.mock.calls[0][0]).not.toContain('123456');
+            });
+
+            it('should count two codes minted in the same second apart', async () => {
+                await attempt('123456');
+                userService.getUserByDisplayName.mockResolvedValue({
+                    displayName,
+                    membershipType,
+                    dateRegistered: '2026-01-01T00:00:00.000Z',
+                    membership: { tokens: { code: '654321', timeStamp } },
+                });
+                await attempt('654321');
+
+                const [[first], [second]] = allowCipherAttempt.mock.calls;
+
+                expect(first).not.toEqual(second);
+            });
+
+            it.each([
+                ['tokens were saved', { tokens: { blob: 'b', code: '123456', timeStamp } }],
+                ['a conflict saved none', undefined],
+            ])(
+                'should refuse an unregistered account before spending an attempt when %s',
+                async (_, membership) => {
+                    /**
+                     * Both answer 404 for ever, so the attempt limit can't tell
+                     * a saved sign-up from one that hit a conflict.
+                     */
+                    userService.getUserByDisplayName.mockResolvedValue({
+                        displayName,
+                        membershipType,
+                        membership,
+                    });
+
+                    for (let i = 0; i < 6; i++) {
+                        await expect(attempt('000000')).rejects.toBeInstanceOf(InvalidCipherError);
+                    }
+                    expect(allowCipherAttempt).not.toHaveBeenCalled();
+                },
+            );
+
+            it.each([
+                ['email', { code: '123456' }],
+                ['phone', { blob: 'some-blob' }],
+            ])(
+                'should refuse %s with no code when only the other channel has a token',
+                async (channel, held) => {
+                    userService.getUserByDisplayName.mockResolvedValue({
+                        displayName,
+                        membershipType,
+                        dateRegistered: '2026-01-01T00:00:00.000Z',
+                        membership: { tokens: { ...held, timeStamp } },
+                    });
+
+                    await expect(
+                        userController.decipher({ displayName, membershipType, channel }),
+                    ).rejects.toBeInstanceOf(InvalidCipherError);
+                },
+            );
+
+            it('should spend an attempt on a wrong code too', async () => {
+                await expect(attempt('000000')).rejects.toBeInstanceOf(InvalidCipherError);
+
+                expect(allowCipherAttempt).toHaveBeenCalledOnce();
+            });
+
+            it('should refuse even the right code once the attempts are spent', async () => {
+                allowCipherAttempt.mockResolvedValueOnce(false);
+
+                await expect(attempt('123456')).rejects.toBeInstanceOf(CipherAttemptsExceededError);
+            });
+
+            it('should not spend an attempt on an expired code', async () => {
+                userService.getUserByDisplayName.mockResolvedValue({
+                    displayName,
+                    membershipType,
+                    dateRegistered: '2026-01-01T00:00:00.000Z',
+                    membership: { tokens: { code: '123456', timeStamp: 1 } },
+                });
+
+                await expect(attempt('123456')).rejects.toBeInstanceOf(InvalidCipherError);
+
+                expect(allowCipherAttempt).not.toHaveBeenCalled();
+            });
+        });
+    });
+
+    describe('resend', () => {
+        const sms = { sid: 'SM-resend-sid' };
+        const email = { messageId: '<resend-message-id@example.com>' };
+        const resend = channel => userController.resend({ displayName, membershipType, channel });
+        let stored;
+        let tokens;
+
+        beforeEach(() => {
+            tokens = { blob: 'pending-blob', code: '424242', timeStamp: getEpoch() };
+            stored = {
+                displayName,
+                membershipType,
+                emailAddress: 'ada@example.com',
+                phoneNumber: `+1${phoneNumber}`,
+                membership: { tokens, message: { sid: 'SM-original' } },
+            };
+            userService.getUserByDisplayName.mockImplementation(() =>
+                Promise.resolve({ ...structuredClone(stored), _etag: chance.guid() }),
+            );
+            userService.updateUser.mockImplementation(user => {
+                stored = structuredClone(user);
+
+                return Promise.resolve(user);
+            });
+            notificationService.sendMessage.mockResolvedValue(sms);
+            userController.postmaster.register.mockResolvedValue(email);
+        });
+
+        afterEach(() => {
+            userService.getUserByDisplayName.mockReset();
+            userService.updateUser.mockReset().mockImplementation(user => Promise.resolve(user));
+            notificationService.sendMessage.mockReset().mockResolvedValue();
+            userController.postmaster.register.mockReset();
+        });
+
+        it('should read the pending sign-up without the cache', async () => {
+            await resend('phone');
+
+            expect(userService.getUserByDisplayName).toHaveBeenNthCalledWith(
+                1,
+                displayName,
+                membershipType,
+                true,
+            );
+        });
+
+        it('should send the same code by SMS only, keeping the tokens', async () => {
+            await resend('phone');
+
+            const [text, to] = notificationService.sendMessage.mock.calls[0];
+
+            expect(text).toContain('424242');
+            expect(text).toContain('Reply HELP for help, STOP to cancel.');
+            expect(to).toEqual(`+1${phoneNumber}`);
+            expect(userController.postmaster.register).not.toHaveBeenCalled();
+            expect(stored.membership.tokens).toEqual(tokens);
+        });
+
+        it('should send the same link by email only, keeping the tokens', async () => {
+            await resend('email');
+
+            const [recipient, , path] = userController.postmaster.register.mock.calls[0];
+
+            expect(recipient.membership.tokens.blob).toEqual('pending-blob');
+            expect(path).toEqual('/register');
+            expect(notificationService.sendMessage).not.toHaveBeenCalled();
+            expect(stored.membership.tokens).toEqual(tokens);
+        });
+
+        it.each([
+            ['phone', 'message', sms],
+            ['email', 'postmark', email],
+        ])('should save the %s receipt, for billing', async (channel, field, receipt) => {
+            await resend(channel);
+
+            expect(stored.membership[field]).toEqual(receipt);
+        });
+
+        it.each([
+            [
+                'there is no user',
+                () => {
+                    stored = undefined;
+                },
+            ],
+            [
+                'the account is registered',
+                () => {
+                    stored.dateRegistered = '2026-01-01T00:00:00.000Z';
+                },
+            ],
+            [
+                'only a cipher is pending',
+                () => {
+                    delete stored.membership.tokens.blob;
+                },
+            ],
+            [
+                'there are no tokens',
+                () => {
+                    delete stored.membership;
+                },
+            ],
+            [
+                'the tokens have expired',
+                () => {
+                    stored.membership.tokens.timeStamp = 1;
+                },
+            ],
+        ])('should send and save nothing when %s', async (_, arrange) => {
+            arrange();
+            userService.getUserByDisplayName.mockImplementation(() =>
+                Promise.resolve(stored && structuredClone(stored)),
+            );
+
+            await expect(resend('phone')).resolves.toBeUndefined();
+
+            expect(notificationService.sendMessage).not.toHaveBeenCalled();
+            expect(userService.updateUser).not.toHaveBeenCalled();
+            expect(logInfo).toHaveBeenCalledWith(
+                { displayName, membershipType, channel: 'phone' },
+                'No pending sign-up to resend.',
+            );
+        });
+
+        it('should still send, without an icon, when the manifest is unavailable', async () => {
+            /**
+             * Only the path with a sign-up to send for looks the icon up, so
+             * a 503 here would answer differently from a conflict.
+             */
+            worldRepository.getVendorIcon.mockRejectedValueOnce(
+                Object.assign(new Error('manifest unavailable'), { statusCode: 503 }),
+            );
+
+            await expect(resend('email')).resolves.toBeUndefined();
+
+            const [, image] = userController.postmaster.register.mock.calls[0];
+
+            expect(image).toBeUndefined();
+            expect(logWarn).toHaveBeenCalledWith(
+                { err: expect.any(Error) },
+                'No vendor icon for the verification message.',
+            );
+        });
+
+        it('should resolve, and only log, when the send fails', async () => {
+            const err = new Error('twilio unavailable');
+
+            notificationService.sendMessage.mockRejectedValueOnce(err);
+
+            await expect(resend('phone')).resolves.toBeUndefined();
+
+            expect(userService.updateUser).not.toHaveBeenCalled();
+            expect(logError).toHaveBeenCalledWith(
+                { err, displayName, membershipType, channel: 'phone' },
+                'Failed to resend a sign-up verification message.',
             );
         });
     });
@@ -1612,6 +1920,7 @@ describe('UserController.signIn against the real Destiny and User services', () 
         vi.clearAllMocks();
 
         controller = new UserController({
+            allowCipherAttempt,
             destinyService: new DestinyService({ cacheService: {} }),
             notificationService,
             userService: new UserService({ cacheService, client: {}, documentService }),

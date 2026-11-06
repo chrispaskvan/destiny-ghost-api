@@ -572,7 +572,7 @@
             "description": "Forbidden. Missing or invalid CSRF token."
           },
           "429": {
-            "description": "Too Many Requests. The user has requested codes too frequently."
+            "description": "Too Many Requests. Three codes per channel every 15 minutes."
           }
         }
       }
@@ -643,7 +643,7 @@
             "description": "Not Found. No pending verification found for this user and channel, or the code has already been used/invalidated."
           },
           "429": {
-            "description": "Too Many Requests. The user has requested codes too frequently."
+            "description": "Too Many Requests. This code has had its five attempts, right or wrong, and no longer works. Request a new code.\n"
           }
         }
       }
@@ -829,13 +829,72 @@
         "description": "Sign up for the service with a first name, last name, phone number, and email address. These are the only accepted fields; every other property of an account is server-owned and assigned during verification, so a request carrying one is rejected rather than ignored.\n",
         "responses": {
           "204": {
-            "description": "No Content. Returned whether or not this account, address or number was already registered, and whether or not the verification messages could be sent, so a conflict is not disclosed. A registered account changes its contact with PATCH /users instead; signing up sends it nothing. Signing up again sends new codes on both channels and replaces the earlier ones.\n"
+            "description": "No Content. Returned whether or not this account, address or number was already registered, and whether or not the verification messages could be sent, so a conflict is not disclosed. A registered account can't change its contact by signing up; it is sent nothing. Signing up again sends new codes on both channels and replaces the earlier ones.\n"
           },
           "403": {
             "description": "Forbidden. Missing or invalid CSRF token."
           },
           "422": {
             "description": "Unprocessable Entity. A field is missing, malformed, unexpected, or the phone number cannot be used.\n"
+          },
+          "429": {
+            "description": "Too Many Requests. Five sign-ups an hour per account."
+          }
+        }
+      }
+    },
+    "/users/signUp/resend": {
+      "post": {
+        "summary": "Resend a sign-up verification message.",
+        "operationId": "resendSignUp",
+        "description": "Sends the pending sign-up's verification code (phone) or link (email) again, on that channel only. The same code or link goes out, so one that already arrived still works. To get new ones, sign up again.\n",
+        "tags": [
+          "Users"
+        ],
+        "security": [
+          {
+            "bungieOAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "channel"
+                ],
+                "properties": {
+                  "channel": {
+                    "type": "string",
+                    "enum": [
+                      "email",
+                      "phone"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "No Content. Returned whether or not there was a pending sign-up to resend, and whether or not the message could be sent, so a conflict at sign-up is not disclosed. If nothing arrives, sign up again.\n"
+          },
+          "400": {
+            "description": "Bad Request. The channel is missing or not \"email\" or \"phone\"."
+          },
+          "403": {
+            "description": "Forbidden. Missing or invalid CSRF token."
+          },
+          "429": {
+            "description": "Too Many Requests. Three resends per channel every 15 minutes."
           }
         }
       }

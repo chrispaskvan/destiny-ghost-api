@@ -4,8 +4,10 @@ import { Router } from 'express';
 import { z } from 'zod';
 import AuthenticationMiddleWare from '../authentication/authentication.middleware.js';
 import UserController from './user.controller.js';
+import CipherAttemptsExceededError from './cipher-attempts-exceeded.error.js';
 import InvalidCipherError from './invalid-cipher.error.js';
 import InvalidPhoneNumberError from './invalid-phone-number.error.js';
+import cleanPhoneNumber from './clean-phone-number.js';
 import csrfProtection, { generateToken } from '../helpers/csrf.middleware.js';
 import log from '../helpers/log.js';
 
@@ -123,10 +125,17 @@ function signIn(req, res, user, next) {
 /** @typedef {import('../authentication/authentication.controller.js').default} AuthenticationController */
 
 /**
+ * @typedef {import('express').RequestHandler} RequestHandler
+ */
+
+/**
  * @typedef {Object} UserRoutesOptions
+ * @property {(key: string) => Promise<boolean>} allowCipherAttempt - see `UserController`
  * @property {AuthenticationController} authenticationController
  * @property {import('../destiny/destiny.service.js').default} destinyService
  * @property {import('../notifications/notification.service.js').default} notificationService
+ * @property {{ signUp: RequestHandler, resend: RequestHandler, cipher: RequestHandler }} rateLimiters
+ * - per-account limits on the endpoints that send billed messages
  * @property {number} [tokenTtlSeconds] - see `UserController`
  * @property {import('./user.service.js').default} userService
  * @property {import('../helpers/world2.js').default} worldRepository
@@ -136,15 +145,18 @@ function signIn(req, res, user, next) {
  * @param {UserRoutesOptions} options
  */
 const routes = ({
+    allowCipherAttempt,
     authenticationController,
     destinyService,
     notificationService,
+    rateLimiters,
     tokenTtlSeconds,
     userService,
     worldRepository,
 }) => {
     const middleware = new AuthenticationMiddleWare({ authenticationController });
     const userController = new UserController({
+        allowCipherAttempt,
         destinyService,
         notificationService,
         tokenTtlSeconds,
@@ -152,6 +164,23 @@ const routes = ({
         worldRepository,
     });
     const userRouter = Router();
+
+    /**
+     * Ahead of the per-channel limits, so a malformed request neither spends
+     * one nor gets a bucket of its own.
+     * @type {import('express').RequestHandler}
+     */
+    const requireChannel = (req, res, next) => {
+        const { channel } = req.body ?? {};
+
+        if (!['email', 'phone'].includes(channel)) {
+            return res
+                .status(StatusCodes.BAD_REQUEST)
+                .send('Invalid channel. Must be "email" or "phone".');
+        }
+
+        return next();
+    };
 
     /**
      * The only four fields a client may supply when signing up.
@@ -262,11 +291,13 @@ const routes = ({
      *       403:
      *         description: Forbidden. Missing or invalid CSRF token.
      *       429:
-     *         description: Too Many Requests. The user has requested codes too frequently.
+     *         description: Too Many Requests. Three codes per channel every 15 minutes.
      */
     userRouter.route('/current/ciphers').post(
         (req, res, next) => middleware.authenticateUser(req, res, next),
         csrfProtection,
+        requireChannel,
+        rateLimiters.cipher,
         async (req, res) => {
             try {
                 const {
@@ -275,12 +306,6 @@ const routes = ({
                 const { displayName, membershipType } = /** @type {AuthenticatedSessionData} */ (
                     /** @type {unknown} */ (req.session)
                 );
-
-                if (!channel || !['email', 'phone'].includes(channel)) {
-                    return res
-                        .status(StatusCodes.BAD_REQUEST)
-                        .send('Invalid channel. Must be "email" or "phone".');
-                }
 
                 await userController.sendCipher({
                     displayName,
@@ -348,11 +373,14 @@ const routes = ({
      *       404:
      *         description: Not Found. No pending verification found for this user and channel, or the code has already been used/invalidated.
      *       429:
-     *         description: Too Many Requests. The user has requested codes too frequently.
+     *         description: >
+     *           Too Many Requests. This code has had its five attempts, right or wrong, and
+     *           no longer works. Request a new code.
      */
     userRouter.route('/current/cryptarch').post(
         (req, res, next) => middleware.authenticateUser(req, res, next),
         csrfProtection,
+        requireChannel,
         async (req, res) => {
             try {
                 const {
@@ -361,12 +389,6 @@ const routes = ({
                 const { displayName, membershipType } = /** @type {AuthenticatedSessionData} */ (
                     /** @type {unknown} */ (req.session)
                 );
-
-                if (!channel || !['email', 'phone'].includes(channel)) {
-                    return res
-                        .status(StatusCodes.BAD_REQUEST)
-                        .send('Invalid channel. Must be "email" or "phone".');
-                }
 
                 await userController.decipher({
                     displayName,
@@ -379,6 +401,15 @@ const routes = ({
             } catch (err) {
                 if (err instanceof InvalidCipherError) {
                     return res.status(StatusCodes.NOT_FOUND).send('Invalid cipher.');
+                }
+                /**
+                 * No Retry-After: waiting doesn't help. The code is spent,
+                 * and only a new one can be checked.
+                 */
+                if (err instanceof CipherAttemptsExceededError) {
+                    return res
+                        .status(StatusCodes.TOO_MANY_REQUESTS)
+                        .send('Too many attempts. Request a new code.');
                 }
 
                 throw err;
@@ -598,59 +629,62 @@ const routes = ({
      *          description: >
      *            No Content. Returned whether or not this account, address or number was
      *            already registered, and whether or not the verification messages could be
-     *            sent, so a conflict is not disclosed. A registered account changes its
-     *            contact with PATCH /users instead; signing up sends it nothing. Signing up
-     *            again sends new codes on both channels and replaces the earlier ones.
+     *            sent, so a conflict is not disclosed. A registered account can't change its
+     *            contact by signing up; it is sent nothing. Signing up again sends new codes
+     *            on both channels and replaces the earlier ones.
      *        403:
      *          description: Forbidden. Missing or invalid CSRF token.
      *        422:
      *          description: >
      *            Unprocessable Entity. A field is missing, malformed, unexpected, or the phone
      *            number cannot be used.
+     *        429:
+     *          description: Too Many Requests. Five sign-ups an hour per account.
      */
     userRouter.route('/signUp').post(
         (req, res, next) => middleware.authenticateUser(req, res, next),
         csrfProtection,
-        async (req, res) => {
-            const { displayName, membershipType } = /** @type {AuthenticatedSessionData} */ (
-                /** @type {unknown} */ (req.session)
-            );
-
+        /**
+         * The request is checked whole - fields, then the phone number -
+         * ahead of the sign-up limit, so a typo neither sends anything nor
+         * spends one of the hour's sign-ups. Nothing here depends on whether
+         * the address or number is registered, so a 422 reveals nothing.
+         */
+        (req, res, next) => {
             /**
              * Everything else about the account - who it belongs to, whether
              * it is registered, what it is subscribed to - is the server's to
              * decide. Rejecting rather than stripping unexpected fields means
              * an attempt to set one is visible instead of silently ignored.
              */
-            let contact;
-
             try {
-                contact = signUpSchema.parse(req.body);
+                const contact = signUpSchema.parse(req.body);
+
+                cleanPhoneNumber(contact.phoneNumber);
+                res.locals.contact = contact;
             } catch (err) {
                 const message =
-                    err instanceof z.ZodError ? err.issues[0].message : 'Unprocessable Entity';
+                    err instanceof z.ZodError
+                        ? err.issues[0].message
+                        : err instanceof InvalidPhoneNumberError
+                          ? err.message
+                          : 'Unprocessable Entity';
 
                 return res.status(StatusCodes.UNPROCESSABLE_ENTITY).json({ error: message });
             }
 
-            let signedUp;
-
-            try {
-                signedUp = await userController.signUp({ displayName, membershipType, contact });
-            } catch (err) {
-                /**
-                 * `#cleanPhoneNumber` throws on an unparseable number or a
-                 * barred region. It ran before any send or write, so this is a
-                 * rejected request rather than a failure.
-                 */
-                if (err instanceof InvalidPhoneNumberError) {
-                    return res
-                        .status(StatusCodes.UNPROCESSABLE_ENTITY)
-                        .json({ error: err.message });
-                }
-
-                throw err;
-            }
+            return next();
+        },
+        rateLimiters.signUp,
+        async (req, res) => {
+            const { displayName, membershipType } = /** @type {AuthenticatedSessionData} */ (
+                /** @type {unknown} */ (req.session)
+            );
+            const signedUp = await userController.signUp({
+                displayName,
+                membershipType,
+                contact: res.locals.contact,
+            });
 
             if (signedUp?.undelivered.length) {
                 log.warn(
@@ -670,6 +704,74 @@ const routes = ({
              * caller whether the address or number is already registered, and
              * a caller can make a send fail at will: a phone that has texted
              * STOP is refused by Twilio every time.
+             */
+            return res.status(StatusCodes.NO_CONTENT).end();
+        },
+    );
+
+    /**
+     * @openapi
+     * /users/signUp/resend:
+     *   post:
+     *     summary: Resend a sign-up verification message.
+     *     operationId: resendSignUp
+     *     description: >
+     *       Sends the pending sign-up's verification code (phone) or link (email) again,
+     *       on that channel only. The same code or link goes out, so one that already
+     *       arrived still works. To get new ones, sign up again.
+     *     tags:
+     *       - Users
+     *     security:
+     *       - bungieOAuth: []
+     *     parameters:
+     *       - $ref: '#/components/parameters/CsrfToken'
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             type: object
+     *             required:
+     *               - channel
+     *             properties:
+     *               channel:
+     *                 type: string
+     *                 enum:
+     *                   - email
+     *                   - phone
+     *     responses:
+     *       204:
+     *         description: >
+     *           No Content. Returned whether or not there was a pending sign-up to resend,
+     *           and whether or not the message could be sent, so a conflict at sign-up is
+     *           not disclosed. If nothing arrives, sign up again.
+     *       400:
+     *         description: Bad Request. The channel is missing or not "email" or "phone".
+     *       403:
+     *         description: Forbidden. Missing or invalid CSRF token.
+     *       429:
+     *         description: Too Many Requests. Three resends per channel every 15 minutes.
+     */
+    userRouter.route('/signUp/resend').post(
+        (req, res, next) => middleware.authenticateUser(req, res, next),
+        csrfProtection,
+        requireChannel,
+        rateLimiters.resend,
+        async (req, res) => {
+            const { displayName, membershipType } = /** @type {AuthenticatedSessionData} */ (
+                /** @type {unknown} */ (req.session)
+            );
+
+            await userController.resend({
+                displayName,
+                membershipType,
+                channel: req.body.channel,
+            });
+
+            /**
+             * 204 whatever happened: whether there was a sign-up to resend
+             * is what sign-up's conflict check decided, and how a send went
+             * can be forced (a number that texted STOP).
              */
             return res.status(StatusCodes.NO_CONTENT).end();
         },

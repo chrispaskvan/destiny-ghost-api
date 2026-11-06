@@ -73,7 +73,14 @@ sequenceDiagram
             API->>Email: Send link WEBSITE/register?token=[blob]
             Email-->>User: Deliver email
         end
-        API-->>WebApp: 204 whether or not the messages were sent, and on any conflict, including an already-registered account (nothing is sent to it)
+        API-->>WebApp: 204 whether or not the messages were sent, and on any conflict, including an already-registered account (nothing is sent to it); 429 after 5 sign-ups an hour
+    end
+
+    opt A message didn't arrive
+        User->>WebApp: Ask to resend the SMS or the email
+        WebApp->>API: POST /users/signUp/resend (channel)
+        API->>SMS: Resend the same code, or Email: the same link (other channel and tokens untouched)
+        API-->>WebApp: 204 whether or not there was a pending sign-up or the send worked; 429 after 3 per channel per 15 min
     end
 
     rect rgba(80, 200, 120, 0.15)
@@ -87,7 +94,7 @@ sequenceDiagram
         API-->>WebApp: 200 success, or 400 if expired/mismatched (resubmit signUp to retry)
     end
 
-    note over WebApp,API: POST /users/current/ciphers and /users/current/cryptarch require<br/>an already-registered user (400 otherwise) — they're for re-verifying<br/>a single channel later (e.g. before a sensitive profile edit),<br/>not for initial sign-up.
+    note over WebApp,API: POST /users/current/ciphers and /users/current/cryptarch require<br/>an already-registered user (400 otherwise) — they're for re-verifying<br/>a single channel later (e.g. before a sensitive profile edit),<br/>not for initial sign-up. Each code allows 5 cryptarch attempts,<br/>right or wrong; after that it answers 429 until a new code is sent.
 ```
 
 ## 3. Authenticated App Usage

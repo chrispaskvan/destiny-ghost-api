@@ -5,11 +5,12 @@
  * @module User Controller
  * @author Chris Paskvan
  */
+import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { applyPatch, createPatch } from 'rfc6902';
+import CipherAttemptsExceededError from './cipher-attempts-exceeded.error.js';
 import InvalidCipherError from './invalid-cipher.error.js';
-import InvalidPhoneNumberError from './invalid-phone-number.error.js';
-import { parsePhoneNumber } from 'awesome-phonenumber';
+import cleanPhoneNumber from './clean-phone-number.js';
 import Postmaster from '../helpers/postmaster.js';
 import getEpoch from '../helpers/get-epoch.js';
 import log from '../helpers/log.js';
@@ -61,6 +62,9 @@ import notificationTypes from '../notifications/notification.types.js';
 /**
  * Constructor options for UserController.
  * @typedef {Object} UserControllerOptions
+ * @property {(key: string) => Promise<boolean>} allowCipherAttempt - spends one
+ * of a verification code's attempts, keyed on the token; false once they are
+ * spent (see `helpers/rate-limiter.middleware.js`)
  * @property {import('../destiny/destiny.service.js').default} destinyService
  * @property {import('../notifications/notification.service.js').default} notificationService
  * @property {number} [tokenTtlSeconds] - how long a verification code or email
@@ -78,15 +82,28 @@ import notificationTypes from '../notifications/notification.types.js';
  * either channel would decide `join` on its own (#571).
  *
  * The longer window does not make the six-digit code guessable: `join` also
- * needs the 128-bit email token, and `decipher` the user's session.
+ * needs the 128-bit email token, and `decipher` the user's session and one of
+ * the code's few attempts.
  * @type {number}
  */
 const DEFAULT_TOKEN_TTL_SECONDS = 900;
 
 /**
+ * The longest a verification token may be configured to live. A code's
+ * attempt count (`cipher-attempt` in `helpers/rate-limiter.middleware.js`)
+ * lasts a day from its first attempt, so it must not outlive a token that
+ * lives longer: the code would get its attempts back.
+ * @type {number}
+ */
+const MAX_TOKEN_TTL_SECONDS = 24 * 60 * 60;
+
+/**
  * User Controller Class
  */
 class UserController {
+    /** @type {(key: string) => Promise<boolean>} */
+    #allowCipherAttempt;
+
     /** @type {number} */
     #tokenTtlSeconds;
 
@@ -100,12 +117,22 @@ class UserController {
          * Checked here so a bad `settings/users.json` stops the server at
          * startup, rather than expiring every code, or none, at runtime.
          */
-        if (!Number.isSafeInteger(tokenTtlSeconds) || tokenTtlSeconds <= 0) {
+        if (
+            !Number.isSafeInteger(tokenTtlSeconds) ||
+            tokenTtlSeconds <= 0 ||
+            tokenTtlSeconds > MAX_TOKEN_TTL_SECONDS
+        ) {
             throw new TypeError(
-                `tokenTtlSeconds must be a positive integer; got ${JSON.stringify(tokenTtlSeconds)}`,
+                `tokenTtlSeconds must be a positive integer of at most ${MAX_TOKEN_TTL_SECONDS}; got ${JSON.stringify(tokenTtlSeconds)}`,
             );
         }
 
+        /** Required: without it, cryptarch would allow unlimited guesses. */
+        if (typeof options.allowCipherAttempt !== 'function') {
+            throw new TypeError('allowCipherAttempt is required');
+        }
+
+        this.#allowCipherAttempt = options.allowCipherAttempt;
         this.#tokenTtlSeconds = tokenTtlSeconds;
         this.destiny = options.destinyService;
         this.notifications = options.notificationService;
@@ -134,25 +161,6 @@ class UserController {
      */
     static #buildWelcomeMessage() {
         return 'Welcome! Message frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to cancel.';
-    }
-
-    /**
-     * Get the phone number format into the Twilio standard: e164.
-     * Deny phone numbers from China, North Korea, and Russia.
-     *
-     * @param {string} phoneNumber
-     * @returns {string}
-     */
-    static #cleanPhoneNumber(phoneNumber) {
-        const cleaned = parsePhoneNumber(phoneNumber[0] === '+' ? phoneNumber : `+1${phoneNumber}`);
-
-        if (!cleaned.valid || ['CN', 'KP', 'RU'].includes(cleaned.regionCode)) {
-            throw new InvalidPhoneNumberError('phone number is invalid', {
-                cause: 'error' in cleaned ? cleaned.error : undefined,
-            });
-        }
-
-        return cleaned.number.e164;
     }
 
     /**
@@ -275,16 +283,45 @@ class UserController {
             await this.users.getUserByDisplayName(displayName, membershipType, true)
         );
 
-        if (!user) {
-            throw new InvalidCipherError('user not found');
+        /**
+         * Registered accounts only: a pending sign-up verifies through
+         * `join`. Refused before an attempt is spent, because a sign-up that
+         * hit a conflict saves no tokens, so its codes would answer 404 for
+         * ever where a saved one reaches 429, and tell the caller which.
+         */
+        if (!user?.dateRegistered) {
+            throw new InvalidCipherError('registration not found');
         }
-        if (getEpoch() > (user?.membership?.tokens?.timeStamp ?? 0) + this.#tokenTtlSeconds) {
+
+        const tokens = user.membership?.tokens;
+        /**
+         * Checked to exist, not just compared: a phone cipher has no blob, so
+         * an email check with no code compared `undefined` with `undefined`
+         * and passed.
+         */
+        const expected = channel === 'phone' ? tokens?.code : tokens?.blob;
+
+        if (!expected) {
+            throw new InvalidCipherError('no code for this channel');
+        }
+        if (getEpoch() > (tokens?.timeStamp ?? 0) + this.#tokenTtlSeconds) {
             throw new InvalidCipherError('token expired');
         }
-        if (
-            (channel === 'phone' && user?.membership?.tokens?.code !== code) ||
-            (channel === 'email' && user?.membership?.tokens?.blob !== code)
-        ) {
+
+        /**
+         * Spent before comparing, and on every attempt, the right one
+         * included, so parallel guesses can't all get in ahead of the count.
+         * Keyed on the whole token set, hashed so no code reaches Redis: a
+         * new code starts a new count, even one minted in the same second.
+         */
+        const token = createHash('sha256')
+            .update(JSON.stringify([tokens?.blob, tokens?.code, tokens?.timeStamp]))
+            .digest('hex');
+
+        if (!(await this.#allowCipherAttempt(`${membershipType}:${displayName}:${token}`))) {
+            throw new CipherAttemptsExceededError();
+        }
+        if (code !== expected) {
             throw new InvalidCipherError('invalid code');
         }
 
@@ -477,7 +514,7 @@ class UserController {
             throw new Error('registration not found');
         }
 
-        const iconUrl = await this.world.getVendorIcon(postmasterHash);
+        const iconUrl = await this.#vendorIcon();
         const tokens =
             channel === 'phone'
                 ? { code: getCode(), timeStamp: getEpoch() }
@@ -496,7 +533,7 @@ class UserController {
                               /** @type {string} */ (tokens.code),
                           ),
                           user.phoneNumber,
-                          user.type === 'mobile' ? iconUrl : '',
+                          user.type === 'mobile' ? (iconUrl ?? '') : '',
                       ),
                   }
                 : {
@@ -633,13 +670,14 @@ class UserController {
          * output is what a stored number is matched against, and it carries
          * the barred-region check.
          */
-        const phoneNumber = UserController.#cleanPhoneNumber(contact.phoneNumber);
+        const phoneNumber = cleanPhoneNumber(contact.phoneNumber);
 
         /**
-         * Sign-up is first registration only. A registered account changes
-         * its contact through `PATCH /users` and the cipher checks; letting it
-         * through here would replace verified contact with unverified
-         * contact before anything is checked. Checked after the phone
+         * Sign-up is first registration only. A registered account can't
+         * change its contact here (nor, today, anywhere: `PATCH /users`
+         * accepts names and notification flags only); letting it through
+         * would replace verified contact with unverified contact before
+         * anything is checked. Checked after the phone
          * number, so a number that cannot be used still answers 422: that
          * describes the caller's own input, not anyone's registration.
          */
@@ -681,7 +719,7 @@ class UserController {
             return undefined;
         }
 
-        const iconUrl = await this.world.getVendorIcon(postmasterHash);
+        const iconUrl = await this.#vendorIcon();
         const membership = /** @type {Membership} */ (user.membership);
 
         /**
@@ -701,7 +739,7 @@ class UserController {
                     /** @type {string} */ (membership.tokens?.code),
                 ),
                 phoneNumber,
-                user.type === 'mobile' ? iconUrl : '',
+                user.type === 'mobile' ? (iconUrl ?? '') : '',
             ),
             this.postmaster.register(
                 /** @type {import('../helpers/postmaster.js').EmailUser} */ (
@@ -746,6 +784,98 @@ class UserController {
         }
 
         return { undelivered };
+    }
+
+    /**
+     * Send a pending sign-up's verification message again, on one channel.
+     *
+     * The same code or link goes out, and the saved tokens are left alone, so
+     * a message that did arrive, perhaps late, still works, and the other
+     * channel is untouched. A fresh pair means signing up again.
+     *
+     * Resolves whatever happens: nothing to resend, or a send that failed,
+     * is only logged. The route answers the same either way, because whether
+     * a sign-up was saved is what the conflict check decides, so telling the
+     * caller would reveal whether its address or number is registered.
+     * @param {Object} param0
+     * @param {string} param0.displayName
+     * @param {number} param0.membershipType
+     * @param {'phone' | 'email'} param0.channel
+     * @returns {Promise<void>}
+     */
+    async resend({ displayName, membershipType, channel }) {
+        const context = { displayName, membershipType, channel };
+        const user = /** @type {MutableUser | undefined} */ (
+            await this.users.getUserByDisplayName(displayName, membershipType, true)
+        );
+        const tokens = user?.membership?.tokens;
+
+        /**
+         * A pending sign-up holds both tokens; a cipher for a registered
+         * account holds one, and isn't this endpoint's to resend.
+         */
+        if (
+            !user ||
+            user.dateRegistered ||
+            !tokens?.blob ||
+            !tokens?.code ||
+            getEpoch() > (tokens.timeStamp ?? 0) + this.#tokenTtlSeconds
+        ) {
+            log.info(context, 'No pending sign-up to resend.');
+
+            return;
+        }
+
+        const iconUrl = await this.#vendorIcon();
+        /** @type {Membership} */
+        let receipts;
+
+        try {
+            receipts =
+                channel === 'phone'
+                    ? {
+                          message: await this.notifications.sendMessage(
+                              UserController.#buildVerificationMessage(tokens.code),
+                              /** @type {string} */ (user.phoneNumber),
+                              user.type === 'mobile' ? (iconUrl ?? '') : '',
+                          ),
+                      }
+                    : {
+                          postmark: await this.postmaster.register(
+                              /** @type {import('../helpers/postmaster.js').EmailUser} */ (
+                                  /** @type {unknown} */ (user)
+                              ),
+                              iconUrl,
+                              '/register',
+                          ),
+                      };
+        } catch (err) {
+            log.error({ err, ...context }, 'Failed to resend a sign-up verification message.');
+
+            return;
+        }
+
+        await this.#saveReceipts({ displayName, membershipType, tokens }, receipts);
+    }
+
+    /**
+     * The icon that decorates a verification message. Optional: a message
+     * without it still verifies.
+     *
+     * Never throws. The manifest behind it can be unavailable (a 503), and
+     * sign-up and resend look it up only on the path that sends, so letting
+     * it fail the request would answer differently exactly when there was a
+     * sign-up to send for.
+     * @returns {Promise<string | undefined>}
+     */
+    async #vendorIcon() {
+        try {
+            return await this.world.getVendorIcon(postmasterHash);
+        } catch (err) {
+            log.warn({ err }, 'No vendor icon for the verification message.');
+
+            return undefined;
+        }
     }
 
     /**
