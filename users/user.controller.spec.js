@@ -5,13 +5,19 @@ import { get, post } from '../helpers/bungie.request.js';
 import DestinyService from '../destiny/destiny.service.js';
 import UserController from './user.controller.js';
 import UserService from './user.service.js';
+import CipherAttemptsExceededError from './cipher-attempts-exceeded.error.js';
+import InvalidCipherError from './invalid-cipher.error.js';
 import InvalidPhoneNumberError from './invalid-phone-number.error.js';
 
-const { logError, logWarn } = vi.hoisted(() => ({ logError: vi.fn(), logWarn: vi.fn() }));
+const { logError, logInfo, logWarn } = vi.hoisted(() => ({
+    logError: vi.fn(),
+    logInfo: vi.fn(),
+    logWarn: vi.fn(),
+}));
 
 vi.mock('../helpers/bungie.request.js');
 vi.mock('../helpers/log.js', () => ({
-    default: { error: logError, info: vi.fn(), warn: logWarn },
+    default: { error: logError, info: logInfo, warn: logWarn },
 }));
 vi.mock('../helpers/postmaster.js', () => ({
     default: class {
@@ -38,6 +44,7 @@ const destinyService = {
 const notificationService = {
     sendMessage: vi.fn().mockResolvedValue(),
 };
+const allowCipherAttempt = vi.fn().mockResolvedValue(true);
 const userService = {
     createAnonymousUser: vi.fn().mockImplementation(user => Promise.resolve(user)),
     deleteUserMessages: vi.fn().mockResolvedValue(),
@@ -62,6 +69,7 @@ let userController;
 
 beforeEach(() => {
     userController = new UserController({
+        allowCipherAttempt,
         destinyService,
         notificationService,
         userService,
@@ -261,6 +269,7 @@ describe('UserController', () => {
         const tokensAged = seconds => ({ code, timeStamp: getEpoch() - seconds });
         const controllerWith = tokenTtlSeconds =>
             new UserController({
+                allowCipherAttempt,
                 destinyService,
                 notificationService,
                 tokenTtlSeconds,
@@ -1158,6 +1167,210 @@ describe('UserController', () => {
                 true,
             );
         });
+
+        it('should not construct without an attempt limit', () => {
+            /** Without one, cryptarch would allow unlimited guesses. */
+            expect(
+                () =>
+                    new UserController({
+                        destinyService,
+                        notificationService,
+                        userService,
+                        worldRepository,
+                    }),
+            ).toThrow(new TypeError('allowCipherAttempt is required'));
+        });
+
+        describe('attempts', () => {
+            const timeStamp = getEpoch();
+            const attempt = code =>
+                userController.decipher({ displayName, membershipType, channel: 'phone', code });
+
+            beforeEach(() => {
+                userService.getUserByDisplayName.mockResolvedValue({
+                    displayName,
+                    membershipType,
+                    membership: { tokens: { code: '123456', timeStamp } },
+                });
+            });
+
+            afterEach(() => {
+                userService.getUserByDisplayName.mockReset();
+                allowCipherAttempt.mockReset().mockResolvedValue(true);
+            });
+
+            it("should spend one of the code's attempts, keyed on its token", async () => {
+                await attempt('123456');
+
+                expect(allowCipherAttempt).toHaveBeenCalledExactlyOnceWith(
+                    `${membershipType}:${displayName}:${timeStamp}`,
+                );
+            });
+
+            it('should spend an attempt on a wrong code too', async () => {
+                await expect(attempt('000000')).rejects.toBeInstanceOf(InvalidCipherError);
+
+                expect(allowCipherAttempt).toHaveBeenCalledOnce();
+            });
+
+            it('should refuse even the right code once the attempts are spent', async () => {
+                allowCipherAttempt.mockResolvedValueOnce(false);
+
+                await expect(attempt('123456')).rejects.toBeInstanceOf(CipherAttemptsExceededError);
+            });
+
+            it('should not spend an attempt on an expired code', async () => {
+                userService.getUserByDisplayName.mockResolvedValue({
+                    displayName,
+                    membershipType,
+                    membership: { tokens: { code: '123456', timeStamp: 1 } },
+                });
+
+                await expect(attempt('123456')).rejects.toBeInstanceOf(InvalidCipherError);
+
+                expect(allowCipherAttempt).not.toHaveBeenCalled();
+            });
+        });
+    });
+
+    describe('resend', () => {
+        const sms = { sid: 'SM-resend-sid' };
+        const email = { messageId: '<resend-message-id@example.com>' };
+        const resend = channel => userController.resend({ displayName, membershipType, channel });
+        let stored;
+        let tokens;
+
+        beforeEach(() => {
+            tokens = { blob: 'pending-blob', code: '424242', timeStamp: getEpoch() };
+            stored = {
+                displayName,
+                membershipType,
+                emailAddress: 'ada@example.com',
+                phoneNumber: `+1${phoneNumber}`,
+                membership: { tokens, message: { sid: 'SM-original' } },
+            };
+            userService.getUserByDisplayName.mockImplementation(() =>
+                Promise.resolve({ ...structuredClone(stored), _etag: chance.guid() }),
+            );
+            userService.updateUser.mockImplementation(user => {
+                stored = structuredClone(user);
+
+                return Promise.resolve(user);
+            });
+            notificationService.sendMessage.mockResolvedValue(sms);
+            userController.postmaster.register.mockResolvedValue(email);
+        });
+
+        afterEach(() => {
+            userService.getUserByDisplayName.mockReset();
+            userService.updateUser.mockReset().mockImplementation(user => Promise.resolve(user));
+            notificationService.sendMessage.mockReset().mockResolvedValue();
+            userController.postmaster.register.mockReset();
+        });
+
+        it('should read the pending sign-up without the cache', async () => {
+            await resend('phone');
+
+            expect(userService.getUserByDisplayName).toHaveBeenNthCalledWith(
+                1,
+                displayName,
+                membershipType,
+                true,
+            );
+        });
+
+        it('should send the same code by SMS only, keeping the tokens', async () => {
+            await resend('phone');
+
+            const [text, to] = notificationService.sendMessage.mock.calls[0];
+
+            expect(text).toContain('424242');
+            expect(text).toContain('Reply HELP for help, STOP to cancel.');
+            expect(to).toEqual(`+1${phoneNumber}`);
+            expect(userController.postmaster.register).not.toHaveBeenCalled();
+            expect(stored.membership.tokens).toEqual(tokens);
+        });
+
+        it('should send the same link by email only, keeping the tokens', async () => {
+            await resend('email');
+
+            const [recipient, , path] = userController.postmaster.register.mock.calls[0];
+
+            expect(recipient.membership.tokens.blob).toEqual('pending-blob');
+            expect(path).toEqual('/register');
+            expect(notificationService.sendMessage).not.toHaveBeenCalled();
+            expect(stored.membership.tokens).toEqual(tokens);
+        });
+
+        it.each([
+            ['phone', 'message', sms],
+            ['email', 'postmark', email],
+        ])('should save the %s receipt, for billing', async (channel, field, receipt) => {
+            await resend(channel);
+
+            expect(stored.membership[field]).toEqual(receipt);
+        });
+
+        it.each([
+            [
+                'there is no user',
+                () => {
+                    stored = undefined;
+                },
+            ],
+            [
+                'the account is registered',
+                () => {
+                    stored.dateRegistered = '2026-01-01T00:00:00.000Z';
+                },
+            ],
+            [
+                'only a cipher is pending',
+                () => {
+                    delete stored.membership.tokens.blob;
+                },
+            ],
+            [
+                'there are no tokens',
+                () => {
+                    delete stored.membership;
+                },
+            ],
+            [
+                'the tokens have expired',
+                () => {
+                    stored.membership.tokens.timeStamp = 1;
+                },
+            ],
+        ])('should send and save nothing when %s', async (_, arrange) => {
+            arrange();
+            userService.getUserByDisplayName.mockImplementation(() =>
+                Promise.resolve(stored && structuredClone(stored)),
+            );
+
+            await expect(resend('phone')).resolves.toBeUndefined();
+
+            expect(notificationService.sendMessage).not.toHaveBeenCalled();
+            expect(userService.updateUser).not.toHaveBeenCalled();
+            expect(logInfo).toHaveBeenCalledWith(
+                { displayName, membershipType, channel: 'phone' },
+                'No pending sign-up to resend.',
+            );
+        });
+
+        it('should resolve, and only log, when the send fails', async () => {
+            const err = new Error('twilio unavailable');
+
+            notificationService.sendMessage.mockRejectedValueOnce(err);
+
+            await expect(resend('phone')).resolves.toBeUndefined();
+
+            expect(userService.updateUser).not.toHaveBeenCalled();
+            expect(logError).toHaveBeenCalledWith(
+                { err, displayName, membershipType, channel: 'phone' },
+                'Failed to resend a sign-up verification message.',
+            );
+        });
     });
 
     describe('sendCipher', () => {
@@ -1612,6 +1825,7 @@ describe('UserController.signIn against the real Destiny and User services', () 
         vi.clearAllMocks();
 
         controller = new UserController({
+            allowCipherAttempt,
             destinyService: new DestinyService({ cacheService: {} }),
             notificationService,
             userService: new UserService({ cacheService, client: {}, documentService }),

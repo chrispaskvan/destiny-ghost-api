@@ -9,6 +9,10 @@ const {
     fallbackConsume,
     invalidConsume,
     invalidGet,
+    signUpConsume,
+    resendConsume,
+    cipherConsume,
+    cipherAttemptConsume,
     MockRateLimiterRes,
     limiterOptions,
 } = vi.hoisted(() => ({
@@ -21,6 +25,10 @@ const {
     fallbackConsume: vi.fn(),
     invalidConsume: vi.fn(),
     invalidGet: vi.fn(),
+    signUpConsume: vi.fn(),
+    resendConsume: vi.fn(),
+    cipherConsume: vi.fn(),
+    cipherAttemptConsume: vi.fn(),
     MockRateLimiterRes: class RateLimiterRes {
         constructor(remainingPoints, msBeforeNext) {
             this.remainingPoints = remainingPoints;
@@ -42,6 +50,10 @@ vi.mock('rate-limiter-flexible', () => ({
                 'twilio-callback': callbackConsume,
                 'twilio-fallback': fallbackConsume,
                 'twilio-invalid': invalidConsume,
+                'sign-up': signUpConsume,
+                'sign-up-resend': resendConsume,
+                cipher: cipherConsume,
+                'cipher-attempt': cipherAttemptConsume,
             }[keyPrefix];
             this.get = invalidGet;
         }
@@ -60,6 +72,10 @@ import rateLimiterMiddleware, {
     twilioFallbackRateLimiterMiddleware,
     twilioPreflightMiddleware,
     rejectTwilioRequest,
+    signUpRateLimiterMiddleware,
+    resendRateLimiterMiddleware,
+    cipherRateLimiterMiddleware,
+    allowCipherAttempt,
 } from './rate-limiter.middleware.js';
 
 describe('rate limiter store', () => {
@@ -71,10 +87,104 @@ describe('rate limiter store', () => {
             'twilio-callback',
             'twilio-fallback',
             'twilio-invalid',
+            'sign-up',
+            'sign-up-resend',
+            'cipher',
+            'cipher-attempt',
         ]);
         for (const options of limiterOptions) {
             expect(options).toMatchObject({ storeClient: cache, useRedisPackage: true });
         }
+    });
+});
+
+describe('verification limits', () => {
+    const limits = prefix => limiterOptions.find(({ keyPrefix }) => keyPrefix === prefix);
+    let req, res, next;
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        cache.isReady = true;
+        req = { ip: '127.0.0.1', session: { membershipId: 'm-1' }, body: {}, headers: {} };
+        res = { set: vi.fn(), status: vi.fn().mockReturnThis(), end: vi.fn() };
+        next = vi.fn();
+    });
+
+    it('allows 5 sign-ups an hour, 3 resends per channel per 15 minutes, 5 attempts per code', () => {
+        expect(limits('sign-up')).toMatchObject({ points: 5, duration: 60 * 60 });
+        expect(limits('sign-up-resend')).toMatchObject({ points: 3, duration: 15 * 60 });
+        expect(limits('cipher')).toMatchObject({ points: 3, duration: 15 * 60 });
+        /** Longer than any token lives, so a code's count outlasts it. */
+        expect(limits('cipher-attempt')).toMatchObject({ points: 5, duration: 24 * 60 * 60 });
+    });
+
+    it('charges a sign-up to the session membership', async () => {
+        signUpConsume.mockResolvedValueOnce({ remainingPoints: 4, msBeforeNext: 1000 });
+
+        await signUpRateLimiterMiddleware(req, res, next);
+
+        expect(signUpConsume).toHaveBeenCalledExactlyOnceWith('m-1', 1);
+        expect(next).toHaveBeenCalledExactlyOnceWith();
+    });
+
+    it('charges a resend to the session membership and channel', async () => {
+        req.body.channel = 'phone';
+        resendConsume.mockResolvedValueOnce({ remainingPoints: 2, msBeforeNext: 1000 });
+
+        await resendRateLimiterMiddleware(req, res, next);
+
+        expect(resendConsume).toHaveBeenCalledExactlyOnceWith('m-1:phone', 1);
+        expect(next).toHaveBeenCalledExactlyOnceWith();
+    });
+
+    it('charges a cipher to the session membership and channel, apart from resends', async () => {
+        req.body.channel = 'email';
+        cipherConsume.mockResolvedValueOnce({ remainingPoints: 2, msBeforeNext: 1000 });
+
+        await cipherRateLimiterMiddleware(req, res, next);
+
+        expect(cipherConsume).toHaveBeenCalledExactlyOnceWith('m-1:email', 1);
+        expect(resendConsume).not.toHaveBeenCalled();
+        expect(next).toHaveBeenCalledExactlyOnceWith();
+    });
+
+    it('answers 429 with Retry-After once resends run out', async () => {
+        req.body.channel = 'email';
+        resendConsume.mockRejectedValueOnce(new MockRateLimiterRes(0, 61_000));
+
+        await resendRateLimiterMiddleware(req, res, next);
+
+        expect(res.set).toHaveBeenCalledWith('Retry-After', '61');
+        expect(res.status).toHaveBeenCalledWith(StatusCodes.TOO_MANY_REQUESTS);
+        expect(next).not.toHaveBeenCalled();
+    });
+
+    describe('allowCipherAttempt', () => {
+        it('allows an attempt while the code has points left', async () => {
+            cipherAttemptConsume.mockResolvedValueOnce({ remainingPoints: 4 });
+
+            await expect(allowCipherAttempt('key')).resolves.toBe(true);
+            expect(cipherAttemptConsume).toHaveBeenCalledExactlyOnceWith('key', 1);
+        });
+
+        it('refuses an attempt once the code has none', async () => {
+            cipherAttemptConsume.mockRejectedValueOnce(new MockRateLimiterRes(0, 1000));
+
+            await expect(allowCipherAttempt('key')).resolves.toBe(false);
+        });
+
+        it('fails open when Redis errors', async () => {
+            cipherAttemptConsume.mockRejectedValueOnce(new Error('Redis unavailable'));
+
+            await expect(allowCipherAttempt('key')).resolves.toBe(true);
+        });
+
+        it('fails open when Redis is not ready', async () => {
+            cache.isReady = false;
+
+            await expect(allowCipherAttempt('key')).resolves.toBe(true);
+            expect(cipherAttemptConsume).not.toHaveBeenCalled();
+        });
     });
 });
 

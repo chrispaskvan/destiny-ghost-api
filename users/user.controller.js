@@ -7,6 +7,7 @@
  */
 import { isDeepStrictEqual } from 'node:util';
 import { applyPatch, createPatch } from 'rfc6902';
+import CipherAttemptsExceededError from './cipher-attempts-exceeded.error.js';
 import InvalidCipherError from './invalid-cipher.error.js';
 import InvalidPhoneNumberError from './invalid-phone-number.error.js';
 import { parsePhoneNumber } from 'awesome-phonenumber';
@@ -61,6 +62,9 @@ import notificationTypes from '../notifications/notification.types.js';
 /**
  * Constructor options for UserController.
  * @typedef {Object} UserControllerOptions
+ * @property {(key: string) => Promise<boolean>} allowCipherAttempt - spends one
+ * of a verification code's attempts, keyed on the token; false once they are
+ * spent (see `helpers/rate-limiter.middleware.js`)
  * @property {import('../destiny/destiny.service.js').default} destinyService
  * @property {import('../notifications/notification.service.js').default} notificationService
  * @property {number} [tokenTtlSeconds] - how long a verification code or email
@@ -78,7 +82,8 @@ import notificationTypes from '../notifications/notification.types.js';
  * either channel would decide `join` on its own (#571).
  *
  * The longer window does not make the six-digit code guessable: `join` also
- * needs the 128-bit email token, and `decipher` the user's session.
+ * needs the 128-bit email token, and `decipher` the user's session and one of
+ * the code's few attempts.
  * @type {number}
  */
 const DEFAULT_TOKEN_TTL_SECONDS = 900;
@@ -87,6 +92,9 @@ const DEFAULT_TOKEN_TTL_SECONDS = 900;
  * User Controller Class
  */
 class UserController {
+    /** @type {(key: string) => Promise<boolean>} */
+    #allowCipherAttempt;
+
     /** @type {number} */
     #tokenTtlSeconds;
 
@@ -106,6 +114,12 @@ class UserController {
             );
         }
 
+        /** Required: without it, cryptarch would allow unlimited guesses. */
+        if (typeof options.allowCipherAttempt !== 'function') {
+            throw new TypeError('allowCipherAttempt is required');
+        }
+
+        this.#allowCipherAttempt = options.allowCipherAttempt;
         this.#tokenTtlSeconds = tokenTtlSeconds;
         this.destiny = options.destinyService;
         this.notifications = options.notificationService;
@@ -280,6 +294,19 @@ class UserController {
         }
         if (getEpoch() > (user?.membership?.tokens?.timeStamp ?? 0) + this.#tokenTtlSeconds) {
             throw new InvalidCipherError('token expired');
+        }
+
+        /**
+         * Spent before comparing, and on every attempt, the right one
+         * included, so parallel guesses can't all get in ahead of the count.
+         * Keyed on the token's timestamp: a new code starts a new count.
+         */
+        if (
+            !(await this.#allowCipherAttempt(
+                `${membershipType}:${displayName}:${user.membership?.tokens?.timeStamp}`,
+            ))
+        ) {
+            throw new CipherAttemptsExceededError();
         }
         if (
             (channel === 'phone' && user?.membership?.tokens?.code !== code) ||
@@ -746,6 +773,78 @@ class UserController {
         }
 
         return { undelivered };
+    }
+
+    /**
+     * Send a pending sign-up's verification message again, on one channel.
+     *
+     * The same code or link goes out, and the saved tokens are left alone, so
+     * a message that did arrive, perhaps late, still works, and the other
+     * channel is untouched. A fresh pair means signing up again.
+     *
+     * Resolves whatever happens: nothing to resend, or a send that failed,
+     * is only logged. The route answers the same either way, because whether
+     * a sign-up was saved is what the conflict check decides, so telling the
+     * caller would reveal whether its address or number is registered.
+     * @param {Object} param0
+     * @param {string} param0.displayName
+     * @param {number} param0.membershipType
+     * @param {'phone' | 'email'} param0.channel
+     * @returns {Promise<void>}
+     */
+    async resend({ displayName, membershipType, channel }) {
+        const context = { displayName, membershipType, channel };
+        const user = /** @type {MutableUser | undefined} */ (
+            await this.users.getUserByDisplayName(displayName, membershipType, true)
+        );
+        const tokens = user?.membership?.tokens;
+
+        /**
+         * A pending sign-up holds both tokens; a cipher for a registered
+         * account holds one, and isn't this endpoint's to resend.
+         */
+        if (
+            !user ||
+            user.dateRegistered ||
+            !tokens?.blob ||
+            !tokens?.code ||
+            getEpoch() > (tokens.timeStamp ?? 0) + this.#tokenTtlSeconds
+        ) {
+            log.info(context, 'No pending sign-up to resend.');
+
+            return;
+        }
+
+        const iconUrl = await this.world.getVendorIcon(postmasterHash);
+        /** @type {Membership} */
+        let receipts;
+
+        try {
+            receipts =
+                channel === 'phone'
+                    ? {
+                          message: await this.notifications.sendMessage(
+                              UserController.#buildVerificationMessage(tokens.code),
+                              /** @type {string} */ (user.phoneNumber),
+                              user.type === 'mobile' ? iconUrl : '',
+                          ),
+                      }
+                    : {
+                          postmark: await this.postmaster.register(
+                              /** @type {import('../helpers/postmaster.js').EmailUser} */ (
+                                  /** @type {unknown} */ (user)
+                              ),
+                              iconUrl,
+                              '/register',
+                          ),
+                      };
+        } catch (err) {
+            log.error({ err, ...context }, 'Failed to resend a sign-up verification message.');
+
+            return;
+        }
+
+        await this.#saveReceipts({ displayName, membershipType, tokens }, receipts);
     }
 
     /**

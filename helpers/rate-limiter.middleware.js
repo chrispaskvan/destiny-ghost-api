@@ -44,6 +44,40 @@ const twilioInvalidLimiter = new RateLimiterRedis({
     points: 10,
     duration: 1,
 });
+/**
+ * Each sign-up and resend sends a billed SMS and/or email, and the global
+ * bucket alone let a session send about ten a second (#571).
+ */
+const signUpLimiter = new RateLimiterRedis({
+    ...store,
+    keyPrefix: 'sign-up',
+    points: 5,
+    duration: 60 * 60,
+});
+const resendLimiter = new RateLimiterRedis({
+    ...store,
+    keyPrefix: 'sign-up-resend',
+    points: 3,
+    duration: 15 * 60,
+});
+/** A registered account's re-verification codes, billed the same way. */
+const cipherLimiter = new RateLimiterRedis({
+    ...store,
+    keyPrefix: 'cipher',
+    points: 3,
+    duration: 15 * 60,
+});
+/**
+ * Attempts per verification code. A 6-digit code at the global limit had
+ * about a 1% chance of being guessed within one TTL. The duration only has
+ * to outlast a token: the key names the token, so a new code starts afresh.
+ */
+const cipherAttemptLimiter = new RateLimiterRedis({
+    ...store,
+    keyPrefix: 'cipher-attempt',
+    points: 5,
+    duration: 24 * 60 * 60,
+});
 
 /**
  * @param {import('rate-limiter-flexible').RateLimiterRes} rateLimiterRes
@@ -234,6 +268,75 @@ const twilioPreflightMiddleware = async (req, res, next) => {
     return next();
 };
 
+/**
+ * Limit sign-ups per account. Runs after `authenticateUser`, so the session
+ * has a membership.
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ */
+const signUpRateLimiterMiddleware = (req, res, next) =>
+    consumePoints(
+        signUpLimiter,
+        /** @type {string} */ (
+            /** @type {import('../users/user.routes.js').AppSessionData} */ (
+                /** @type {unknown} */ (req.session)
+            ).membershipId
+        ),
+        1,
+        res,
+        next,
+    );
+
+/**
+ * Charge a request to its account and channel. Runs after the route has
+ * checked the channel.
+ * @param {RateLimiterRedis} limiter
+ * @returns {import('express').RequestHandler}
+ */
+const perChannel = limiter => (req, res, next) =>
+    consumePoints(
+        limiter,
+        `${
+            /** @type {import('../users/user.routes.js').AppSessionData} */ (
+                /** @type {unknown} */ (req.session)
+            ).membershipId
+        }:${req.body.channel}`,
+        1,
+        res,
+        next,
+    );
+
+/** Limit sign-up resends per account and channel. */
+const resendRateLimiterMiddleware = perChannel(resendLimiter);
+
+/** Limit re-verification codes per account and channel. */
+const cipherRateLimiterMiddleware = perChannel(cipherLimiter);
+
+/**
+ * Spend one of a verification code's attempts. Consumed before the code is
+ * compared, so parallel guesses can't all slip past a check that only
+ * recorded failures afterwards.
+ *
+ * Fails open, like every bucket here: with Redis unavailable, guessing is
+ * bounded by the global limit alone.
+ * @param {string} key - names the token being tried
+ * @returns {Promise<boolean>} false once the code's attempts are spent
+ */
+const allowCipherAttempt = async key => {
+    if (!client.isReady) {
+        return true;
+    }
+
+    try {
+        await cipherAttemptLimiter.consume(key, 1);
+
+        return true;
+    } catch (rejection) {
+        return !(rejection instanceof RateLimiterRes && client.isReady);
+    }
+};
+
 export default rateLimiterMiddleware;
 export {
     twilioRateLimiterMiddleware,
@@ -242,4 +345,8 @@ export {
     twilioFallbackRateLimiterMiddleware,
     twilioPreflightMiddleware,
     rejectTwilioRequest,
+    signUpRateLimiterMiddleware,
+    resendRateLimiterMiddleware,
+    cipherRateLimiterMiddleware,
+    allowCipherAttempt,
 };
