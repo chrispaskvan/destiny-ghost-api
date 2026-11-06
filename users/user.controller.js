@@ -61,24 +61,50 @@ import notificationTypes from '../notifications/notification.types.js';
  * @typedef {Object} UserControllerOptions
  * @property {import('../destiny/destiny.service.js').default} destinyService
  * @property {import('../notifications/notification.service.js').default} notificationService
+ * @property {number} [tokenTtlSeconds] - how long a verification code or email
+ * link stays valid; defaults to `DEFAULT_TOKEN_TTL_SECONDS`
  * @property {import('./user.service.js').default} userService
  * @property {import('../helpers/world2.js').default} worldRepository
  */
 
 /**
- * Time To Live for Tokens
+ * How long a verification token stays valid when nothing is configured.
+ *
+ * Fifteen minutes, so an emailed link survives greylisting, which can hold a
+ * message for five to fifteen. `join` checks the SMS code and the email link
+ * together against one timestamp, so one TTL covers both: a shorter one for
+ * either channel would decide `join` on its own (#571).
+ *
+ * The longer window does not make the six-digit code guessable: `join` also
+ * needs the 128-bit email token, and `decipher` the user's session.
  * @type {number}
  */
-const ttl = 300;
+const DEFAULT_TOKEN_TTL_SECONDS = 900;
 
 /**
  * User Controller Class
  */
 class UserController {
+    /** @type {number} */
+    #tokenTtlSeconds;
+
     /**
      * @param {UserControllerOptions} options
      */
     constructor(options) {
+        const { tokenTtlSeconds = DEFAULT_TOKEN_TTL_SECONDS } = options;
+
+        /**
+         * Checked here so a bad `settings/users.json` stops the server at
+         * startup, rather than expiring every code, or none, at runtime.
+         */
+        if (!Number.isSafeInteger(tokenTtlSeconds) || tokenTtlSeconds <= 0) {
+            throw new TypeError(
+                `tokenTtlSeconds must be a positive integer; got ${JSON.stringify(tokenTtlSeconds)}`,
+            );
+        }
+
+        this.#tokenTtlSeconds = tokenTtlSeconds;
         this.destiny = options.destinyService;
         this.notifications = options.notificationService;
         this.postmaster = new Postmaster();
@@ -245,7 +271,7 @@ class UserController {
         if (!user) {
             throw new Error('user not found');
         }
-        if (getEpoch() > (user?.membership?.tokens?.timeStamp ?? 0) + ttl) {
+        if (getEpoch() > (user?.membership?.tokens?.timeStamp ?? 0) + this.#tokenTtlSeconds) {
             throw new Error('token expired');
         }
         if (
@@ -379,7 +405,8 @@ class UserController {
 
         if (
             !registeredUser ||
-            getEpoch() > (registeredUser?.membership?.tokens?.timeStamp ?? 0) + ttl ||
+            getEpoch() >
+                (registeredUser?.membership?.tokens?.timeStamp ?? 0) + this.#tokenTtlSeconds ||
             user?.tokens?.phoneNumber !== registeredUser?.membership?.tokens?.code
         ) {
             return undefined;

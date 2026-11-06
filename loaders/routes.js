@@ -163,6 +163,11 @@ export default () => {
         authenticationController,
         destinyService,
         notificationService,
+        /**
+         * Optional `settings/users.json`; without it the controller's
+         * default applies.
+         */
+        tokenTtlSeconds: configuration.users?.tokenTtlSeconds,
         userService,
         worldRepository: world,
     });
