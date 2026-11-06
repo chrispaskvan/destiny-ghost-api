@@ -1409,6 +1409,49 @@ describe('UserService', () => {
         });
     });
 
+    describe('merging onto the stored document', () => {
+        /**
+         * Cosmos has moved on (a consent write whose cache refresh failed);
+         * the cache still holds the older copy. The caller read past the
+         * cache, so its `_etag` is current and the IfMatch would pass.
+         */
+        const cached = { ...structuredClone(user), consentUpdatedAt: 1_000, _etag: 'e1' };
+        const fresh = { ...structuredClone(user), consentUpdatedAt: 2_000, _etag: 'e2' };
+
+        beforeEach(() => {
+            cacheService.getUser.mockResolvedValue(structuredClone(cached));
+            documentService.getDocuments.mockResolvedValue([structuredClone(fresh)]);
+            documentService.updateDocument.mockResolvedValue(undefined);
+            cacheService.setUser.mockResolvedValue(undefined);
+        });
+
+        afterEach(() => {
+            cacheService.getUser.mockReset();
+            documentService.getDocuments.mockReset();
+        });
+
+        it('should keep the stored consent watermark, not a stale cached one, on updateUser', async () => {
+            await userService.updateUser({ ...structuredClone(fresh), firstName: 'Ada' });
+
+            const [, written] = documentService.updateDocument.mock.calls[0];
+
+            expect(written.consentUpdatedAt).toEqual(2_000);
+            expect(written.firstName).toEqual('Ada');
+        });
+
+        it('should keep the stored consent watermark, not a stale cached one, on updateAnonymousUser', async () => {
+            await userService.updateAnonymousUser({
+                ...structuredClone(anonymousUser),
+                displayName: user.displayName,
+                membershipType: user.membershipType,
+            });
+
+            const [, written] = documentService.updateDocument.mock.calls[0];
+
+            expect(written.consentUpdatedAt).toEqual(2_000);
+        });
+    });
+
     describe('protecting the consent watermark from caller input', () => {
         /**
          * The sign-up route hands `updateUser` a raw request body. A planted

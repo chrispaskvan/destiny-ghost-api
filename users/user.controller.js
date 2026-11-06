@@ -7,6 +7,7 @@
  */
 import { isDeepStrictEqual } from 'node:util';
 import { applyPatch, createPatch } from 'rfc6902';
+import InvalidCipherError from './invalid-cipher.error.js';
 import InvalidPhoneNumberError from './invalid-phone-number.error.js';
 import { parsePhoneNumber } from 'awesome-phonenumber';
 import Postmaster from '../helpers/postmaster.js';
@@ -275,16 +276,16 @@ class UserController {
         );
 
         if (!user) {
-            throw new Error('user not found');
+            throw new InvalidCipherError('user not found');
         }
         if (getEpoch() > (user?.membership?.tokens?.timeStamp ?? 0) + this.#tokenTtlSeconds) {
-            throw new Error('token expired');
+            throw new InvalidCipherError('token expired');
         }
         if (
             (channel === 'phone' && user?.membership?.tokens?.code !== code) ||
             (channel === 'email' && user?.membership?.tokens?.blob !== code)
         ) {
-            throw new Error('invalid code');
+            throw new InvalidCipherError('invalid code');
         }
 
         return user;
