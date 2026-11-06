@@ -136,7 +136,6 @@ function signIn(req, res, user, next) {
  * @property {import('../notifications/notification.service.js').default} notificationService
  * @property {{ signUp: RequestHandler, resend: RequestHandler, cipher: RequestHandler }} rateLimiters
  * - per-account limits on the endpoints that send billed messages
- * @property {number} [tokenTtlSeconds] - see `UserController`
  * @property {import('./user.service.js').default} userService
  * @property {import('../helpers/world2.js').default} worldRepository
  */
@@ -150,7 +149,6 @@ const routes = ({
     destinyService,
     notificationService,
     rateLimiters,
-    tokenTtlSeconds,
     userService,
     worldRepository,
 }) => {
@@ -159,7 +157,6 @@ const routes = ({
         allowCipherAttempt,
         destinyService,
         notificationService,
-        tokenTtlSeconds,
         userService,
         worldRepository,
     });

@@ -70,7 +70,8 @@ const cipherLimiter = new RateLimiterRedis({
 /**
  * Attempts per verification code. A 6-digit code at the global limit had
  * about a 1% chance of being guessed within one TTL. The duration only has
- * to outlast a token: the key names the token, so a new code starts afresh.
+ * to outlast a token (`TOKEN_TTL_SECONDS` in `users/user.controller.js`,
+ * 15 minutes): the key names the token, so a new code starts afresh.
  */
 const cipherAttemptLimiter = new RateLimiterRedis({
     ...store,

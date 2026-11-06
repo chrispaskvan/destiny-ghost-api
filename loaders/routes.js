@@ -174,11 +174,6 @@ export default () => {
             resend: resendRateLimiterMiddleware,
             cipher: cipherRateLimiterMiddleware,
         },
-        /**
-         * Optional `settings/users.json`; without it the controller's
-         * default applies.
-         */
-        tokenTtlSeconds: configuration.users?.tokenTtlSeconds,
         userService,
         worldRepository: world,
     });

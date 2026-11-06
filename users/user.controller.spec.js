@@ -267,69 +267,33 @@ describe('UserController', () => {
          * each case stays a few seconds clear of the boundary.
          */
         const tokensAged = seconds => ({ code, timeStamp: getEpoch() - seconds });
-        const controllerWith = tokenTtlSeconds =>
-            new UserController({
-                allowCipherAttempt,
-                destinyService,
-                notificationService,
-                tokenTtlSeconds,
-                userService,
-                worldRepository,
-            });
-        const join = (controller, seconds) => {
+        const join = seconds => {
             userService.getUserByEmailAddressToken.mockResolvedValueOnce({
                 membership: { tokens: tokensAged(seconds) },
             });
 
-            return controller.join({ tokens: { emailAddress: 'some-blob', phoneNumber: code } });
+            return userController.join({
+                tokens: { emailAddress: 'some-blob', phoneNumber: code },
+            });
         };
-        const decipher = (controller, seconds) => {
+        const decipher = seconds => {
             userService.getUserByDisplayName.mockResolvedValueOnce({
                 dateRegistered: '2026-01-01T00:00:00.000Z',
                 membership: { tokens: tokensAged(seconds) },
             });
 
-            return controller.decipher({ displayName, membershipType, channel: 'phone', code });
+            return userController.decipher({ displayName, membershipType, channel: 'phone', code });
         };
 
-        describe('when none is configured', () => {
-            it('should accept a token up to 15 minutes old', async () => {
-                await expect(join(controllerWith(undefined), 895)).resolves.toBeDefined();
-                await expect(decipher(controllerWith(undefined), 895)).resolves.toBeDefined();
-            });
-
-            it('should reject a token older than 15 minutes', async () => {
-                await expect(join(controllerWith(undefined), 905)).resolves.toBeUndefined();
-                await expect(decipher(controllerWith(undefined), 905)).rejects.toThrow(
-                    'token expired',
-                );
-            });
+        it('should accept a token up to 15 minutes old', async () => {
+            await expect(join(895)).resolves.toBeDefined();
+            await expect(decipher(895)).resolves.toBeDefined();
         });
 
-        describe('when one is configured', () => {
-            it('should accept a token inside it', async () => {
-                await expect(join(controllerWith(600), 595)).resolves.toBeDefined();
-                await expect(decipher(controllerWith(600), 595)).resolves.toBeDefined();
-            });
-
-            it('should reject a token older than it', async () => {
-                await expect(join(controllerWith(600), 605)).resolves.toBeUndefined();
-                await expect(decipher(controllerWith(600), 605)).rejects.toThrow('token expired');
-            });
+        it('should reject a token older than 15 minutes', async () => {
+            await expect(join(905)).resolves.toBeUndefined();
+            await expect(decipher(905)).rejects.toThrow('token expired');
         });
-
-        it('should accept a day', () => {
-            expect(() => controllerWith(24 * 60 * 60)).not.toThrow();
-        });
-
-        it.each([0, -1, 1.5, '900', null, Number.NaN, 24 * 60 * 60 + 1])(
-            'should refuse to start with %s',
-            tokenTtlSeconds => {
-                expect(() => controllerWith(tokenTtlSeconds)).toThrow(
-                    'tokenTtlSeconds must be a positive integer',
-                );
-            },
-        );
     });
 
     describe('join', () => {

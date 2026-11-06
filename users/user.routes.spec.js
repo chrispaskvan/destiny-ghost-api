@@ -1742,7 +1742,7 @@ describe('UserRouter', () => {
                                 code,
                                 timeStamp:
                                     Math.floor(Temporal.Now.instant().epochMilliseconds / 1000) -
-                                    400, // Older than the 300 seconds configured below
+                                    1000, // Older than the 15-minute TTL
                             },
                         },
                     };
@@ -1761,20 +1761,7 @@ describe('UserRouter', () => {
                         }
                     });
 
-                    /**
-                     * Inside the 900-second default, so this expires only if
-                     * the configured TTL reaches the controller.
-                     */
-                    UserRouter({
-                        allowCipherAttempt,
-                        rateLimiters,
-                        authenticationController,
-                        destinyService,
-                        notificationService,
-                        tokenTtlSeconds: 300,
-                        userService,
-                        worldRepository,
-                    })(req, res, next);
+                    userRouter(req, res, next);
                 }));
         });
 
