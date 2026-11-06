@@ -65,7 +65,7 @@ sequenceDiagram
         User->>WebApp: Enter first/last name, phone, email
         WebApp->>API: POST /users/signUp (firstName, lastName, phoneNumber, emailAddress)
         API->>API: Normalize phone to E.164 (rejects CN/KP/RU region codes)
-        API->>API: Generate one token pair: SMS code + email blob, shared TTL (15 min default)
+        API->>API: Generate one token pair: SMS code + email blob, shared 15-min TTL
         par Send SMS
             API->>SMS: Send "Enter [code] to verify your phone number"
             SMS-->>User: Deliver SMS

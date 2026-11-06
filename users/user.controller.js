@@ -11,6 +11,7 @@ import { applyPatch, createPatch } from 'rfc6902';
 import CipherAttemptsExceededError from './cipher-attempts-exceeded.error.js';
 import InvalidCipherError from './invalid-cipher.error.js';
 import cleanPhoneNumber from './clean-phone-number.js';
+import TOKEN_TTL_SECONDS from './token-ttl.js';
 import Postmaster from '../helpers/postmaster.js';
 import getEpoch from '../helpers/get-epoch.js';
 import log from '../helpers/log.js';
@@ -70,25 +71,6 @@ import notificationTypes from '../notifications/notification.types.js';
  * @property {import('./user.service.js').default} userService
  * @property {import('../helpers/world2.js').default} worldRepository
  */
-
-/**
- * How long a verification token stays valid, in seconds.
- *
- * Fifteen minutes, so an emailed link survives greylisting, which can hold a
- * message for five to fifteen. `join` checks the SMS code and the email link
- * together against one timestamp, so one TTL covers both: a shorter one for
- * either channel would decide `join` on its own (#571).
- *
- * The longer window does not make the six-digit code guessable: `join` also
- * needs the 128-bit email token, and `decipher` the user's session and one of
- * the code's few attempts.
- *
- * A code's attempt count (`cipher-attempt` in
- * `helpers/rate-limiter.middleware.js`) lasts a day from its first attempt,
- * so this must stay shorter than that, or a code would get its attempts back.
- * @type {number}
- */
-const TOKEN_TTL_SECONDS = 900;
 
 /**
  * User Controller Class
@@ -420,10 +402,15 @@ class UserController {
             await this.users.getUserByEmailAddressToken(user.tokens.emailAddress)
         );
 
+        /**
+         * The stored code is checked to exist, not just compared: an email
+         * cipher saves a blob with no code, so a join with that blob and no
+         * code compared `undefined` with `undefined` and passed.
+         */
         if (
-            !registeredUser ||
-            getEpoch() > (registeredUser?.membership?.tokens?.timeStamp ?? 0) + TOKEN_TTL_SECONDS ||
-            user?.tokens?.phoneNumber !== registeredUser?.membership?.tokens?.code
+            !registeredUser?.membership?.tokens?.code ||
+            getEpoch() > (registeredUser.membership.tokens.timeStamp ?? 0) + TOKEN_TTL_SECONDS ||
+            user.tokens.phoneNumber !== registeredUser.membership.tokens.code
         ) {
             return undefined;
         }

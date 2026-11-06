@@ -285,18 +285,51 @@ describe('UserController', () => {
             return userController.decipher({ displayName, membershipType, channel: 'phone', code });
         };
 
+        const resend = seconds => {
+            userService.getUserByDisplayName.mockResolvedValueOnce({
+                displayName,
+                membershipType,
+                phoneNumber: `+1${phoneNumber}`,
+                membership: { tokens: { ...tokensAged(seconds), blob: 'some-blob' } },
+            });
+
+            return userController.resend({ displayName, membershipType, channel: 'phone' });
+        };
+
         it('should accept a token up to 15 minutes old', async () => {
             await expect(join(895)).resolves.toBeDefined();
             await expect(decipher(895)).resolves.toBeDefined();
+
+            await resend(895);
+            expect(notificationService.sendMessage).toHaveBeenCalledOnce();
         });
 
         it('should reject a token older than 15 minutes', async () => {
             await expect(join(905)).resolves.toBeUndefined();
             await expect(decipher(905)).rejects.toThrow('token expired');
+
+            await resend(905);
+            expect(notificationService.sendMessage).not.toHaveBeenCalled();
         });
     });
 
     describe('join', () => {
+        it("should refuse an email cipher's blob, which has no code to match", async () => {
+            /**
+             * An email cipher saves a blob and no code. Compared without a
+             * check that a code exists, a join with no code matched it.
+             */
+            userService.getUserByEmailAddressToken.mockResolvedValueOnce({
+                dateRegistered: '2026-01-01T00:00:00.000Z',
+                membership: { tokens: { blob: 'cipher-blob', timeStamp: getEpoch() } },
+            });
+
+            await expect(
+                userController.join({ tokens: { emailAddress: 'cipher-blob' } }),
+            ).resolves.toBeUndefined();
+            expect(userService.updateUser).not.toHaveBeenCalled();
+        });
+
         describe('when the request is missing an email address token', () => {
             it('should return undefined without querying the user service', async () => {
                 const user = await userController.join({ tokens: {} });

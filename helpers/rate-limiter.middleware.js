@@ -2,6 +2,7 @@
 import { StatusCodes } from 'http-status-codes';
 import { RateLimiterRedis, RateLimiterRes } from 'rate-limiter-flexible';
 import client from './cache.js';
+import TOKEN_TTL_SECONDS from '../users/token-ttl.js';
 
 // rate-limiter-flexible picks its node-redis code path by the client's class name (`Commander`),
 // which node-redis v6 no longer uses. Without `useRedisPackage` every consume throws, and
@@ -69,15 +70,18 @@ const cipherLimiter = new RateLimiterRedis({
 });
 /**
  * Attempts per verification code. A 6-digit code at the global limit had
- * about a 1% chance of being guessed within one TTL. The duration only has
- * to outlast a token (`TOKEN_TTL_SECONDS` in `users/user.controller.js`,
- * 15 minutes): the key names the token, so a new code starts afresh.
+ * about a 1% chance of being guessed within one TTL.
+ *
+ * The count lasts as long as a token does. It starts at a code's first
+ * attempt, never before the code was minted, so it always outlasts the code
+ * and a spent code can't get its attempts back. The key names the token, so
+ * a new code starts afresh.
  */
 const cipherAttemptLimiter = new RateLimiterRedis({
     ...store,
     keyPrefix: 'cipher-attempt',
     points: 5,
-    duration: 24 * 60 * 60,
+    duration: TOKEN_TTL_SECONDS,
 });
 
 /**
