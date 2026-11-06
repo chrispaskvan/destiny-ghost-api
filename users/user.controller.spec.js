@@ -1137,6 +1137,29 @@ describe('UserController', () => {
         });
     });
 
+    describe('decipher', () => {
+        it('should check the code against an uncached read', async () => {
+            userService.getUserByDisplayName.mockResolvedValueOnce({
+                displayName,
+                membershipType,
+                membership: { tokens: { code: '123456', timeStamp: getEpoch() } },
+            });
+
+            await userController.decipher({
+                displayName,
+                membershipType,
+                channel: 'phone',
+                code: '123456',
+            });
+
+            expect(userService.getUserByDisplayName).toHaveBeenCalledWith(
+                displayName,
+                membershipType,
+                true,
+            );
+        });
+    });
+
     describe('sendCipher', () => {
         const sms = { sid: 'SM-cipher-sid' };
         const email = { messageId: '<cipher-message-id@example.com>' };
@@ -1224,10 +1247,20 @@ describe('UserController', () => {
                 expect(firstWrite).toBeLessThan(firstSend);
 
                 const [persisted] = userService.updateUser.mock.calls[0];
+                const saved = persisted.membership.tokens[token];
 
-                expect(persisted.membership.tokens[token]).toEqual(expect.any(String));
-                expect(persisted.membership.tokens[token]).not.toEqual('000000');
-                expect(stored.membership.tokens).toEqual(persisted.membership.tokens);
+                expect(saved).toEqual(expect.any(String));
+
+                /** What went out is what was saved. */
+                if (channel === 'phone') {
+                    const [text] = notificationService.sendMessage.mock.calls[0];
+
+                    expect(text).toContain(saved);
+                } else {
+                    const [recipient] = userController.postmaster.confirm.mock.calls[0];
+
+                    expect(recipient.membership.tokens.blob).toEqual(saved);
+                }
             });
 
             it('should send nothing when the token cannot be saved', async () => {
@@ -1248,7 +1281,9 @@ describe('UserController', () => {
                  * stays; the user asks again. Nothing went out to bill.
                  */
                 expect(userService.updateUser).toHaveBeenCalledTimes(1);
-                expect(stored.membership.tokens[token]).toEqual(expect.any(String));
+                expect(stored.membership.tokens).toEqual(
+                    userService.updateUser.mock.calls[0][0].membership.tokens,
+                );
             });
 
             it('should save the receipt onto a fresh read, for billing', async () => {

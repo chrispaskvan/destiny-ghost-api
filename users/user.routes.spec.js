@@ -1256,6 +1256,7 @@ describe('UserRouter', () => {
                             expect(userService.getUserByDisplayName).toHaveBeenCalledWith(
                                 displayName,
                                 membershipType,
+                                true,
                             );
                             done();
                         } catch (err) {
@@ -1304,6 +1305,7 @@ describe('UserRouter', () => {
                             expect(userService.getUserByDisplayName).toHaveBeenCalledWith(
                                 displayName,
                                 membershipType,
+                                true,
                             );
                             done();
                         } catch (err) {

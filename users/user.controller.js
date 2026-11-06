@@ -5,6 +5,7 @@
  * @module User Controller
  * @author Chris Paskvan
  */
+import { isDeepStrictEqual } from 'node:util';
 import { applyPatch, createPatch } from 'rfc6902';
 import InvalidPhoneNumberError from './invalid-phone-number.error.js';
 import { parsePhoneNumber } from 'awesome-phonenumber';
@@ -264,8 +265,13 @@ class UserController {
      * @returns {Promise<MutableUser>}
      */
     async decipher({ displayName, membershipType, channel, code }) {
+        /**
+         * Read past the cache: `sendCipher` saves the token before sending it,
+         * but a cache refresh that fails after that save is only logged, and
+         * a cached read would then check the code against the previous one.
+         */
         const user = /** @type {MutableUser | undefined} */ (
-            await this.users.getUserByDisplayName(displayName, membershipType)
+            await this.users.getUserByDisplayName(displayName, membershipType, true)
         );
 
         if (!user) {
@@ -457,14 +463,10 @@ class UserController {
      * @param {Object} param0
      * @param {string} param0.displayName
      * @param {number} param0.membershipType
-     * @param {string} param0.channel
+     * @param {'phone' | 'email'} param0.channel
      * @returns {Promise<void>}
      */
     async sendCipher({ displayName, membershipType, channel }) {
-        if (channel !== 'phone' && channel !== 'email') {
-            throw new Error(`invalid channel ${channel}`);
-        }
-
         /** Read past the cache: a stale `_etag` would fail the write below. */
         const user = /** @type {MutableUser | undefined} */ (
             await this.users.getUserByDisplayName(displayName, membershipType, true)
@@ -758,9 +760,9 @@ class UserController {
      * `join` that landed while the messages were sending is kept, and the read
      * brings the ETag that guards this write against anything later. A read
      * holding other tokens means a newer sign-up or cipher replaced them, and
-     * these receipts are not for the messages it sent. All three token fields
-     * are compared: a sign-up has both a code and a blob, a phone cipher only
-     * a code, an email cipher only a blob.
+     * these receipts are not for the messages it sent. The whole token set is
+     * compared: a sign-up has both a code and a blob, a phone cipher only a
+     * code, an email cipher only a blob.
      * @param {{ displayName: string, membershipType: number, tokens?: MembershipTokens }} saved -
      * the account, and the tokens as they were saved
      * @param {Membership} receipts - `message` and/or `postmark`
@@ -779,14 +781,7 @@ class UserController {
                 await this.users.getUserByDisplayName(displayName, membershipType, true)
             );
 
-            const held = current?.membership?.tokens;
-
-            if (
-                !current ||
-                held?.blob !== tokens?.blob ||
-                held?.code !== tokens?.code ||
-                held?.timeStamp !== tokens?.timeStamp
-            ) {
+            if (!current || !isDeepStrictEqual(current.membership?.tokens, tokens)) {
                 log.warn(context, 'The saved tokens have changed; not saving their receipts.');
 
                 return;
