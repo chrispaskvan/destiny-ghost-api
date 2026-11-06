@@ -1264,12 +1264,34 @@ class UserService {
             );
         }
 
-        const { consentUpdatedAt } = userDocument;
+        const { consentUpdatedAt, emailAddress, phoneNumber } = userDocument;
 
         Object.assign(userDocument, user);
         preserveConsentWatermark(userDocument, { consentUpdatedAt });
 
-        return this.#replaceAndCache(userDocument, /** @type {number} */ (user.membershipType));
+        await this.#replaceAndCache(userDocument, /** @type {number} */ (user.membershipType));
+
+        /**
+         * A contact change (`join` promoting a re-sign-up) leaves the cache's
+         * pointer keys for the old email and phone pointing at this user for
+         * up to an hour, so a lookup by the old number would still find them.
+         * Dropped after the write, which has already cached the new ones.
+         */
+        const stale = {
+            emailAddress: emailAddress !== userDocument.emailAddress ? emailAddress : undefined,
+            phoneNumber: phoneNumber !== userDocument.phoneNumber ? phoneNumber : undefined,
+        };
+
+        if (stale.emailAddress || stale.phoneNumber) {
+            try {
+                await this.cacheService.deleteUser(stale);
+            } catch (err) {
+                log.warn(
+                    { err, userId: userDocument.id },
+                    "Failed to drop the user's old contact from the cache.",
+                );
+            }
+        }
     }
 
     /**

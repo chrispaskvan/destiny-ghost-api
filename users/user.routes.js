@@ -123,6 +123,7 @@ function signIn(req, res, user, next) {
  */
 
 /** @typedef {import('../authentication/authentication.controller.js').default} AuthenticationController */
+/** @typedef {import('./user.controller.js').UserControllerOptions} UserControllerOptions */
 
 /**
  * @typedef {import('express').RequestHandler} RequestHandler
@@ -134,6 +135,7 @@ function signIn(req, res, user, next) {
  * @property {AuthenticationController} authenticationController
  * @property {import('../destiny/destiny.service.js').default} destinyService
  * @property {import('../notifications/notification.service.js').default} notificationService
+ * @property {UserControllerOptions['readConsent']} readConsent - see `UserController`
  * @property {{ signUp: RequestHandler, resend: RequestHandler, cipher: RequestHandler }} rateLimiters
  * - per-account limits on the endpoints that send billed messages
  * @property {import('./user.service.js').default} userService
@@ -149,6 +151,7 @@ const routes = ({
     destinyService,
     notificationService,
     rateLimiters,
+    readConsent,
     userService,
     worldRepository,
 }) => {
@@ -157,6 +160,7 @@ const routes = ({
         allowCipherAttempt,
         destinyService,
         notificationService,
+        readConsent,
         userService,
         worldRepository,
     });
@@ -457,8 +461,12 @@ const routes = ({
      * paths:
      *  /users/join:
      *    post:
-     *      summary: Confirm the user.
+     *      summary: Confirm a sign-up.
      *      operationId: join
+     *      description: >
+     *        Checks the emailed token and the SMS code from the session's own pending sign-up,
+     *        then makes the pending contact the account's contact. A first sign-up registers
+     *        the account; a registered account's sign-up changes its contact.
      *      tags:
      *        - Users
      *      security:
@@ -483,9 +491,12 @@ const routes = ({
      *                      format: email
      *      responses:
      *        200:
-     *          description: User joined successfully.
+     *          description: Joined. The pending contact is now the account's contact.
      *        400:
-     *          description: Bad request.
+     *          description: >
+     *            Bad Request. No pending sign-up for this session matches the token and code,
+     *            it has expired, or another account has since registered the email address or
+     *            phone number. Sign up again.
      *        403:
      *          description: Forbidden. Missing or invalid CSRF token.
      */
@@ -493,10 +504,16 @@ const routes = ({
         (req, res, next) => middleware.authenticateUser(req, res, next),
         csrfProtection,
         async (req, res) => {
-            const { body: user } = req;
-            const newUser = await userController.join(user);
+            const { displayName, membershipType } = /** @type {AuthenticatedSessionData} */ (
+                /** @type {unknown} */ (req.session)
+            );
+            const joined = await userController.join({
+                displayName,
+                membershipType,
+                tokens: req.body?.tokens,
+            });
 
-            return newUser
+            return joined
                 ? res.status(StatusCodes.OK).end()
                 : res.status(StatusCodes.BAD_REQUEST).end();
         },
@@ -624,11 +641,12 @@ const routes = ({
      *      responses:
      *        204:
      *          description: >
-     *            No Content. Returned whether or not this account, address or number was
-     *            already registered, and whether or not the verification messages could be
-     *            sent, so a conflict is not disclosed. A registered account can't change its
-     *            contact by signing up; it is sent nothing. Signing up again sends new codes
-     *            on both channels and replaces the earlier ones.
+     *            No Content. Returned whether or not the address or number is registered to
+     *            another account, and whether or not the verification messages could be sent,
+     *            so a conflict is not disclosed. The contact is held as pending until
+     *            POST /users/join confirms both codes; a registered account changes its
+     *            contact this way, and keeps its current contact until then. Signing up again
+     *            sends new codes on both channels and replaces the earlier ones.
      *        403:
      *          description: Forbidden. Missing or invalid CSRF token.
      *        422:

@@ -41,8 +41,20 @@ import notificationTypes from '../notifications/notification.types.js';
  */
 
 /**
+ * Contact submitted at sign-up and not yet verified. `join` promotes it to
+ * the top level of the document once both codes check out; until then the
+ * top-level contact is only ever verified contact (#794).
+ * @typedef {Object} PendingContact
+ * @property {string} emailAddress
+ * @property {string} firstName
+ * @property {string} lastName
+ * @property {string} phoneNumber - E.164
+ */
+
+/**
  * @typedef {Object} Membership
  * @property {MembershipTokens} [tokens]
+ * @property {PendingContact} [pending]
  * @property {*} [message]
  * @property {*} [postmark]
  */
@@ -54,6 +66,7 @@ import notificationTypes from '../notifications/notification.types.js';
  * fields set only in memory during specific flows.
  * @typedef {Omit<Partial<User>, 'patches'> & Partial<AnonymousUser> & {
  *   _etag?: string,
+ *   id?: string,
  *   membership?: Membership,
  *   patches?: VersionedPatch[],
  *   version?: number,
@@ -68,6 +81,9 @@ import notificationTypes from '../notifications/notification.types.js';
  * spent (see `helpers/rate-limiter.middleware.js`)
  * @property {import('../destiny/destiny.service.js').default} destinyService
  * @property {import('../notifications/notification.service.js').default} notificationService
+ * @property {(phoneNumber: string) => Promise<{ isSubscribed: boolean } | undefined>} readConsent
+ * - a STOP or START for the number that the stored documents may not hold yet
+ * (see `helpers/consent-marker.js`)
  * @property {import('./user.service.js').default} userService
  * @property {import('../helpers/world2.js').default} worldRepository
  */
@@ -79,6 +95,9 @@ class UserController {
     /** @type {(key: string) => Promise<boolean>} */
     #allowCipherAttempt;
 
+    /** @type {UserControllerOptions['readConsent']} */
+    #readConsent;
+
     /**
      * @param {UserControllerOptions} options
      */
@@ -88,7 +107,16 @@ class UserController {
             throw new TypeError('allowCipherAttempt is required');
         }
 
+        /**
+         * Required: without it, a STOP sent between sign-up and `join` would
+         * be lost, since no document holds the pending number yet.
+         */
+        if (typeof options.readConsent !== 'function') {
+            throw new TypeError('readConsent is required');
+        }
+
         this.#allowCipherAttempt = options.allowCipherAttempt;
+        this.#readConsent = options.readConsent;
         this.destiny = options.destinyService;
         this.notifications = options.notificationService;
         this.postmaster = new Postmaster();
@@ -384,60 +412,111 @@ class UserController {
 
     /**
      * @typedef {Object} JoinRequest
-     * @property {{ emailAddress?: string, phoneNumber?: string }} [tokens]
+     * @property {string} displayName - the session's account
+     * @property {number} membershipType - the session's account
+     * @property {{ emailAddress?: string, phoneNumber?: string }} [tokens] - the
+     * emailed blob, and the SMS code
      */
 
     /**
-     * Confirm registration request by creating an account if appropriate.
+     * Confirm a sign-up: once both codes check out, the pending contact
+     * becomes the account's contact. A first sign-up registers the account;
+     * a registered account's sign-up changes its contact.
      *
-     * @param {JoinRequest} user
+     * @param {JoinRequest} request
      * @returns {Promise<MutableUser | undefined>}
      */
-    async join(user) {
-        if (!user?.tokens?.emailAddress) {
+    async join({ displayName, membershipType, tokens: submitted }) {
+        if (!submitted?.emailAddress) {
             return undefined;
         }
 
-        const registeredUser = /** @type {MutableUser | undefined} */ (
-            await this.users.getUserByEmailAddressToken(user.tokens.emailAddress)
+        const user = /** @type {MutableUser | undefined} */ (
+            await this.users.getUserByEmailAddressToken(submitted.emailAddress)
         );
+        const tokens = user?.membership?.tokens;
+        const pending = user?.membership?.pending;
 
         /**
          * The stored code is checked to exist, not just compared: an email
          * cipher saves a blob with no code, so a join with that blob and no
-         * code compared `undefined` with `undefined` and passed.
+         * code compared `undefined` with `undefined` and passed. The sign-up
+         * must be the session's own, now that a registered account can sign
+         * up again.
          */
         if (
-            !registeredUser?.membership?.tokens?.code ||
-            getEpoch() > (registeredUser.membership.tokens.timeStamp ?? 0) + TOKEN_TTL_SECONDS ||
-            user.tokens.phoneNumber !== registeredUser.membership.tokens.code
+            !user ||
+            !pending ||
+            !tokens?.code ||
+            user.displayName !== displayName ||
+            user.membershipType !== membershipType ||
+            getEpoch() > (tokens.timeStamp ?? 0) + TOKEN_TTL_SECONDS ||
+            submitted.phoneNumber !== tokens.code
         ) {
             return undefined;
         }
 
-        const isNewRegistration = !registeredUser.dateRegistered;
+        /**
+         * Checked again at promotion: another account may have registered the
+         * same email or phone since this sign-up was saved, and `signUp`'s
+         * check is long past.
+         */
+        const holders = await Promise.all([
+            this.users.getUserByEmailAddress(pending.emailAddress),
+            this.users.getUserByPhoneNumber(pending.phoneNumber),
+        ]);
+
+        if (holders.some(holder => UserController.#registeredToAnother(holder, user))) {
+            log.warn(
+                { displayName, membershipType },
+                'Not joining: the pending contact was registered by another account.',
+            );
+
+            return undefined;
+        }
+
+        const isNewRegistration = !user.dateRegistered;
+
+        /**
+         * Consent belongs to the number. A new number starts subscribed - it
+         * was just signed up with - unless it texted STOP before `join`, which
+         * only the consent marker holds, as no document had the number then.
+         * An unchanged number keeps what it has.
+         */
+        if (isNewRegistration || user.phoneNumber !== pending.phoneNumber) {
+            const consent = await this.#readConsent(pending.phoneNumber);
+
+            user.isSubscribed = consent ? consent.isSubscribed : true;
+        }
+
+        Object.assign(user, pending);
+        /** Tokens and pending contact are spent; receipts stay, for billing. */
+        user.membership = {
+            message: user.membership?.message,
+            postmark: user.membership?.postmark,
+        };
 
         if (isNewRegistration) {
-            registeredUser.dateRegistered = Temporal.Now.instant().toString({
+            user.dateRegistered = Temporal.Now.instant().toString({
                 smallestUnit: 'millisecond',
             });
         }
 
-        if (!registeredUser.notifications?.length) {
-            registeredUser.notifications = Object.values(notificationTypes).map(type => ({
+        if (!user.notifications?.length) {
+            user.notifications = Object.values(notificationTypes).map(type => ({
                 enabled: false,
                 type,
                 messages: [],
             }));
         }
 
-        await this.users.updateUser(/** @type {User} */ (/** @type {unknown} */ (registeredUser)));
+        await this.users.updateUser(/** @type {User} */ (/** @type {unknown} */ (user)));
 
-        if (isNewRegistration && registeredUser.phoneNumber) {
+        if (isNewRegistration) {
             try {
                 await this.notifications.sendMessage(
                     UserController.#buildWelcomeMessage(),
-                    registeredUser.phoneNumber,
+                    pending.phoneNumber,
                     '',
                 );
             } catch (err) {
@@ -445,7 +524,7 @@ class UserController {
             }
         }
 
-        return registeredUser;
+        return user;
     }
 
     /**
@@ -609,15 +688,17 @@ class UserController {
     }
 
     /**
-     * User initial application request.
+     * Sign up, or, for a registered account, change contact: the submitted
+     * contact is saved as pending and sent its codes, and `join` makes it the
+     * account's contact once both check out.
      * @param {Object} param0
      * @param {string} param0.displayName
      * @param {number} param0.membershipType
      * @param {{ firstName: string, lastName: string, phoneNumber: string, emailAddress: string }} param0.contact
      * @returns {Promise<{ undelivered: Array<'phone' | 'email'> } | undefined>} the channels
-     * whose verification message could not be sent; `undefined` when this
-     * account is already registered, or the address or number belongs to a
-     * registered user, and nothing was sent or saved
+     * whose verification message could not be sent; `undefined` when the
+     * address or number belongs to another registered account, and nothing
+     * was sent or saved
      */
     async signUp({ displayName, membershipType, contact }) {
         const bungieUser = /** @type {MutableUser | undefined} */ (
@@ -632,49 +713,48 @@ class UserController {
         const phoneNumber = cleanPhoneNumber(contact.phoneNumber);
 
         /**
-         * Sign-up is first registration only. A registered account can't
-         * change its contact here (nor, today, anywhere: `PATCH /users`
-         * accepts names and notification flags only); letting it through
-         * would replace verified contact with unverified contact before
-         * anything is checked. Checked after the phone
-         * number, so a number that cannot be used still answers 422: that
-         * describes the caller's own input, not anyone's registration.
-         */
-        if (bungieUser?.dateRegistered) {
-            return undefined;
-        }
-
-        /**
          * Assembled from three trusted sources rather than merged onto the
          * request body: the contact fields the route allowlisted, the stored
          * record this session already owns, and a token pair minted here. The
          * body never reaches the document, so a field the stored record
          * happens to lack - `dateRegistered`, `notifications`, `isSubscribed` -
          * cannot ride in on it.
+         *
+         * The contact goes under `membership.pending`, not the top level, so
+         * the top level - what every contact lookup reads - only ever holds
+         * verified contact, and a registered account's stays in place until
+         * `join` (#794).
          */
-        const user = /** @type {MutableUser} */ ({
-            ...bungieUser,
+        /** @type {PendingContact} */
+        const pending = {
             emailAddress: contact.emailAddress,
             firstName: contact.firstName,
             lastName: contact.lastName,
             phoneNumber,
+        };
+        const user = /** @type {MutableUser} */ ({
+            ...bungieUser,
             membership: {
                 tokens: {
                     blob: getBlob(),
                     code: getCode(),
                     timeStamp: getEpoch(),
                 },
+                pending,
             },
         });
 
-        const userPromises = [
+        /**
+         * A conflict is contact registered to another account. The account's
+         * own current contact isn't one: re-signing up with the same email to
+         * change only the phone is fine.
+         */
+        const holders = await Promise.all([
             this.users.getUserByEmailAddress(contact.emailAddress),
             this.users.getUserByPhoneNumber(phoneNumber),
-        ];
-        const users = await Promise.all(userPromises);
-        const registeredUsers = users.filter(user1 => user1?.dateRegistered);
+        ]);
 
-        if (registeredUsers.length) {
+        if (holders.some(holder => UserController.#registeredToAnother(holder, bungieUser))) {
             return undefined;
         }
 
@@ -686,7 +766,7 @@ class UserController {
          * is one `join` can check. Sending first left a delivered code
          * unsaved whenever the other channel or this write failed (#571).
          */
-        await this.users.updateUser(/** @type {User} */ (/** @type {unknown} */ (user)));
+        await this.#save(user);
 
         /**
          * Settled independently: one channel failing neither stops the other
@@ -702,7 +782,7 @@ class UserController {
             ),
             this.postmaster.register(
                 /** @type {import('../helpers/postmaster.js').EmailUser} */ (
-                    /** @type {unknown} */ (user)
+                    /** @type {unknown} */ ({ ...user, ...pending })
                 ),
                 iconUrl,
                 '/register',
@@ -768,14 +848,17 @@ class UserController {
             await this.users.getUserByDisplayName(displayName, membershipType, true)
         );
         const tokens = user?.membership?.tokens;
+        const pending = user?.membership?.pending;
 
         /**
-         * A pending sign-up holds both tokens; a cipher for a registered
-         * account holds one, and isn't this endpoint's to resend.
+         * A pending sign-up holds both tokens and the pending contact, for a
+         * new account or a registered one changing its contact. A cipher
+         * holds one token and no pending contact, and isn't this endpoint's
+         * to resend.
          */
         if (
             !user ||
-            user.dateRegistered ||
+            !pending ||
             !tokens?.blob ||
             !tokens?.code ||
             getEpoch() > (tokens.timeStamp ?? 0) + TOKEN_TTL_SECONDS
@@ -795,14 +878,14 @@ class UserController {
                     ? {
                           message: await this.notifications.sendMessage(
                               UserController.#buildVerificationMessage(tokens.code),
-                              /** @type {string} */ (user.phoneNumber),
+                              pending.phoneNumber,
                               user.type === 'mobile' ? (iconUrl ?? '') : '',
                           ),
                       }
                     : {
                           postmark: await this.postmaster.register(
                               /** @type {import('../helpers/postmaster.js').EmailUser} */ (
-                                  /** @type {unknown} */ (user)
+                                  /** @type {unknown} */ ({ ...user, ...pending })
                               ),
                               iconUrl,
                               '/register',
@@ -815,6 +898,33 @@ class UserController {
         }
 
         await this.#saveReceipts({ displayName, membershipType, tokens }, receipts);
+    }
+
+    /**
+     * Whether contact found by a lookup is registered to an account other
+     * than `account`. The account itself counts only when its id is known:
+     * comparing two missing ids would call any registered holder "self".
+     * @param {{ id?: string, dateRegistered?: string } | undefined} holder - the
+     * document a lookup found
+     * @param {{ id?: string } | undefined} account - the account signing up
+     * @returns {boolean}
+     */
+    static #registeredToAnother(holder, account) {
+        return Boolean(holder?.dateRegistered) && (!account?.id || holder?.id !== account.id);
+    }
+
+    /**
+     * Write a document by the schema it satisfies. A registered document
+     * holds verified contact at the top level, which `updateUser`'s schema
+     * requires; an unregistered one holds its contact under
+     * `membership.pending` and has none there.
+     * @param {MutableUser} user
+     * @returns {Promise<void>}
+     */
+    #save(user) {
+        return user.dateRegistered
+            ? this.users.updateUser(/** @type {User} */ (/** @type {unknown} */ (user)))
+            : this.users.updateAnonymousUser(/** @type {AnonymousUser} */ (user));
     }
 
     /**
@@ -879,7 +989,7 @@ class UserController {
 
             current.membership = { ...current.membership, ...receipts };
 
-            await this.users.updateUser(/** @type {User} */ (/** @type {unknown} */ (current)));
+            await this.#save(current);
         } catch (err) {
             log.error({ err, ...context }, 'Failed to save verification delivery receipts.');
         }

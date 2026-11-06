@@ -45,6 +45,7 @@ const notificationService = {
     sendMessage: vi.fn().mockResolvedValue(),
 };
 const allowCipherAttempt = vi.fn().mockResolvedValue(true);
+const readConsent = vi.fn().mockResolvedValue(undefined);
 const userService = {
     createAnonymousUser: vi.fn().mockImplementation(user => Promise.resolve(user)),
     deleteUserMessages: vi.fn().mockResolvedValue(),
@@ -70,6 +71,7 @@ let userController;
 beforeEach(() => {
     userController = new UserController({
         allowCipherAttempt,
+        readConsent,
         destinyService,
         notificationService,
         userService,
@@ -267,12 +269,22 @@ describe('UserController', () => {
          * each case stays a few seconds clear of the boundary.
          */
         const tokensAged = seconds => ({ code, timeStamp: getEpoch() - seconds });
+        const pending = {
+            emailAddress: 'ada@example.com',
+            firstName: 'Ada',
+            lastName: 'Lovelace',
+            phoneNumber: `+1${phoneNumber}`,
+        };
         const join = seconds => {
             userService.getUserByEmailAddressToken.mockResolvedValueOnce({
-                membership: { tokens: tokensAged(seconds) },
+                displayName,
+                membershipType,
+                membership: { tokens: tokensAged(seconds), pending },
             });
 
             return userController.join({
+                displayName,
+                membershipType,
                 tokens: { emailAddress: 'some-blob', phoneNumber: code },
             });
         };
@@ -289,8 +301,7 @@ describe('UserController', () => {
             userService.getUserByDisplayName.mockResolvedValueOnce({
                 displayName,
                 membershipType,
-                phoneNumber: `+1${phoneNumber}`,
-                membership: { tokens: { ...tokensAged(seconds), blob: 'some-blob' } },
+                membership: { tokens: { ...tokensAged(seconds), blob: 'some-blob' }, pending },
             });
 
             return userController.resend({ displayName, membershipType, channel: 'phone' });
@@ -300,6 +311,8 @@ describe('UserController', () => {
             await expect(join(895)).resolves.toBeDefined();
             await expect(decipher(895)).resolves.toBeDefined();
 
+            /** `join` has just sent its welcome. */
+            notificationService.sendMessage.mockClear();
             await resend(895);
             expect(notificationService.sendMessage).toHaveBeenCalledOnce();
         });
@@ -314,251 +327,237 @@ describe('UserController', () => {
     });
 
     describe('join', () => {
-        it("should refuse an email cipher's blob, which has no code to match", async () => {
-            /**
-             * An email cipher saves a blob and no code. Compared without a
-             * check that a code exists, a join with no code matched it.
-             */
-            userService.getUserByEmailAddressToken.mockResolvedValueOnce({
-                dateRegistered: '2026-01-01T00:00:00.000Z',
-                membership: { tokens: { blob: 'cipher-blob', timeStamp: getEpoch() } },
-            });
+        const code = '424242';
+        const pending = {
+            emailAddress: 'ada@example.com',
+            firstName: 'Ada',
+            lastName: 'Lovelace',
+            phoneNumber: '+12085550123',
+        };
+        const receipts = { message: { sid: 'SM-1' }, postmark: { messageId: '<m-1>' } };
+        /** A saved sign-up, as `signUp` leaves it. */
+        const signedUp = (overrides = {}) => ({
+            id: 'doc-1',
+            ...mockUser,
+            membership: {
+                tokens: { blob: 'some-token', code, timeStamp: getEpoch() },
+                pending,
+                ...receipts,
+            },
+            ...overrides,
+        });
+        const join = (
+            tokens = { emailAddress: 'some-token', phoneNumber: code },
+            account = { displayName, membershipType },
+        ) => userController.join({ ...account, tokens });
+        const saved = () => userService.updateUser.mock.calls.at(-1)?.[0];
 
-            await expect(
-                userController.join({ tokens: { emailAddress: 'cipher-blob' } }),
-            ).resolves.toBeUndefined();
-            expect(userService.updateUser).not.toHaveBeenCalled();
+        beforeEach(() => {
+            userService.getUserByEmailAddress.mockResolvedValue(undefined);
+            userService.getUserByPhoneNumber.mockResolvedValue(undefined);
         });
 
-        describe('when the request is missing an email address token', () => {
-            it('should return undefined without querying the user service', async () => {
-                const user = await userController.join({ tokens: {} });
+        afterEach(() => {
+            userService.getUserByEmailAddressToken.mockReset();
+            userService.getUserByEmailAddress.mockReset();
+            userService.getUserByPhoneNumber.mockReset();
+            readConsent.mockReset().mockResolvedValue(undefined);
+        });
+
+        describe('refusing', () => {
+            it('should not look anything up without an email token', async () => {
+                await expect(join({})).resolves.toBeUndefined();
 
                 expect(userService.getUserByEmailAddressToken).not.toHaveBeenCalled();
-                expect(user).toBeUndefined();
             });
-        });
-        describe('when user is not found', () => {
-            it('should return undefined', async () => {
-                userService.getUserByEmailAddressToken.mockImplementation(() => Promise.resolve());
 
-                const user = await userController.join({
-                    tokens: {
-                        emailAddress: 'some-token',
-                    },
-                });
+            it.each([
+                ['no document holds the token', undefined],
+                [
+                    "an email cipher's blob, which has no code to match",
+                    signedUp({
+                        dateRegistered: '2026-01-01T00:00:00.000Z',
+                        membership: { tokens: { blob: 'some-token', timeStamp: getEpoch() } },
+                    }),
+                ],
+                [
+                    'a sign-up with no pending contact (the old format)',
+                    signedUp({
+                        membership: { tokens: { blob: 'some-token', code, timeStamp: getEpoch() } },
+                    }),
+                ],
+                [
+                    'an expired sign-up',
+                    signedUp({
+                        membership: {
+                            tokens: { blob: 'some-token', code, timeStamp: getEpoch() - 1000 },
+                            pending,
+                        },
+                    }),
+                ],
+            ])('should refuse %s', async (_, document) => {
+                /** Both attempts below read it, so not `Once`. */
+                userService.getUserByEmailAddressToken.mockResolvedValue(document);
 
-                expect(userService.getUserByEmailAddressToken).toHaveBeenCalled();
-                expect(user).toBeUndefined();
+                /**
+                 * The cipher case sends no code at all, which compared
+                 * `undefined` with `undefined` before the code was checked to
+                 * exist.
+                 */
+                await expect(join({ emailAddress: 'some-token' })).resolves.toBeUndefined();
+                await expect(join()).resolves.toBeUndefined();
                 expect(userService.updateUser).not.toHaveBeenCalled();
             });
+
+            it('should refuse a wrong code', async () => {
+                userService.getUserByEmailAddressToken.mockResolvedValueOnce(signedUp());
+
+                await expect(
+                    join({ emailAddress: 'some-token', phoneNumber: '000000' }),
+                ).resolves.toBeUndefined();
+                expect(userService.updateUser).not.toHaveBeenCalled();
+            });
+
+            it("should refuse another account's sign-up", async () => {
+                userService.getUserByEmailAddressToken.mockResolvedValueOnce(signedUp());
+
+                await expect(
+                    join(undefined, { displayName: 'someone-else', membershipType }),
+                ).resolves.toBeUndefined();
+                expect(userService.updateUser).not.toHaveBeenCalled();
+            });
+
+            it.each([
+                ['email', 'getUserByEmailAddress'],
+                ['phone', 'getUserByPhoneNumber'],
+            ])('should refuse when another account registered the %s since', async (_, lookup) => {
+                userService.getUserByEmailAddressToken.mockResolvedValueOnce(signedUp());
+                userService[lookup].mockResolvedValue({
+                    id: 'doc-2',
+                    dateRegistered: '2026-01-01T00:00:00.000Z',
+                });
+
+                await expect(join()).resolves.toBeUndefined();
+                expect(userService.updateUser).not.toHaveBeenCalled();
+                expect(logWarn).toHaveBeenCalledWith(
+                    { displayName, membershipType },
+                    'Not joining: the pending contact was registered by another account.',
+                );
+            });
         });
-        describe('when user is found', () => {
-            const code = chance.string();
 
-            describe('when the token has expired', () => {
-                it('should return undefined', async () => {
-                    userService.getUserByEmailAddressToken.mockImplementation(() =>
-                        Promise.resolve({
-                            membership: {
-                                tokens: {
-                                    timeStamp: getEpoch() - 1000,
-                                    code,
-                                },
-                            },
-                        }),
-                    );
+        describe('a first sign-up', () => {
+            it('should register the account with the pending contact', async () => {
+                userService.getUserByEmailAddressToken.mockResolvedValueOnce(signedUp());
 
-                    const user = await userController.join({
-                        tokens: {
-                            emailAddress: 'some-token',
-                            phoneNumber: code,
-                        },
-                    });
+                const user = await join();
 
-                    expect(userService.getUserByEmailAddressToken).toHaveBeenCalled();
-                    expect(user).toBeUndefined();
-                    expect(userService.updateUser).not.toHaveBeenCalled();
-                });
+                expect(user).toMatchObject(mockUser);
+                expect(saved()).toMatchObject({ ...pending, dateRegistered: expect.any(String) });
+                /** Tokens and pending contact are spent; receipts stay, for billing. */
+                expect(saved().membership).toEqual(receipts);
+                expect(notificationService.sendMessage).toHaveBeenCalledWith(
+                    'Welcome! Message frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to cancel.',
+                    pending.phoneNumber,
+                    '',
+                );
             });
 
-            describe('when the code is invalid', () => {
-                it('should return undefined', async () => {
-                    userService.getUserByEmailAddressToken.mockImplementation(() =>
-                        Promise.resolve({
-                            membership: {
-                                tokens: {
-                                    timeStamp: getEpoch(),
-                                    code,
-                                },
-                            },
-                        }),
-                    );
+            it('should still join if sending the welcome message fails', async () => {
+                notificationService.sendMessage.mockRejectedValueOnce(new Error('twilio error'));
+                userService.getUserByEmailAddressToken.mockResolvedValueOnce(signedUp());
 
-                    const user = await userController.join({
-                        tokens: {
-                            emailAddress: 'some-token',
-                            phoneNumber: 'wrong-code',
-                        },
-                    });
-
-                    expect(userService.getUserByEmailAddressToken).toHaveBeenCalled();
-                    expect(user).toBeUndefined();
-                    expect(userService.updateUser).not.toHaveBeenCalled();
-                });
+                await expect(join()).resolves.toBeDefined();
+                expect(saved().dateRegistered).toBeDefined();
             });
 
-            describe('when the code and token are valid', () => {
-                it('should return the registered user, not the request body', async () => {
-                    userService.getUserByEmailAddressToken.mockImplementation(() =>
-                        Promise.resolve({
-                            membership: {
-                                tokens: {
-                                    timeStamp: getEpoch(),
-                                    code,
-                                },
-                            },
-                            phoneNumber: `+1${phoneNumber}`,
-                            ...mockUser,
-                        }),
-                    );
+            it('should subscribe the number by default', async () => {
+                userService.getUserByEmailAddressToken.mockResolvedValueOnce(signedUp());
 
-                    const user = await userController.join({
-                        tokens: {
-                            emailAddress: 'some-token',
-                            phoneNumber: code,
-                        },
-                    });
+                await join();
 
-                    expect(userService.getUserByEmailAddressToken).toHaveBeenCalled();
-                    expect(user).toMatchObject(mockUser);
-                    expect(user.dateRegistered).toBeDefined();
-                    expect(userService.updateUser).toHaveBeenCalled();
-                    expect(notificationService.sendMessage).toHaveBeenCalledWith(
-                        'Welcome! Message frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to cancel.',
-                        `+1${phoneNumber}`,
-                        '',
-                    );
+                expect(readConsent).toHaveBeenCalledWith(pending.phoneNumber);
+                expect(saved().isSubscribed).toBe(true);
+            });
+
+            it('should keep a STOP the number sent before joining', async () => {
+                /** No document held the pending number, so only the marker has it. */
+                readConsent.mockResolvedValueOnce({ isSubscribed: false, receivedAt: 1 });
+                userService.getUserByEmailAddressToken.mockResolvedValueOnce(signedUp());
+
+                await join();
+
+                expect(saved().isSubscribed).toBe(false);
+            });
+
+            it('should seed all known notification types', async () => {
+                userService.getUserByEmailAddressToken.mockResolvedValueOnce(signedUp());
+
+                await join();
+
+                expect(saved().notifications).toEqual([
+                    { enabled: false, type: 'Orders', messages: [] },
+                    { enabled: false, type: 'Banshee-44', messages: [] },
+                    { enabled: false, type: 'Lord Saladin', messages: [] },
+                    { enabled: false, type: 'Xur', messages: [] },
+                ]);
+            });
+        });
+
+        describe('a registered account changing its contact', () => {
+            const registered = (overrides = {}) =>
+                signedUp({
+                    dateRegistered: '2026-01-01T00:00:00.000Z',
+                    emailAddress: 'old@example.com',
+                    firstName: 'Ada',
+                    lastName: 'Lovelace',
+                    phoneNumber: '+12085550199',
+                    isSubscribed: false,
+                    notifications: [{ enabled: true, type: 'Xur', messages: [] }],
+                    ...overrides,
                 });
 
-                it('should still join if sending the welcome message fails', async () => {
-                    notificationService.sendMessage.mockRejectedValueOnce(
-                        new Error('twilio error'),
-                    );
-                    userService.getUserByEmailAddressToken.mockImplementation(() =>
-                        Promise.resolve({
-                            membership: {
-                                tokens: {
-                                    timeStamp: getEpoch(),
-                                    code,
-                                },
-                            },
-                            phoneNumber: `+1${phoneNumber}`,
-                            ...mockUser,
-                        }),
-                    );
+            it('should replace the contact and keep the registration', async () => {
+                userService.getUserByEmailAddressToken.mockResolvedValueOnce(registered());
 
-                    const user = await userController.join({
-                        tokens: {
-                            emailAddress: 'some-token',
-                            phoneNumber: code,
-                        },
-                    });
+                await join();
 
-                    expect(userService.getUserByEmailAddressToken).toHaveBeenCalled();
-                    expect(user).toMatchObject(mockUser);
-                    expect(user.dateRegistered).toBeDefined();
-                    expect(userService.updateUser).toHaveBeenCalled();
+                expect(saved()).toMatchObject({
+                    ...pending,
+                    dateRegistered: '2026-01-01T00:00:00.000Z',
+                    notifications: [{ enabled: true, type: 'Xur', messages: [] }],
+                });
+                expect(saved().membership).toEqual(receipts);
+                expect(notificationService.sendMessage).not.toHaveBeenCalled();
+            });
+
+            it("should not carry the old number's opt-out to a new number", async () => {
+                userService.getUserByEmailAddressToken.mockResolvedValueOnce(registered());
+
+                await join();
+
+                expect(saved().isSubscribed).toBe(true);
+            });
+
+            it('should leave consent alone when the number is unchanged', async () => {
+                userService.getUserByEmailAddressToken.mockResolvedValueOnce(
+                    registered({ phoneNumber: pending.phoneNumber }),
+                );
+
+                await join();
+
+                expect(readConsent).not.toHaveBeenCalled();
+                expect(saved().isSubscribed).toBe(false);
+            });
+
+            it('should not count its own current contact as a conflict', async () => {
+                userService.getUserByEmailAddressToken.mockResolvedValueOnce(registered());
+                userService.getUserByEmailAddress.mockResolvedValue({
+                    id: 'doc-1',
+                    dateRegistered: '2026-01-01T00:00:00.000Z',
                 });
 
-                it('should not resend welcome message or update dateRegistered for already-registered users', async () => {
-                    const existingDateRegistered = Temporal.Now.instant().toString();
-
-                    notificationService.sendMessage.mockClear();
-                    userService.getUserByEmailAddressToken.mockImplementation(() =>
-                        Promise.resolve({
-                            dateRegistered: existingDateRegistered,
-                            membership: {
-                                tokens: {
-                                    timeStamp: getEpoch(),
-                                    code,
-                                },
-                            },
-                            phoneNumber: `+1${phoneNumber}`,
-                            ...mockUser,
-                        }),
-                    );
-
-                    const user = await userController.join({
-                        tokens: {
-                            emailAddress: 'some-token',
-                            phoneNumber: code,
-                        },
-                    });
-
-                    expect(user.dateRegistered).toBe(existingDateRegistered);
-                    expect(notificationService.sendMessage).not.toHaveBeenCalled();
-                });
-
-                it('should seed all known notification types', async () => {
-                    userService.getUserByEmailAddressToken.mockImplementation(() =>
-                        Promise.resolve({
-                            membership: {
-                                tokens: {
-                                    timeStamp: getEpoch(),
-                                    code,
-                                },
-                            },
-                            phoneNumber: `+1${phoneNumber}`,
-                            ...mockUser,
-                        }),
-                    );
-
-                    await userController.join({
-                        tokens: {
-                            emailAddress: 'some-token',
-                            phoneNumber: code,
-                        },
-                    });
-
-                    const [savedUser] = userService.updateUser.mock.calls.at(-1);
-
-                    expect(savedUser.notifications).toEqual([
-                        { enabled: false, type: 'Orders', messages: [] },
-                        { enabled: false, type: 'Banshee-44', messages: [] },
-                        { enabled: false, type: 'Lord Saladin', messages: [] },
-                        { enabled: false, type: 'Xur', messages: [] },
-                    ]);
-                });
-
-                it('should not overwrite existing notifications', async () => {
-                    const existingNotifications = [{ enabled: true, type: 'Xur', messages: [] }];
-
-                    userService.getUserByEmailAddressToken.mockImplementation(() =>
-                        Promise.resolve({
-                            membership: {
-                                tokens: {
-                                    timeStamp: getEpoch(),
-                                    code,
-                                },
-                            },
-                            notifications: existingNotifications,
-                            phoneNumber: `+1${phoneNumber}`,
-                            ...mockUser,
-                        }),
-                    );
-
-                    await userController.join({
-                        tokens: {
-                            emailAddress: 'some-token',
-                            phoneNumber: code,
-                        },
-                    });
-
-                    const [savedUser] = userService.updateUser.mock.calls.at(-1);
-
-                    expect(savedUser.notifications).toEqual(existingNotifications);
-                });
+                await expect(join()).resolves.toBeDefined();
             });
         });
     });
@@ -726,190 +725,185 @@ describe('UserController', () => {
     });
 
     describe('signUp', () => {
-        describe('when user is not registered', () => {
-            describe('when phone number is valid', () => {
-                it('should update user', async () => {
-                    userService.getUserByDisplayName.mockImplementation(() => Promise.resolve());
-                    userService.getUserByEmailAddress.mockImplementation(() => Promise.resolve());
-                    userService.getUserByPhoneNumber.mockImplementation(() => Promise.resolve());
+        const contact = {
+            firstName: 'Ada',
+            lastName: 'Lovelace',
+            emailAddress: 'ada@example.com',
+            phoneNumber,
+        };
+        const anonymous = { id: 'doc-1', displayName, membershipType, membershipId };
+        const registered = {
+            ...anonymous,
+            dateRegistered: '2026-01-01T00:00:00.000Z',
+            emailAddress: 'verified@example.com',
+            firstName: 'Ada',
+            lastName: 'Lovelace',
+            phoneNumber: '+12085550199',
+        };
+        const signUp = (body = contact) =>
+            userController.signUp({ displayName, membershipType, contact: body });
+        const registeredElsewhere = { id: 'doc-2', dateRegistered: '2026-01-01T00:00:00.000Z' };
 
-                    const user = await userController.signUp({
-                        displayName,
-                        membershipType,
-                        contact: {
-                            firstName: 'Ada',
-                            lastName: 'Lovelace',
-                            emailAddress: 'ada@example.com',
-                            phoneNumber,
-                        },
-                    });
+        beforeEach(() => {
+            userService.getUserByEmailAddress.mockResolvedValue(undefined);
+            userService.getUserByPhoneNumber.mockResolvedValue(undefined);
+        });
 
-                    expect(userService.updateUser).toHaveBeenCalled();
-                    expect(user).not.toBeUndefined();
-                    expect(notificationService.sendMessage).toHaveBeenCalledWith(
-                        expect.stringContaining('Reply HELP for help, STOP to cancel.'),
-                        `+1${phoneNumber}`,
-                        '',
-                    );
+        afterEach(() => {
+            userService.getUserByDisplayName.mockReset();
+            userService.getUserByEmailAddress.mockReset();
+            userService.getUserByPhoneNumber.mockReset();
+        });
 
-                    const [persisted] = userService.updateUser.mock.calls[0];
-
-                    /**
-                     * Registration state belongs to `join`, which runs only
-                     * once the emailed blob and the SMS code check out. Sign-up
-                     * assembles the document itself, so neither field can
-                     * arrive on it.
-                     */
-                    expect(persisted.dateRegistered).toBeUndefined();
-                    expect(persisted.notifications).toBeUndefined();
-                    expect(persisted.isSubscribed).toBeUndefined();
-                    expect(persisted.roles).toBeUndefined();
-                    expect(persisted.phoneNumber).toBe(`+1${phoneNumber}`);
-                    expect(persisted.membership.tokens).toEqual(
-                        expect.objectContaining({
-                            blob: expect.any(String),
-                            code: expect.any(String),
-                        }),
-                    );
-                });
-
-                it('should ignore server-owned fields a caller slips past the route', async () => {
-                    userService.getUserByDisplayName.mockImplementation(() => Promise.resolve());
-                    userService.getUserByEmailAddress.mockImplementation(() => Promise.resolve());
-                    userService.getUserByPhoneNumber.mockImplementation(() => Promise.resolve());
-
-                    /**
-                     * The route rejects these outright; this pins the second
-                     * line of defence, so a future caller reaching the
-                     * controller directly cannot reintroduce the hole.
-                     */
-                    await userController.signUp({
-                        displayName,
-                        membershipType,
-                        contact: {
-                            firstName: 'Ada',
-                            lastName: 'Lovelace',
-                            emailAddress: 'ada@example.com',
-                            phoneNumber,
-                            dateRegistered: '2020-01-01T00:00:00.000Z',
-                            notifications: [{ enabled: true, type: 'Xur', messages: [] }],
-                            roles: ['Admin'],
-                        },
-                    });
-
-                    const [persisted] = userService.updateUser.mock.calls[0];
-
-                    expect(persisted.dateRegistered).toBeUndefined();
-                    expect(persisted.notifications).toBeUndefined();
-                    expect(persisted.roles).toBeUndefined();
-                });
+        describe('when the account is not registered', () => {
+            beforeEach(() => {
+                userService.getUserByDisplayName.mockResolvedValue(anonymous);
             });
-            describe('when phone number is invalid', () => {
-                it('should not update user', async () => {
-                    userService.getUserByDisplayName.mockImplementation(() => Promise.resolve());
-                    userService.getUserByEmailAddress.mockImplementation(() => Promise.resolve());
-                    userService.getUserByPhoneNumber.mockImplementation(() => Promise.resolve());
 
-                    /**
-                     * The route decides the status code from the type, so a
-                     * bare `Error` here would send an unusable number back as
-                     * a 500.
-                     */
-                    await expect(
-                        userController.signUp({
-                            displayName,
-                            membershipType,
-                            contact: {
-                                firstName: 'Ada',
-                                lastName: 'Lovelace',
-                                emailAddress: 'ada@example.com',
-                                phoneNumber: '+86 10 1234 5678',
-                            },
-                        }),
-                    ).rejects.toBeInstanceOf(InvalidPhoneNumberError);
+            it('should save the contact as pending, with the tokens', async () => {
+                await expect(signUp()).resolves.toBeDefined();
+
+                /** No top-level contact, so not `updateUser`, whose schema requires it. */
+                expect(userService.updateUser).not.toHaveBeenCalled();
+
+                const [persisted] = userService.updateAnonymousUser.mock.calls[0];
+
+                expect(persisted.membership.pending).toEqual({
+                    ...contact,
+                    phoneNumber: `+1${phoneNumber}`,
                 });
+                expect(persisted.membership.tokens).toEqual(
+                    expect.objectContaining({ blob: expect.any(String), code: expect.any(String) }),
+                );
+                /**
+                 * The top level is what every contact lookup reads, so it only
+                 * ever holds verified contact.
+                 */
+                expect(persisted.emailAddress).toBeUndefined();
+                expect(persisted.phoneNumber).toBeUndefined();
+                /** Registration state belongs to `join`. */
+                expect(persisted.dateRegistered).toBeUndefined();
+                expect(persisted.notifications).toBeUndefined();
+                expect(persisted.isSubscribed).toBeUndefined();
+                expect(persisted.roles).toBeUndefined();
+            });
+
+            it('should send the codes to the pending contact', async () => {
+                await signUp();
+
+                expect(notificationService.sendMessage).toHaveBeenCalledWith(
+                    expect.stringContaining('Reply HELP for help, STOP to cancel.'),
+                    `+1${phoneNumber}`,
+                    '',
+                );
+
+                const [recipient, , path] = userController.postmaster.register.mock.calls[0];
+
+                expect(recipient).toMatchObject({
+                    emailAddress: contact.emailAddress,
+                    firstName: contact.firstName,
+                });
+                expect(recipient.membership.tokens.blob).toEqual(expect.any(String));
+                expect(path).toEqual('/register');
+            });
+
+            it('should ignore server-owned fields a caller slips past the route', async () => {
+                /**
+                 * The route rejects these outright; this pins the second line
+                 * of defence, so a future caller reaching the controller
+                 * directly cannot reintroduce the hole.
+                 */
+                await signUp({
+                    ...contact,
+                    dateRegistered: '2020-01-01T00:00:00.000Z',
+                    notifications: [{ enabled: true, type: 'Xur', messages: [] }],
+                    roles: ['Admin'],
+                });
+
+                const [persisted] = userService.updateAnonymousUser.mock.calls[0];
+
+                expect(persisted.dateRegistered).toBeUndefined();
+                expect(persisted.notifications).toBeUndefined();
+                expect(persisted.roles).toBeUndefined();
+                expect(persisted.membership.pending).not.toHaveProperty('roles');
+            });
+
+            it('should reject an unusable phone number', async () => {
+                /**
+                 * The route decides the status code from the type, so a bare
+                 * `Error` here would send an unusable number back as a 500.
+                 */
+                await expect(
+                    signUp({ ...contact, phoneNumber: '+86 10 1234 5678' }),
+                ).rejects.toBeInstanceOf(InvalidPhoneNumberError);
+            });
+
+            it.each([
+                ['email', 'getUserByEmailAddress'],
+                ['phone', 'getUserByPhoneNumber'],
+            ])(
+                'should send and save nothing when another account registered the %s',
+                async (_, lookup) => {
+                    userService[lookup].mockResolvedValue(registeredElsewhere);
+
+                    await expect(signUp()).resolves.toBeUndefined();
+
+                    expect(userService.updateAnonymousUser).not.toHaveBeenCalled();
+                    expect(userService.updateUser).not.toHaveBeenCalled();
+                    expect(notificationService.sendMessage).not.toHaveBeenCalled();
+                    expect(userController.postmaster.register).not.toHaveBeenCalled();
+                },
+            );
+
+            it('should count a registered holder as a conflict even when no ids are known', async () => {
+                /**
+                 * Two missing ids are equal, which once made any registered
+                 * holder look like the account itself.
+                 */
+                userService.getUserByDisplayName.mockResolvedValue(undefined);
+                userService.getUserByEmailAddress.mockResolvedValue({
+                    dateRegistered: '2026-01-01T00:00:00.000Z',
+                });
+
+                await expect(signUp()).resolves.toBeUndefined();
             });
         });
 
-        describe('when user is registered', () => {
-            it('should not return a user', async () => {
-                userService.getUserByDisplayName.mockImplementation(() =>
-                    Promise.resolve({
-                        displayName,
-                        membershipType,
-                    }),
-                );
-                userService.getUserByEmailAddress.mockImplementation(() =>
-                    Promise.resolve({
-                        dateRegistered: Temporal.Now.instant().toString(),
-                    }),
-                );
-
-                const user = await userController.signUp({
-                    displayName,
-                    membershipType,
-                    contact: {
-                        firstName: 'Ada',
-                        lastName: 'Lovelace',
-                        emailAddress: 'ada@example.com',
-                        phoneNumber,
-                    },
-                });
-
-                expect(user).toBeUndefined();
+        describe('when the account is registered', () => {
+            beforeEach(() => {
+                userService.getUserByDisplayName.mockResolvedValue(registered);
             });
 
-            it('should send and save nothing for an account that is already registered', async () => {
-                userService.getUserByDisplayName.mockResolvedValueOnce({
-                    displayName,
-                    membershipType,
-                    dateRegistered: Temporal.Now.instant().toString(),
-                    emailAddress: 'verified@example.com',
-                    phoneNumber: '+15555550100',
-                });
-                userService.getUserByEmailAddress.mockResolvedValue(undefined);
-                userService.getUserByPhoneNumber.mockResolvedValue(undefined);
+            it('should save the new contact as pending and keep the verified contact', async () => {
+                /** Re-signing up is how a registered account changes its contact. */
+                await expect(signUp()).resolves.toEqual({ undelivered: [] });
 
-                /**
-                 * The new address and number are unclaimed, so only the
-                 * account's own registration stops this. Letting it through
-                 * would replace verified contact with contact nobody checked.
-                 */
-                const user = await userController.signUp({
-                    displayName,
-                    membershipType,
-                    contact: {
-                        firstName: 'Ada',
-                        lastName: 'Lovelace',
-                        emailAddress: 'unverified@example.com',
-                        phoneNumber,
-                    },
-                });
+                const [persisted] = userService.updateUser.mock.calls[0];
 
-                expect(user).toBeUndefined();
+                expect(persisted).toMatchObject({
+                    emailAddress: registered.emailAddress,
+                    phoneNumber: registered.phoneNumber,
+                    dateRegistered: registered.dateRegistered,
+                });
+                expect(persisted.membership.pending).toMatchObject({
+                    emailAddress: contact.emailAddress,
+                    phoneNumber: `+1${phoneNumber}`,
+                });
+                expect(userService.updateAnonymousUser).not.toHaveBeenCalled();
+            });
+
+            it('should not count its own current contact as a conflict', async () => {
+                userService.getUserByEmailAddress.mockResolvedValue(registered);
+
+                await expect(signUp()).resolves.toBeDefined();
+                expect(notificationService.sendMessage).toHaveBeenCalled();
+            });
+
+            it("should not take another account's contact", async () => {
+                userService.getUserByPhoneNumber.mockResolvedValue(registeredElsewhere);
+
+                await expect(signUp()).resolves.toBeUndefined();
                 expect(userService.updateUser).not.toHaveBeenCalled();
-                expect(notificationService.sendMessage).not.toHaveBeenCalled();
-                expect(userController.postmaster.register).not.toHaveBeenCalled();
-            });
-            it('should still reject an unusable phone number from a registered account', async () => {
-                userService.getUserByDisplayName.mockResolvedValueOnce({
-                    displayName,
-                    membershipType,
-                    dateRegistered: Temporal.Now.instant().toString(),
-                });
-
-                await expect(
-                    userController.signUp({
-                        displayName,
-                        membershipType,
-                        contact: {
-                            firstName: 'Ada',
-                            lastName: 'Lovelace',
-                            emailAddress: 'ada@example.com',
-                            phoneNumber: '+86 10 1234 5678',
-                        },
-                    }),
-                ).rejects.toBeInstanceOf(InvalidPhoneNumberError);
             });
         });
 
@@ -925,7 +919,14 @@ describe('UserController', () => {
             const signUp = () => userController.signUp({ displayName, membershipType, contact });
 
             /**
-             * What Cosmos holds: each `updateUser` replaces it, and a read
+             * The account isn't registered, so its writes go through
+             * `updateAnonymousUser`: its contact is pending, and `updateUser`'s
+             * schema requires top-level contact.
+             */
+            const write = userService.updateAnonymousUser;
+
+            /**
+             * What Cosmos holds: each write replaces it, and a read
              * that skips the cache returns a copy with a fresh ETag. The
              * receipts are saved onto that read, so the specs below can see
              * whether a write in between survives.
@@ -941,11 +942,13 @@ describe('UserController', () => {
                 );
                 userService.getUserByEmailAddress.mockResolvedValue(undefined);
                 userService.getUserByPhoneNumber.mockResolvedValue(undefined);
-                userService.updateUser.mockImplementation(user => {
-                    stored = structuredClone(user);
+                for (const writer of [userService.updateUser, write]) {
+                    writer.mockImplementation(user => {
+                        stored = structuredClone(user);
 
-                    return Promise.resolve(user);
-                });
+                        return Promise.resolve(user);
+                    });
+                }
                 notificationService.sendMessage.mockResolvedValue(sms);
                 userController.postmaster.register.mockResolvedValue(email);
             });
@@ -959,23 +962,23 @@ describe('UserController', () => {
                 userService.getUserByDisplayName.mockReset();
                 userService.getUserByEmailAddress.mockReset();
                 userService.getUserByPhoneNumber.mockReset();
-                userService.updateUser
-                    .mockReset()
-                    .mockImplementation(user => Promise.resolve(user));
+                for (const writer of [userService.updateUser, write]) {
+                    writer.mockReset().mockImplementation(user => Promise.resolve(user));
+                }
                 notificationService.sendMessage.mockReset().mockResolvedValue();
             });
 
             it('should save the tokens before sending either message', async () => {
                 await signUp();
 
-                const [firstWrite] = userService.updateUser.mock.invocationCallOrder;
+                const [firstWrite] = write.mock.invocationCallOrder;
                 const [firstSms] = notificationService.sendMessage.mock.invocationCallOrder;
                 const [firstEmail] = userController.postmaster.register.mock.invocationCallOrder;
 
                 expect(firstWrite).toBeLessThan(firstSms);
                 expect(firstWrite).toBeLessThan(firstEmail);
 
-                const [persisted] = userService.updateUser.mock.calls[0];
+                const [persisted] = write.mock.calls[0];
 
                 expect(persisted.membership.tokens).toEqual(
                     expect.objectContaining({
@@ -986,7 +989,7 @@ describe('UserController', () => {
             });
 
             it('should send nothing when the tokens cannot be saved', async () => {
-                userService.updateUser.mockRejectedValueOnce(new Error('cosmos unavailable'));
+                write.mockRejectedValueOnce(new Error('cosmos unavailable'));
 
                 await expect(signUp()).rejects.toThrow('cosmos unavailable');
 
@@ -1035,7 +1038,7 @@ describe('UserController', () => {
                 await expect(signUp()).resolves.toEqual({ undelivered: ['phone', 'email'] });
 
                 /** Nothing went out, so there is nothing to bill. */
-                expect(userService.updateUser).toHaveBeenCalledTimes(1);
+                expect(write).toHaveBeenCalledTimes(1);
             });
 
             it("should not bring back an earlier sign-up's codes when nothing goes out", async () => {
@@ -1058,7 +1061,7 @@ describe('UserController', () => {
                  * number nobody verified. A send that failed may also have
                  * been delivered, so the new codes stay.
                  */
-                expect(stored.emailAddress).toEqual(contact.emailAddress);
+                expect(stored.membership.pending.emailAddress).toEqual(contact.emailAddress);
                 expect(stored.membership.tokens.blob).not.toEqual('earlier-blob');
                 expect(stored.membership.tokens.code).not.toEqual('111111');
             });
@@ -1066,9 +1069,9 @@ describe('UserController', () => {
             it('should save the receipts after sending, for billing', async () => {
                 await signUp();
 
-                expect(userService.updateUser).toHaveBeenCalledTimes(2);
+                expect(write).toHaveBeenCalledTimes(2);
 
-                const [receipts] = userService.updateUser.mock.calls[1];
+                const [receipts] = write.mock.calls[1];
 
                 expect(receipts.membership.message).toEqual(sms);
                 expect(receipts.membership.postmark).toEqual(email);
@@ -1085,7 +1088,7 @@ describe('UserController', () => {
 
                 await signUp();
 
-                const [receipts] = userService.updateUser.mock.calls[1];
+                const [receipts] = write.mock.calls[1];
 
                 expect(receipts.membership.message).toEqual(sms);
                 expect(receipts.membership).not.toHaveProperty('postmark');
@@ -1115,7 +1118,7 @@ describe('UserController', () => {
 
                 await expect(signUp()).resolves.toEqual({ undelivered: [] });
 
-                expect(userService.updateUser).toHaveBeenCalledTimes(1);
+                expect(write).toHaveBeenCalledTimes(1);
                 expect(stored.membership.tokens).toEqual(newer);
                 expect(logWarn).toHaveBeenCalledWith(
                     { displayName, membershipType, sid: sms.sid, messageId: email.messageId },
@@ -1126,7 +1129,7 @@ describe('UserController', () => {
             it('should still succeed when the receipts cannot be saved', async () => {
                 const err = new Error('precondition failed');
 
-                userService.updateUser
+                write
                     .mockImplementationOnce(user => {
                         stored = structuredClone(user);
 
@@ -1175,6 +1178,20 @@ describe('UserController', () => {
                 membershipType,
                 true,
             );
+        });
+
+        it('should not construct without a consent reader', () => {
+            /** Without it, a STOP sent between sign-up and `join` would be lost. */
+            expect(
+                () =>
+                    new UserController({
+                        allowCipherAttempt,
+                        destinyService,
+                        notificationService,
+                        userService,
+                        worldRepository,
+                    }),
+            ).toThrow(new TypeError('readConsent is required'));
         });
 
         it('should not construct without an attempt limit', () => {
@@ -1309,6 +1326,14 @@ describe('UserController', () => {
         const sms = { sid: 'SM-resend-sid' };
         const email = { messageId: '<resend-message-id@example.com>' };
         const resend = channel => userController.resend({ displayName, membershipType, channel });
+        const pending = {
+            emailAddress: 'ada@example.com',
+            firstName: 'Ada',
+            lastName: 'Lovelace',
+            phoneNumber: `+1${phoneNumber}`,
+        };
+        /** An unregistered account's writes go through `updateAnonymousUser`. */
+        const write = userService.updateAnonymousUser;
         let stored;
         let tokens;
 
@@ -1317,25 +1342,27 @@ describe('UserController', () => {
             stored = {
                 displayName,
                 membershipType,
-                emailAddress: 'ada@example.com',
-                phoneNumber: `+1${phoneNumber}`,
-                membership: { tokens, message: { sid: 'SM-original' } },
+                membership: { tokens, pending, message: { sid: 'SM-original' } },
             };
             userService.getUserByDisplayName.mockImplementation(() =>
                 Promise.resolve({ ...structuredClone(stored), _etag: chance.guid() }),
             );
-            userService.updateUser.mockImplementation(user => {
-                stored = structuredClone(user);
+            for (const writer of [userService.updateUser, write]) {
+                writer.mockImplementation(user => {
+                    stored = structuredClone(user);
 
-                return Promise.resolve(user);
-            });
+                    return Promise.resolve(user);
+                });
+            }
             notificationService.sendMessage.mockResolvedValue(sms);
             userController.postmaster.register.mockResolvedValue(email);
         });
 
         afterEach(() => {
             userService.getUserByDisplayName.mockReset();
-            userService.updateUser.mockReset().mockImplementation(user => Promise.resolve(user));
+            for (const writer of [userService.updateUser, write]) {
+                writer.mockReset().mockImplementation(user => Promise.resolve(user));
+            }
             notificationService.sendMessage.mockReset().mockResolvedValue();
             userController.postmaster.register.mockReset();
         });
@@ -1391,15 +1418,23 @@ describe('UserController', () => {
                 },
             ],
             [
-                'the account is registered',
+                'a registered account has no pending sign-up',
                 () => {
                     stored.dateRegistered = '2026-01-01T00:00:00.000Z';
+                    delete stored.membership.pending;
                 },
             ],
             [
                 'only a cipher is pending',
                 () => {
                     delete stored.membership.tokens.blob;
+                    delete stored.membership.pending;
+                },
+            ],
+            [
+                'the tokens have no pending contact (the old format)',
+                () => {
+                    delete stored.membership.pending;
                 },
             ],
             [
@@ -1424,10 +1459,29 @@ describe('UserController', () => {
 
             expect(notificationService.sendMessage).not.toHaveBeenCalled();
             expect(userService.updateUser).not.toHaveBeenCalled();
+            expect(write).not.toHaveBeenCalled();
             expect(logInfo).toHaveBeenCalledWith(
                 { displayName, membershipType, channel: 'phone' },
                 'No pending sign-up to resend.',
             );
+        });
+
+        it("should resend a registered account's contact change to the new contact", async () => {
+            stored = {
+                ...stored,
+                dateRegistered: '2026-01-01T00:00:00.000Z',
+                emailAddress: 'old@example.com',
+                phoneNumber: '+12085550199',
+            };
+
+            await resend('phone');
+
+            const [, to] = notificationService.sendMessage.mock.calls[0];
+
+            expect(to).toEqual(pending.phoneNumber);
+            /** Registered, so the receipt goes through `updateUser`. */
+            expect(userService.updateUser).toHaveBeenCalledOnce();
+            expect(stored.membership.message).toEqual(sms);
         });
 
         it('should still send, without an icon, when the manifest is unavailable', async () => {
@@ -1458,6 +1512,7 @@ describe('UserController', () => {
             await expect(resend('phone')).resolves.toBeUndefined();
 
             expect(userService.updateUser).not.toHaveBeenCalled();
+            expect(write).not.toHaveBeenCalled();
             expect(logError).toHaveBeenCalledWith(
                 { err, displayName, membershipType, channel: 'phone' },
                 'Failed to resend a sign-up verification message.',
@@ -1918,6 +1973,7 @@ describe('UserController.signIn against the real Destiny and User services', () 
 
         controller = new UserController({
             allowCipherAttempt,
+            readConsent,
             destinyService: new DestinyService({ cacheService: {} }),
             notificationService,
             userService: new UserService({ cacheService, client: {}, documentService }),
