@@ -267,72 +267,69 @@ describe('UserController', () => {
          * each case stays a few seconds clear of the boundary.
          */
         const tokensAged = seconds => ({ code, timeStamp: getEpoch() - seconds });
-        const controllerWith = tokenTtlSeconds =>
-            new UserController({
-                allowCipherAttempt,
-                destinyService,
-                notificationService,
-                tokenTtlSeconds,
-                userService,
-                worldRepository,
-            });
-        const join = (controller, seconds) => {
+        const join = seconds => {
             userService.getUserByEmailAddressToken.mockResolvedValueOnce({
                 membership: { tokens: tokensAged(seconds) },
             });
 
-            return controller.join({ tokens: { emailAddress: 'some-blob', phoneNumber: code } });
+            return userController.join({
+                tokens: { emailAddress: 'some-blob', phoneNumber: code },
+            });
         };
-        const decipher = (controller, seconds) => {
+        const decipher = seconds => {
             userService.getUserByDisplayName.mockResolvedValueOnce({
                 dateRegistered: '2026-01-01T00:00:00.000Z',
                 membership: { tokens: tokensAged(seconds) },
             });
 
-            return controller.decipher({ displayName, membershipType, channel: 'phone', code });
+            return userController.decipher({ displayName, membershipType, channel: 'phone', code });
         };
 
-        describe('when none is configured', () => {
-            it('should accept a token up to 15 minutes old', async () => {
-                await expect(join(controllerWith(undefined), 895)).resolves.toBeDefined();
-                await expect(decipher(controllerWith(undefined), 895)).resolves.toBeDefined();
+        const resend = seconds => {
+            userService.getUserByDisplayName.mockResolvedValueOnce({
+                displayName,
+                membershipType,
+                phoneNumber: `+1${phoneNumber}`,
+                membership: { tokens: { ...tokensAged(seconds), blob: 'some-blob' } },
             });
 
-            it('should reject a token older than 15 minutes', async () => {
-                await expect(join(controllerWith(undefined), 905)).resolves.toBeUndefined();
-                await expect(decipher(controllerWith(undefined), 905)).rejects.toThrow(
-                    'token expired',
-                );
-            });
+            return userController.resend({ displayName, membershipType, channel: 'phone' });
+        };
+
+        it('should accept a token up to 15 minutes old', async () => {
+            await expect(join(895)).resolves.toBeDefined();
+            await expect(decipher(895)).resolves.toBeDefined();
+
+            await resend(895);
+            expect(notificationService.sendMessage).toHaveBeenCalledOnce();
         });
 
-        describe('when one is configured', () => {
-            it('should accept a token inside it', async () => {
-                await expect(join(controllerWith(600), 595)).resolves.toBeDefined();
-                await expect(decipher(controllerWith(600), 595)).resolves.toBeDefined();
-            });
+        it('should reject a token older than 15 minutes', async () => {
+            await expect(join(905)).resolves.toBeUndefined();
+            await expect(decipher(905)).rejects.toThrow('token expired');
 
-            it('should reject a token older than it', async () => {
-                await expect(join(controllerWith(600), 605)).resolves.toBeUndefined();
-                await expect(decipher(controllerWith(600), 605)).rejects.toThrow('token expired');
-            });
+            await resend(905);
+            expect(notificationService.sendMessage).not.toHaveBeenCalled();
         });
-
-        it('should accept a day', () => {
-            expect(() => controllerWith(24 * 60 * 60)).not.toThrow();
-        });
-
-        it.each([0, -1, 1.5, '900', null, Number.NaN, 24 * 60 * 60 + 1])(
-            'should refuse to start with %s',
-            tokenTtlSeconds => {
-                expect(() => controllerWith(tokenTtlSeconds)).toThrow(
-                    'tokenTtlSeconds must be a positive integer',
-                );
-            },
-        );
     });
 
     describe('join', () => {
+        it("should refuse an email cipher's blob, which has no code to match", async () => {
+            /**
+             * An email cipher saves a blob and no code. Compared without a
+             * check that a code exists, a join with no code matched it.
+             */
+            userService.getUserByEmailAddressToken.mockResolvedValueOnce({
+                dateRegistered: '2026-01-01T00:00:00.000Z',
+                membership: { tokens: { blob: 'cipher-blob', timeStamp: getEpoch() } },
+            });
+
+            await expect(
+                userController.join({ tokens: { emailAddress: 'cipher-blob' } }),
+            ).resolves.toBeUndefined();
+            expect(userService.updateUser).not.toHaveBeenCalled();
+        });
+
         describe('when the request is missing an email address token', () => {
             it('should return undefined without querying the user service', async () => {
                 const user = await userController.join({ tokens: {} });

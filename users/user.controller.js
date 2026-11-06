@@ -11,6 +11,7 @@ import { applyPatch, createPatch } from 'rfc6902';
 import CipherAttemptsExceededError from './cipher-attempts-exceeded.error.js';
 import InvalidCipherError from './invalid-cipher.error.js';
 import cleanPhoneNumber from './clean-phone-number.js';
+import TOKEN_TTL_SECONDS from './token-ttl.js';
 import Postmaster from '../helpers/postmaster.js';
 import getEpoch from '../helpers/get-epoch.js';
 import log from '../helpers/log.js';
@@ -67,35 +68,9 @@ import notificationTypes from '../notifications/notification.types.js';
  * spent (see `helpers/rate-limiter.middleware.js`)
  * @property {import('../destiny/destiny.service.js').default} destinyService
  * @property {import('../notifications/notification.service.js').default} notificationService
- * @property {number} [tokenTtlSeconds] - how long a verification code or email
- * link stays valid; defaults to `DEFAULT_TOKEN_TTL_SECONDS`
  * @property {import('./user.service.js').default} userService
  * @property {import('../helpers/world2.js').default} worldRepository
  */
-
-/**
- * How long a verification token stays valid when nothing is configured.
- *
- * Fifteen minutes, so an emailed link survives greylisting, which can hold a
- * message for five to fifteen. `join` checks the SMS code and the email link
- * together against one timestamp, so one TTL covers both: a shorter one for
- * either channel would decide `join` on its own (#571).
- *
- * The longer window does not make the six-digit code guessable: `join` also
- * needs the 128-bit email token, and `decipher` the user's session and one of
- * the code's few attempts.
- * @type {number}
- */
-const DEFAULT_TOKEN_TTL_SECONDS = 900;
-
-/**
- * The longest a verification token may be configured to live. A code's
- * attempt count (`cipher-attempt` in `helpers/rate-limiter.middleware.js`)
- * lasts a day from its first attempt, so it must not outlive a token that
- * lives longer: the code would get its attempts back.
- * @type {number}
- */
-const MAX_TOKEN_TTL_SECONDS = 24 * 60 * 60;
 
 /**
  * User Controller Class
@@ -104,36 +79,16 @@ class UserController {
     /** @type {(key: string) => Promise<boolean>} */
     #allowCipherAttempt;
 
-    /** @type {number} */
-    #tokenTtlSeconds;
-
     /**
      * @param {UserControllerOptions} options
      */
     constructor(options) {
-        const { tokenTtlSeconds = DEFAULT_TOKEN_TTL_SECONDS } = options;
-
-        /**
-         * Checked here so a bad `settings/users.json` stops the server at
-         * startup, rather than expiring every code, or none, at runtime.
-         */
-        if (
-            !Number.isSafeInteger(tokenTtlSeconds) ||
-            tokenTtlSeconds <= 0 ||
-            tokenTtlSeconds > MAX_TOKEN_TTL_SECONDS
-        ) {
-            throw new TypeError(
-                `tokenTtlSeconds must be a positive integer of at most ${MAX_TOKEN_TTL_SECONDS}; got ${JSON.stringify(tokenTtlSeconds)}`,
-            );
-        }
-
         /** Required: without it, cryptarch would allow unlimited guesses. */
         if (typeof options.allowCipherAttempt !== 'function') {
             throw new TypeError('allowCipherAttempt is required');
         }
 
         this.#allowCipherAttempt = options.allowCipherAttempt;
-        this.#tokenTtlSeconds = tokenTtlSeconds;
         this.destiny = options.destinyService;
         this.notifications = options.notificationService;
         this.postmaster = new Postmaster();
@@ -304,7 +259,7 @@ class UserController {
         if (!expected) {
             throw new InvalidCipherError('no code for this channel');
         }
-        if (getEpoch() > (tokens?.timeStamp ?? 0) + this.#tokenTtlSeconds) {
+        if (getEpoch() > (tokens?.timeStamp ?? 0) + TOKEN_TTL_SECONDS) {
             throw new InvalidCipherError('token expired');
         }
 
@@ -447,11 +402,15 @@ class UserController {
             await this.users.getUserByEmailAddressToken(user.tokens.emailAddress)
         );
 
+        /**
+         * The stored code is checked to exist, not just compared: an email
+         * cipher saves a blob with no code, so a join with that blob and no
+         * code compared `undefined` with `undefined` and passed.
+         */
         if (
-            !registeredUser ||
-            getEpoch() >
-                (registeredUser?.membership?.tokens?.timeStamp ?? 0) + this.#tokenTtlSeconds ||
-            user?.tokens?.phoneNumber !== registeredUser?.membership?.tokens?.code
+            !registeredUser?.membership?.tokens?.code ||
+            getEpoch() > (registeredUser.membership.tokens.timeStamp ?? 0) + TOKEN_TTL_SECONDS ||
+            user.tokens.phoneNumber !== registeredUser.membership.tokens.code
         ) {
             return undefined;
         }
@@ -819,7 +778,7 @@ class UserController {
             user.dateRegistered ||
             !tokens?.blob ||
             !tokens?.code ||
-            getEpoch() > (tokens.timeStamp ?? 0) + this.#tokenTtlSeconds
+            getEpoch() > (tokens.timeStamp ?? 0) + TOKEN_TTL_SECONDS
         ) {
             log.info(context, 'No pending sign-up to resend.');
 

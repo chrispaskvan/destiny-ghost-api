@@ -65,6 +65,7 @@ vi.mock('./cache.js', () => ({
 }));
 
 import cache from './cache.js';
+import TOKEN_TTL_SECONDS from '../users/token-ttl.js';
 import rateLimiterMiddleware, {
     twilioRateLimiterMiddleware,
     twilioIngressRateLimiterMiddleware,
@@ -119,8 +120,11 @@ describe('verification limits', () => {
         expect(limits('sign-up')).toMatchObject({ points: 5, duration: 60 * 60 });
         expect(limits('sign-up-resend')).toMatchObject({ points: 3, duration: 15 * 60 });
         expect(limits('cipher')).toMatchObject({ points: 3, duration: 15 * 60 });
-        /** Longer than any token lives, so a code's count outlasts it. */
-        expect(limits('cipher-attempt')).toMatchObject({ points: 5, duration: 24 * 60 * 60 });
+        /** As long as a token lives, so a code's count outlasts it. */
+        expect(limits('cipher-attempt')).toMatchObject({
+            points: 5,
+            duration: TOKEN_TTL_SECONDS,
+        });
     });
 
     it('charges a sign-up to the session account', async () => {
