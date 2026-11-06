@@ -448,6 +448,12 @@ class UserController {
     /**
      * Send a verification code to the user.
      *
+     * The new token is saved before it is sent, so every code that reaches
+     * the user is one `decipher` can check. Sending first left a delivered
+     * code unsaved whenever the write failed, and the retry sent, and
+     * billed, another (#796). A failed send rejects but keeps the token: it
+     * may still have been delivered, and the user can ask again.
+     *
      * @param {Object} param0
      * @param {string} param0.displayName
      * @param {number} param0.membershipType
@@ -455,8 +461,13 @@ class UserController {
      * @returns {Promise<void>}
      */
     async sendCipher({ displayName, membershipType, channel }) {
+        if (channel !== 'phone' && channel !== 'email') {
+            throw new Error(`invalid channel ${channel}`);
+        }
+
+        /** Read past the cache: a stale `_etag` would fail the write below. */
         const user = /** @type {MutableUser | undefined} */ (
-            await this.users.getUserByDisplayName(displayName, membershipType)
+            await this.users.getUserByDisplayName(displayName, membershipType, true)
         );
 
         if (!(user?.dateRegistered && user?.emailAddress && user?.phoneNumber)) {
@@ -464,51 +475,40 @@ class UserController {
         }
 
         const iconUrl = await this.world.getVendorIcon(postmasterHash);
+        const tokens =
+            channel === 'phone'
+                ? { code: getCode(), timeStamp: getEpoch() }
+                : { blob: getBlob(), timeStamp: getEpoch() };
 
-        if (channel === 'phone') {
-            Object.assign(user, {
-                membership: {
-                    tokens: {
-                        code: getCode(),
-                        timeStamp: getEpoch(),
-                    },
-                },
-            });
-
-            const membership = /** @type {Membership} */ (user.membership);
-
-            membership.message = await this.notifications.sendMessage(
-                UserController.#buildVerificationMessage(
-                    /** @type {string} */ (membership.tokens?.code),
-                ),
-                user.phoneNumber,
-                user.type === 'mobile' ? iconUrl : '',
-            );
-        }
-
-        if (channel === 'email') {
-            Object.assign(user, {
-                membership: {
-                    tokens: {
-                        blob: getBlob(),
-                        timeStamp: getEpoch(),
-                    },
-                },
-            });
-
-            const membership = /** @type {Membership} */ (user.membership);
-
-            membership.postmark = await this.postmaster.confirm(
-                /** @type {import('../helpers/postmaster.js').EmailUser} */ (
-                    /** @type {unknown} */ (user)
-                ),
-                iconUrl,
-                '/confirm',
-            );
-        }
+        user.membership = { tokens };
 
         await this.users.updateUser(/** @type {User} */ (/** @type {unknown} */ (user)));
+
+        /** @type {Membership} */
+        const receipts =
+            channel === 'phone'
+                ? {
+                      message: await this.notifications.sendMessage(
+                          UserController.#buildVerificationMessage(
+                              /** @type {string} */ (tokens.code),
+                          ),
+                          user.phoneNumber,
+                          user.type === 'mobile' ? iconUrl : '',
+                      ),
+                  }
+                : {
+                      postmark: await this.postmaster.confirm(
+                          /** @type {import('../helpers/postmaster.js').EmailUser} */ (
+                              /** @type {unknown} */ (user)
+                          ),
+                          iconUrl,
+                          '/confirm',
+                      ),
+                  };
+
+        await this.#saveReceipts({ displayName, membershipType, tokens }, receipts);
     }
+
     /**
      * Sign In with Bungie and PSN/XBox Live. The incoming displayName is
      * never read — it's immediately overwritten below from the Bungie
@@ -737,7 +737,7 @@ class UserController {
          */
         if (Object.keys(receipts).length) {
             await this.#saveReceipts(
-                { displayName, membershipType, blob: membership.tokens?.blob },
+                { displayName, membershipType, tokens: membership.tokens },
                 receipts,
             );
         }
@@ -746,25 +746,27 @@ class UserController {
     }
 
     /**
-     * Add a sign-up's delivery receipts, which are kept for billing, to the
-     * sign-up already saved.
+     * Add the delivery receipts of a verification already saved - a sign-up
+     * or a cipher - which are kept for billing.
      *
      * Best effort, because the outcome of the sends is already settled:
      * failing the request now would only invite a retry that sends, and
      * bills, the messages again. A failure is logged with the account and the
      * provider's ids, enough to reconcile them.
      *
-     * Applied to a fresh read rather than the document `signUp` built, so a
+     * Applied to a fresh read rather than the document the caller built, so a
      * `join` that landed while the messages were sending is kept, and the read
      * brings the ETag that guards this write against anything later. A read
-     * holding other tokens means a newer sign-up replaced them, and these
-     * receipts are not for the messages it sent.
-     * @param {{ displayName: string, membershipType: number, blob?: string }} signUp -
-     * the account, and the email token of the sign-up as it was saved
+     * holding other tokens means a newer sign-up or cipher replaced them, and
+     * these receipts are not for the messages it sent. All three token fields
+     * are compared: a sign-up has both a code and a blob, a phone cipher only
+     * a code, an email cipher only a blob.
+     * @param {{ displayName: string, membershipType: number, tokens?: MembershipTokens }} saved -
+     * the account, and the tokens as they were saved
      * @param {Membership} receipts - `message` and/or `postmark`
      * @returns {Promise<void>}
      */
-    async #saveReceipts({ displayName, membershipType, blob }, receipts) {
+    async #saveReceipts({ displayName, membershipType, tokens }, receipts) {
         const context = {
             displayName,
             membershipType,
@@ -777,8 +779,15 @@ class UserController {
                 await this.users.getUserByDisplayName(displayName, membershipType, true)
             );
 
-            if (!current || current.membership?.tokens?.blob !== blob) {
-                log.warn(context, 'The saved sign-up has changed; not saving its receipts.');
+            const held = current?.membership?.tokens;
+
+            if (
+                !current ||
+                held?.blob !== tokens?.blob ||
+                held?.code !== tokens?.code ||
+                held?.timeStamp !== tokens?.timeStamp
+            ) {
+                log.warn(context, 'The saved tokens have changed; not saving their receipts.');
 
                 return;
             }
@@ -787,7 +796,7 @@ class UserController {
 
             await this.users.updateUser(/** @type {User} */ (/** @type {unknown} */ (current)));
         } catch (err) {
-            log.error({ err, ...context }, 'Failed to save sign-up delivery receipts.');
+            log.error({ err, ...context }, 'Failed to save verification delivery receipts.');
         }
     }
 

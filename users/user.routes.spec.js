@@ -1017,6 +1017,7 @@ describe('UserRouter', () => {
                             expect(userService.getUserByDisplayName).toHaveBeenCalledWith(
                                 displayName,
                                 membershipType,
+                                true,
                             );
                             expect(userService.updateUser).toHaveBeenCalled();
                             done();
@@ -1065,6 +1066,7 @@ describe('UserRouter', () => {
                             expect(userService.getUserByDisplayName).toHaveBeenCalledWith(
                                 displayName,
                                 membershipType,
+                                true,
                             );
                             expect(notificationService.sendMessage).toHaveBeenCalled();
                             expect(userService.updateUser).toHaveBeenCalled();

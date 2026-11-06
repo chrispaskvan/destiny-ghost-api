@@ -15,6 +15,7 @@ vi.mock('../helpers/log.js', () => ({
 }));
 vi.mock('../helpers/postmaster.js', () => ({
     default: class {
+        confirm = vi.fn();
         register = vi.fn();
     },
 }));
@@ -1101,7 +1102,7 @@ describe('UserController', () => {
                 expect(stored.membership.tokens).toEqual(newer);
                 expect(logWarn).toHaveBeenCalledWith(
                     { displayName, membershipType, sid: sms.sid, messageId: email.messageId },
-                    'The saved sign-up has changed; not saving its receipts.',
+                    'The saved tokens have changed; not saving their receipts.',
                 );
             });
 
@@ -1130,34 +1131,217 @@ describe('UserController', () => {
                         sid: sms.sid,
                         messageId: email.messageId,
                     },
-                    'Failed to save sign-up delivery receipts.',
+                    'Failed to save verification delivery receipts.',
                 );
             });
         });
     });
 
     describe('sendCipher', () => {
-        describe('when channel is phone', () => {
-            it('should send a compliant verification message', async () => {
-                userService.getUserByDisplayName.mockImplementation(() =>
-                    Promise.resolve({
-                        displayName,
-                        emailAddress: 'some-email-address',
-                        dateRegistered: Temporal.Now.instant().toString(),
-                        membershipType,
-                        phoneNumber: `+1${phoneNumber}`,
-                    }),
-                );
+        const sms = { sid: 'SM-cipher-sid' };
+        const email = { messageId: '<cipher-message-id@example.com>' };
+        const send = channel => userController.sendCipher({ displayName, membershipType, channel });
+        const sender = {
+            phone: () => notificationService.sendMessage,
+            email: () => userController.postmaster.confirm,
+        };
+        const receiptField = { phone: 'message', email: 'postmark' };
+        const receiptFor = { phone: sms, email };
 
-                await userController.sendCipher({ displayName, membershipType, channel: 'phone' });
+        /**
+         * What Cosmos holds, as in signUp's 'delivery' specs: each
+         * `updateUser` replaces it, and a read returns a copy with a fresh
+         * ETag.
+         */
+        let stored;
 
-                expect(notificationService.sendMessage).toHaveBeenCalledWith(
-                    expect.stringContaining('Reply HELP for help, STOP to cancel.'),
-                    `+1${phoneNumber}`,
-                    '',
-                );
-                expect(userService.updateUser).toHaveBeenCalled();
+        beforeEach(() => {
+            stored = {
+                displayName,
+                emailAddress: 'some-email-address',
+                dateRegistered: Temporal.Now.instant().toString(),
+                membershipType,
+                phoneNumber: `+1${phoneNumber}`,
+                membership: { tokens: { code: '000000', timeStamp: 1 } },
+            };
+            userService.getUserByDisplayName.mockImplementation(() =>
+                Promise.resolve({ ...structuredClone(stored), _etag: chance.guid() }),
+            );
+            userService.updateUser.mockImplementation(user => {
+                stored = structuredClone(user);
+
+                return Promise.resolve(user);
             });
+            notificationService.sendMessage.mockResolvedValue(sms);
+            userController.postmaster.confirm.mockResolvedValue(email);
+        });
+
+        afterEach(() => {
+            userService.getUserByDisplayName.mockReset();
+            userService.updateUser.mockReset().mockImplementation(user => Promise.resolve(user));
+            notificationService.sendMessage.mockReset().mockResolvedValue();
+        });
+
+        it('should send a compliant verification message', async () => {
+            await send('phone');
+
+            expect(notificationService.sendMessage).toHaveBeenCalledWith(
+                expect.stringContaining('Reply HELP for help, STOP to cancel.'),
+                `+1${phoneNumber}`,
+                '',
+            );
+        });
+
+        it('should read the user it is about to write without the cache', async () => {
+            await send('phone');
+
+            expect(userService.getUserByDisplayName).toHaveBeenNthCalledWith(
+                1,
+                displayName,
+                membershipType,
+                true,
+            );
+        });
+
+        it('should reject a user who is not registered', async () => {
+            delete stored.dateRegistered;
+
+            await expect(send('phone')).rejects.toThrow('registration not found');
+
+            expect(userService.updateUser).not.toHaveBeenCalled();
+            expect(notificationService.sendMessage).not.toHaveBeenCalled();
+        });
+
+        describe.each(['phone', 'email'])('when channel is %s', channel => {
+            const token = channel === 'phone' ? 'code' : 'blob';
+
+            it('should save the new token before sending it', async () => {
+                await send(channel);
+
+                const [firstWrite] = userService.updateUser.mock.invocationCallOrder;
+                const [firstSend] = sender[channel]().mock.invocationCallOrder;
+
+                expect(firstWrite).toBeLessThan(firstSend);
+
+                const [persisted] = userService.updateUser.mock.calls[0];
+
+                expect(persisted.membership.tokens[token]).toEqual(expect.any(String));
+                expect(persisted.membership.tokens[token]).not.toEqual('000000');
+                expect(stored.membership.tokens).toEqual(persisted.membership.tokens);
+            });
+
+            it('should send nothing when the token cannot be saved', async () => {
+                userService.updateUser.mockRejectedValueOnce(new Error('precondition failed'));
+
+                await expect(send(channel)).rejects.toThrow('precondition failed');
+
+                expect(sender[channel]()).not.toHaveBeenCalled();
+            });
+
+            it('should reject when the send fails, keeping the saved token', async () => {
+                sender[channel]().mockRejectedValueOnce(new Error('provider unavailable'));
+
+                await expect(send(channel)).rejects.toThrow('provider unavailable');
+
+                /**
+                 * A failed send may still have been delivered, so the token
+                 * stays; the user asks again. Nothing went out to bill.
+                 */
+                expect(userService.updateUser).toHaveBeenCalledTimes(1);
+                expect(stored.membership.tokens[token]).toEqual(expect.any(String));
+            });
+
+            it('should save the receipt onto a fresh read, for billing', async () => {
+                await send(channel);
+
+                expect(userService.updateUser).toHaveBeenCalledTimes(2);
+
+                const [saved] = userService.updateUser.mock.calls[1];
+
+                expect(saved.membership[receiptField[channel]]).toEqual(receiptFor[channel]);
+                expect(saved.membership.tokens).toEqual(
+                    userService.updateUser.mock.calls[0][0].membership.tokens,
+                );
+                expect(saved._etag).toEqual(expect.any(String));
+            });
+
+            it('should not save the receipt onto a newer token', async () => {
+                const newer = { [token]: 'newer-token', timeStamp: 2 };
+
+                sender[channel]().mockImplementationOnce(() => {
+                    stored.membership.tokens = newer;
+
+                    return Promise.resolve(receiptFor[channel]);
+                });
+
+                await send(channel);
+
+                expect(userService.updateUser).toHaveBeenCalledTimes(1);
+                expect(stored.membership.tokens).toEqual(newer);
+                expect(logWarn).toHaveBeenCalledWith(
+                    expect.objectContaining({ displayName, membershipType }),
+                    'The saved tokens have changed; not saving their receipts.',
+                );
+            });
+
+            it('should still succeed when the receipt cannot be saved', async () => {
+                const err = new Error('cosmos unavailable');
+
+                userService.updateUser
+                    .mockImplementationOnce(user => {
+                        stored = structuredClone(user);
+
+                        return Promise.resolve(user);
+                    })
+                    .mockRejectedValueOnce(err);
+
+                await expect(send(channel)).resolves.toBeUndefined();
+
+                expect(logError).toHaveBeenCalledWith(
+                    expect.objectContaining({ err, displayName, membershipType }),
+                    'Failed to save verification delivery receipts.',
+                );
+            });
+        });
+
+        it('should not save a phone receipt onto a newer phone code', async () => {
+            /**
+             * Phone tokens have no blob, so a guard on the blob alone would
+             * match any two phone codes.
+             */
+            notificationService.sendMessage.mockImplementationOnce(() => {
+                stored.membership.tokens = {
+                    ...stored.membership.tokens,
+                    code: 'newer-code',
+                };
+
+                return Promise.resolve(sms);
+            });
+
+            await send('phone');
+
+            expect(userService.updateUser).toHaveBeenCalledTimes(1);
+            expect(stored.membership.tokens.code).toEqual('newer-code');
+        });
+
+        it('should not save a phone receipt onto a newer code that repeats the digits', async () => {
+            /**
+             * Six digits repeat about once in a million ciphers; the
+             * timestamp still tells the two apart.
+             */
+            notificationService.sendMessage.mockImplementationOnce(() => {
+                stored.membership.tokens = {
+                    ...stored.membership.tokens,
+                    timeStamp: stored.membership.tokens.timeStamp + 1,
+                };
+
+                return Promise.resolve(sms);
+            });
+
+            await send('phone');
+
+            expect(userService.updateUser).toHaveBeenCalledTimes(1);
+            expect(stored.membership).not.toHaveProperty('message');
         });
     });
 
