@@ -1017,6 +1017,7 @@ describe('UserRouter', () => {
                             expect(userService.getUserByDisplayName).toHaveBeenCalledWith(
                                 displayName,
                                 membershipType,
+                                true,
                             );
                             expect(userService.updateUser).toHaveBeenCalled();
                             done();
@@ -1065,6 +1066,7 @@ describe('UserRouter', () => {
                             expect(userService.getUserByDisplayName).toHaveBeenCalledWith(
                                 displayName,
                                 membershipType,
+                                true,
                             );
                             expect(notificationService.sendMessage).toHaveBeenCalled();
                             expect(userService.updateUser).toHaveBeenCalled();
@@ -1211,6 +1213,36 @@ describe('UserRouter', () => {
                     userRouter(req, res, next);
                 }));
         });
+
+        describe('when the send fails with a provider "not found"', () => {
+            it('should forward the error rather than call the registration missing', async () => {
+                const req = createRequest({
+                    method: 'POST',
+                    url: '/current/ciphers',
+                    headers: { 'x-csrf-token': csrfToken },
+                    body: { channel: 'phone' },
+                    session: { csrfToken, displayName, membershipType },
+                });
+                const err = new Error('The requested resource /Services/MG123 was not found');
+
+                next.mockClear();
+                userService.getUserByDisplayName.mockResolvedValue({
+                    displayName,
+                    membershipType,
+                    dateRegistered: Temporal.Now.instant().toString(),
+                    emailAddress,
+                    phoneNumber,
+                });
+                notificationService.sendMessage.mockRejectedValueOnce(err);
+
+                userRouter(req, res, next);
+
+                await vi.waitFor(() => {
+                    expect(next).toHaveBeenCalledWith(err);
+                });
+                expect(res._isEndCalled()).toEqual(false);
+            });
+        });
     });
 
     describe('POST /users/current/cryptarch', () => {
@@ -1254,6 +1286,7 @@ describe('UserRouter', () => {
                             expect(userService.getUserByDisplayName).toHaveBeenCalledWith(
                                 displayName,
                                 membershipType,
+                                true,
                             );
                             done();
                         } catch (err) {
@@ -1302,6 +1335,7 @@ describe('UserRouter', () => {
                             expect(userService.getUserByDisplayName).toHaveBeenCalledWith(
                                 displayName,
                                 membershipType,
+                                true,
                             );
                             done();
                         } catch (err) {
@@ -1340,6 +1374,33 @@ describe('UserRouter', () => {
 
                     userRouter(req, res, next);
                 }));
+        });
+
+        describe('when the user cannot be read', () => {
+            it('should forward the error rather than call the code invalid', async () => {
+                const req = createRequest({
+                    method: 'POST',
+                    url: '/current/cryptarch',
+                    headers: { 'x-csrf-token': csrfToken },
+                    body: { channel: 'phone', code: '123456' },
+                    session: { csrfToken, displayName, membershipType },
+                });
+                const err = new Error('Request rate is large');
+
+                next.mockClear();
+                userService.getUserByDisplayName.mockRejectedValueOnce(err);
+
+                /**
+                 * A 404 here sent the user to request, and pay for, another
+                 * code that would fail the same way.
+                 */
+                userRouter(req, res, next);
+
+                await vi.waitFor(() => {
+                    expect(next).toHaveBeenCalledWith(err);
+                });
+                expect(res._isEndCalled()).toEqual(false);
+            });
         });
 
         describe('when verification code is invalid', () => {

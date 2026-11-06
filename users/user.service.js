@@ -1210,9 +1210,11 @@ class UserService {
             return Promise.reject(err);
         }
 
+        /** Past the cache, for the reason given on `updateUser`. */
         const user = await this.getUserByDisplayName(
             anonymousUser.displayName,
             anonymousUser.membershipType,
+            true,
         );
 
         if (user) {
@@ -1243,7 +1245,18 @@ class UserService {
             return Promise.reject(err);
         }
 
-        const userDocument = await this.getUserByDisplayName(user.displayName, user.membershipType);
+        /**
+         * Past the cache: this is the copy the caller's fields are merged onto
+         * and the consent watermark is kept from. A stale cached copy paired
+         * with a caller's fresh `_etag` would pass the IfMatch and write the
+         * stale watermark and fields back; read from Cosmos, a stale caller
+         * `_etag` fails with 412 instead.
+         */
+        const userDocument = await this.getUserByDisplayName(
+            user.displayName,
+            user.membershipType,
+            true,
+        );
 
         if (!userDocument) {
             throw new Error(

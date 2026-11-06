@@ -4,6 +4,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import AuthenticationMiddleWare from '../authentication/authentication.middleware.js';
 import UserController from './user.controller.js';
+import InvalidCipherError from './invalid-cipher.error.js';
 import InvalidPhoneNumberError from './invalid-phone-number.error.js';
 import csrfProtection, { generateToken } from '../helpers/csrf.middleware.js';
 import log from '../helpers/log.js';
@@ -289,7 +290,11 @@ const routes = ({
 
                 return res.status(StatusCodes.ACCEPTED).end();
             } catch (err) {
-                if (err instanceof Error && err.message.includes('not found')) {
+                /**
+                 * Exact: a provider error can say "not found" too (Twilio
+                 * 20404), and it is not the user's missing registration.
+                 */
+                if (err instanceof Error && err.message === 'registration not found') {
                     return res.status(StatusCodes.BAD_REQUEST).send('User registration not found.');
                 }
 
@@ -371,8 +376,12 @@ const routes = ({
                 });
 
                 return res.status(StatusCodes.NO_CONTENT).end();
-            } catch {
-                return res.status(StatusCodes.NOT_FOUND).send('Invalid cipher.');
+            } catch (err) {
+                if (err instanceof InvalidCipherError) {
+                    return res.status(StatusCodes.NOT_FOUND).send('Invalid cipher.');
+                }
+
+                throw err;
             }
         },
     );
