@@ -269,24 +269,31 @@ const twilioPreflightMiddleware = async (req, res, next) => {
 };
 
 /**
+ * The account a per-account limit charges: the session's `membershipType`
+ * and `displayName`, which `authenticateUser` requires. Not `membershipId`,
+ * which older records without Bungie data leave undefined, so they would all
+ * share one bucket.
+ * @param {import('express').Request} req
+ * @returns {string}
+ */
+const accountKey = req => {
+    const { displayName, membershipType } =
+        /** @type {import('../users/user.routes.js').AppSessionData} */ (
+            /** @type {unknown} */ (req.session)
+        );
+
+    return `${membershipType}:${displayName}`;
+};
+
+/**
  * Limit sign-ups per account. Runs after `authenticateUser`, so the session
- * has a membership.
+ * names an account.
  * @param {import('express').Request} req
  * @param {import('express').Response} res
  * @param {import('express').NextFunction} next
  */
 const signUpRateLimiterMiddleware = (req, res, next) =>
-    consumePoints(
-        signUpLimiter,
-        /** @type {string} */ (
-            /** @type {import('../users/user.routes.js').AppSessionData} */ (
-                /** @type {unknown} */ (req.session)
-            ).membershipId
-        ),
-        1,
-        res,
-        next,
-    );
+    consumePoints(signUpLimiter, accountKey(req), 1, res, next);
 
 /**
  * Charge a request to its account and channel. Runs after the route has
@@ -295,17 +302,7 @@ const signUpRateLimiterMiddleware = (req, res, next) =>
  * @returns {import('express').RequestHandler}
  */
 const perChannel = limiter => (req, res, next) =>
-    consumePoints(
-        limiter,
-        `${
-            /** @type {import('../users/user.routes.js').AppSessionData} */ (
-                /** @type {unknown} */ (req.session)
-            ).membershipId
-        }:${req.body.channel}`,
-        1,
-        res,
-        next,
-    );
+    consumePoints(limiter, `${accountKey(req)}:${req.body.channel}`, 1, res, next);
 
 /** Limit sign-up resends per account and channel. */
 const resendRateLimiterMiddleware = perChannel(resendLimiter);

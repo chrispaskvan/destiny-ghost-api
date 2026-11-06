@@ -1420,6 +1420,35 @@ describe('UserRouter', () => {
     });
 
     describe('POST /users/signUp rate limit', () => {
+        it.each([
+            ['an unusable phone number', { phoneNumber: '+86 10 1234 5678' }],
+            ['a missing field', { lastName: undefined }],
+        ])('should answer 422 for %s without spending the limit', async (_, change) => {
+            const done = new Promise(resolve => res.on('end', resolve));
+
+            userRouter(
+                createRequest({
+                    method: 'POST',
+                    url: '/signUp',
+                    headers: { 'x-csrf-token': csrfToken },
+                    session: { csrfToken, displayName, membershipType },
+                    body: {
+                        firstName: 'Ada',
+                        lastName: 'Lovelace',
+                        phoneNumber: '+12085550123',
+                        emailAddress: 'ada@example.com',
+                        ...change,
+                    },
+                }),
+                res,
+                next,
+            );
+            await done;
+
+            expect(res.statusCode).toEqual(StatusCodes.UNPROCESSABLE_ENTITY);
+            expect(rateLimiters.signUp).not.toHaveBeenCalled();
+        });
+
         it('should stop at the sign-up limit before reading, saving or sending', async () => {
             rateLimiters.signUp.mockImplementationOnce((_req, limited) =>
                 limited.status(StatusCodes.TOO_MANY_REQUESTS).end(),
@@ -1436,7 +1465,7 @@ describe('UserRouter', () => {
                     body: {
                         firstName: 'Ada',
                         lastName: 'Lovelace',
-                        phoneNumber: '+15555550100',
+                        phoneNumber: '+12085550123',
                         emailAddress: 'ada@example.com',
                     },
                 }),
@@ -1474,6 +1503,7 @@ describe('UserRouter', () => {
                     const user = {
                         displayName,
                         membershipType,
+                        dateRegistered: Temporal.Now.instant().toString(),
                         membership: {
                             tokens: {
                                 code,
@@ -1523,6 +1553,7 @@ describe('UserRouter', () => {
                     const user = {
                         displayName,
                         membershipType,
+                        dateRegistered: Temporal.Now.instant().toString(),
                         membership: {
                             tokens: {
                                 blob,
@@ -1590,6 +1621,7 @@ describe('UserRouter', () => {
                 userService.getUserByDisplayName.mockResolvedValueOnce({
                     displayName,
                     membershipType,
+                    dateRegistered: Temporal.Now.instant().toString(),
                     membership: { tokens: { code: '123456', timeStamp: Number.MAX_SAFE_INTEGER } },
                 });
 
@@ -1658,6 +1690,7 @@ describe('UserRouter', () => {
                     const user = {
                         displayName,
                         membershipType,
+                        dateRegistered: Temporal.Now.instant().toString(),
                         membership: {
                             tokens: {
                                 code: 'correct-code',
@@ -1703,6 +1736,7 @@ describe('UserRouter', () => {
                     const user = {
                         displayName,
                         membershipType,
+                        dateRegistered: Temporal.Now.instant().toString(),
                         membership: {
                             tokens: {
                                 code,

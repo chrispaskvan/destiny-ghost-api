@@ -105,7 +105,12 @@ describe('verification limits', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         cache.isReady = true;
-        req = { ip: '127.0.0.1', session: { membershipId: 'm-1' }, body: {}, headers: {} };
+        req = {
+            ip: '127.0.0.1',
+            session: { displayName: 'Ada', membershipType: 2, membershipId: 'm-1' },
+            body: {},
+            headers: {},
+        };
         res = { set: vi.fn(), status: vi.fn().mockReturnThis(), end: vi.fn() };
         next = vi.fn();
     });
@@ -118,12 +123,12 @@ describe('verification limits', () => {
         expect(limits('cipher-attempt')).toMatchObject({ points: 5, duration: 24 * 60 * 60 });
     });
 
-    it('charges a sign-up to the session membership', async () => {
+    it('charges a sign-up to the session account', async () => {
         signUpConsume.mockResolvedValueOnce({ remainingPoints: 4, msBeforeNext: 1000 });
 
         await signUpRateLimiterMiddleware(req, res, next);
 
-        expect(signUpConsume).toHaveBeenCalledExactlyOnceWith('m-1', 1);
+        expect(signUpConsume).toHaveBeenCalledExactlyOnceWith('2:Ada', 1);
         expect(next).toHaveBeenCalledExactlyOnceWith();
     });
 
@@ -133,7 +138,7 @@ describe('verification limits', () => {
 
         await resendRateLimiterMiddleware(req, res, next);
 
-        expect(resendConsume).toHaveBeenCalledExactlyOnceWith('m-1:phone', 1);
+        expect(resendConsume).toHaveBeenCalledExactlyOnceWith('2:Ada:phone', 1);
         expect(next).toHaveBeenCalledExactlyOnceWith();
     });
 
@@ -143,9 +148,27 @@ describe('verification limits', () => {
 
         await cipherRateLimiterMiddleware(req, res, next);
 
-        expect(cipherConsume).toHaveBeenCalledExactlyOnceWith('m-1:email', 1);
+        expect(cipherConsume).toHaveBeenCalledExactlyOnceWith('2:Ada:email', 1);
         expect(resendConsume).not.toHaveBeenCalled();
         expect(next).toHaveBeenCalledExactlyOnceWith();
+    });
+
+    it('keeps two accounts without a Bungie membership in separate buckets', async () => {
+        /**
+         * Older records leave `membershipId` undefined; keyed on it, every
+         * such account shared one bucket.
+         */
+        signUpConsume.mockResolvedValue({ remainingPoints: 4, msBeforeNext: 1000 });
+
+        for (const displayName of ['Ada', 'Grace']) {
+            await signUpRateLimiterMiddleware(
+                { ...req, session: { displayName, membershipType: 2 } },
+                res,
+                next,
+            );
+        }
+
+        expect(signUpConsume.mock.calls.map(([key]) => key)).toEqual(['2:Ada', '2:Grace']);
     });
 
     it('answers 429 with Retry-After once resends run out', async () => {

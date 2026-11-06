@@ -7,6 +7,7 @@ import UserController from './user.controller.js';
 import CipherAttemptsExceededError from './cipher-attempts-exceeded.error.js';
 import InvalidCipherError from './invalid-cipher.error.js';
 import InvalidPhoneNumberError from './invalid-phone-number.error.js';
+import cleanPhoneNumber from './clean-phone-number.js';
 import csrfProtection, { generateToken } from '../helpers/csrf.middleware.js';
 import log from '../helpers/log.js';
 
@@ -379,6 +380,7 @@ const routes = ({
     userRouter.route('/current/cryptarch').post(
         (req, res, next) => middleware.authenticateUser(req, res, next),
         csrfProtection,
+        requireChannel,
         async (req, res) => {
             try {
                 const {
@@ -387,12 +389,6 @@ const routes = ({
                 const { displayName, membershipType } = /** @type {AuthenticatedSessionData} */ (
                     /** @type {unknown} */ (req.session)
                 );
-
-                if (!channel || !['email', 'phone'].includes(channel)) {
-                    return res
-                        .status(StatusCodes.BAD_REQUEST)
-                        .send('Invalid channel. Must be "email" or "phone".');
-                }
 
                 await userController.decipher({
                     displayName,
@@ -648,47 +644,47 @@ const routes = ({
     userRouter.route('/signUp').post(
         (req, res, next) => middleware.authenticateUser(req, res, next),
         csrfProtection,
-        rateLimiters.signUp,
-        async (req, res) => {
-            const { displayName, membershipType } = /** @type {AuthenticatedSessionData} */ (
-                /** @type {unknown} */ (req.session)
-            );
-
+        /**
+         * The request is checked whole - fields, then the phone number -
+         * ahead of the sign-up limit, so a typo neither sends anything nor
+         * spends one of the hour's sign-ups. Nothing here depends on whether
+         * the address or number is registered, so a 422 reveals nothing.
+         */
+        (req, res, next) => {
             /**
              * Everything else about the account - who it belongs to, whether
              * it is registered, what it is subscribed to - is the server's to
              * decide. Rejecting rather than stripping unexpected fields means
              * an attempt to set one is visible instead of silently ignored.
              */
-            let contact;
-
             try {
-                contact = signUpSchema.parse(req.body);
+                const contact = signUpSchema.parse(req.body);
+
+                cleanPhoneNumber(contact.phoneNumber);
+                res.locals.contact = contact;
             } catch (err) {
                 const message =
-                    err instanceof z.ZodError ? err.issues[0].message : 'Unprocessable Entity';
+                    err instanceof z.ZodError
+                        ? err.issues[0].message
+                        : err instanceof InvalidPhoneNumberError
+                          ? err.message
+                          : 'Unprocessable Entity';
 
                 return res.status(StatusCodes.UNPROCESSABLE_ENTITY).json({ error: message });
             }
 
-            let signedUp;
-
-            try {
-                signedUp = await userController.signUp({ displayName, membershipType, contact });
-            } catch (err) {
-                /**
-                 * `#cleanPhoneNumber` throws on an unparseable number or a
-                 * barred region. It ran before any send or write, so this is a
-                 * rejected request rather than a failure.
-                 */
-                if (err instanceof InvalidPhoneNumberError) {
-                    return res
-                        .status(StatusCodes.UNPROCESSABLE_ENTITY)
-                        .json({ error: err.message });
-                }
-
-                throw err;
-            }
+            return next();
+        },
+        rateLimiters.signUp,
+        async (req, res) => {
+            const { displayName, membershipType } = /** @type {AuthenticatedSessionData} */ (
+                /** @type {unknown} */ (req.session)
+            );
+            const signedUp = await userController.signUp({
+                displayName,
+                membershipType,
+                contact: res.locals.contact,
+            });
 
             if (signedUp?.undelivered.length) {
                 log.warn(

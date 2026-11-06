@@ -285,6 +285,7 @@ describe('UserController', () => {
         };
         const decipher = (controller, seconds) => {
             userService.getUserByDisplayName.mockResolvedValueOnce({
+                dateRegistered: '2026-01-01T00:00:00.000Z',
                 membership: { tokens: tokensAged(seconds) },
             });
 
@@ -317,7 +318,11 @@ describe('UserController', () => {
             });
         });
 
-        it.each([0, -1, 1.5, '900', null, Number.NaN])(
+        it('should accept a day', () => {
+            expect(() => controllerWith(24 * 60 * 60)).not.toThrow();
+        });
+
+        it.each([0, -1, 1.5, '900', null, Number.NaN, 24 * 60 * 60 + 1])(
             'should refuse to start with %s',
             tokenTtlSeconds => {
                 expect(() => controllerWith(tokenTtlSeconds)).toThrow(
@@ -992,6 +997,12 @@ describe('UserController', () => {
                 expect(userController.postmaster.register).not.toHaveBeenCalled();
             });
 
+            it('should still send both when the manifest is unavailable', async () => {
+                worldRepository.getVendorIcon.mockRejectedValueOnce(new Error('503'));
+
+                await expect(signUp()).resolves.toEqual({ undelivered: [] });
+            });
+
             it('should report nothing undelivered when both messages go out', async () => {
                 await expect(signUp()).resolves.toEqual({ undelivered: [] });
             });
@@ -1151,6 +1162,7 @@ describe('UserController', () => {
             userService.getUserByDisplayName.mockResolvedValueOnce({
                 displayName,
                 membershipType,
+                dateRegistered: '2026-01-01T00:00:00.000Z',
                 membership: { tokens: { code: '123456', timeStamp: getEpoch() } },
             });
 
@@ -1190,6 +1202,7 @@ describe('UserController', () => {
                 userService.getUserByDisplayName.mockResolvedValue({
                     displayName,
                     membershipType,
+                    dateRegistered: '2026-01-01T00:00:00.000Z',
                     membership: { tokens: { code: '123456', timeStamp } },
                 });
             });
@@ -1199,13 +1212,74 @@ describe('UserController', () => {
                 allowCipherAttempt.mockReset().mockResolvedValue(true);
             });
 
-            it("should spend one of the code's attempts, keyed on its token", async () => {
+            it("should spend one of the code's attempts, keyed on its account and token", async () => {
                 await attempt('123456');
 
                 expect(allowCipherAttempt).toHaveBeenCalledExactlyOnceWith(
-                    `${membershipType}:${displayName}:${timeStamp}`,
+                    expect.stringMatching(
+                        new RegExp(`^${membershipType}:${displayName}:[0-9a-f]{64}$`),
+                    ),
                 );
+                /** The code itself never reaches Redis. */
+                expect(allowCipherAttempt.mock.calls[0][0]).not.toContain('123456');
             });
+
+            it('should count two codes minted in the same second apart', async () => {
+                await attempt('123456');
+                userService.getUserByDisplayName.mockResolvedValue({
+                    displayName,
+                    membershipType,
+                    dateRegistered: '2026-01-01T00:00:00.000Z',
+                    membership: { tokens: { code: '654321', timeStamp } },
+                });
+                await attempt('654321');
+
+                const [[first], [second]] = allowCipherAttempt.mock.calls;
+
+                expect(first).not.toEqual(second);
+            });
+
+            it.each([
+                ['tokens were saved', { tokens: { blob: 'b', code: '123456', timeStamp } }],
+                ['a conflict saved none', undefined],
+            ])(
+                'should refuse an unregistered account before spending an attempt when %s',
+                async (_, membership) => {
+                    /**
+                     * Both answer 404 for ever, so the attempt limit can't tell
+                     * a saved sign-up from one that hit a conflict.
+                     */
+                    userService.getUserByDisplayName.mockResolvedValue({
+                        displayName,
+                        membershipType,
+                        membership,
+                    });
+
+                    for (let i = 0; i < 6; i++) {
+                        await expect(attempt('000000')).rejects.toBeInstanceOf(InvalidCipherError);
+                    }
+                    expect(allowCipherAttempt).not.toHaveBeenCalled();
+                },
+            );
+
+            it.each([
+                ['email', { code: '123456' }],
+                ['phone', { blob: 'some-blob' }],
+            ])(
+                'should refuse %s with no code when only the other channel has a token',
+                async (channel, held) => {
+                    userService.getUserByDisplayName.mockResolvedValue({
+                        displayName,
+                        membershipType,
+                        dateRegistered: '2026-01-01T00:00:00.000Z',
+                        membership: { tokens: { ...held, timeStamp } },
+                    });
+
+                    await expect(
+                        userController.decipher({ displayName, membershipType, channel }),
+                    ).rejects.toBeInstanceOf(InvalidCipherError);
+                },
+            );
 
             it('should spend an attempt on a wrong code too', async () => {
                 await expect(attempt('000000')).rejects.toBeInstanceOf(InvalidCipherError);
@@ -1223,6 +1297,7 @@ describe('UserController', () => {
                 userService.getUserByDisplayName.mockResolvedValue({
                     displayName,
                     membershipType,
+                    dateRegistered: '2026-01-01T00:00:00.000Z',
                     membership: { tokens: { code: '123456', timeStamp: 1 } },
                 });
 
@@ -1355,6 +1430,26 @@ describe('UserController', () => {
             expect(logInfo).toHaveBeenCalledWith(
                 { displayName, membershipType, channel: 'phone' },
                 'No pending sign-up to resend.',
+            );
+        });
+
+        it('should still send, without an icon, when the manifest is unavailable', async () => {
+            /**
+             * Only the path with a sign-up to send for looks the icon up, so
+             * a 503 here would answer differently from a conflict.
+             */
+            worldRepository.getVendorIcon.mockRejectedValueOnce(
+                Object.assign(new Error('manifest unavailable'), { statusCode: 503 }),
+            );
+
+            await expect(resend('email')).resolves.toBeUndefined();
+
+            const [, image] = userController.postmaster.register.mock.calls[0];
+
+            expect(image).toBeUndefined();
+            expect(logWarn).toHaveBeenCalledWith(
+                { err: expect.any(Error) },
+                'No vendor icon for the verification message.',
             );
         });
 
