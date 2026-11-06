@@ -629,9 +629,9 @@ const routes = ({
      *          description: >
      *            No Content. Returned whether or not this account, address or number was
      *            already registered, and whether or not the verification messages could be
-     *            sent, so a conflict is not disclosed. A registered account changes its
-     *            contact with PATCH /users instead; signing up sends it nothing. Signing up
-     *            again sends new codes on both channels and replaces the earlier ones.
+     *            sent, so a conflict is not disclosed. A registered account can't change its
+     *            contact by signing up; it is sent nothing. Signing up again sends new codes
+     *            on both channels and replaces the earlier ones.
      *        403:
      *          description: Forbidden. Missing or invalid CSRF token.
      *        422:

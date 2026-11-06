@@ -673,10 +673,11 @@ class UserController {
         const phoneNumber = cleanPhoneNumber(contact.phoneNumber);
 
         /**
-         * Sign-up is first registration only. A registered account changes
-         * its contact through `PATCH /users` and the cipher checks; letting it
-         * through here would replace verified contact with unverified
-         * contact before anything is checked. Checked after the phone
+         * Sign-up is first registration only. A registered account can't
+         * change its contact here (nor, today, anywhere: `PATCH /users`
+         * accepts names and notification flags only); letting it through
+         * would replace verified contact with unverified contact before
+         * anything is checked. Checked after the phone
          * number, so a number that cannot be used still answers 422: that
          * describes the caller's own input, not anyone's registration.
          */

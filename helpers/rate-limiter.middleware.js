@@ -315,8 +315,11 @@ const cipherRateLimiterMiddleware = perChannel(cipherLimiter);
  * compared, so parallel guesses can't all slip past a check that only
  * recorded failures afterwards.
  *
- * Fails open, like every bucket here: with Redis unavailable, guessing is
- * bounded by the global limit alone.
+ * Fails open, like every bucket here. When the client isn't ready, sessions
+ * (`helpers/store.js`, the same client) fail too, so the request never
+ * authenticates. A single command failing on a connected client lets that
+ * attempt through with no limit at all, since the global bucket fails open
+ * the same way.
  * @param {string} key - names the token being tried
  * @returns {Promise<boolean>} false once the code's attempts are spent
  */
