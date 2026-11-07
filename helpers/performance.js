@@ -1,5 +1,4 @@
 // @ts-check
-import { createHook } from 'node:async_hooks';
 import { subscribe, unsubscribe } from 'node:diagnostics_channel';
 import { performance } from 'node:perf_hooks';
 
@@ -21,48 +20,87 @@ const elapsed = start => Math.round((performance.now() - start) * 1000) / 1000;
  * the request that made it. Set by `enable()`.
  */
 let logEach = false;
+/** Whether the channels are subscribed. Set by `enable()`. */
+let subscribed = false;
 
 /**
- * The request-scoped logger, read when a measurement starts. Read when it
- * completes instead, it is whatever context the completing callback runs in:
- * for a DNS lookup, that is none, so the lookup was logged without the
- * traceId of the request that caused it.
+ * Whether each measurement is logged by default: `PERFORMANCE_LOG` when it is
+ * `true` or `false`, and otherwise only in development. Every measurement is
+ * recorded against its request either way.
+ *
+ * @param {{ PERFORMANCE_LOG?: string, NODE_ENV?: string }} [env]
+ */
+const logsEach = ({ PERFORMANCE_LOG, NODE_ENV } = process.env) =>
+    PERFORMANCE_LOG === 'true' || PERFORMANCE_LOG === 'false'
+        ? PERFORMANCE_LOG === 'true'
+        : NODE_ENV === 'development';
+
+/**
+ * The request-scoped logger, read when a measurement starts, so that it
+ * belongs to the request that started it whatever context completes it.
  */
 const requestLogger = () => context.getStore()?.get('logger') ?? log;
 
 /**
- * Node publishes no diagnostics channel for DNS lookups, so they are the one
- * thing still timed with an async hook. Only enabled when each measurement is
- * logged: an init hook runs for every async resource the process creates.
- * @type {Map<number, { entry: string, start: number, logger: import('pino').Logger }>}
+ * Bumped on disable, so a lookup started before it is dropped when it
+ * completes: the socket still holds its listener.
  */
-const lookups = new Map();
-const hook = createHook({
-    init(id, type, _triggerID, resource) {
-        if (type === 'GETADDRINFOREQWRAP') {
-            lookups.set(id, {
-                entry: `DNS Lookup: ${/** @type {{ hostname: string }} */ (resource).hostname}`,
-                start: performance.now(),
-                logger: requestLogger(),
-            });
+let generation = 0;
+/**
+ * Times the socket's DNS lookup. Node publishes no diagnostics channel for
+ * DNS, but every client socket - node:http, node:https, node:http2 and
+ * fetch's - is published on net.client.socket before it looks its host up,
+ * and emits 'lookup' once the lookup completes, failed or not.
+ *
+ * A client that resolves the host itself and dials the address, or hands the
+ * socket a `lookup` of its own, is timed by what the socket sees: nothing, or
+ * that `lookup`. nodemailer does both, so SMTP lookups are missing or near 0.
+ *
+ * A lookup belongs to the context its socket is created in: the request that
+ * needed the connection, unless a pool opens it on another one's behalf.
+ *
+ * @param {import('node:net').Socket} socket
+ */
+const startLookup = socket => {
+    const started = generation;
+    const logThis = logEach;
+    const start = performance.now();
+    const logger = requestLogger();
+    const requestLookups = context.getStore()?.get('lookups');
+    /**
+     * @param {Error | null} error
+     * @param {string} _address
+     * @param {number} _family
+     * @param {string} host
+     */
+    const complete = (error, _address, _family, host) => {
+        socket.off('connect', release);
+        if (started !== generation) {
+            return;
         }
-    },
-    destroy(id) {
-        const lookup = lookups.get(id);
 
-        if (lookup) {
-            lookups.delete(id);
-            lookup.logger.info(
-                { entry: lookup.entry, duration: elapsed(lookup.start) },
+        const duration = elapsed(start);
+
+        requestLookups?.push({ host, duration, ...(error && { error: error.message }) });
+        if (logThis) {
+            logger.info(
+                { entry: `DNS Lookup: ${host}`, duration, error: error?.message },
                 'Performance Measurement',
             );
         }
-    },
-});
+    };
+    // A socket connected without a lookup (to an address) lets go of the
+    // request it was opened in
+    const release = () => socket.off('lookup', complete);
+
+    // A host with several addresses emits 'lookup' for each one; the first
+    // completes the lookup
+    socket.once('lookup', complete).once('connect', release);
+};
 
 /**
  * @typedef {object} PendingRequest
- * @property {string} entry
+ * @property {string} [entry] - built only when it will be logged
  * @property {string} host
  * @property {number} start
  * @property {import('pino').Logger} logger
@@ -82,7 +120,8 @@ const hook = createHook({
 let requests = new WeakMap();
 /**
  * The URL is censored here because Pino's redaction works on object paths and
- * cannot see a credential inside the query string of `entry`.
+ * cannot see a credential inside the query string of `entry`, which is built
+ * only when the request will be logged on its own.
  *
  * @param {object} key
  * @param {string} method
@@ -90,7 +129,7 @@ let requests = new WeakMap();
  */
 const startRequest = (key, method, url) => {
     requests.set(key, {
-        entry: `HTTP Request: ${method} ${redactUrl(url)}`,
+        ...(logEach && { entry: `HTTP Request: ${method} ${redactUrl(url)}` }),
         host: URL.parse(url)?.host ?? '',
         start: performance.now(),
         logger: requestLogger(),
@@ -162,7 +201,8 @@ const completeRequest = (key, error) => {
             duration,
             ...(error && { error: error.message }),
         });
-        if (logEach) {
+        // An entry is built only when logging was on as the request started
+        if (logEach && request.entry) {
             request.logger.info(
                 {
                     entry: request.entry,
@@ -188,6 +228,12 @@ const completeRequest = (key, error) => {
  */
 /** @type {Array<[string, (message: any) => void]>} */
 const channels = [
+    // DNS lookups, from every client
+    [
+        'net.client.socket',
+        /** @param {{ socket: import('node:net').Socket }} message */
+        ({ socket }) => startLookup(socket),
+    ],
     // node:http and node:https (axios, Twilio, Cosmos, Application Insights, ...)
     [
         'http.client.request.start',
@@ -271,27 +317,31 @@ const channels = [
 
 export default {
     /**
-     * Times every outbound HTTP request, recording each against the inbound
-     * request that made it so httpLog can summarize them.
+     * Times every outbound HTTP request and DNS lookup, recording each
+     * against the inbound request that made it so httpLog can summarize them.
      *
      * @param {{ log?: boolean }} [options] - also log each request, and each
      * DNS lookup, as it completes
      */
     enable({ log: logEachRequest = true } = {}) {
         logEach = logEachRequest;
-        if (logEach) {
-            hook.enable();
-        }
-        for (const [name, onMessage] of channels) {
-            subscribe(name, onMessage);
+        // A channel takes the same subscriber twice, and each lookup would
+        // then be timed twice
+        if (!subscribed) {
+            subscribed = true;
+            for (const [name, onMessage] of channels) {
+                subscribe(name, onMessage);
+            }
         }
     },
     disable() {
-        hook.disable();
+        subscribed = false;
         for (const [name, onMessage] of channels) {
             unsubscribe(name, onMessage);
         }
-        lookups.clear();
+        generation += 1;
         requests = new WeakMap();
     },
 };
+
+export { logsEach };

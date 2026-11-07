@@ -13,7 +13,7 @@ vi.mock('./log.js', () => ({
 }));
 
 import context from './async-context.js';
-import { requestSerializer, summarizeDependencies } from './httpLog.js';
+import { requestSerializer, summarizeDependencies, summarizeLookups } from './httpLog.js';
 import { censor } from './redact.js';
 
 const chance = new Chance();
@@ -153,6 +153,58 @@ describe('summarizeDependencies', () => {
     it('should count a failure whose error has no message', () => {
         expect(summarizeWith([{ host: 'www.bungie.net', duration: 12, error: '' }])).toEqual([
             { host: 'www.bungie.net', calls: 1, duration: 12, errors: 1 },
+        ]);
+    });
+});
+
+describe('summarizeLookups', () => {
+    /** @param {import('./async-context.js').Timing[]} [lookups] */
+    const summarizeWith = lookups =>
+        context.run(
+            // @ts-expect-error - only the lookups are read
+            new Map(lookups && [['lookups', lookups]]),
+            summarizeLookups,
+        );
+
+    it('should leave the field out when the request made no lookups', () => {
+        expect(summarizeWith([])).toBeUndefined();
+        expect(summarizeWith()).toBeUndefined();
+        expect(summarizeLookups()).toBeUndefined();
+    });
+
+    it('should total the lookups of each host, apart from the calls', () => {
+        expect(
+            context.run(
+                // @ts-expect-error - only the timings and lookups are read
+                new Map([
+                    ['timings', [{ host: 'www.bungie.net', duration: 400 }]],
+                    [
+                        'lookups',
+                        [
+                            { host: 'www.bungie.net', duration: 20.4 },
+                            { host: 'api.twilio.com', duration: 3.2 },
+                            {
+                                host: 'www.bungie.net',
+                                duration: 10.4,
+                                error: 'getaddrinfo EAI_AGAIN',
+                            },
+                        ],
+                    ],
+                ]),
+                () => ({ dependencies: summarizeDependencies(), dns: summarizeLookups() }),
+            ),
+        ).toEqual({
+            dependencies: [{ host: 'www.bungie.net', calls: 1, duration: 400, errors: 0 }],
+            dns: [
+                { host: 'www.bungie.net', lookups: 2, duration: 31, errors: 1 },
+                { host: 'api.twilio.com', lookups: 1, duration: 3, errors: 0 },
+            ],
+        });
+    });
+
+    it('should count a failure whose error has no message', () => {
+        expect(summarizeWith([{ host: 'www.bungie.net', duration: 12, error: '' }])).toEqual([
+            { host: 'www.bungie.net', lookups: 1, duration: 12, errors: 1 },
         ]);
     });
 });
