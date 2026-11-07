@@ -302,10 +302,10 @@ describe('performance', () => {
             const origin = `https://localhost:${securePort}`;
 
             await inRequest(async () => {
-                await new Promise(resolve => {
+                await new Promise((resolve, reject) => {
                     getSecure(`${origin}/lookup/https`, { agent: false }, res =>
                         res.resume().on('close', resolve),
-                    );
+                    ).on('error', reject);
                 });
                 const session = connect(origin);
                 const stream = session.request({ ':path': '/lookup/http2' });
@@ -522,11 +522,7 @@ describe('performance', () => {
         expect(log.info).not.toHaveBeenCalled();
     });
 
-    /**
-     * Logging changes only with another enable(), which subscribes the
-     * channels a second time: disable() drops what is in flight. The second
-     * disable() unsubscribes them again, ahead of afterEach's.
-     */
+    /** Logging changes with another enable(); disable() drops what is in flight. */
     it('should not log a request that started before logging was turned on', async () => {
         performanceHook.disable();
         performanceHook.enable({ log: false });
@@ -537,9 +533,45 @@ describe('performance', () => {
                 res.resume().on('close', resolve);
             });
         });
-        performanceHook.disable();
 
         expect(log.info).not.toHaveBeenCalled();
+    });
+
+    it('should not log a lookup that started before logging was turned on', async () => {
+        performanceHook.disable();
+        performanceHook.enable({ log: false });
+
+        await new Promise(resolve => {
+            get(
+                `http://localhost:${port}/lookup/turned-on`,
+                {
+                    agent: false,
+                    lookup: (hostname, options, callback) => {
+                        performanceHook.enable();
+                        dnsLookup(hostname, options, callback);
+                    },
+                },
+                res => res.resume().on('close', resolve),
+            );
+        });
+
+        expect(loggedFields('DNS Lookup: localhost')).toBeUndefined();
+    });
+
+    it('should time each lookup once, however often it is enabled', async () => {
+        performanceHook.enable();
+
+        await new Promise(resolve => {
+            get(`http://localhost:${port}/lookup/twice`, { agent: false }, res =>
+                res.resume().on('close', resolve),
+            );
+        });
+
+        expect(
+            vi
+                .mocked(log.info)
+                .mock.calls.filter(([{ entry }]) => entry === 'DNS Lookup: localhost'),
+        ).toHaveLength(1);
     });
 
     it('should not log a response that completes after being disabled', async () => {

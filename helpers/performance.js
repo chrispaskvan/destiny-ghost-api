@@ -20,6 +20,8 @@ const elapsed = start => Math.round((performance.now() - start) * 1000) / 1000;
  * the request that made it. Set by `enable()`.
  */
 let logEach = false;
+/** Whether the channels are subscribed. Set by `enable()`. */
+let subscribed = false;
 
 /**
  * Whether each measurement is logged by default: `PERFORMANCE_LOG` when it is
@@ -54,10 +56,14 @@ let generation = 0;
  * socket a `lookup` of its own, is timed by what the socket sees: nothing, or
  * that `lookup`. nodemailer does both, so SMTP lookups are missing or near 0.
  *
+ * A lookup belongs to the context its socket is created in: the request that
+ * needed the connection, unless a pool opens it on another one's behalf.
+ *
  * @param {import('node:net').Socket} socket
  */
 const startLookup = socket => {
     const started = generation;
+    const logThis = logEach;
     const start = performance.now();
     const logger = requestLogger();
     const requestLookups = context.getStore()?.get('lookups');
@@ -76,7 +82,7 @@ const startLookup = socket => {
         const duration = elapsed(start);
 
         requestLookups?.push({ host, duration, ...(error && { error: error.message }) });
-        if (logEach) {
+        if (logThis) {
             logger.info(
                 { entry: `DNS Lookup: ${host}`, duration, error: error?.message },
                 'Performance Measurement',
@@ -319,11 +325,17 @@ export default {
      */
     enable({ log: logEachRequest = true } = {}) {
         logEach = logEachRequest;
-        for (const [name, onMessage] of channels) {
-            subscribe(name, onMessage);
+        // A channel takes the same subscriber twice, and each lookup would
+        // then be timed twice
+        if (!subscribed) {
+            subscribed = true;
+            for (const [name, onMessage] of channels) {
+                subscribe(name, onMessage);
+            }
         }
     },
     disable() {
+        subscribed = false;
         for (const [name, onMessage] of channels) {
             unsubscribe(name, onMessage);
         }

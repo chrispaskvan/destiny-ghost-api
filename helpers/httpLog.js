@@ -97,7 +97,8 @@ const summarizeDependencies = () => summarizeByHost(context.getStore()?.get('tim
 
 /**
  * The DNS lookups made while handling this request, one entry per hostname,
- * apart from `dependencies` because their time is already inside the calls'.
+ * apart from `dependencies`: an HTTP call's lookup is already inside its
+ * duration, and a lookup for Redis, Cosmos or SMTP has no call to sit in.
  * Undefined when there were none - the usual case, since a pooled connection
  * needs no lookup.
  */
