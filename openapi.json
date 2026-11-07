@@ -693,8 +693,9 @@
     },
     "/users/join": {
       "post": {
-        "summary": "Confirm the user.",
+        "summary": "Confirm a sign-up.",
         "operationId": "join",
+        "description": "Checks the emailed token and the SMS code from the session's own pending sign-up, then makes the pending contact the account's contact. A first sign-up registers the account; a registered account's sign-up changes its contact.\n",
         "tags": [
           "Users"
         ],
@@ -735,10 +736,10 @@
         },
         "responses": {
           "200": {
-            "description": "User joined successfully."
+            "description": "Joined. The pending contact is now the account's contact."
           },
           "400": {
-            "description": "Bad request."
+            "description": "Bad Request. No pending sign-up for this session matches the token and code, it has expired, or another account has since registered the email address or phone number. Sign up again.\n"
           },
           "403": {
             "description": "Forbidden. Missing or invalid CSRF token."
@@ -829,7 +830,7 @@
         "description": "Sign up for the service with a first name, last name, phone number, and email address. These are the only accepted fields; every other property of an account is server-owned and assigned during verification, so a request carrying one is rejected rather than ignored.\n",
         "responses": {
           "204": {
-            "description": "No Content. Returned whether or not this account, address or number was already registered, and whether or not the verification messages could be sent, so a conflict is not disclosed. A registered account can't change its contact by signing up; it is sent nothing. Signing up again sends new codes on both channels and replaces the earlier ones.\n"
+            "description": "No Content. Returned whether or not the address or number is registered to another account, and whether or not the verification messages could be sent, so a conflict is not disclosed. The contact is held as pending until POST /users/join confirms both codes; a registered account changes its contact this way, and keeps its current contact until then. Signing up again sends new codes on both channels and replaces the earlier ones.\n"
           },
           "403": {
             "description": "Forbidden. Missing or invalid CSRF token."

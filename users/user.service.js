@@ -892,6 +892,27 @@ class UserService {
     }
 
     /**
+     * Whether a sign-up not yet joined is waiting on this number. Its
+     * contact sits under `membership.pending`, which ordinary lookups don't
+     * read: they hold verified contact only. Kept separate for the one
+     * caller that needs it, the status callback, so a verification SMS's
+     * delivery reports are still recorded.
+     * @param {string} phoneNumber
+     * @returns {Promise<boolean>}
+     */
+    async hasPendingSignUp(phoneNumber) {
+        const documents = await this.documents.getDocuments(
+            userCollectionId,
+            new QueryBuilder()
+                .select('id')
+                .where('membership.pending.phoneNumber', phoneNumber)
+                .getQuery(),
+        );
+
+        return documents.length > 0;
+    }
+
+    /**
      * Whether the account behind a number is part way through a platform move:
      * it has documents, and every one is marked `movedTo`. `movePlatform`
      * marks the old copy before creating the new one, so this is the gap
@@ -1264,12 +1285,44 @@ class UserService {
             );
         }
 
-        const { consentUpdatedAt } = userDocument;
+        const { consentUpdatedAt, emailAddress, phoneNumber } = userDocument;
 
         Object.assign(userDocument, user);
-        preserveConsentWatermark(userDocument, { consentUpdatedAt });
+        /**
+         * The watermark belongs to the number. A write that changes the
+         * number (`join` promoting a re-sign-up) drops the old one's: kept,
+         * it would let the old number's last change outrank the new
+         * number's, so a delayed STOP sent from the new number could lose.
+         * Dropping can only lower it, never plant one.
+         */
+        preserveConsentWatermark(
+            userDocument,
+            phoneNumber === userDocument.phoneNumber ? { consentUpdatedAt } : undefined,
+        );
 
-        return this.#replaceAndCache(userDocument, /** @type {number} */ (user.membershipType));
+        await this.#replaceAndCache(userDocument, /** @type {number} */ (user.membershipType));
+
+        /**
+         * A contact change (`join` promoting a re-sign-up) leaves the cache's
+         * pointer keys for the old email and phone pointing at this user for
+         * up to an hour, so a lookup by the old number would still find them.
+         * Dropped after the write, which has already cached the new ones.
+         */
+        const stale = {
+            emailAddress: emailAddress !== userDocument.emailAddress ? emailAddress : undefined,
+            phoneNumber: phoneNumber !== userDocument.phoneNumber ? phoneNumber : undefined,
+        };
+
+        if (stale.emailAddress || stale.phoneNumber) {
+            try {
+                await this.cacheService.deleteUser(stale);
+            } catch (err) {
+                log.warn(
+                    { err, userId: userDocument.id },
+                    "Failed to drop the user's old contact from the cache.",
+                );
+            }
+        }
     }
 
     /**

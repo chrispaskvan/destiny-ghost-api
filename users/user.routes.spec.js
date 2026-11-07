@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { StatusCodes } from 'http-status-codes';
 import Chance from 'chance';
 import { createResponse, createRequest } from 'node-mocks-http';
+import UserController from './user.controller.js';
 import UserRouter from './user.routes.js';
 import UserService from './user.service.js';
 
@@ -66,6 +67,7 @@ const userService = {
     getUserByEmailAddress: vi.fn(),
     getUserByMembershipId: vi.fn(),
     getUserByPhoneNumber: vi.fn(),
+    updateAnonymousUser: vi.fn(),
     updateUser: vi.fn(),
 };
 const worldRepository = {
@@ -73,6 +75,7 @@ const worldRepository = {
 };
 
 const allowCipherAttempt = vi.fn().mockResolvedValue(true);
+const readConsent = vi.fn().mockResolvedValue(undefined);
 /** Stand-ins for the per-account limits; their own specs are with the limiter. */
 const rateLimiters = {
     signUp: vi.fn((_req, _res, next) => next()),
@@ -85,6 +88,7 @@ let userRouter;
 beforeEach(() => {
     userRouter = UserRouter({
         allowCipherAttempt,
+        readConsent,
         rateLimiters,
         authenticationController,
         destinyService,
@@ -452,7 +456,8 @@ describe('UserRouter', () => {
                 res.on('end', () => {
                     try {
                         expect(res.statusCode).toEqual(StatusCodes.NO_CONTENT);
-                        expect(userService.updateUser).toHaveBeenCalled();
+                        /** Unregistered, so written without top-level contact. */
+                        expect(userService.updateAnonymousUser).toHaveBeenCalled();
                         expect(postmasterRegister).toHaveBeenCalled();
                         done();
                     } catch (err) {
@@ -559,6 +564,7 @@ describe('UserRouter', () => {
                          */
                         expect(res.statusCode).toEqual(StatusCodes.NO_CONTENT);
                         expect(userService.updateUser).not.toHaveBeenCalled();
+                        expect(userService.updateAnonymousUser).not.toHaveBeenCalled();
                         expect(notificationService.sendMessage).not.toHaveBeenCalled();
                         expect(postmasterRegister).not.toHaveBeenCalled();
                         done();
@@ -922,6 +928,7 @@ describe('UserRouter', () => {
                 };
                 const router = UserRouter({
                     allowCipherAttempt,
+                    readConsent,
                     rateLimiters,
                     authenticationController,
                     destinyService,
@@ -1292,6 +1299,48 @@ describe('UserRouter', () => {
                 expect(userService.updateUser).not.toHaveBeenCalled();
                 expect(notificationService.sendMessage).not.toHaveBeenCalled();
             });
+        });
+    });
+
+    describe('POST /users/join', () => {
+        it("should join the session's own account", async () => {
+            const joinSpy = vi.spyOn(UserController.prototype, 'join').mockResolvedValueOnce({});
+            const done = new Promise(resolve => res.on('end', resolve));
+
+            /** Built after the spy, so its controller calls through it. */
+            UserRouter({
+                allowCipherAttempt,
+                readConsent,
+                rateLimiters,
+                authenticationController,
+                destinyService,
+                notificationService,
+                userService,
+                worldRepository,
+            })(
+                createRequest({
+                    method: 'POST',
+                    url: '/join',
+                    headers: { 'x-csrf-token': csrfToken },
+                    session: { csrfToken, displayName, membershipType },
+                    body: {
+                        displayName: 'someone-else',
+                        tokens: { emailAddress: 'blob', phoneNumber: '424242' },
+                    },
+                }),
+                res,
+                next,
+            );
+            await done;
+
+            /** The account comes from the session, never the body. */
+            expect(joinSpy).toHaveBeenCalledExactlyOnceWith({
+                displayName,
+                membershipType,
+                tokens: { emailAddress: 'blob', phoneNumber: '424242' },
+            });
+            expect(res.statusCode).toEqual(StatusCodes.OK);
+            joinSpy.mockRestore();
         });
     });
 

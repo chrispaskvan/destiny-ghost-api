@@ -48,6 +48,7 @@ const mmsService = { process: vi.fn() };
 const userService = {
     addUserMessage: vi.fn(),
     getUserByPhoneNumber: vi.fn(),
+    hasPendingSignUp: vi.fn().mockResolvedValue(false),
     updateUserSubscription: vi.fn(),
 };
 const worldRepository = {
@@ -685,6 +686,25 @@ describe('TwilioController', () => {
             expect(userService.addUserMessage).not.toHaveBeenCalled();
         });
 
+        it("should record a pending sign-up's verification SMS reports", async () => {
+            /**
+             * The number is pending, so the verified-only lookup misses it;
+             * its reports are kept all the same.
+             */
+            userService.getUserByPhoneNumber.mockResolvedValue(undefined);
+            userService.hasPendingSignUp.mockResolvedValueOnce(true);
+
+            await twilioController.statusCallback({
+                To: phoneNumber,
+                MessageStatus: 'delivered',
+            });
+
+            expect(userService.hasPendingSignUp).toHaveBeenCalledWith(phoneNumber);
+            expect(userService.addUserMessage).toHaveBeenCalledWith(
+                expect.objectContaining({ SmsStatus: 'delivered' }),
+            );
+        });
+
         it('should record the delivery outcome against the message', async () => {
             await twilioController.statusCallback({
                 To: phoneNumber,
@@ -741,6 +761,26 @@ describe('TwilioController', () => {
             expect(ClaimCheck.advance).toHaveBeenCalledWith('cc1', phoneNumber, {
                 status: 'sent',
             });
+        });
+
+        it("should settle the claim check when the number is no longer the recipient's", async () => {
+            /**
+             * The recipient changed numbers after the send. The receipt is
+             * matched by the message, so it still settles; the audit trail
+             * stays with numbers an account holds.
+             */
+            userService.getUserByPhoneNumber.mockResolvedValue(undefined);
+
+            await twilioController.statusCallback({
+                To: phoneNumber,
+                MessageStatus: 'delivered',
+                ClaimCheck: 'cc1',
+            });
+
+            expect(ClaimCheck.advance).toHaveBeenCalledWith('cc1', phoneNumber, {
+                status: 'delivered',
+            });
+            expect(userService.addUserMessage).not.toHaveBeenCalled();
         });
 
         it('should leave the claim check alone when none is given', async () => {

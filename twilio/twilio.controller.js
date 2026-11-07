@@ -718,24 +718,35 @@ class TwilioController {
             return;
         }
 
-        const user = await this.users.getUserByPhoneNumber(phoneNumber);
+        /**
+         * A pending sign-up's number isn't in the verified-only lookup, but
+         * its verification SMS's reports are kept like any other's.
+         */
+        const known =
+            Boolean(await this.users.getUserByPhoneNumber(phoneNumber)) ||
+            (await this.users.hasPendingSignUp(phoneNumber));
 
-        if (user) {
+        if (known) {
             await this.users.addUserMessage(
                 /** @type {Omit<import('../users/user.service.js').UserMessage, 'id'>} */ ({
                     ...message,
                     SmsStatus: status,
                 }),
             );
-            /**
-             * The receipt is only the latest word; every report is kept above,
-             * in arrival order (`adr-files/twilio-message-status.md`). These
-             * arrive out of order and sometimes twice, so the receipt moves
-             * forward only, and only for the message it is tracking.
-             */
-            if (claimCheck) {
-                await ClaimCheck.advance(claimCheck, phoneNumber, { status, sid });
-            }
+        }
+
+        /**
+         * The receipt is only the latest word; every report is kept above,
+         * in arrival order (`adr-files/twilio-message-status.md`). These
+         * arrive out of order and sometimes twice, so the receipt moves
+         * forward only, and only for the message it is tracking.
+         *
+         * Matched by the message, not by who holds the number now: a report
+         * arriving after the recipient changed numbers still settles it.
+         * `advance` never creates an entry, so this can't add one.
+         */
+        if (claimCheck) {
+            await ClaimCheck.advance(claimCheck, phoneNumber, { status, sid });
         }
     }
 }
