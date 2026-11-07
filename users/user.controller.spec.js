@@ -19,10 +19,15 @@ const { logError, logInfo, logWarn } = vi.hoisted(() => ({
 vi.mock('../helpers/bungie.request.js');
 vi.mock('../helpers/log.js', () => ({
     default: {
-        child: vi.fn(bindings => ({ bindings: () => bindings })),
         error: logError,
         info: logInfo,
         warn: logWarn,
+    },
+    /** As the real one does, with a stand-in that only knows its bindings. */
+    runWithBindings: async (bindings, fn) => {
+        const { default: context } = await import('../helpers/async-context.js');
+
+        return context.run(new Map([['logger', { bindings: () => bindings }]]), fn);
     },
 }));
 vi.mock('../helpers/postmaster.js', () => ({

@@ -10,10 +10,9 @@ import { applyPatch, createPatch } from 'rfc6902';
 import cleanPhoneNumber from './clean-phone-number.js';
 import { limitConcurrency, QUEUE_NAME as SIGN_UP_QUEUE } from './sign-up.queue.js';
 import TOKEN_TTL_SECONDS from './token-ttl.js';
-import context from '../helpers/async-context.js';
 import Postmaster from '../helpers/postmaster.js';
 import getEpoch from '../helpers/get-epoch.js';
-import log from '../helpers/log.js';
+import log, { runWithBindings } from '../helpers/log.js';
 import subscriber from '../helpers/subscriber.js';
 import { getBlob, getCode } from '../helpers/tokens.js';
 import { postmasterHash } from '../destiny/destiny.constants.js';
@@ -154,9 +153,8 @@ class UserController {
      */
     #work(body, properties, job) {
         const traceId = job.data?.applicationProperties?.traceId;
-        const store = new Map([['logger', log.child({ traceId, jobId: job.id })]]);
 
-        return context.run(/** @type {*} */ (store), () => this.#run(body, properties, job));
+        return runWithBindings({ traceId, jobId: job.id }, () => this.#run(body, properties, job));
     }
 
     /**

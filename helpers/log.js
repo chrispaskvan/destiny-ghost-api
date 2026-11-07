@@ -72,5 +72,28 @@ const contextMiddleware = (_req, _res, next) => {
     return context.run(store, next);
 };
 
+/**
+ * Run `fn` with a child of the root logger as the context logger, so every
+ * line logged through `log` while it runs carries `bindings`, the way a
+ * request's lines carry its traceId. For work outside a request, such as a
+ * queued job.
+ *
+ * The child is made from the root logger, never from `log`: a Pino child's
+ * prototype is the logger `child()` was called on, so a child of the proxy,
+ * once it is the context logger, would look its methods up through the
+ * proxy, which hands back the same child, until the stack overflows.
+ * @template T
+ * @param {Record<string, unknown>} bindings
+ * @param {() => T} fn
+ * @returns {T}
+ */
+const runWithBindings = (bindings, fn) => {
+    const store = new Map();
+
+    store.set('logger', logger.child(bindings));
+
+    return context.run(store, fn);
+};
+
 export default log;
-export { contextMiddleware, getWorkerExecArgv };
+export { contextMiddleware, getWorkerExecArgv, runWithBindings };

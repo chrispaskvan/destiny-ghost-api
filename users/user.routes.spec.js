@@ -58,11 +58,11 @@ vi.mock('./sign-up.queue.js', async () => {
 
 vi.mock('../helpers/log.js', () => ({
     default: {
-        child: vi.fn(bindings => ({ bindings: () => bindings })),
         error: vi.fn(),
         info: logInfo,
         warn: logWarn,
     },
+    runWithBindings: (_bindings, fn) => fn(),
 }));
 vi.mock('../helpers/postmaster.js', () => ({
     default: class {
