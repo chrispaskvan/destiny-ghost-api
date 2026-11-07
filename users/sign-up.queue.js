@@ -8,6 +8,7 @@
 import { Queue } from 'bullmq';
 import client from '../helpers/jobs.js';
 import context from '../helpers/async-context.js';
+import log from '../helpers/log.js';
 
 const QUEUE_NAME = 'sign-up';
 
@@ -23,19 +24,39 @@ const QUEUE_NAME = 'sign-up';
  * the user signs up again. The worker doesn't pick a stalled job up again for
  * the same reason (`maxStalledCount: 0` in `UserController`).
  *
- * The job carries the submitted contact, so it is removed once it completes,
- * and kept a day when it fails, long enough to look into. The codes are
- * minted in the job, so none ever reaches Redis.
+ * The job carries the submitted contact, so it is removed as soon as it
+ * finishes, whether it completed or failed. Age-based removal would not do:
+ * BullMQ runs no timer, so an expired job is only pruned when another one
+ * finishes after it, and with no later failure, a failed job's contact would
+ * stay in Redis for good. A failure is logged by the subscriber, and the user
+ * signs up again. The codes are minted in the job, so none ever reaches
+ * Redis.
  */
 const queue = new Queue(QUEUE_NAME, {
     connection: client,
     defaultJobOptions: {
         attempts: 1,
         removeOnComplete: true,
-        removeOnFail: {
-            age: 86_400,
-        },
+        removeOnFail: true,
     },
+});
+
+/**
+ * One job at a time across every instance, not just per worker: the
+ * worker's own `concurrency: 1` holds only within one process. Two sign-ups
+ * from one account running at once read the same ETag, and the later one,
+ * say a typo fixed, fails its save with a 412 and, tried only once, is lost
+ * after its caller was told 204. Run in order, the later one wins.
+ *
+ * Stored on the queue in Redis, so setting it again at each start is
+ * harmless. If it can't be set, each worker still runs one job at a time,
+ * which is the whole of it while there is one instance.
+ */
+const ready = queue.setGlobalConcurrency(1).catch(err => {
+    log.warn(
+        { err, queueName: QUEUE_NAME },
+        "Failed to set the sign-up queue's global concurrency.",
+    );
 });
 
 /**
@@ -71,4 +92,4 @@ const enqueueResend = ({ displayName, membershipType, channel }) =>
     enqueue('resend', { displayName, membershipType, channel });
 
 export default queue;
-export { enqueueResend, enqueueSignUp, QUEUE_NAME };
+export { enqueueResend, enqueueSignUp, QUEUE_NAME, ready };

@@ -112,7 +112,8 @@ class UserController {
 
         /**
          * The routes answer once a sign-up or resend is queued; the work
-         * happens here (#795). One at a time, so two sign-ups from one
+         * happens here (#795). One at a time, here and, through the
+         * queue's global limit, across instances, so two sign-ups from one
          * account run in the order they arrived and the later one wins
          * rather than racing the first to a 412. A job whose worker died
          * isn't run again: it may have sent, and billed, its messages
