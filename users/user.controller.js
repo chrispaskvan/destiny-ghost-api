@@ -491,13 +491,12 @@ class UserController {
          * only the consent marker holds, as no document had the number then.
          * An unchanged number keeps what it has.
          */
-        const consent =
-            isNewRegistration || user.phoneNumber !== pending.phoneNumber
-                ? { found: await this.#readConsent(pending.phoneNumber) }
-                : undefined;
+        const isNewNumber = isNewRegistration || user.phoneNumber !== pending.phoneNumber;
 
-        if (consent) {
-            user.isSubscribed = consent.found ? consent.found.isSubscribed : true;
+        if (isNewNumber) {
+            const found = await this.#readConsent(pending.phoneNumber);
+
+            user.isSubscribed = found ? found.isSubscribed : true;
         }
 
         Object.assign(user, pending);
@@ -523,8 +522,24 @@ class UserController {
 
         await this.users.updateUser(/** @type {User} */ (/** @type {unknown} */ (user)));
 
-        if (consent?.found) {
-            await this.#stampConsent({ displayName, membershipType }, consent.found);
+        /**
+         * Read again now the document holds the number. A STOP handled
+         * between the read above and the promotion found no document to
+         * write to, so only the marker has it. From here on, any change is
+         * written to the document directly, so nothing is lost after this.
+         * The marker keeps the newest change it was given.
+         */
+        if (isNewNumber) {
+            const latest = await this.#readConsent(pending.phoneNumber);
+
+            if (latest) {
+                user.isSubscribed = latest.isSubscribed;
+                await this.#stampConsent(
+                    { displayName, membershipType },
+                    pending.phoneNumber,
+                    latest,
+                );
+            }
         }
 
         /** Not to a number that texted STOP before joining. */
@@ -928,13 +943,23 @@ class UserController {
      * strictly older loses. One landing after the read fails the write's
      * ETag instead.
      *
-     * Best effort: the promotion already wrote `isSubscribed`, so a failure
-     * here only leaves the watermark behind, and is logged.
+     * Best effort, and logged on failure. Usually the promotion already
+     * wrote `isSubscribed`, so a failure only leaves the watermark behind; a
+     * STOP handled during the promotion is then left in the marker alone,
+     * which still suppresses sends until it expires.
+     *
+     * Only onto the number it describes: skipped if the account no longer
+     * holds it.
      * @param {{ displayName: string, membershipType: number }} account
+     * @param {string} phoneNumber - the number the consent belongs to
      * @param {{ isSubscribed: boolean, receivedAt: number }} consent
      * @returns {Promise<void>}
      */
-    async #stampConsent({ displayName, membershipType }, { isSubscribed, receivedAt }) {
+    async #stampConsent(
+        { displayName, membershipType },
+        phoneNumber,
+        { isSubscribed, receivedAt },
+    ) {
         try {
             const promoted = await this.users.getUserByDisplayName(
                 displayName,
@@ -942,7 +967,7 @@ class UserController {
                 true,
             );
 
-            if (!promoted) {
+            if (promoted?.phoneNumber !== phoneNumber) {
                 return;
             }
 

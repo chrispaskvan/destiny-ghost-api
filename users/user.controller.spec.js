@@ -484,10 +484,11 @@ describe('UserController', () => {
 
             it('should keep a STOP the number sent before joining, with its timestamp', async () => {
                 /** No document held the pending number, so only the marker has it. */
-                readConsent.mockResolvedValueOnce({ isSubscribed: false, receivedAt: 200 });
+                readConsent.mockResolvedValue({ isSubscribed: false, receivedAt: 200 });
                 userService.getUserByEmailAddressToken.mockResolvedValueOnce(signedUp());
                 userService.getUserByDisplayName.mockResolvedValueOnce({
                     id: 'doc-1',
+                    phoneNumber: pending.phoneNumber,
                     _etag: 'e2',
                 });
 
@@ -507,16 +508,19 @@ describe('UserController', () => {
                     true,
                 );
                 expect(userService.updateUserSubscription).toHaveBeenCalledExactlyOnceWith(
-                    { id: 'doc-1', _etag: 'e2' },
+                    { id: 'doc-1', phoneNumber: pending.phoneNumber, _etag: 'e2' },
                     false,
                     200,
                 );
             });
 
             it('should still join when the consent stamp fails', async () => {
-                readConsent.mockResolvedValueOnce({ isSubscribed: false, receivedAt: 200 });
+                readConsent.mockResolvedValue({ isSubscribed: false, receivedAt: 200 });
                 userService.getUserByEmailAddressToken.mockResolvedValueOnce(signedUp());
-                userService.getUserByDisplayName.mockResolvedValueOnce({ id: 'doc-1' });
+                userService.getUserByDisplayName.mockResolvedValueOnce({
+                    id: 'doc-1',
+                    phoneNumber: pending.phoneNumber,
+                });
                 userService.updateUserSubscription.mockRejectedValueOnce(new Error('412'));
 
                 await expect(join()).resolves.toBeDefined();
@@ -533,10 +537,11 @@ describe('UserController', () => {
                  * sent right then is written straight to it, with a newer
                  * stamp than the marker's.
                  */
-                readConsent.mockResolvedValueOnce({ isSubscribed: true, receivedAt: 100 });
+                readConsent.mockResolvedValue({ isSubscribed: true, receivedAt: 100 });
                 userService.getUserByEmailAddressToken.mockResolvedValueOnce(signedUp());
                 userService.getUserByDisplayName.mockResolvedValueOnce({
                     id: 'doc-1',
+                    phoneNumber: pending.phoneNumber,
                     consentUpdatedAt: 200,
                     isSubscribed: false,
                 });
@@ -547,20 +552,59 @@ describe('UserController', () => {
 
             it('should stamp over an older or equal watermark', async () => {
                 /** Strictly older loses, as in `applyConsent`; a tie is applied. */
-                readConsent.mockResolvedValueOnce({ isSubscribed: false, receivedAt: 200 });
+                readConsent.mockResolvedValue({ isSubscribed: false, receivedAt: 200 });
                 userService.getUserByEmailAddressToken.mockResolvedValueOnce(signedUp());
                 userService.getUserByDisplayName.mockResolvedValueOnce({
                     id: 'doc-1',
+                    phoneNumber: pending.phoneNumber,
                     consentUpdatedAt: 200,
                 });
 
                 await join();
 
                 expect(userService.updateUserSubscription).toHaveBeenCalledExactlyOnceWith(
-                    { id: 'doc-1', consentUpdatedAt: 200 },
+                    { id: 'doc-1', phoneNumber: pending.phoneNumber, consentUpdatedAt: 200 },
                     false,
                     200,
                 );
+            });
+
+            it('should keep a STOP handled while the promotion was written', async () => {
+                /**
+                 * Handled after the first read, before the promotion: no
+                 * document held the number, so only the marker has it.
+                 */
+                readConsent
+                    .mockResolvedValueOnce(undefined)
+                    .mockResolvedValueOnce({ isSubscribed: false, receivedAt: 200 });
+                userService.getUserByEmailAddressToken.mockResolvedValueOnce(signedUp());
+                userService.getUserByDisplayName.mockResolvedValueOnce({
+                    id: 'doc-1',
+                    phoneNumber: pending.phoneNumber,
+                });
+
+                const joined = await join();
+
+                expect(readConsent).toHaveBeenNthCalledWith(2, pending.phoneNumber);
+                expect(userService.updateUserSubscription).toHaveBeenCalledExactlyOnceWith(
+                    { id: 'doc-1', phoneNumber: pending.phoneNumber },
+                    false,
+                    200,
+                );
+                expect(joined.isSubscribed).toBe(false);
+                expect(notificationService.sendMessage).not.toHaveBeenCalled();
+            });
+
+            it('should not stamp a number the account no longer holds', async () => {
+                readConsent.mockResolvedValue({ isSubscribed: false, receivedAt: 200 });
+                userService.getUserByEmailAddressToken.mockResolvedValueOnce(signedUp());
+                userService.getUserByDisplayName.mockResolvedValueOnce({
+                    id: 'doc-1',
+                    phoneNumber: '+12085550188',
+                });
+
+                await expect(join()).resolves.toBeDefined();
+                expect(userService.updateUserSubscription).not.toHaveBeenCalled();
             });
 
             it('should stamp nothing without a consent marker', async () => {
