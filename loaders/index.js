@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import Routes from './routes.js';
 import errorMiddleware from './error.middleware.js';
 import expressLoader from './express.js';
-import hook from '../helpers/performance.js';
+import hook, { logsEach } from '../helpers/performance.js';
 import log from '../helpers/log.js';
 
 const loaders = {
@@ -48,10 +48,11 @@ const loaders = {
         /**
          * Performance Hook
          *
-         * Always on, so each request's log carries its outbound calls; each
-         * call is logged separately only in development.
+         * Always on, so each request's log carries its outbound calls and DNS
+         * lookups; each is logged separately only in development, unless
+         * PERFORMANCE_LOG says otherwise.
          */
-        hook.enable({ log: process.env.NODE_ENV === 'development' });
+        hook.enable({ log: logsEach() });
 
         /**
          * Check for the latest manifest definition and database from Bungie.
