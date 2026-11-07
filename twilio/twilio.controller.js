@@ -718,9 +718,15 @@ class TwilioController {
             return;
         }
 
-        const user = await this.users.getUserByPhoneNumber(phoneNumber);
+        /**
+         * A pending sign-up's number isn't in the verified-only lookup, but
+         * its verification SMS's reports are kept like any other's.
+         */
+        const known =
+            Boolean(await this.users.getUserByPhoneNumber(phoneNumber)) ||
+            (await this.users.hasPendingSignUp(phoneNumber));
 
-        if (user) {
+        if (known) {
             await this.users.addUserMessage(
                 /** @type {Omit<import('../users/user.service.js').UserMessage, 'id'>} */ ({
                     ...message,

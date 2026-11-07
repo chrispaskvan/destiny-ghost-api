@@ -1409,6 +1409,84 @@ describe('UserService', () => {
         });
     });
 
+    describe('hasPendingSignUp', () => {
+        it('should look for the number among pending sign-ups', async () => {
+            documentService.getDocuments.mockResolvedValueOnce([{ id: '1' }]);
+
+            await expect(userService.hasPendingSignUp('+12085550123')).resolves.toBe(true);
+
+            const [, query] = documentService.getDocuments.mock.calls[0];
+
+            expect(JSON.stringify(query)).toContain('membership.pending.phoneNumber');
+            expect(JSON.stringify(query)).toContain('+12085550123');
+        });
+
+        it('should say no when none holds it', async () => {
+            documentService.getDocuments.mockResolvedValueOnce([]);
+
+            await expect(userService.hasPendingSignUp('+12085550123')).resolves.toBe(false);
+        });
+    });
+
+    describe('changing contact', () => {
+        const stored = {
+            ...structuredClone(user),
+            emailAddress: 'old@example.com',
+            phoneNumber: '+12085550199',
+            _etag: 'e1',
+        };
+
+        beforeEach(() => {
+            userService.getUserByDisplayName = vi.fn().mockResolvedValue(structuredClone(stored));
+            documentService.updateDocument.mockResolvedValue(undefined);
+            cacheService.setUser.mockResolvedValue(undefined);
+            cacheService.deleteUser.mockResolvedValue(undefined);
+        });
+
+        it('should drop the old email and phone from the cache', async () => {
+            await userService.updateUser({
+                ...structuredClone(stored),
+                emailAddress: 'new@example.com',
+                phoneNumber: '+12085550123',
+            });
+
+            /**
+             * Their pointer keys would otherwise find this user by the old
+             * contact for up to an hour.
+             */
+            expect(cacheService.deleteUser).toHaveBeenCalledExactlyOnceWith({
+                emailAddress: 'old@example.com',
+                phoneNumber: '+12085550199',
+            });
+        });
+
+        it('should drop only what changed', async () => {
+            await userService.updateUser({
+                ...structuredClone(stored),
+                phoneNumber: '+12085550123',
+            });
+
+            expect(cacheService.deleteUser).toHaveBeenCalledExactlyOnceWith({
+                emailAddress: undefined,
+                phoneNumber: '+12085550199',
+            });
+        });
+
+        it('should drop nothing when the contact is unchanged', async () => {
+            await userService.updateUser({ ...structuredClone(stored), firstName: 'Grace' });
+
+            expect(cacheService.deleteUser).not.toHaveBeenCalled();
+        });
+
+        it('should still resolve when the cache cannot drop them', async () => {
+            cacheService.deleteUser.mockRejectedValueOnce(new Error('redis unavailable'));
+
+            await expect(
+                userService.updateUser({ ...structuredClone(stored), phoneNumber: '+12085550123' }),
+            ).resolves.toBeUndefined();
+        });
+    });
+
     describe('merging onto the stored document', () => {
         /**
          * Cosmos has moved on (a consent write whose cache refresh failed);

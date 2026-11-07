@@ -66,6 +66,7 @@ sequenceDiagram
         WebApp->>API: POST /users/signUp (firstName, lastName, phoneNumber, emailAddress)
         API->>API: Normalize phone to E.164 (rejects CN/KP/RU region codes)
         API->>API: Generate one token pair: SMS code + email blob, shared 15-min TTL
+        API->>API: Save the contact as pending (membership.pending); the account's current contact, if any, is untouched
         par Send SMS
             API->>SMS: Send "Enter [code] to verify your phone number"
             SMS-->>User: Deliver SMS
@@ -73,13 +74,13 @@ sequenceDiagram
             API->>Email: Send link WEBSITE/register?token=[blob]
             Email-->>User: Deliver email
         end
-        API-->>WebApp: 204 whether or not the messages were sent, and on any conflict, including an already-registered account (nothing is sent to it); 429 after 5 sign-ups an hour
+        API-->>WebApp: 204 whether or not the messages were sent, and when the contact is registered to another account (nothing is sent); 429 after 5 sign-ups an hour
     end
 
     opt A message didn't arrive
         User->>WebApp: Ask to resend the SMS or the email
         WebApp->>API: POST /users/signUp/resend (channel)
-        API->>SMS: Resend the same code, or Email: the same link (other channel and tokens untouched)
+        API->>SMS: Resend the same code, or Email: the same link, to the pending contact (other channel and tokens untouched)
         API-->>WebApp: 204 whether or not there was a pending sign-up or the send worked; 429 after 3 per channel per 15 min
     end
 
@@ -89,10 +90,14 @@ sequenceDiagram
         WebApp-->>User: Prompt for the SMS code
         User->>WebApp: Enter SMS code
         WebApp->>API: POST /users/join (tokens: emailAddress=[blob], phoneNumber=[code])
-        API->>API: Validate both against the token pair's TTL
-        API->>API: Set dateRegistered and seed notifications (Orders, Banshee-44, Lord Saladin, Xur, all disabled)
-        API-->>WebApp: 200 success, or 400 if expired/mismatched (resubmit signUp to retry)
+        API->>API: Validate both against the token pair's TTL, for the session's own sign-up
+        API->>API: Re-check the pending contact isn't registered to another account
+        API->>API: Promote the pending contact to the account's contact; consent for a new number from its consent marker, else subscribed
+        API->>API: First sign-up only: set dateRegistered, seed notifications (Orders, Banshee-44, Lord Saladin, Xur, all disabled), send welcome SMS
+        API-->>WebApp: 200 success, or 400 if expired/mismatched/conflicting (resubmit signUp to retry)
     end
+
+    note over WebApp,API: Changing phone or email: a registered user signs up again with the new contact<br/>and joins; the old contact stays in place until join succeeds.
 
     note over WebApp,API: POST /users/current/ciphers and /users/current/cryptarch require<br/>an already-registered user (400 otherwise) — they're for re-verifying<br/>a single channel later (e.g. before a sensitive profile edit),<br/>not for initial sign-up. Each code allows 5 cryptarch attempts,<br/>right or wrong; after that it answers 429 until a new code is sent.
 ```

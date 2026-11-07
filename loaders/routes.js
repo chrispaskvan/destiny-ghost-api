@@ -39,6 +39,7 @@ import schema from '../graphql/schema.js';
 import root from '../graphql/root.js';
 import pool from '../helpers/pool.js';
 import McpRouter from '../mcp/mcp.routes.js';
+import { readConsent } from '../helpers/consent-marker.js';
 import rateLimiterMiddleware, {
     allowCipherAttempt,
     cipherRateLimiterMiddleware,
@@ -174,6 +175,7 @@ export default () => {
             resend: resendRateLimiterMiddleware,
             cipher: cipherRateLimiterMiddleware,
         },
+        readConsent,
         userService,
         worldRepository: world,
     });
