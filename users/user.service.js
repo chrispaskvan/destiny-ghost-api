@@ -1288,7 +1288,17 @@ class UserService {
         const { consentUpdatedAt, emailAddress, phoneNumber } = userDocument;
 
         Object.assign(userDocument, user);
-        preserveConsentWatermark(userDocument, { consentUpdatedAt });
+        /**
+         * The watermark belongs to the number. A write that changes the
+         * number (`join` promoting a re-sign-up) drops the old one's: kept,
+         * it would let the old number's last change outrank the new
+         * number's, so a delayed STOP sent from the new number could lose.
+         * Dropping can only lower it, never plant one.
+         */
+        preserveConsentWatermark(
+            userDocument,
+            phoneNumber === userDocument.phoneNumber ? { consentUpdatedAt } : undefined,
+        );
 
         await this.#replaceAndCache(userDocument, /** @type {number} */ (user.membershipType));
 

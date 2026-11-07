@@ -733,15 +733,20 @@ class TwilioController {
                     SmsStatus: status,
                 }),
             );
-            /**
-             * The receipt is only the latest word; every report is kept above,
-             * in arrival order (`adr-files/twilio-message-status.md`). These
-             * arrive out of order and sometimes twice, so the receipt moves
-             * forward only, and only for the message it is tracking.
-             */
-            if (claimCheck) {
-                await ClaimCheck.advance(claimCheck, phoneNumber, { status, sid });
-            }
+        }
+
+        /**
+         * The receipt is only the latest word; every report is kept above,
+         * in arrival order (`adr-files/twilio-message-status.md`). These
+         * arrive out of order and sometimes twice, so the receipt moves
+         * forward only, and only for the message it is tracking.
+         *
+         * Matched by the message, not by who holds the number now: a report
+         * arriving after the recipient changed numbers still settles it.
+         * `advance` never creates an entry, so this can't add one.
+         */
+        if (claimCheck) {
+            await ClaimCheck.advance(claimCheck, phoneNumber, { status, sid });
         }
     }
 }

@@ -1478,6 +1478,40 @@ describe('UserService', () => {
             expect(cacheService.deleteUser).not.toHaveBeenCalled();
         });
 
+        it("should drop the old number's consent watermark when the number changes", async () => {
+            /**
+             * The watermark belongs to the number: kept, the old number's
+             * last change could outrank a delayed STOP from the new one.
+             */
+            userService.getUserByDisplayName = vi
+                .fn()
+                .mockResolvedValue({ ...structuredClone(stored), consentUpdatedAt: 300 });
+
+            await userService.updateUser({
+                ...structuredClone(stored),
+                phoneNumber: '+12085550123',
+            });
+
+            const [, written] = documentService.updateDocument.mock.calls[0];
+
+            expect(written).not.toHaveProperty('consentUpdatedAt');
+        });
+
+        it('should keep the consent watermark when only the email changes', async () => {
+            userService.getUserByDisplayName = vi
+                .fn()
+                .mockResolvedValue({ ...structuredClone(stored), consentUpdatedAt: 300 });
+
+            await userService.updateUser({
+                ...structuredClone(stored),
+                emailAddress: 'new@example.com',
+            });
+
+            const [, written] = documentService.updateDocument.mock.calls[0];
+
+            expect(written.consentUpdatedAt).toBe(300);
+        });
+
         it('should still resolve when the cache cannot drop them', async () => {
             cacheService.deleteUser.mockRejectedValueOnce(new Error('redis unavailable'));
 

@@ -527,6 +527,42 @@ describe('UserController', () => {
                 );
             });
 
+            it('should skip a stamp a newer change for the number has superseded', async () => {
+                /**
+                 * Once promoted, the document holds the number, so a STOP
+                 * sent right then is written straight to it, with a newer
+                 * stamp than the marker's.
+                 */
+                readConsent.mockResolvedValueOnce({ isSubscribed: true, receivedAt: 100 });
+                userService.getUserByEmailAddressToken.mockResolvedValueOnce(signedUp());
+                userService.getUserByDisplayName.mockResolvedValueOnce({
+                    id: 'doc-1',
+                    consentUpdatedAt: 200,
+                    isSubscribed: false,
+                });
+
+                await expect(join()).resolves.toBeDefined();
+                expect(userService.updateUserSubscription).not.toHaveBeenCalled();
+            });
+
+            it('should stamp over an older or equal watermark', async () => {
+                /** Strictly older loses, as in `applyConsent`; a tie is applied. */
+                readConsent.mockResolvedValueOnce({ isSubscribed: false, receivedAt: 200 });
+                userService.getUserByEmailAddressToken.mockResolvedValueOnce(signedUp());
+                userService.getUserByDisplayName.mockResolvedValueOnce({
+                    id: 'doc-1',
+                    consentUpdatedAt: 200,
+                });
+
+                await join();
+
+                expect(userService.updateUserSubscription).toHaveBeenCalledExactlyOnceWith(
+                    { id: 'doc-1', consentUpdatedAt: 200 },
+                    false,
+                    200,
+                );
+            });
+
             it('should stamp nothing without a consent marker', async () => {
                 userService.getUserByEmailAddressToken.mockResolvedValueOnce(signedUp());
 

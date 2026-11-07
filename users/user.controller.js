@@ -918,9 +918,15 @@ class UserController {
 
     /**
      * Record the new number's consent with its own timestamp, through the one
-     * write that sets the watermark (`updateUser` keeps the stored one, which
-     * is the old number's, or none). Without it, a delayed consent change
-     * for the number, older than this one, would still win.
+     * write that sets the watermark (`updateUser` clears it when the number
+     * changes). Without it, a delayed consent change for the number, older
+     * than this one, would still win.
+     *
+     * Once the promotion lands, the document holds the number, so a STOP or
+     * START sent right then is written to it directly. A stamp older than
+     * what is stored is superseded and skipped, by `applyConsent`'s rule:
+     * strictly older loses. One landing after the read fails the write's
+     * ETag instead.
      *
      * Best effort: the promotion already wrote `isSubscribed`, so a failure
      * here only leaves the watermark behind, and is logged.
@@ -936,9 +942,18 @@ class UserController {
                 true,
             );
 
-            if (promoted) {
-                await this.users.updateUserSubscription(promoted, isSubscribed, receivedAt);
+            if (!promoted) {
+                return;
             }
+
+            if (
+                typeof promoted.consentUpdatedAt === 'number' &&
+                promoted.consentUpdatedAt > receivedAt
+            ) {
+                return;
+            }
+
+            await this.users.updateUserSubscription(promoted, isSubscribed, receivedAt);
         } catch (err) {
             log.error(
                 { err, displayName, membershipType },
