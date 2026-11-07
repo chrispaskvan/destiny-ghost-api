@@ -2,6 +2,7 @@ import { lookup as dnsLookup } from 'node:dns';
 import { once } from 'node:events';
 import { readFileSync } from 'node:fs';
 import { createServer, get } from 'node:http';
+import { get as getSecure } from 'node:https';
 import {
     connect,
     createServer as createHttp2Server,
@@ -287,6 +288,37 @@ describe('performance', () => {
             });
 
             expect(lookups).toStrictEqual([
+                { host: 'localhost', duration: expect.any(Number) },
+                { host: 'localhost', duration: expect.any(Number) },
+            ]);
+        });
+
+        /**
+         * Over TLS, each client looks the host up on the socket it then wraps.
+         * The hostname is localhost because the existing HTTPS tests dial
+         * 127.0.0.1, which needs no lookup.
+         */
+        it('should record the lookup each client makes over TLS', async () => {
+            const origin = `https://localhost:${securePort}`;
+
+            await inRequest(async () => {
+                await new Promise(resolve => {
+                    getSecure(`${origin}/lookup/https`, { agent: false }, res =>
+                        res.resume().on('close', resolve),
+                    );
+                });
+                const session = connect(origin);
+                const stream = session.request({ ':path': '/lookup/http2' });
+
+                stream.resume();
+                await once(stream, 'close');
+                session.close();
+                // fetch negotiates HTTP/2 with this server
+                await (await fetch(`${origin}/lookup/fetch`)).text();
+            });
+
+            expect(lookups).toStrictEqual([
+                { host: 'localhost', duration: expect.any(Number) },
                 { host: 'localhost', duration: expect.any(Number) },
                 { host: 'localhost', duration: expect.any(Number) },
             ]);
