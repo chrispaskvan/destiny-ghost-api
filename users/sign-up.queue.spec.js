@@ -9,6 +9,7 @@ const { mocks, logWarn } = vi.hoisted(() => ({
         add: vi.fn().mockResolvedValue({ id: 'job-1' }),
         constructorArgs: null,
         setGlobalConcurrency: vi.fn().mockResolvedValue(1),
+        closing: undefined,
     },
     logWarn: vi.fn(),
 }));
@@ -23,6 +24,9 @@ vi.mock('bullmq', () => ({
         }
         setGlobalConcurrency(...args) {
             return mocks.setGlobalConcurrency(...args);
+        }
+        get closing() {
+            return mocks.closing;
         }
     },
 }));
@@ -39,10 +43,10 @@ vi.mock('../helpers/async-context.js', () => ({
     default: { getStore: () => new Map([['logger', { bindings }]]) },
 }));
 
-import { enqueueResend, enqueueSignUp, QUEUE_NAME, ready } from './sign-up.queue.js';
+import { enqueueResend, enqueueSignUp, limitConcurrency, QUEUE_NAME } from './sign-up.queue.js';
 
 /** Taken at import, before `clearMocks` wipes them; the module runs once. */
-const setGlobalConcurrencyCalls = [...mocks.setGlobalConcurrency.mock.calls];
+const setGlobalConcurrencyAtImport = [...mocks.setGlobalConcurrency.mock.calls];
 
 describe('sign-up queue', () => {
     beforeEach(() => {
@@ -75,23 +79,50 @@ describe('sign-up queue', () => {
         expect(defaultJobOptions.removeOnFail).toBe(true);
     });
 
-    it('should run one job at a time across every instance', async () => {
-        await ready;
-
-        expect(setGlobalConcurrencyCalls).toEqual([[1]]);
+    it('should leave Redis alone when imported', () => {
+        expect(setGlobalConcurrencyAtImport).toEqual([]);
     });
 
-    it('should start anyway when the global limit cannot be set', async () => {
-        vi.resetModules();
-        mocks.setGlobalConcurrency.mockRejectedValueOnce(new Error('NOSCRIPT'));
+    describe('limitConcurrency', () => {
+        beforeEach(() => {
+            mocks.closing = undefined;
+        });
 
-        const { ready: again } = await import('./sign-up.queue.js');
+        it('should run one job at a time across every instance', async () => {
+            await expect(limitConcurrency()).resolves.toBe(true);
+            expect(mocks.setGlobalConcurrency).toHaveBeenCalledExactlyOnceWith(1);
+        });
 
-        await expect(again).resolves.toBeUndefined();
-        expect(logWarn).toHaveBeenCalledWith(
-            expect.objectContaining({ queueName: 'sign-up' }),
-            "Failed to set the sign-up queue's global concurrency.",
-        );
+        it('should keep trying until the limit is set', async () => {
+            mocks.setGlobalConcurrency
+                .mockRejectedValueOnce(new Error('ECONNREFUSED'))
+                .mockRejectedValueOnce(new Error('ECONNREFUSED'));
+
+            await expect(limitConcurrency({ retryDelay: 0 })).resolves.toBe(true);
+            expect(mocks.setGlobalConcurrency).toHaveBeenCalledTimes(3);
+            expect(logWarn).toHaveBeenCalledTimes(2);
+            expect(logWarn).toHaveBeenLastCalledWith(
+                expect.objectContaining({ queueName: 'sign-up', attempt: 2 }),
+                "Failed to set the sign-up queue's global concurrency; its jobs wait until it is.",
+            );
+        });
+
+        it('should give up once the queue is closing', async () => {
+            mocks.setGlobalConcurrency.mockImplementationOnce(async () => {
+                mocks.closing = Promise.resolve();
+                throw new Error('Connection is closed.');
+            });
+
+            await expect(limitConcurrency({ retryDelay: 0 })).resolves.toBe(false);
+            expect(mocks.setGlobalConcurrency).toHaveBeenCalledOnce();
+        });
+
+        it('should not try at all on a closing queue', async () => {
+            mocks.closing = Promise.resolve();
+
+            await expect(limitConcurrency()).resolves.toBe(false);
+            expect(mocks.setGlobalConcurrency).not.toHaveBeenCalled();
+        });
     });
 
     it('should queue a sign-up in the envelope the subscriber reads', async () => {

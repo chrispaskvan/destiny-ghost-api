@@ -5,6 +5,7 @@
  * @summary Answer sign-up before doing the work, so timing can't reveal a conflict.
  */
 // @ts-check
+import { setTimeout as delay } from 'node:timers/promises';
 import { Queue } from 'bullmq';
 import client from '../helpers/jobs.js';
 import context from '../helpers/async-context.js';
@@ -48,16 +49,32 @@ const queue = new Queue(QUEUE_NAME, {
  * say a typo fixed, fails its save with a 412 and, tried only once, is lost
  * after its caller was told 204. Run in order, the later one wins.
  *
- * Stored on the queue in Redis, so setting it again at each start is
- * harmless. If it can't be set, each worker still runs one job at a time,
- * which is the whole of it while there is one instance.
+ * `UserController` awaits this before it starts the worker, so no instance
+ * works the queue without the limit: while Redis can't be reached, this
+ * keeps trying, and the queued sign-ups wait rather than race. Stored on the
+ * queue in Redis, so setting it again at each start is harmless. It gives up
+ * only once the queue is closing, resolving `false`, and its wait between
+ * tries doesn't hold the process open.
+ * @param {{ retryDelay?: number }} [options] - milliseconds between tries
+ * @returns {Promise<boolean>} whether the limit is set
  */
-const ready = queue.setGlobalConcurrency(1).catch(err => {
-    log.warn(
-        { err, queueName: QUEUE_NAME },
-        "Failed to set the sign-up queue's global concurrency.",
-    );
-});
+const limitConcurrency = async ({ retryDelay = 5_000 } = {}) => {
+    for (let attempt = 1; !queue.closing; attempt += 1) {
+        try {
+            await queue.setGlobalConcurrency(1);
+
+            return true;
+        } catch (err) {
+            log.warn(
+                { err, queueName: QUEUE_NAME, attempt },
+                "Failed to set the sign-up queue's global concurrency; its jobs wait until it is.",
+            );
+            await delay(retryDelay, undefined, { ref: false });
+        }
+    }
+
+    return false;
+};
 
 /**
  * The envelope matches `helpers/publisher.js`, because `helpers/subscriber.js`
@@ -92,4 +109,4 @@ const enqueueResend = ({ displayName, membershipType, channel }) =>
     enqueue('resend', { displayName, membershipType, channel });
 
 export default queue;
-export { enqueueResend, enqueueSignUp, QUEUE_NAME, ready };
+export { enqueueResend, enqueueSignUp, limitConcurrency, QUEUE_NAME };

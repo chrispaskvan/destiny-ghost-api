@@ -31,7 +31,7 @@ const { logInfo, logWarn } = vi.hoisted(() => ({ logInfo: vi.fn(), logWarn: vi.f
  * cover a sign-up end to end; the ones that check the route doesn't wait on
  * it override `enqueue…`.
  */
-const { queued } = vi.hoisted(() => ({ queued: { work: undefined } }));
+const { queued } = vi.hoisted(() => ({ queued: { work: undefined, serialize: undefined } }));
 
 vi.mock('../helpers/subscriber.js', () => ({
     default: {
@@ -42,14 +42,27 @@ vi.mock('../helpers/subscriber.js', () => ({
         }),
     },
 }));
-vi.mock('./sign-up.queue.js', () => ({
-    QUEUE_NAME: 'sign-up',
-    enqueueSignUp: vi.fn(data => queued.work(structuredClone(data), {}, { name: 'sign-up' })),
-    enqueueResend: vi.fn(data => queued.work(structuredClone(data), {}, { name: 'resend' })),
-}));
+vi.mock('./sign-up.queue.js', async () => {
+    const { default: safeReviver } = await import('../helpers/safe-reviver.js');
+
+    /** What the worker reads back: the body as the queue writes it to Redis. */
+    queued.serialize = data => JSON.parse(JSON.stringify(data), safeReviver);
+
+    return {
+        QUEUE_NAME: 'sign-up',
+        limitConcurrency: vi.fn().mockResolvedValue(true),
+        enqueueSignUp: vi.fn(data => queued.work(queued.serialize(data), {}, { name: 'sign-up' })),
+        enqueueResend: vi.fn(data => queued.work(queued.serialize(data), {}, { name: 'resend' })),
+    };
+});
 
 vi.mock('../helpers/log.js', () => ({
-    default: { error: vi.fn(), info: logInfo, warn: logWarn },
+    default: {
+        child: vi.fn(bindings => ({ bindings: () => bindings })),
+        error: vi.fn(),
+        info: logInfo,
+        warn: logWarn,
+    },
 }));
 vi.mock('../helpers/postmaster.js', () => ({
     default: class {
@@ -404,7 +417,7 @@ describe('UserRouter', () => {
         it('should answer once the sign-up is queued, before any of it runs', async () => {
             userService.getUserByDisplayName.mockReturnValueOnce(new Promise(() => {}));
             enqueueSignUp.mockImplementationOnce(data => {
-                queued.work(structuredClone(data), {}, { name: 'sign-up' });
+                queued.work(queued.serialize(data), {}, { name: 'sign-up' });
 
                 return Promise.resolve({ id: 'job-1' });
             });
@@ -1133,7 +1146,7 @@ describe('UserRouter', () => {
             /** A resend after a conflict found nothing and returned at once (#795). */
             userService.getUserByDisplayName.mockReturnValueOnce(new Promise(() => {}));
             enqueueResend.mockImplementationOnce(data => {
-                queued.work(structuredClone(data), {}, { name: 'resend' });
+                queued.work(queued.serialize(data), {}, { name: 'resend' });
 
                 return Promise.resolve({ id: 'job-1' });
             });

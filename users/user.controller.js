@@ -8,8 +8,9 @@
 import { isDeepStrictEqual } from 'node:util';
 import { applyPatch, createPatch } from 'rfc6902';
 import cleanPhoneNumber from './clean-phone-number.js';
-import { QUEUE_NAME as SIGN_UP_QUEUE } from './sign-up.queue.js';
+import { limitConcurrency, QUEUE_NAME as SIGN_UP_QUEUE } from './sign-up.queue.js';
 import TOKEN_TTL_SECONDS from './token-ttl.js';
+import context from '../helpers/async-context.js';
 import Postmaster from '../helpers/postmaster.js';
 import getEpoch from '../helpers/get-epoch.js';
 import log from '../helpers/log.js';
@@ -118,23 +119,53 @@ class UserController {
          * rather than racing the first to a 412. A job whose worker died
          * isn't run again: it may have sent, and billed, its messages
          * already (see `users/sign-up.queue.js`).
+         *
+         * Started only once the global limit is set, so no instance works
+         * the queue without it. `listening` settles once the worker has
+         * started, or the queue closed before it could.
+         * @type {Promise<void>}
          */
-        subscriber.listen(this.#work.bind(this), SIGN_UP_QUEUE, {
-            concurrency: 1,
-            maxStalledCount: 0,
-        });
+        this.listening = limitConcurrency()
+            .then(limited => {
+                if (limited) {
+                    subscriber.listen(this.#work.bind(this), SIGN_UP_QUEUE, {
+                        concurrency: 1,
+                        maxStalledCount: 0,
+                    });
+                }
+            })
+            .catch(err => {
+                log.error({ err, queueName: SIGN_UP_QUEUE }, 'Failed to start the sign-up worker.');
+            });
     }
 
     /**
      * Run a queued sign-up or resend. Their outcomes are logged here, as the
      * caller has already had its answer. A rejection fails the job, which
      * the subscriber logs.
+     *
+     * Run under a logger carrying the job's id and the trace id of the
+     * request that queued it, so every line it logs, `signUp`'s and
+     * `resend`'s included, ties back to that request.
+     * @param {*} body
+     * @param {*} properties
+     * @param {import('bullmq').Job} job
+     * @returns {Promise<void>}
+     */
+    #work(body, properties, job) {
+        const traceId = job.data?.applicationProperties?.traceId;
+        const store = new Map([['logger', log.child({ traceId, jobId: job.id })]]);
+
+        return context.run(/** @type {*} */ (store), () => this.#run(body, properties, job));
+    }
+
+    /**
      * @param {*} body
      * @param {*} _properties
      * @param {import('bullmq').Job} job
      * @returns {Promise<void>}
      */
-    async #work(body, _properties, job) {
+    async #run(body, _properties, job) {
         const { displayName, membershipType } = body;
 
         if (job.name === 'resend') {
