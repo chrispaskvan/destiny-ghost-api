@@ -6,8 +6,8 @@ import AuthenticationMiddleWare from '../authentication/authentication.middlewar
 import UserController from './user.controller.js';
 import InvalidPhoneNumberError from './invalid-phone-number.error.js';
 import cleanPhoneNumber from './clean-phone-number.js';
+import { enqueueResend, enqueueSignUp } from './sign-up.queue.js';
 import csrfProtection, { generateToken } from '../helpers/csrf.middleware.js';
-import log from '../helpers/log.js';
 
 /** @typedef {import('./user.controller.js').MutableUser} MutableUser */
 
@@ -475,7 +475,9 @@ const routes = ({
      *            so a conflict is not disclosed. The contact is held as pending until
      *            POST /users/join confirms both codes; a registered account changes its
      *            contact this way, and keeps its current contact until then. Signing up again
-     *            sends new codes on both channels and replaces the earlier ones.
+     *            sends new codes on both channels and replaces the earlier ones. The answer
+     *            comes once the sign-up is queued, before any of this is checked or sent, so
+     *            its timing discloses nothing either; the messages follow shortly.
      *        403:
      *          description: Forbidden. Missing or invalid CSRF token.
      *        422:
@@ -524,26 +526,20 @@ const routes = ({
             const { displayName, membershipType } = /** @type {AuthenticatedSessionData} */ (
                 /** @type {unknown} */ (req.session)
             );
-            const signedUp = await userController.signUp({
+            /**
+             * Queued, not run: answered after the work, the latency told a
+             * conflict (two lookups) from a sign-up (a save and two sends),
+             * whatever the status said (#795). The worker in
+             * `UserController` does the rest and logs how it went.
+             */
+            await enqueueSignUp({
                 displayName,
                 membershipType,
                 contact: res.locals.contact,
             });
 
-            if (signedUp?.undelivered.length) {
-                log.warn(
-                    { displayName, membershipType, undelivered: signedUp.undelivered },
-                    'User signed up, but not every verification message was sent',
-                );
-            } else {
-                log.info(
-                    { displayName, membershipType },
-                    signedUp ? 'User signed up' : 'User sign up failed due to conflicts',
-                );
-            }
-
             /**
-             * 204 whatever happened to the messages. A conflict sends nothing,
+             * 204 whatever happens to the messages. A conflict sends nothing,
              * so any answer that depended on how a send went would tell the
              * caller whether the address or number is already registered, and
              * a caller can make a send fail at will: a phone that has texted
@@ -588,7 +584,9 @@ const routes = ({
      *         description: >
      *           No Content. Returned whether or not there was a pending sign-up to resend,
      *           and whether or not the message could be sent, so a conflict at sign-up is
-     *           not disclosed. If nothing arrives, sign up again.
+     *           not disclosed. Answered once the resend is queued, before any of this is
+     *           checked, so its timing discloses nothing either. If nothing arrives, sign
+     *           up again.
      *       400:
      *         description: Bad Request. The channel is missing or not "email" or "phone".
      *       403:
@@ -606,15 +604,20 @@ const routes = ({
                 /** @type {unknown} */ (req.session)
             );
 
-            await userController.resend({
+            /**
+             * Queued for the same reason as sign-up: a conflict saved
+             * nothing, so a resend after one returned at once where a real
+             * one sent, and its latency told them apart (#795).
+             */
+            await enqueueResend({
                 displayName,
                 membershipType,
                 channel: req.body.channel,
             });
 
             /**
-             * 204 whatever happened: whether there was a sign-up to resend
-             * is what sign-up's conflict check decided, and how a send went
+             * 204 whatever happens: whether there is a sign-up to resend
+             * is what sign-up's conflict check decided, and how a send goes
              * can be forced (a number that texted STOP).
              */
             return res.status(StatusCodes.NO_CONTENT).end();

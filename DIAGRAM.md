@@ -64,7 +64,10 @@ sequenceDiagram
         note right of User: Submit contact info
         User->>WebApp: Enter first/last name, phone, email
         WebApp->>API: POST /users/signUp (firstName, lastName, phoneNumber, emailAddress)
-        API->>API: Normalize phone to E.164 (rejects CN/KP/RU region codes)
+        API->>API: Validate fields and normalize phone to E.164 (422 for CN/KP/RU region codes or a bad field)
+        API->>API: Queue the sign-up
+        API-->>WebApp: 204 once queued, whether or not the contact is registered to another account (nothing is sent then) or the messages go out; 429 after 5 sign-ups an hour
+        note right of API: The rest runs on the sign-up worker, so the answer's timing discloses nothing
         API->>API: Generate one token pair: SMS code + email blob, shared 15-min TTL
         API->>API: Save the contact as pending (membership.pending); the account's current contact, if any, is untouched
         par Send SMS
@@ -74,14 +77,13 @@ sequenceDiagram
             API->>Email: Send link WEBSITE/register?token=[blob]
             Email-->>User: Deliver email
         end
-        API-->>WebApp: 204 whether or not the messages were sent, and when the contact is registered to another account (nothing is sent); 429 after 5 sign-ups an hour
     end
 
     opt A message didn't arrive
         User->>WebApp: Ask to resend the SMS or the email
         WebApp->>API: POST /users/signUp/resend (channel)
+        API-->>WebApp: 204 once queued, whether or not there was a pending sign-up or the send works; 429 after 3 per channel per 15 min
         API->>SMS: Resend the same code, or Email: the same link, to the pending contact (other channel and tokens untouched)
-        API-->>WebApp: 204 whether or not there was a pending sign-up or the send worked; 429 after 3 per channel per 15 min
     end
 
     rect rgba(80, 200, 120, 0.15)

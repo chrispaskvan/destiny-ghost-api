@@ -17,11 +17,17 @@ vi.mock('./log.js', () => ({
     default: {
         info: vi.fn(),
         error: vi.fn(),
+        warn: vi.fn(),
     },
 }));
 
-import subscriber from './subscriber.js';
-import log from './log.js';
+/**
+ * Imported afresh for each test: the subscriber is a singleton, and once
+ * closed it refuses new workers, which many of these tests register after
+ * an earlier one closed it.
+ */
+let subscriber;
+let log;
 
 describe('Subscriber', () => {
     let MockWorkerConstructor;
@@ -29,6 +35,9 @@ describe('Subscriber', () => {
 
     beforeEach(async () => {
         vi.clearAllMocks();
+        vi.resetModules();
+        ({ default: subscriber } = await import('./subscriber.js'));
+        ({ default: log } = await import('./log.js'));
 
         // Get the mocked Worker constructor
         const { Worker } = await vi.importMock('bullmq');
@@ -473,6 +482,24 @@ describe('Subscriber', () => {
 
         it('should handle close with no workers', async () => {
             await expect(subscriber.close()).resolves.not.toThrow();
+        });
+
+        it('should refuse a worker registered once closing has started', async () => {
+            /**
+             * A caller that awaits something before it registers, as the
+             * sign-up worker awaits its global limit, could otherwise add a
+             * worker the drain never closes.
+             */
+            const closing = subscriber.close();
+
+            subscriber.listen(vi.fn(), 'sign-up');
+            await closing;
+
+            expect(MockWorkerConstructor).not.toHaveBeenCalled();
+            expect(log.warn).toHaveBeenCalledWith(
+                { queueName: 'sign-up' },
+                'Not starting a worker: the subscriber is closing.',
+            );
         });
     });
 });

@@ -18,6 +18,7 @@ import loaders from './loaders/index.js';
 import publisher from './helpers/publisher.js';
 import subscriber from './helpers/subscriber.js';
 import consentQueue from './twilio/consent.queue.js';
+import signUpQueue from './users/sign-up.queue.js';
 import broadcastQueue from './notifications/broadcast.queue.js';
 import processExternalPromisesWithTimeout from './helpers/process-external-promises-with-timeout.js';
 import pool from './helpers/pool.js';
@@ -39,9 +40,13 @@ let secureConnection;
  * Workers come first because an active job still needs everything after
  * them: Redis for its claim-check receipt and the Twilio rate limiter, the
  * worker pool for manifest reads. `subscriber.close()` waits for those jobs
- * to finish, and a job outliving the drain timeout is not lost - BullMQ
- * finds it stalled and runs it again, which is the at-least-once delivery
- * the queue already promises. The producers come next, while the jobs
+ * to finish. A notification or consent job outliving the drain timeout is
+ * not lost - BullMQ finds it stalled and runs it again, which is the
+ * at-least-once delivery those queues promise. A sign-up or resend is the
+ * exception: it may already have sent, and billed, its messages, so it is
+ * never run again (`maxStalledCount: 0`) and one cut off here is dropped,
+ * after its caller was told 204; the user signs up again (#795). The
+ * producers come next, while the jobs
  * connection they share is still up, and the connections themselves last.
  *
  * The whole sequence is bounded at 16 seconds, after Terminus has stopped
@@ -55,6 +60,7 @@ const shutdownStages = [
             ['Publisher', () => publisher.close()],
             ['Consent queue', () => consentQueue.close()],
             ['Broadcast queue', () => broadcastQueue.close()],
+            ['Sign-up queue', () => signUpQueue.close()],
         ],
         timeout: 3000,
     },

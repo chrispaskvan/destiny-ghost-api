@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import context from './async-context.js';
-import { contextMiddleware, getWorkerExecArgv } from './log.js';
+import log, { contextMiddleware, getWorkerExecArgv, runWithBindings } from './log.js';
 
 describe('getWorkerExecArgv', () => {
     it('should remove unsupported worker execArgv flags', () => {
@@ -43,5 +43,27 @@ describe('contextMiddleware', () => {
         expect(store?.get('logger')).toBeDefined();
         expect(store?.get('timings')).toEqual([]);
         expect(store?.get('lookups')).toEqual([]);
+    });
+});
+
+describe('runWithBindings', () => {
+    it('should log through the real logger with the given bindings', () => {
+        /**
+         * Through the exported proxy, not a stand-in: a child made from the
+         * proxy looked its methods up through the proxy into itself, and the
+         * first line a job logged overflowed the stack.
+         */
+        const bindings = runWithBindings({ traceId: 'trace-1', jobId: 'job-7' }, () => {
+            log.debug('a line from a job');
+
+            return log.bindings();
+        });
+
+        expect(bindings).toMatchObject({ traceId: 'trace-1', jobId: 'job-7' });
+    });
+
+    it("should return what the function returns, and leave the caller's context alone", async () => {
+        await expect(runWithBindings({ jobId: 'job-7' }, async () => 'done')).resolves.toBe('done');
+        expect(context.getStore()).toBeUndefined();
     });
 });

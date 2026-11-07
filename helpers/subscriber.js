@@ -28,6 +28,13 @@ class Subscriber {
     #givingUp = new Set();
 
     /**
+     * Set once `close` starts. A worker registered after that, by a caller
+     * that waited on something first, would be missed by the drain and keep
+     * taking jobs while Redis goes away, so `listen` refuses it.
+     */
+    #closing = false;
+
+    /**
      * @constructor
      * @param {(body: *, options: { claimCheckNumber: string, notificationType: string }, job: import('bullmq').Job) => Promise<*>} callback -
      * handed the job itself too, for a handler that records progress on it
@@ -49,6 +56,12 @@ class Subscriber {
         queueName = 'notifications',
         { concurrency = 5, maxStalledCount, onGiveUp } = {},
     ) {
+        if (this.#closing) {
+            log.warn({ queueName }, 'Not starting a worker: the subscriber is closing.');
+
+            return;
+        }
+
         const worker = new Worker(
             queueName,
             async job => {
@@ -202,6 +215,8 @@ class Subscriber {
      * worker that fails to close does not cut the others' drain short.
      */
     async close() {
+        this.#closing = true;
+
         try {
             await closeAll(
                 this.#workers.map(worker => worker.close()),

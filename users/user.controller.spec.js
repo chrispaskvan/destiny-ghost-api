@@ -3,6 +3,9 @@ import Chance from 'chance';
 import getEpoch from '../helpers/get-epoch.js';
 import { get, post } from '../helpers/bungie.request.js';
 import DestinyService from '../destiny/destiny.service.js';
+import context from '../helpers/async-context.js';
+import subscriber from '../helpers/subscriber.js';
+import { limitConcurrency } from './sign-up.queue.js';
 import UserController from './user.controller.js';
 import UserService from './user.service.js';
 import InvalidPhoneNumberError from './invalid-phone-number.error.js';
@@ -15,13 +18,28 @@ const { logError, logInfo, logWarn } = vi.hoisted(() => ({
 
 vi.mock('../helpers/bungie.request.js');
 vi.mock('../helpers/log.js', () => ({
-    default: { error: logError, info: logInfo, warn: logWarn },
+    default: {
+        error: logError,
+        info: logInfo,
+        warn: logWarn,
+    },
+    /** As the real one does, with a stand-in that only knows its bindings. */
+    runWithBindings: async (bindings, fn) => {
+        const { default: context } = await import('../helpers/async-context.js');
+
+        return context.run(new Map([['logger', { bindings: () => bindings }]]), fn);
+    },
 }));
 vi.mock('../helpers/postmaster.js', () => ({
     default: class {
         confirm = vi.fn();
         register = vi.fn();
     },
+}));
+vi.mock('../helpers/subscriber.js', () => ({ default: { listen: vi.fn() } }));
+vi.mock('./sign-up.queue.js', () => ({
+    QUEUE_NAME: 'sign-up',
+    limitConcurrency: vi.fn().mockResolvedValue(true),
 }));
 
 const chance = new Chance();
@@ -1323,6 +1341,169 @@ describe('UserController', () => {
                         worldRepository,
                     }),
             ).toThrow(new TypeError('readConsent is required'));
+        });
+    });
+
+    describe('queued sign-ups and resends', () => {
+        /** The worker this test's controller registered. */
+        const worker = async () => {
+            await userController.listening;
+
+            const [work, queueName, options] = subscriber.listen.mock.calls.at(-1);
+
+            return { work, queueName, options };
+        };
+        const contact = {
+            emailAddress: 'ada@example.com',
+            firstName: 'Ada',
+            lastName: 'Lovelace',
+            phoneNumber: '+12085550123',
+        };
+
+        it('should work the sign-up queue one job at a time, never re-running one', async () => {
+            /**
+             * A job whose worker died may already have sent, and billed,
+             * its messages.
+             */
+            expect(await worker()).toMatchObject({
+                queueName: 'sign-up',
+                options: { concurrency: 1, maxStalledCount: 0 },
+            });
+        });
+
+        it('should run a queued sign-up and log how it went', async () => {
+            const signUp = vi
+                .spyOn(userController, 'signUp')
+                .mockResolvedValueOnce({ undelivered: ['email'] });
+
+            await (await worker()).work(
+                { displayName, membershipType, contact },
+                {},
+                { name: 'sign-up' },
+            );
+
+            expect(signUp).toHaveBeenCalledExactlyOnceWith({
+                displayName,
+                membershipType,
+                contact,
+            });
+            expect(logWarn).toHaveBeenCalledWith(
+                { displayName, membershipType, undelivered: ['email'] },
+                'User signed up, but not every verification message was sent',
+            );
+        });
+
+        it.each([
+            [{ undelivered: [] }, 'User signed up'],
+            [undefined, 'User sign up failed due to conflicts'],
+        ])('should log a sign-up that resolved %o', async (outcome, message) => {
+            vi.spyOn(userController, 'signUp').mockResolvedValueOnce(outcome);
+
+            await (await worker()).work(
+                { displayName, membershipType, contact },
+                {},
+                { name: 'sign-up' },
+            );
+
+            expect(logInfo).toHaveBeenCalledWith({ displayName, membershipType }, message);
+        });
+
+        it('should fail the job when the sign-up rejects', async () => {
+            vi.spyOn(userController, 'signUp').mockRejectedValueOnce(new Error('412'));
+
+            const { work } = await worker();
+
+            await expect(
+                work({ displayName, membershipType, contact }, {}, { name: 'sign-up' }),
+            ).rejects.toThrow('412');
+        });
+
+        it('should run a queued resend', async () => {
+            const resend = vi.spyOn(userController, 'resend').mockResolvedValueOnce(undefined);
+            const signUp = vi.spyOn(userController, 'signUp');
+
+            await (await worker()).work(
+                { displayName, membershipType, channel: 'phone' },
+                {},
+                { name: 'resend' },
+            );
+
+            expect(resend).toHaveBeenCalledExactlyOnceWith({
+                displayName,
+                membershipType,
+                channel: 'phone',
+            });
+            expect(signUp).not.toHaveBeenCalled();
+        });
+
+        it('should refuse a job it does not know', async () => {
+            const signUp = vi.spyOn(userController, 'signUp');
+
+            const { work } = await worker();
+
+            await expect(
+                work({ displayName, membershipType }, {}, { name: 'join' }),
+            ).rejects.toThrow('Unknown sign-up job: join');
+            expect(signUp).not.toHaveBeenCalled();
+        });
+
+        it('should start working only once the global limit is set', async () => {
+            const { promise, resolve } = Promise.withResolvers();
+
+            limitConcurrency.mockReturnValueOnce(promise);
+            subscriber.listen.mockClear();
+
+            const controller = new UserController({
+                readConsent,
+                destinyService,
+                notificationService,
+                userService,
+                worldRepository,
+            });
+
+            await Promise.resolve();
+            expect(subscriber.listen).not.toHaveBeenCalled();
+
+            resolve(true);
+            await controller.listening;
+            expect(subscriber.listen).toHaveBeenCalledOnce();
+        });
+
+        it('should not start working when the queue closed first', async () => {
+            limitConcurrency.mockResolvedValueOnce(false);
+            subscriber.listen.mockClear();
+
+            await new UserController({
+                readConsent,
+                destinyService,
+                notificationService,
+                userService,
+                worldRepository,
+            }).listening;
+
+            expect(subscriber.listen).not.toHaveBeenCalled();
+        });
+
+        it('should run a job under its own trace id, so what it logs ties back to its request', async () => {
+            let bindings;
+
+            vi.spyOn(userController, 'signUp').mockImplementationOnce(async () => {
+                bindings = context.getStore()?.get('logger')?.bindings();
+
+                return { undelivered: [] };
+            });
+
+            await (await worker()).work(
+                { displayName, membershipType, contact },
+                {},
+                {
+                    id: 'job-7',
+                    name: 'sign-up',
+                    data: { applicationProperties: { traceId: 'trace-1' } },
+                },
+            );
+
+            expect(bindings).toEqual({ traceId: 'trace-1', jobId: 'job-7' });
         });
     });
 

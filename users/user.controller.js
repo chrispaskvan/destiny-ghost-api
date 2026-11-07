@@ -8,10 +8,12 @@
 import { isDeepStrictEqual } from 'node:util';
 import { applyPatch, createPatch } from 'rfc6902';
 import cleanPhoneNumber from './clean-phone-number.js';
+import { limitConcurrency, QUEUE_NAME as SIGN_UP_QUEUE } from './sign-up.queue.js';
 import TOKEN_TTL_SECONDS from './token-ttl.js';
 import Postmaster from '../helpers/postmaster.js';
 import getEpoch from '../helpers/get-epoch.js';
-import log from '../helpers/log.js';
+import log, { runWithBindings } from '../helpers/log.js';
+import subscriber from '../helpers/subscriber.js';
 import { getBlob, getCode } from '../helpers/tokens.js';
 import { postmasterHash } from '../destiny/destiny.constants.js';
 import notificationTypes from '../notifications/notification.types.js';
@@ -107,6 +109,85 @@ class UserController {
         this.postmaster = new Postmaster();
         this.users = options.userService;
         this.world = options.worldRepository;
+
+        /**
+         * The routes answer once a sign-up or resend is queued; the work
+         * happens here (#795). One at a time, here and, through the
+         * queue's global limit, across instances, so two sign-ups from one
+         * account run in the order they arrived and the later one wins
+         * rather than racing the first to a 412. A job whose worker died
+         * isn't run again: it may have sent, and billed, its messages
+         * already (see `users/sign-up.queue.js`).
+         *
+         * Started only once the global limit is set, so no instance works
+         * the queue without it. `listening` settles once the worker has
+         * started, or the queue closed before it could.
+         * @type {Promise<void>}
+         */
+        this.listening = limitConcurrency()
+            .then(limited => {
+                if (limited) {
+                    subscriber.listen(this.#work.bind(this), SIGN_UP_QUEUE, {
+                        concurrency: 1,
+                        maxStalledCount: 0,
+                    });
+                }
+            })
+            .catch(err => {
+                log.error({ err, queueName: SIGN_UP_QUEUE }, 'Failed to start the sign-up worker.');
+            });
+    }
+
+    /**
+     * Run a queued sign-up or resend. Their outcomes are logged here, as the
+     * caller has already had its answer. A rejection fails the job, which
+     * the subscriber logs.
+     *
+     * Run under a logger carrying the job's id and the trace id of the
+     * request that queued it, so every line it logs, `signUp`'s and
+     * `resend`'s included, ties back to that request.
+     * @param {*} body
+     * @param {*} properties
+     * @param {import('bullmq').Job} job
+     * @returns {Promise<void>}
+     */
+    #work(body, properties, job) {
+        const traceId = job.data?.applicationProperties?.traceId;
+
+        return runWithBindings({ traceId, jobId: job.id }, () => this.#run(body, properties, job));
+    }
+
+    /**
+     * @param {*} body
+     * @param {*} _properties
+     * @param {import('bullmq').Job} job
+     * @returns {Promise<void>}
+     */
+    async #run(body, _properties, job) {
+        const { displayName, membershipType } = body;
+
+        if (job.name === 'resend') {
+            await this.resend(body);
+
+            return;
+        }
+        if (job.name !== 'sign-up') {
+            throw new Error(`Unknown sign-up job: ${job.name}`);
+        }
+
+        const signedUp = await this.signUp(body);
+
+        if (signedUp?.undelivered.length) {
+            log.warn(
+                { displayName, membershipType, undelivered: signedUp.undelivered },
+                'User signed up, but not every verification message was sent',
+            );
+        } else {
+            log.info(
+                { displayName, membershipType },
+                signedUp ? 'User signed up' : 'User sign up failed due to conflicts',
+            );
+        }
     }
 
     /**
