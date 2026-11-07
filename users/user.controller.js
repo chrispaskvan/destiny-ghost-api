@@ -275,6 +275,14 @@ class UserController {
         if (!user?.dateRegistered) {
             throw new InvalidCipherError('registration not found');
         }
+        /**
+         * A registered account with pending contact holds a re-sign-up's
+         * tokens, which went to the new, unverified contact. They prove
+         * nothing about the registered one.
+         */
+        if (user.membership?.pending) {
+            throw new InvalidCipherError('a contact change is pending');
+        }
 
         const tokens = user.membership?.tokens;
         /**
@@ -519,7 +527,8 @@ class UserController {
             await this.#stampConsent({ displayName, membershipType }, consent.found);
         }
 
-        if (isNewRegistration) {
+        /** Not to a number that texted STOP before joining. */
+        if (isNewRegistration && user.isSubscribed !== false) {
             try {
                 await this.notifications.sendMessage(
                     UserController.#buildWelcomeMessage(),
@@ -709,7 +718,7 @@ class UserController {
      */
     async signUp({ displayName, membershipType, contact }) {
         const bungieUser = /** @type {MutableUser | undefined} */ (
-            await this.users.getUserByDisplayName(displayName, membershipType)
+            await this.users.getUserByDisplayName(displayName, membershipType, true)
         );
 
         /**

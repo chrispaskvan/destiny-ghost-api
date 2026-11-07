@@ -121,10 +121,36 @@ describe('UserCache', () => {
                         .mockResolvedValueOnce(mockUser1)
                         .mockResolvedValueOnce(mockUser);
 
-                    const user = await cacheService.getUser();
+                    const user = await cacheService.getUser(mockUser.phoneNumber);
 
                     expect(user).toEqual(mockUser);
                     expect(cacheService.getCache).toHaveBeenCalledTimes(2);
+                });
+
+                it('follows an email pointer too', async () => {
+                    const { membershipId, ...mockUser1 } = mockUser;
+
+                    vi.spyOn(cacheService, 'getCache')
+                        .mockResolvedValueOnce(mockUser1)
+                        .mockResolvedValueOnce(mockUser);
+
+                    await expect(cacheService.getUser(mockUser.emailAddress)).resolves.toEqual(
+                        mockUser,
+                    );
+                });
+
+                it('misses when the user no longer holds that contact', async () => {
+                    /**
+                     * The pointer outlived a contact change, as when dropping
+                     * it failed. Following it would name the wrong user.
+                     */
+                    const { membershipId, ...mockUser1 } = mockUser;
+
+                    vi.spyOn(cacheService, 'getCache')
+                        .mockResolvedValueOnce(mockUser1)
+                        .mockResolvedValueOnce({ ...mockUser, phoneNumber: '+12085550123' });
+
+                    await expect(cacheService.getUser('+19704965500')).resolves.toBeUndefined();
                 });
             });
         });

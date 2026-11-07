@@ -105,7 +105,17 @@ class UserCache {
                 typeof displayName === 'string' &&
                 typeof membershipType === 'number'
             ) {
-                return await this.getUser(displayName, membershipType);
+                const resolved = await this.getUser(displayName, membershipType);
+
+                /**
+                 * A pointer outlives a contact change whenever dropping it
+                 * fails, and would go on naming a user who no longer holds
+                 * this number or address. Only a record that still holds it
+                 * counts; anything else is a miss, so the lookup reads Cosmos.
+                 */
+                return resolved?.phoneNumber === key || resolved?.emailAddress === key
+                    ? resolved
+                    : undefined;
             }
 
             return user;

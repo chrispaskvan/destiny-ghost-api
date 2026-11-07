@@ -494,6 +494,8 @@ describe('UserController', () => {
                 await join();
 
                 expect(saved().isSubscribed).toBe(false);
+                /** No welcome to a number that opted out. */
+                expect(notificationService.sendMessage).not.toHaveBeenCalled();
                 /**
                  * Through the write that sets the watermark: `updateUser`
                  * keeps the stored one, so a delayed START older than this
@@ -801,6 +803,22 @@ describe('UserController', () => {
         describe('when the account is not registered', () => {
             beforeEach(() => {
                 userService.getUserByDisplayName.mockResolvedValue(anonymous);
+            });
+
+            it('should read the account past the cache', async () => {
+                /**
+                 * The writes merge this copy over a fresh read, so a stale
+                 * cached one would put back old fields and fail on its ETag.
+                 */
+                await signUp();
+
+                /** The first read: the receipt write reads past the cache too. */
+                expect(userService.getUserByDisplayName).toHaveBeenNthCalledWith(
+                    1,
+                    displayName,
+                    membershipType,
+                    true,
+                );
             });
 
             it('should save the contact as pending, with the tokens', async () => {
@@ -1346,6 +1364,25 @@ describe('UserController', () => {
                     expect(allowCipherAttempt).not.toHaveBeenCalled();
                 },
             );
+
+            it("should refuse a registered account's pending re-sign-up codes", async () => {
+                /**
+                 * They went to the new, unverified contact, so they prove
+                 * nothing about the registered one.
+                 */
+                userService.getUserByDisplayName.mockResolvedValue({
+                    displayName,
+                    membershipType,
+                    dateRegistered: '2026-01-01T00:00:00.000Z',
+                    membership: {
+                        tokens: { blob: 'b', code: '123456', timeStamp },
+                        pending: { phoneNumber: '+12085550123' },
+                    },
+                });
+
+                await expect(attempt('123456')).rejects.toBeInstanceOf(InvalidCipherError);
+                expect(allowCipherAttempt).not.toHaveBeenCalled();
+            });
 
             it.each([
                 ['email', { code: '123456' }],
