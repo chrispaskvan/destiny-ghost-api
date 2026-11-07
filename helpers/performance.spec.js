@@ -324,6 +324,24 @@ describe('performance', () => {
             ]);
         });
 
+        it('should let go of a socket that connects without a lookup', async () => {
+            /** @type {import('node:net').Socket | undefined} */
+            let socket;
+
+            await inRequest(
+                () =>
+                    new Promise(resolve => {
+                        get(`http://127.0.0.1:${port}/no-lookup`, { agent: false }, res => {
+                            socket = res.socket;
+                            res.resume().on('close', resolve);
+                        });
+                    }),
+            );
+
+            expect(socket?.listenerCount('lookup')).toBe(0);
+            expect(lookups).toEqual([]);
+        });
+
         it('should record a failed lookup with its error, and the request it failed', async () => {
             await inRequest(() =>
                 getOwnConnection(`http://localhost:${port}/lookup/failed`, {
@@ -388,7 +406,10 @@ describe('performance', () => {
 
     it('should time node:http to its response headers and body, and its DNS lookup', async () => {
         await new Promise(resolve => {
-            get(`http://localhost:${port}/http?q=1`, res => res.resume().on('end', resolve));
+            // A connection of its own, since a pooled one makes no lookup
+            get(`http://localhost:${port}/http?q=1`, { agent: false }, res =>
+                res.resume().on('end', resolve),
+            );
         });
 
         expectHeadersThenBody(loggedFields(`HTTP Request: GET http://localhost:${port}/http?q=1`));
@@ -497,6 +518,26 @@ describe('performance', () => {
         await new Promise(resolve => {
             get(`http://localhost:${port}/disabled`, res => res.resume().on('end', resolve));
         });
+
+        expect(log.info).not.toHaveBeenCalled();
+    });
+
+    /**
+     * Logging changes only with another enable(), which subscribes the
+     * channels a second time: disable() drops what is in flight. The second
+     * disable() unsubscribes them again, ahead of afterEach's.
+     */
+    it('should not log a request that started before logging was turned on', async () => {
+        performanceHook.disable();
+        performanceHook.enable({ log: false });
+
+        await new Promise(resolve => {
+            get(`http://127.0.0.1:${port}/turned-on`, { agent: false }, res => {
+                performanceHook.enable();
+                res.resume().on('close', resolve);
+            });
+        });
+        performanceHook.disable();
 
         expect(log.info).not.toHaveBeenCalled();
     });

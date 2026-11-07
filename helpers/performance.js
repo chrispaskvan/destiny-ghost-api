@@ -40,40 +40,56 @@ const logsEach = ({ PERFORMANCE_LOG, NODE_ENV } = process.env) =>
 const requestLogger = () => context.getStore()?.get('logger') ?? log;
 
 /**
- * DNS lookups, keyed by the socket that makes them. Node publishes no
- * diagnostics channel for DNS, but every client socket - node:http, node:https,
- * node:http2 and fetch's - is published on net.client.socket before it looks
- * its host up, and emits 'lookup' once the lookup completes, failed or not.
- * Replaced on disable, like `requests`, since the socket still holds the
- * listener.
- * @type {WeakMap<object, { start: number, logger: import('pino').Logger, requestLookups?: import('./async-context.js').Timing[] }>}
+ * Bumped on disable, so a lookup started before it is dropped when it
+ * completes: the socket still holds its listener.
  */
-let lookups = new WeakMap();
-/** @param {import('node:net').Socket} socket */
+let generation = 0;
+/**
+ * Times the socket's DNS lookup. Node publishes no diagnostics channel for
+ * DNS, but every client socket - node:http, node:https, node:http2 and
+ * fetch's - is published on net.client.socket before it looks its host up,
+ * and emits 'lookup' once the lookup completes, failed or not.
+ *
+ * A client that resolves the host itself and dials the address, or hands the
+ * socket a `lookup` of its own, is timed by what the socket sees: nothing, or
+ * that `lookup`. nodemailer does both, so SMTP lookups are missing or near 0.
+ *
+ * @param {import('node:net').Socket} socket
+ */
 const startLookup = socket => {
-    lookups.set(socket, {
-        start: performance.now(),
-        logger: requestLogger(),
-        requestLookups: context.getStore()?.get('lookups'),
-    });
-    // A host with several addresses emits 'lookup' for each one; the first
-    // completes the lookup, and once lets the listener go with it
-    socket.once('lookup', (error, _address, _family, host) => {
-        const lookup = lookups.get(socket);
-
-        if (lookup) {
-            const duration = elapsed(lookup.start);
-
-            lookups.delete(socket);
-            lookup.requestLookups?.push({ host, duration, ...(error && { error: error.message }) });
-            if (logEach) {
-                lookup.logger.info(
-                    { entry: `DNS Lookup: ${host}`, duration, error: error?.message },
-                    'Performance Measurement',
-                );
-            }
+    const started = generation;
+    const start = performance.now();
+    const logger = requestLogger();
+    const requestLookups = context.getStore()?.get('lookups');
+    /**
+     * @param {Error | null} error
+     * @param {string} _address
+     * @param {number} _family
+     * @param {string} host
+     */
+    const complete = (error, _address, _family, host) => {
+        socket.off('connect', release);
+        if (started !== generation) {
+            return;
         }
-    });
+
+        const duration = elapsed(start);
+
+        requestLookups?.push({ host, duration, ...(error && { error: error.message }) });
+        if (logEach) {
+            logger.info(
+                { entry: `DNS Lookup: ${host}`, duration, error: error?.message },
+                'Performance Measurement',
+            );
+        }
+    };
+    // A socket connected without a lookup (to an address) lets go of the
+    // request it was opened in
+    const release = () => socket.off('lookup', complete);
+
+    // A host with several addresses emits 'lookup' for each one; the first
+    // completes the lookup
+    socket.once('lookup', complete).once('connect', release);
 };
 
 /**
@@ -179,7 +195,8 @@ const completeRequest = (key, error) => {
             duration,
             ...(error && { error: error.message }),
         });
-        if (logEach) {
+        // An entry is built only when logging was on as the request started
+        if (logEach && request.entry) {
             request.logger.info(
                 {
                     entry: request.entry,
@@ -310,7 +327,7 @@ export default {
         for (const [name, onMessage] of channels) {
             unsubscribe(name, onMessage);
         }
-        lookups = new WeakMap();
+        generation += 1;
         requests = new WeakMap();
     },
 };
