@@ -98,8 +98,6 @@ sequenceDiagram
     end
 
     note over WebApp,API: Changing phone or email: a registered user signs up again with the new contact<br/>and joins; the old contact stays in place until join succeeds.
-
-    note over WebApp,API: POST /users/current/ciphers and /users/current/cryptarch require<br/>an already-registered user (400 otherwise) — they're for re-verifying<br/>a single channel later (e.g. before a sensitive profile edit),<br/>not for initial sign-up. Each code allows 5 cryptarch attempts,<br/>right or wrong; after that it answers 429 until a new code is sent.
 ```
 
 ## 3. Authenticated App Usage

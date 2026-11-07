@@ -2,7 +2,6 @@
 import { StatusCodes } from 'http-status-codes';
 import { RateLimiterRedis, RateLimiterRes } from 'rate-limiter-flexible';
 import client from './cache.js';
-import TOKEN_TTL_SECONDS from '../users/token-ttl.js';
 
 // rate-limiter-flexible picks its node-redis code path by the client's class name (`Commander`),
 // which node-redis v6 no longer uses. Without `useRedisPackage` every consume throws, and
@@ -61,29 +60,6 @@ const resendLimiter = new RateLimiterRedis({
     points: 3,
     duration: 15 * 60,
 });
-/** A registered account's re-verification codes, billed the same way. */
-const cipherLimiter = new RateLimiterRedis({
-    ...store,
-    keyPrefix: 'cipher',
-    points: 3,
-    duration: 15 * 60,
-});
-/**
- * Attempts per verification code. A 6-digit code at the global limit had
- * about a 1% chance of being guessed within one TTL.
- *
- * The count lasts as long as a token does. It starts at a code's first
- * attempt, never before the code was minted, so it always outlasts the code
- * and a spent code can't get its attempts back. The key names the token, so
- * a new code starts afresh.
- */
-const cipherAttemptLimiter = new RateLimiterRedis({
-    ...store,
-    keyPrefix: 'cipher-attempt',
-    points: 5,
-    duration: TOKEN_TTL_SECONDS,
-});
-
 /**
  * @param {import('rate-limiter-flexible').RateLimiterRes} rateLimiterRes
  * @param {import('express').Response} res
@@ -312,36 +288,6 @@ const perChannel = limiter => (req, res, next) =>
 /** Limit sign-up resends per account and channel. */
 const resendRateLimiterMiddleware = perChannel(resendLimiter);
 
-/** Limit re-verification codes per account and channel. */
-const cipherRateLimiterMiddleware = perChannel(cipherLimiter);
-
-/**
- * Spend one of a verification code's attempts. Consumed before the code is
- * compared, so parallel guesses can't all slip past a check that only
- * recorded failures afterwards.
- *
- * Fails open, like every bucket here. When the client isn't ready, sessions
- * (`helpers/store.js`, the same client) fail too, so the request never
- * authenticates. A single command failing on a connected client lets that
- * attempt through with no limit at all, since the global bucket fails open
- * the same way.
- * @param {string} key - names the token being tried
- * @returns {Promise<boolean>} false once the code's attempts are spent
- */
-const allowCipherAttempt = async key => {
-    if (!client.isReady) {
-        return true;
-    }
-
-    try {
-        await cipherAttemptLimiter.consume(key, 1);
-
-        return true;
-    } catch (rejection) {
-        return !(rejection instanceof RateLimiterRes && client.isReady);
-    }
-};
-
 export default rateLimiterMiddleware;
 export {
     twilioRateLimiterMiddleware,
@@ -352,6 +298,4 @@ export {
     rejectTwilioRequest,
     signUpRateLimiterMiddleware,
     resendRateLimiterMiddleware,
-    cipherRateLimiterMiddleware,
-    allowCipherAttempt,
 };

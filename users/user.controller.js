@@ -5,11 +5,8 @@
  * @module User Controller
  * @author Chris Paskvan
  */
-import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { applyPatch, createPatch } from 'rfc6902';
-import CipherAttemptsExceededError from './cipher-attempts-exceeded.error.js';
-import InvalidCipherError from './invalid-cipher.error.js';
 import cleanPhoneNumber from './clean-phone-number.js';
 import TOKEN_TTL_SECONDS from './token-ttl.js';
 import Postmaster from '../helpers/postmaster.js';
@@ -32,7 +29,7 @@ import notificationTypes from '../notifications/notification.types.js';
  */
 
 /**
- * In-flight verification-code state, set only during sendCipher/decipher and
+ * In-flight verification-code state, set by `signUp` and spent by `join`;
  * not part of the persisted schema.
  * @typedef {Object} MembershipTokens
  * @property {string} [code]
@@ -76,9 +73,6 @@ import notificationTypes from '../notifications/notification.types.js';
 /**
  * Constructor options for UserController.
  * @typedef {Object} UserControllerOptions
- * @property {(key: string) => Promise<boolean>} allowCipherAttempt - spends one
- * of a verification code's attempts, keyed on the token; false once they are
- * spent (see `helpers/rate-limiter.middleware.js`)
  * @property {import('../destiny/destiny.service.js').default} destinyService
  * @property {import('../notifications/notification.service.js').default} notificationService
  * @property {(phoneNumber: string) => Promise<{ isSubscribed: boolean, receivedAt: number } | undefined>} readConsent
@@ -92,9 +86,6 @@ import notificationTypes from '../notifications/notification.types.js';
  * User Controller Class
  */
 class UserController {
-    /** @type {(key: string) => Promise<boolean>} */
-    #allowCipherAttempt;
-
     /** @type {UserControllerOptions['readConsent']} */
     #readConsent;
 
@@ -102,11 +93,6 @@ class UserController {
      * @param {UserControllerOptions} options
      */
     constructor(options) {
-        /** Required: without it, cryptarch would allow unlimited guesses. */
-        if (typeof options.allowCipherAttempt !== 'function') {
-            throw new TypeError('allowCipherAttempt is required');
-        }
-
         /**
          * Required: without it, a STOP sent between sign-up and `join` would
          * be lost, since no document holds the pending number yet.
@@ -115,7 +101,6 @@ class UserController {
             throw new TypeError('readConsent is required');
         }
 
-        this.#allowCipherAttempt = options.allowCipherAttempt;
         this.#readConsent = options.readConsent;
         this.destiny = options.destinyService;
         this.notifications = options.notificationService;
@@ -247,79 +232,6 @@ class UserController {
     }
 
     /**
-     * Validate a user token.
-     *
-     * @param {Object} param0
-     * @param {string} param0.displayName
-     * @param {number} param0.membershipType
-     * @param {string} param0.channel
-     * @param {string} param0.code
-     * @returns {Promise<MutableUser>}
-     */
-    async decipher({ displayName, membershipType, channel, code }) {
-        /**
-         * Read past the cache: `sendCipher` saves the token before sending it,
-         * but a cache refresh that fails after that save is only logged, and
-         * a cached read would then check the code against the previous one.
-         */
-        const user = /** @type {MutableUser | undefined} */ (
-            await this.users.getUserByDisplayName(displayName, membershipType, true)
-        );
-
-        /**
-         * Registered accounts only: a pending sign-up verifies through
-         * `join`. Refused before an attempt is spent, because a sign-up that
-         * hit a conflict saves no tokens, so its codes would answer 404 for
-         * ever where a saved one reaches 429, and tell the caller which.
-         */
-        if (!user?.dateRegistered) {
-            throw new InvalidCipherError('registration not found');
-        }
-        /**
-         * A registered account with pending contact holds a re-sign-up's
-         * tokens, which went to the new, unverified contact. They prove
-         * nothing about the registered one.
-         */
-        if (user.membership?.pending) {
-            throw new InvalidCipherError('a contact change is pending');
-        }
-
-        const tokens = user.membership?.tokens;
-        /**
-         * Checked to exist, not just compared: a phone cipher has no blob, so
-         * an email check with no code compared `undefined` with `undefined`
-         * and passed.
-         */
-        const expected = channel === 'phone' ? tokens?.code : tokens?.blob;
-
-        if (!expected) {
-            throw new InvalidCipherError('no code for this channel');
-        }
-        if (getEpoch() > (tokens?.timeStamp ?? 0) + TOKEN_TTL_SECONDS) {
-            throw new InvalidCipherError('token expired');
-        }
-
-        /**
-         * Spent before comparing, and on every attempt, the right one
-         * included, so parallel guesses can't all get in ahead of the count.
-         * Keyed on the whole token set, hashed so no code reaches Redis: a
-         * new code starts a new count, even one minted in the same second.
-         */
-        const token = createHash('sha256')
-            .update(JSON.stringify([tokens?.blob, tokens?.code, tokens?.timeStamp]))
-            .digest('hex');
-
-        if (!(await this.#allowCipherAttempt(`${membershipType}:${displayName}:${token}`))) {
-            throw new CipherAttemptsExceededError();
-        }
-        if (code !== expected) {
-            throw new InvalidCipherError('invalid code');
-        }
-
-        return user;
-    }
-
-    /**
      * Delete inconsequential message documents for the given user.
      * @param {MutableUser} user
      * @returns {Promise<void>}
@@ -446,9 +358,10 @@ class UserController {
         const pending = user?.membership?.pending;
 
         /**
-         * The stored code is checked to exist, not just compared: an email
-         * cipher saves a blob with no code, so a join with that blob and no
-         * code compared `undefined` with `undefined` and passed. The sign-up
+         * The stored code is checked to exist, not just compared: a token
+         * with a blob and no code (as the retired email cipher saved, #799)
+         * would otherwise let a join with no code compare `undefined` with
+         * `undefined` and pass. The sign-up
          * must be the session's own, now that a registered account can sign
          * up again.
          */
@@ -556,66 +469,6 @@ class UserController {
         }
 
         return user;
-    }
-
-    /**
-     * Send a verification code to the user.
-     *
-     * The new token is saved before it is sent, so every code that reaches
-     * the user is one `decipher` can check. Sending first left a delivered
-     * code unsaved whenever the write failed, and the retry sent, and
-     * billed, another (#796). A failed send rejects but keeps the token: it
-     * may still have been delivered, and the user can ask again.
-     *
-     * @param {Object} param0
-     * @param {string} param0.displayName
-     * @param {number} param0.membershipType
-     * @param {'phone' | 'email'} param0.channel
-     * @returns {Promise<void>}
-     */
-    async sendCipher({ displayName, membershipType, channel }) {
-        /** Read past the cache: a stale `_etag` would fail the write below. */
-        const user = /** @type {MutableUser | undefined} */ (
-            await this.users.getUserByDisplayName(displayName, membershipType, true)
-        );
-
-        if (!(user?.dateRegistered && user?.emailAddress && user?.phoneNumber)) {
-            throw new Error('registration not found');
-        }
-
-        const iconUrl = await this.#vendorIcon();
-        const tokens =
-            channel === 'phone'
-                ? { code: getCode(), timeStamp: getEpoch() }
-                : { blob: getBlob(), timeStamp: getEpoch() };
-
-        user.membership = { tokens };
-
-        await this.users.updateUser(/** @type {User} */ (/** @type {unknown} */ (user)));
-
-        /** @type {Membership} */
-        const receipts =
-            channel === 'phone'
-                ? {
-                      message: await this.notifications.sendMessage(
-                          UserController.#buildVerificationMessage(
-                              /** @type {string} */ (tokens.code),
-                          ),
-                          user.phoneNumber,
-                          user.type === 'mobile' ? (iconUrl ?? '') : '',
-                      ),
-                  }
-                : {
-                      postmark: await this.postmaster.confirm(
-                          /** @type {import('../helpers/postmaster.js').EmailUser} */ (
-                              /** @type {unknown} */ (user)
-                          ),
-                          iconUrl,
-                          '/confirm',
-                      ),
-                  };
-
-        await this.#saveReceipts({ displayName, membershipType, tokens }, receipts);
     }
 
     /**
@@ -883,9 +736,8 @@ class UserController {
 
         /**
          * A pending sign-up holds both tokens and the pending contact, for a
-         * new account or a registered one changing its contact. A cipher
-         * holds one token and no pending contact, and isn't this endpoint's
-         * to resend.
+         * new account or a registered one changing its contact. Anything
+         * else isn't this endpoint's to resend.
          */
         if (
             !user ||
@@ -1035,8 +887,8 @@ class UserController {
     }
 
     /**
-     * Add the delivery receipts of a verification already saved - a sign-up
-     * or a cipher - which are kept for billing.
+     * Add the delivery receipts of a sign-up already saved, which are kept
+     * for billing.
      *
      * Best effort, because the outcome of the sends is already settled:
      * failing the request now would only invite a retry that sends, and
@@ -1046,10 +898,9 @@ class UserController {
      * Applied to a fresh read rather than the document the caller built, so a
      * `join` that landed while the messages were sending is kept, and the read
      * brings the ETag that guards this write against anything later. A read
-     * holding other tokens means a newer sign-up or cipher replaced them, and
-     * these receipts are not for the messages it sent. The whole token set is
-     * compared: a sign-up has both a code and a blob, a phone cipher only a
-     * code, an email cipher only a blob.
+     * holding other tokens means a newer sign-up replaced them, and these
+     * receipts are not for the messages it sent. The whole token set is
+     * compared, timestamp included.
      * @param {{ displayName: string, membershipType: number, tokens?: MembershipTokens }} saved -
      * the account, and the tokens as they were saved
      * @param {Membership} receipts - `message` and/or `postmark`

@@ -74,20 +74,17 @@ const worldRepository = {
     getVendorIcon: vi.fn(() => 'https://example.com/icon.png'),
 };
 
-const allowCipherAttempt = vi.fn().mockResolvedValue(true);
 const readConsent = vi.fn().mockResolvedValue(undefined);
 /** Stand-ins for the per-account limits; their own specs are with the limiter. */
 const rateLimiters = {
     signUp: vi.fn((_req, _res, next) => next()),
     resend: vi.fn((_req, _res, next) => next()),
-    cipher: vi.fn((_req, _res, next) => next()),
 };
 
 let userRouter;
 
 beforeEach(() => {
     userRouter = UserRouter({
-        allowCipherAttempt,
         readConsent,
         rateLimiters,
         authenticationController,
@@ -927,7 +924,6 @@ describe('UserRouter', () => {
                     }),
                 };
                 const router = UserRouter({
-                    allowCipherAttempt,
                     readConsent,
                     rateLimiters,
                     authenticationController,
@@ -999,309 +995,6 @@ describe('UserRouter', () => {
         });
     });
 
-    describe('POST /users/current/ciphers', () => {
-        const phoneNumber = '+1234567890';
-        const emailAddress = 'test@example.com';
-
-        describe('when channel is email', () => {
-            it('should send verification code and return 202', () =>
-                new Promise((done, reject) => {
-                    const req = createRequest({
-                        method: 'POST',
-                        url: '/current/ciphers',
-                        headers: { 'x-csrf-token': csrfToken },
-                        body: { channel: 'email' },
-                        session: {
-                            csrfToken,
-                            displayName,
-                            membershipType,
-                        },
-                    });
-                    const user = {
-                        displayName,
-                        membershipType,
-                        dateRegistered: Temporal.Now.instant().toString(),
-                        emailAddress,
-                        phoneNumber,
-                    };
-
-                    userService.getUserByDisplayName.mockImplementation(() =>
-                        Promise.resolve(user),
-                    );
-                    userService.updateUser.mockImplementation(() => Promise.resolve(user));
-
-                    res.on('end', () => {
-                        try {
-                            expect(res.statusCode).toEqual(StatusCodes.ACCEPTED);
-                            expect(userService.getUserByDisplayName).toHaveBeenCalledWith(
-                                displayName,
-                                membershipType,
-                                true,
-                            );
-                            expect(userService.updateUser).toHaveBeenCalled();
-                            done();
-                        } catch (err) {
-                            reject(err);
-                        }
-                    });
-
-                    userRouter(req, res, next);
-                }));
-        });
-
-        describe('when channel is phone', () => {
-            it('should send verification code and return 202', () =>
-                new Promise((done, reject) => {
-                    const req = createRequest({
-                        method: 'POST',
-                        url: '/current/ciphers',
-                        headers: { 'x-csrf-token': csrfToken },
-                        body: { channel: 'phone' },
-                        session: {
-                            csrfToken,
-                            displayName,
-                            membershipType,
-                        },
-                    });
-                    const user = {
-                        displayName,
-                        membershipType,
-                        dateRegistered: Temporal.Now.instant().toString(),
-                        emailAddress,
-                        phoneNumber,
-                    };
-
-                    userService.getUserByDisplayName.mockImplementation(() =>
-                        Promise.resolve(user),
-                    );
-                    userService.updateUser.mockImplementation(() => Promise.resolve(user));
-                    notificationService.sendMessage.mockImplementation(() =>
-                        Promise.resolve({ sid: 'test-message-id' }),
-                    );
-
-                    res.on('end', () => {
-                        try {
-                            expect(res.statusCode).toEqual(StatusCodes.ACCEPTED);
-                            expect(userService.getUserByDisplayName).toHaveBeenCalledWith(
-                                displayName,
-                                membershipType,
-                                true,
-                            );
-                            expect(notificationService.sendMessage).toHaveBeenCalled();
-                            expect(userService.updateUser).toHaveBeenCalled();
-                            done();
-                        } catch (err) {
-                            reject(err);
-                        }
-                    });
-
-                    userRouter(req, res, next);
-                }));
-        });
-
-        describe('when channel is invalid', () => {
-            it('should return 400 Bad Request', () =>
-                new Promise((done, reject) => {
-                    const req = createRequest({
-                        method: 'POST',
-                        url: '/current/ciphers',
-                        headers: { 'x-csrf-token': csrfToken },
-                        body: { channel: 'invalid' },
-                        session: {
-                            csrfToken,
-                            displayName,
-                            membershipType,
-                        },
-                    });
-
-                    res.on('end', () => {
-                        try {
-                            expect(res.statusCode).toEqual(StatusCodes.BAD_REQUEST);
-                            expect(res._getData()).toContain('Invalid channel');
-                            done();
-                        } catch (err) {
-                            reject(err);
-                        }
-                    });
-
-                    userRouter(req, res, next);
-                }));
-        });
-
-        describe('when channel is missing', () => {
-            it('should return 400 Bad Request', () =>
-                new Promise((done, reject) => {
-                    const req = createRequest({
-                        method: 'POST',
-                        url: '/current/ciphers',
-                        headers: { 'x-csrf-token': csrfToken },
-                        body: {},
-                        session: {
-                            csrfToken,
-                            displayName,
-                            membershipType,
-                        },
-                    });
-
-                    res.on('end', () => {
-                        try {
-                            expect(res.statusCode).toEqual(StatusCodes.BAD_REQUEST);
-                            expect(res._getData()).toContain('Invalid channel');
-                            done();
-                        } catch (err) {
-                            reject(err);
-                        }
-                    });
-
-                    userRouter(req, res, next);
-                }));
-        });
-
-        describe('when user is not found', () => {
-            it('should return 400 Bad Request', () =>
-                new Promise((done, reject) => {
-                    const req = createRequest({
-                        method: 'POST',
-                        url: '/current/ciphers',
-                        headers: { 'x-csrf-token': csrfToken },
-                        body: { channel: 'email' },
-                        session: {
-                            csrfToken,
-                            displayName,
-                            membershipType,
-                        },
-                    });
-
-                    userService.getUserByDisplayName.mockImplementation(() =>
-                        Promise.resolve(null),
-                    );
-
-                    res.on('end', () => {
-                        try {
-                            expect(res.statusCode).toEqual(StatusCodes.BAD_REQUEST);
-                            expect(res._getData()).toContain('User registration not found');
-                            done();
-                        } catch (err) {
-                            reject(err);
-                        }
-                    });
-
-                    userRouter(req, res, next);
-                }));
-        });
-
-        describe('when a generic error occurs', () => {
-            it('should re-throw the error', () =>
-                new Promise((done, reject) => {
-                    const req = createRequest({
-                        method: 'POST',
-                        url: '/current/ciphers',
-                        headers: { 'x-csrf-token': csrfToken },
-                        body: { channel: 'email' },
-                        session: {
-                            csrfToken,
-                            displayName,
-                            membershipType,
-                        },
-                    });
-                    const genericError = new Error('Database connection failed');
-                    let responseEnded = false;
-                    let errorOccurred = false;
-
-                    userService.getUserByDisplayName.mockImplementation(() =>
-                        Promise.reject(genericError),
-                    );
-
-                    res.on('end', () => {
-                        responseEnded = true;
-                        if (!errorOccurred) {
-                            reject(
-                                new Error(
-                                    'Expected error to be thrown, but request completed normally',
-                                ),
-                            );
-                        }
-                    });
-                    setTimeout(() => {
-                        if (!responseEnded) {
-                            errorOccurred = true;
-                            done();
-                        }
-                    }, 50);
-
-                    userRouter(req, res, next);
-                }));
-        });
-
-        describe('when the send fails with a provider "not found"', () => {
-            it('should forward the error rather than call the registration missing', async () => {
-                const req = createRequest({
-                    method: 'POST',
-                    url: '/current/ciphers',
-                    headers: { 'x-csrf-token': csrfToken },
-                    body: { channel: 'phone' },
-                    session: { csrfToken, displayName, membershipType },
-                });
-                const err = new Error('The requested resource /Services/MG123 was not found');
-
-                next.mockClear();
-                userService.getUserByDisplayName.mockResolvedValue({
-                    displayName,
-                    membershipType,
-                    dateRegistered: Temporal.Now.instant().toString(),
-                    emailAddress,
-                    phoneNumber,
-                });
-                notificationService.sendMessage.mockRejectedValueOnce(err);
-
-                userRouter(req, res, next);
-
-                await vi.waitFor(() => {
-                    expect(next).toHaveBeenCalledWith(err);
-                });
-                expect(res._isEndCalled()).toEqual(false);
-            });
-        });
-
-        describe('limits', () => {
-            const ciphersRequest = body =>
-                createRequest({
-                    method: 'POST',
-                    url: '/current/ciphers',
-                    headers: { 'x-csrf-token': csrfToken },
-                    session: { csrfToken, displayName, membershipType, membershipId: 'm-1' },
-                    body,
-                });
-
-            it('should reject a bad channel before spending the limit', async () => {
-                const done = new Promise(resolve => res.on('end', resolve));
-
-                userRouter(ciphersRequest({ channel: 'sms' }), res, next);
-                await done;
-
-                expect(res.statusCode).toEqual(StatusCodes.BAD_REQUEST);
-                expect(rateLimiters.cipher).not.toHaveBeenCalled();
-            });
-
-            it('should stop at the cipher limit before reading, saving or sending', async () => {
-                rateLimiters.cipher.mockImplementationOnce((_req, limited) =>
-                    limited.status(StatusCodes.TOO_MANY_REQUESTS).end(),
-                );
-
-                const done = new Promise(resolve => res.on('end', resolve));
-
-                userRouter(ciphersRequest({ channel: 'phone' }), res, next);
-                await done;
-
-                expect(res.statusCode).toEqual(StatusCodes.TOO_MANY_REQUESTS);
-                expect(rateLimiters.resend).not.toHaveBeenCalled();
-                expect(userService.getUserByDisplayName).not.toHaveBeenCalled();
-                expect(userService.updateUser).not.toHaveBeenCalled();
-                expect(notificationService.sendMessage).not.toHaveBeenCalled();
-            });
-        });
-    });
-
     describe('POST /users/join', () => {
         it("should join the session's own account", async () => {
             const joinSpy = vi.spyOn(UserController.prototype, 'join').mockResolvedValueOnce({});
@@ -1309,7 +1002,6 @@ describe('UserRouter', () => {
 
             /** Built after the spy, so its controller calls through it. */
             UserRouter({
-                allowCipherAttempt,
                 readConsent,
                 rateLimiters,
                 authenticationController,
@@ -1531,321 +1223,30 @@ describe('UserRouter', () => {
         });
     });
 
-    describe('POST /users/current/cryptarch', () => {
-        const code = '123456';
-        const blob = 'email-verification-blob';
-
-        describe('when validating phone verification code', () => {
-            it('should validate code and return 204', () =>
-                new Promise((done, reject) => {
-                    const req = createRequest({
-                        method: 'POST',
-                        url: '/current/cryptarch',
-                        headers: { 'x-csrf-token': csrfToken },
-                        body: { channel: 'phone', code },
-                        session: {
-                            csrfToken,
-                            displayName,
-                            membershipType,
-                        },
-                    });
-                    const user = {
-                        displayName,
-                        membershipType,
-                        dateRegistered: Temporal.Now.instant().toString(),
-                        membership: {
-                            tokens: {
-                                code,
-                                timeStamp: Math.floor(
-                                    Temporal.Now.instant().epochMilliseconds / 1000,
-                                ), // Current timestamp
-                            },
-                        },
-                    };
-
-                    userService.getUserByDisplayName.mockImplementation(() =>
-                        Promise.resolve(user),
-                    );
-
-                    res.on('end', () => {
-                        try {
-                            expect(res.statusCode).toEqual(StatusCodes.NO_CONTENT);
-                            expect(userService.getUserByDisplayName).toHaveBeenCalledWith(
-                                displayName,
-                                membershipType,
-                                true,
-                            );
-                            done();
-                        } catch (err) {
-                            reject(err);
-                        }
-                    });
-
-                    userRouter(req, res, next);
-                }));
-        });
-
-        describe('when validating email verification code', () => {
-            it('should validate blob and return 204', () =>
-                new Promise((done, reject) => {
-                    const req = createRequest({
-                        method: 'POST',
-                        url: '/current/cryptarch',
-                        headers: { 'x-csrf-token': csrfToken },
-                        body: { channel: 'email', code: blob },
-                        session: {
-                            csrfToken,
-                            displayName,
-                            membershipType,
-                        },
-                    });
-                    const user = {
-                        displayName,
-                        membershipType,
-                        dateRegistered: Temporal.Now.instant().toString(),
-                        membership: {
-                            tokens: {
-                                blob,
-                                timeStamp: Math.floor(
-                                    Temporal.Now.instant().epochMilliseconds / 1000,
-                                ), // Current timestamp
-                            },
-                        },
-                    };
-
-                    userService.getUserByDisplayName.mockImplementation(() =>
-                        Promise.resolve(user),
-                    );
-
-                    res.on('end', () => {
-                        try {
-                            expect(res.statusCode).toEqual(StatusCodes.NO_CONTENT);
-                            expect(userService.getUserByDisplayName).toHaveBeenCalledWith(
-                                displayName,
-                                membershipType,
-                                true,
-                            );
-                            done();
-                        } catch (err) {
-                            reject(err);
-                        }
-                    });
-
-                    userRouter(req, res, next);
-                }));
-        });
-
-        describe('when channel is invalid', () => {
-            it('should return 400 Bad Request', () =>
-                new Promise((done, reject) => {
-                    const req = createRequest({
-                        method: 'POST',
-                        url: '/current/cryptarch',
-                        headers: { 'x-csrf-token': csrfToken },
-                        body: { channel: 'invalid', code },
-                        session: {
-                            csrfToken,
-                            displayName,
-                            membershipType,
-                        },
-                    });
-
-                    res.on('end', () => {
-                        try {
-                            expect(res.statusCode).toEqual(StatusCodes.BAD_REQUEST);
-                            expect(res._getData()).toContain('Invalid channel');
-                            done();
-                        } catch (err) {
-                            reject(err);
-                        }
-                    });
-
-                    userRouter(req, res, next);
-                }));
-        });
-
-        describe("when the code's attempts are spent", () => {
-            it('should answer 429 and ask for a new code', async () => {
-                allowCipherAttempt.mockResolvedValueOnce(false);
-                userService.getUserByDisplayName.mockResolvedValueOnce({
-                    displayName,
-                    membershipType,
-                    dateRegistered: Temporal.Now.instant().toString(),
-                    membership: { tokens: { code: '123456', timeStamp: Number.MAX_SAFE_INTEGER } },
-                });
-
-                const done = new Promise(resolve => res.on('end', resolve));
+    describe('retired verification codes (#799)', () => {
+        it.each(['/current/ciphers', '/current/cryptarch'])(
+            'should leave POST %s unrouted, so it answers 404',
+            async url => {
+                const passed = new Promise(resolve => next.mockImplementationOnce(resolve));
 
                 userRouter(
                     createRequest({
                         method: 'POST',
-                        url: '/current/cryptarch',
+                        url,
                         headers: { 'x-csrf-token': csrfToken },
+                        session: { csrfToken, displayName, membershipType, membershipId: 'm-1' },
                         body: { channel: 'phone', code: '123456' },
-                        session: { csrfToken, displayName, membershipType },
                     }),
                     res,
                     next,
                 );
-                await done;
 
-                expect(res.statusCode).toEqual(StatusCodes.TOO_MANY_REQUESTS);
-                expect(res._getData()).toContain('Request a new code');
-                expect(res.getHeader('Retry-After')).toBeUndefined();
-            });
-        });
-
-        describe('when the user cannot be read', () => {
-            it('should forward the error rather than call the code invalid', async () => {
-                const req = createRequest({
-                    method: 'POST',
-                    url: '/current/cryptarch',
-                    headers: { 'x-csrf-token': csrfToken },
-                    body: { channel: 'phone', code: '123456' },
-                    session: { csrfToken, displayName, membershipType },
-                });
-                const err = new Error('Request rate is large');
-
-                next.mockClear();
-                userService.getUserByDisplayName.mockRejectedValueOnce(err);
-
-                /**
-                 * A 404 here sent the user to request, and pay for, another
-                 * code that would fail the same way.
-                 */
-                userRouter(req, res, next);
-
-                await vi.waitFor(() => {
-                    expect(next).toHaveBeenCalledWith(err);
-                });
-                expect(res._isEndCalled()).toEqual(false);
-            });
-        });
-
-        describe('when verification code is invalid', () => {
-            it('should return 404 Not Found', () =>
-                new Promise((done, reject) => {
-                    const req = createRequest({
-                        method: 'POST',
-                        url: '/current/cryptarch',
-                        headers: { 'x-csrf-token': csrfToken },
-                        body: { channel: 'phone', code: 'wrong-code' },
-                        session: {
-                            csrfToken,
-                            displayName,
-                            membershipType,
-                        },
-                    });
-                    const user = {
-                        displayName,
-                        membershipType,
-                        dateRegistered: Temporal.Now.instant().toString(),
-                        membership: {
-                            tokens: {
-                                code: 'correct-code',
-                                timeStamp: Math.floor(
-                                    Temporal.Now.instant().epochMilliseconds / 1000,
-                                ),
-                            },
-                        },
-                    };
-
-                    userService.getUserByDisplayName.mockImplementation(() =>
-                        Promise.resolve(user),
-                    );
-
-                    res.on('end', () => {
-                        try {
-                            expect(res.statusCode).toEqual(StatusCodes.NOT_FOUND);
-                            expect(res._getData()).toContain('Invalid cipher');
-                            done();
-                        } catch (err) {
-                            reject(err);
-                        }
-                    });
-
-                    userRouter(req, res, next);
-                }));
-        });
-
-        describe('when verification code is expired', () => {
-            it('should return 404 Not Found', () =>
-                new Promise((done, reject) => {
-                    const req = createRequest({
-                        method: 'POST',
-                        url: '/current/cryptarch',
-                        headers: { 'x-csrf-token': csrfToken },
-                        body: { channel: 'phone', code },
-                        session: {
-                            csrfToken,
-                            displayName,
-                            membershipType,
-                        },
-                    });
-                    const user = {
-                        displayName,
-                        membershipType,
-                        dateRegistered: Temporal.Now.instant().toString(),
-                        membership: {
-                            tokens: {
-                                code,
-                                timeStamp:
-                                    Math.floor(Temporal.Now.instant().epochMilliseconds / 1000) -
-                                    1000, // Older than the 15-minute TTL
-                            },
-                        },
-                    };
-
-                    userService.getUserByDisplayName.mockImplementation(() =>
-                        Promise.resolve(user),
-                    );
-
-                    res.on('end', () => {
-                        try {
-                            expect(res.statusCode).toEqual(StatusCodes.NOT_FOUND);
-                            expect(res._getData()).toContain('Invalid cipher');
-                            done();
-                        } catch (err) {
-                            reject(err);
-                        }
-                    });
-
-                    userRouter(req, res, next);
-                }));
-        });
-
-        describe('when user is not found', () => {
-            it('should return 404 Not Found', () =>
-                new Promise((done, reject) => {
-                    const req = createRequest({
-                        method: 'POST',
-                        url: '/current/cryptarch',
-                        headers: { 'x-csrf-token': csrfToken },
-                        body: { channel: 'phone', code },
-                        session: {
-                            csrfToken,
-                            displayName,
-                            membershipType,
-                        },
-                    });
-
-                    userService.getUserByDisplayName.mockImplementation(() =>
-                        Promise.resolve(null),
-                    );
-
-                    res.on('end', () => {
-                        try {
-                            expect(res.statusCode).toEqual(StatusCodes.NOT_FOUND);
-                            expect(res._getData()).toContain('Invalid cipher');
-                            done();
-                        } catch (err) {
-                            reject(err);
-                        }
-                    });
-
-                    userRouter(req, res, next);
-                }));
-        });
+                /** Passed on with no error: the app's own 404 answers it. */
+                await expect(passed).resolves.toBeUndefined();
+                expect(userService.getUserByDisplayName).not.toHaveBeenCalled();
+                expect(notificationService.sendMessage).not.toHaveBeenCalled();
+            },
+        );
     });
 
     describe('GET /users/current/csrfToken', () => {

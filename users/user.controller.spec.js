@@ -5,8 +5,6 @@ import { get, post } from '../helpers/bungie.request.js';
 import DestinyService from '../destiny/destiny.service.js';
 import UserController from './user.controller.js';
 import UserService from './user.service.js';
-import CipherAttemptsExceededError from './cipher-attempts-exceeded.error.js';
-import InvalidCipherError from './invalid-cipher.error.js';
 import InvalidPhoneNumberError from './invalid-phone-number.error.js';
 
 const { logError, logInfo, logWarn } = vi.hoisted(() => ({
@@ -44,7 +42,6 @@ const destinyService = {
 const notificationService = {
     sendMessage: vi.fn().mockResolvedValue(),
 };
-const allowCipherAttempt = vi.fn().mockResolvedValue(true);
 const readConsent = vi.fn().mockResolvedValue(undefined);
 const userService = {
     createAnonymousUser: vi.fn().mockImplementation(user => Promise.resolve(user)),
@@ -71,7 +68,6 @@ let userController;
 
 beforeEach(() => {
     userController = new UserController({
-        allowCipherAttempt,
         readConsent,
         destinyService,
         notificationService,
@@ -289,15 +285,6 @@ describe('UserController', () => {
                 tokens: { emailAddress: 'some-blob', phoneNumber: code },
             });
         };
-        const decipher = seconds => {
-            userService.getUserByDisplayName.mockResolvedValueOnce({
-                dateRegistered: '2026-01-01T00:00:00.000Z',
-                membership: { tokens: tokensAged(seconds) },
-            });
-
-            return userController.decipher({ displayName, membershipType, channel: 'phone', code });
-        };
-
         const resend = seconds => {
             userService.getUserByDisplayName.mockResolvedValueOnce({
                 displayName,
@@ -310,7 +297,6 @@ describe('UserController', () => {
 
         it('should accept a token up to 15 minutes old', async () => {
             await expect(join(895)).resolves.toBeDefined();
-            await expect(decipher(895)).resolves.toBeDefined();
 
             /** `join` has just sent its welcome. */
             notificationService.sendMessage.mockClear();
@@ -320,7 +306,6 @@ describe('UserController', () => {
 
         it('should reject a token older than 15 minutes', async () => {
             await expect(join(905)).resolves.toBeUndefined();
-            await expect(decipher(905)).rejects.toThrow('token expired');
 
             await resend(905);
             expect(notificationService.sendMessage).not.toHaveBeenCalled();
@@ -376,7 +361,7 @@ describe('UserController', () => {
             it.each([
                 ['no document holds the token', undefined],
                 [
-                    "an email cipher's blob, which has no code to match",
+                    'a blob with no code to match (as the retired email cipher saved)',
                     signedUp({
                         dateRegistered: '2026-01-01T00:00:00.000Z',
                         membership: { tokens: { blob: 'some-token', timeStamp: getEpoch() } },
@@ -402,7 +387,7 @@ describe('UserController', () => {
                 userService.getUserByEmailAddressToken.mockResolvedValue(document);
 
                 /**
-                 * The cipher case sends no code at all, which compared
+                 * The codeless case sends no code at all, which compared
                  * `undefined` with `undefined` before the code was checked to
                  * exist.
                  */
@@ -1326,187 +1311,18 @@ describe('UserController', () => {
         });
     });
 
-    describe('decipher', () => {
-        it('should check the code against an uncached read', async () => {
-            userService.getUserByDisplayName.mockResolvedValueOnce({
-                displayName,
-                membershipType,
-                dateRegistered: '2026-01-01T00:00:00.000Z',
-                membership: { tokens: { code: '123456', timeStamp: getEpoch() } },
-            });
-
-            await userController.decipher({
-                displayName,
-                membershipType,
-                channel: 'phone',
-                code: '123456',
-            });
-
-            expect(userService.getUserByDisplayName).toHaveBeenCalledWith(
-                displayName,
-                membershipType,
-                true,
-            );
-        });
-
+    describe('constructor', () => {
         it('should not construct without a consent reader', () => {
             /** Without it, a STOP sent between sign-up and `join` would be lost. */
             expect(
                 () =>
                     new UserController({
-                        allowCipherAttempt,
                         destinyService,
                         notificationService,
                         userService,
                         worldRepository,
                     }),
             ).toThrow(new TypeError('readConsent is required'));
-        });
-
-        it('should not construct without an attempt limit', () => {
-            /** Without one, cryptarch would allow unlimited guesses. */
-            expect(
-                () =>
-                    new UserController({
-                        destinyService,
-                        notificationService,
-                        userService,
-                        worldRepository,
-                    }),
-            ).toThrow(new TypeError('allowCipherAttempt is required'));
-        });
-
-        describe('attempts', () => {
-            const timeStamp = getEpoch();
-            const attempt = code =>
-                userController.decipher({ displayName, membershipType, channel: 'phone', code });
-
-            beforeEach(() => {
-                userService.getUserByDisplayName.mockResolvedValue({
-                    displayName,
-                    membershipType,
-                    dateRegistered: '2026-01-01T00:00:00.000Z',
-                    membership: { tokens: { code: '123456', timeStamp } },
-                });
-            });
-
-            afterEach(() => {
-                userService.getUserByDisplayName.mockReset();
-                allowCipherAttempt.mockReset().mockResolvedValue(true);
-            });
-
-            it("should spend one of the code's attempts, keyed on its account and token", async () => {
-                await attempt('123456');
-
-                expect(allowCipherAttempt).toHaveBeenCalledExactlyOnceWith(
-                    expect.stringMatching(
-                        new RegExp(`^${membershipType}:${displayName}:[0-9a-f]{64}$`),
-                    ),
-                );
-                /** The code itself never reaches Redis. */
-                expect(allowCipherAttempt.mock.calls[0][0]).not.toContain('123456');
-            });
-
-            it('should count two codes minted in the same second apart', async () => {
-                await attempt('123456');
-                userService.getUserByDisplayName.mockResolvedValue({
-                    displayName,
-                    membershipType,
-                    dateRegistered: '2026-01-01T00:00:00.000Z',
-                    membership: { tokens: { code: '654321', timeStamp } },
-                });
-                await attempt('654321');
-
-                const [[first], [second]] = allowCipherAttempt.mock.calls;
-
-                expect(first).not.toEqual(second);
-            });
-
-            it.each([
-                ['tokens were saved', { tokens: { blob: 'b', code: '123456', timeStamp } }],
-                ['a conflict saved none', undefined],
-            ])(
-                'should refuse an unregistered account before spending an attempt when %s',
-                async (_, membership) => {
-                    /**
-                     * Both answer 404 for ever, so the attempt limit can't tell
-                     * a saved sign-up from one that hit a conflict.
-                     */
-                    userService.getUserByDisplayName.mockResolvedValue({
-                        displayName,
-                        membershipType,
-                        membership,
-                    });
-
-                    for (let i = 0; i < 6; i++) {
-                        await expect(attempt('000000')).rejects.toBeInstanceOf(InvalidCipherError);
-                    }
-                    expect(allowCipherAttempt).not.toHaveBeenCalled();
-                },
-            );
-
-            it("should refuse a registered account's pending re-sign-up codes", async () => {
-                /**
-                 * They went to the new, unverified contact, so they prove
-                 * nothing about the registered one.
-                 */
-                userService.getUserByDisplayName.mockResolvedValue({
-                    displayName,
-                    membershipType,
-                    dateRegistered: '2026-01-01T00:00:00.000Z',
-                    membership: {
-                        tokens: { blob: 'b', code: '123456', timeStamp },
-                        pending: { phoneNumber: '+12085550123' },
-                    },
-                });
-
-                await expect(attempt('123456')).rejects.toBeInstanceOf(InvalidCipherError);
-                expect(allowCipherAttempt).not.toHaveBeenCalled();
-            });
-
-            it.each([
-                ['email', { code: '123456' }],
-                ['phone', { blob: 'some-blob' }],
-            ])(
-                'should refuse %s with no code when only the other channel has a token',
-                async (channel, held) => {
-                    userService.getUserByDisplayName.mockResolvedValue({
-                        displayName,
-                        membershipType,
-                        dateRegistered: '2026-01-01T00:00:00.000Z',
-                        membership: { tokens: { ...held, timeStamp } },
-                    });
-
-                    await expect(
-                        userController.decipher({ displayName, membershipType, channel }),
-                    ).rejects.toBeInstanceOf(InvalidCipherError);
-                },
-            );
-
-            it('should spend an attempt on a wrong code too', async () => {
-                await expect(attempt('000000')).rejects.toBeInstanceOf(InvalidCipherError);
-
-                expect(allowCipherAttempt).toHaveBeenCalledOnce();
-            });
-
-            it('should refuse even the right code once the attempts are spent', async () => {
-                allowCipherAttempt.mockResolvedValueOnce(false);
-
-                await expect(attempt('123456')).rejects.toBeInstanceOf(CipherAttemptsExceededError);
-            });
-
-            it('should not spend an attempt on an expired code', async () => {
-                userService.getUserByDisplayName.mockResolvedValue({
-                    displayName,
-                    membershipType,
-                    dateRegistered: '2026-01-01T00:00:00.000Z',
-                    membership: { tokens: { code: '123456', timeStamp: 1 } },
-                });
-
-                await expect(attempt('123456')).rejects.toBeInstanceOf(InvalidCipherError);
-
-                expect(allowCipherAttempt).not.toHaveBeenCalled();
-            });
         });
     });
 
@@ -1613,7 +1429,7 @@ describe('UserController', () => {
                 },
             ],
             [
-                'only a cipher is pending',
+                'a single token is held with no pending contact',
                 () => {
                     delete stored.membership.tokens.blob;
                     delete stored.membership.pending;
@@ -1705,226 +1521,6 @@ describe('UserController', () => {
                 { err, displayName, membershipType, channel: 'phone' },
                 'Failed to resend a sign-up verification message.',
             );
-        });
-    });
-
-    describe('sendCipher', () => {
-        const sms = { sid: 'SM-cipher-sid' };
-        const email = { messageId: '<cipher-message-id@example.com>' };
-        const send = channel => userController.sendCipher({ displayName, membershipType, channel });
-        const sender = {
-            phone: () => notificationService.sendMessage,
-            email: () => userController.postmaster.confirm,
-        };
-        const receiptField = { phone: 'message', email: 'postmark' };
-        const receiptFor = { phone: sms, email };
-
-        /**
-         * What Cosmos holds, as in signUp's 'delivery' specs: each
-         * `updateUser` replaces it, and a read returns a copy with a fresh
-         * ETag.
-         */
-        let stored;
-
-        beforeEach(() => {
-            stored = {
-                displayName,
-                emailAddress: 'some-email-address',
-                dateRegistered: Temporal.Now.instant().toString(),
-                membershipType,
-                phoneNumber: `+1${phoneNumber}`,
-                membership: { tokens: { code: '000000', timeStamp: 1 } },
-            };
-            userService.getUserByDisplayName.mockImplementation(() =>
-                Promise.resolve({ ...structuredClone(stored), _etag: chance.guid() }),
-            );
-            userService.updateUser.mockImplementation(user => {
-                stored = structuredClone(user);
-
-                return Promise.resolve(user);
-            });
-            notificationService.sendMessage.mockResolvedValue(sms);
-            userController.postmaster.confirm.mockResolvedValue(email);
-        });
-
-        afterEach(() => {
-            userService.getUserByDisplayName.mockReset();
-            userService.updateUser.mockReset().mockImplementation(user => Promise.resolve(user));
-            notificationService.sendMessage.mockReset().mockResolvedValue();
-        });
-
-        it('should send a compliant verification message', async () => {
-            await send('phone');
-
-            expect(notificationService.sendMessage).toHaveBeenCalledWith(
-                expect.stringContaining('Reply HELP for help, STOP to cancel.'),
-                `+1${phoneNumber}`,
-                '',
-            );
-        });
-
-        it('should read the user it is about to write without the cache', async () => {
-            await send('phone');
-
-            expect(userService.getUserByDisplayName).toHaveBeenNthCalledWith(
-                1,
-                displayName,
-                membershipType,
-                true,
-            );
-        });
-
-        it('should reject a user who is not registered', async () => {
-            delete stored.dateRegistered;
-
-            await expect(send('phone')).rejects.toThrow('registration not found');
-
-            expect(userService.updateUser).not.toHaveBeenCalled();
-            expect(notificationService.sendMessage).not.toHaveBeenCalled();
-        });
-
-        describe.each(['phone', 'email'])('when channel is %s', channel => {
-            const token = channel === 'phone' ? 'code' : 'blob';
-
-            it('should save the new token before sending it', async () => {
-                await send(channel);
-
-                const [firstWrite] = userService.updateUser.mock.invocationCallOrder;
-                const [firstSend] = sender[channel]().mock.invocationCallOrder;
-
-                expect(firstWrite).toBeLessThan(firstSend);
-
-                const [persisted] = userService.updateUser.mock.calls[0];
-                const saved = persisted.membership.tokens[token];
-
-                expect(saved).toEqual(expect.any(String));
-
-                /** What went out is what was saved. */
-                if (channel === 'phone') {
-                    const [text] = notificationService.sendMessage.mock.calls[0];
-
-                    expect(text).toContain(saved);
-                } else {
-                    const [recipient] = userController.postmaster.confirm.mock.calls[0];
-
-                    expect(recipient.membership.tokens.blob).toEqual(saved);
-                }
-            });
-
-            it('should send nothing when the token cannot be saved', async () => {
-                userService.updateUser.mockRejectedValueOnce(new Error('precondition failed'));
-
-                await expect(send(channel)).rejects.toThrow('precondition failed');
-
-                expect(sender[channel]()).not.toHaveBeenCalled();
-            });
-
-            it('should reject when the send fails, keeping the saved token', async () => {
-                sender[channel]().mockRejectedValueOnce(new Error('provider unavailable'));
-
-                await expect(send(channel)).rejects.toThrow('provider unavailable');
-
-                /**
-                 * A failed send may still have been delivered, so the token
-                 * stays; the user asks again. Nothing went out to bill.
-                 */
-                expect(userService.updateUser).toHaveBeenCalledTimes(1);
-                expect(stored.membership.tokens).toEqual(
-                    userService.updateUser.mock.calls[0][0].membership.tokens,
-                );
-            });
-
-            it('should save the receipt onto a fresh read, for billing', async () => {
-                await send(channel);
-
-                expect(userService.updateUser).toHaveBeenCalledTimes(2);
-
-                const [saved] = userService.updateUser.mock.calls[1];
-
-                expect(saved.membership[receiptField[channel]]).toEqual(receiptFor[channel]);
-                expect(saved.membership.tokens).toEqual(
-                    userService.updateUser.mock.calls[0][0].membership.tokens,
-                );
-                expect(saved._etag).toEqual(expect.any(String));
-            });
-
-            it('should not save the receipt onto a newer token', async () => {
-                const newer = { [token]: 'newer-token', timeStamp: 2 };
-
-                sender[channel]().mockImplementationOnce(() => {
-                    stored.membership.tokens = newer;
-
-                    return Promise.resolve(receiptFor[channel]);
-                });
-
-                await send(channel);
-
-                expect(userService.updateUser).toHaveBeenCalledTimes(1);
-                expect(stored.membership.tokens).toEqual(newer);
-                expect(logWarn).toHaveBeenCalledWith(
-                    expect.objectContaining({ displayName, membershipType }),
-                    'The saved tokens have changed; not saving their receipts.',
-                );
-            });
-
-            it('should still succeed when the receipt cannot be saved', async () => {
-                const err = new Error('cosmos unavailable');
-
-                userService.updateUser
-                    .mockImplementationOnce(user => {
-                        stored = structuredClone(user);
-
-                        return Promise.resolve(user);
-                    })
-                    .mockRejectedValueOnce(err);
-
-                await expect(send(channel)).resolves.toBeUndefined();
-
-                expect(logError).toHaveBeenCalledWith(
-                    expect.objectContaining({ err, displayName, membershipType }),
-                    'Failed to save verification delivery receipts.',
-                );
-            });
-        });
-
-        it('should not save a phone receipt onto a newer phone code', async () => {
-            /**
-             * Phone tokens have no blob, so a guard on the blob alone would
-             * match any two phone codes.
-             */
-            notificationService.sendMessage.mockImplementationOnce(() => {
-                stored.membership.tokens = {
-                    ...stored.membership.tokens,
-                    code: 'newer-code',
-                };
-
-                return Promise.resolve(sms);
-            });
-
-            await send('phone');
-
-            expect(userService.updateUser).toHaveBeenCalledTimes(1);
-            expect(stored.membership.tokens.code).toEqual('newer-code');
-        });
-
-        it('should not save a phone receipt onto a newer code that repeats the digits', async () => {
-            /**
-             * Six digits repeat about once in a million ciphers; the
-             * timestamp still tells the two apart.
-             */
-            notificationService.sendMessage.mockImplementationOnce(() => {
-                stored.membership.tokens = {
-                    ...stored.membership.tokens,
-                    timeStamp: stored.membership.tokens.timeStamp + 1,
-                };
-
-                return Promise.resolve(sms);
-            });
-
-            await send('phone');
-
-            expect(userService.updateUser).toHaveBeenCalledTimes(1);
-            expect(stored.membership).not.toHaveProperty('message');
         });
     });
 
@@ -2160,7 +1756,6 @@ describe('UserController.signIn against the real Destiny and User services', () 
         vi.clearAllMocks();
 
         controller = new UserController({
-            allowCipherAttempt,
             readConsent,
             destinyService: new DestinyService({ cacheService: {} }),
             notificationService,
