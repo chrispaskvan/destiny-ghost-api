@@ -1,3 +1,4 @@
+import { lookup as dnsLookup } from 'node:dns';
 import { once } from 'node:events';
 import { readFileSync } from 'node:fs';
 import { createServer, get } from 'node:http';
@@ -11,7 +12,7 @@ import { performance } from 'node:perf_hooks';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import context from './async-context.js';
 import log from './log.js';
-import performanceHook from './performance.js';
+import performanceHook, { logsEach } from './performance.js';
 
 vi.mock('./log.js', () => ({
     default: {
@@ -27,6 +28,10 @@ const headersDelay = 50;
 const bodyDelay = 100;
 const server = createServer((req, res) => {
     setTimeout(() => {
+        // fetch pools its connections, and a pooled one makes no lookup
+        if (req.url.startsWith('/lookup')) {
+            res.setHeader('connection', 'close');
+        }
         res.writeHead(200);
         res.write('headers sent');
         setTimeout(
@@ -69,6 +74,21 @@ const defaultCACertificates = getCACertificates('default');
 let port;
 let http2Port;
 let securePort;
+
+/**
+ * A `lookup` option that fails the way getaddrinfo does for an unknown host,
+ * without asking a resolver. Used on localhost, since the spec's connection
+ * guard counts a dial to any other host, resolved or not.
+ * @param {string} hostname
+ * @param {object} _options
+ * @param {(error: Error) => void} callback
+ */
+const failingLookup = (hostname, _options, callback) =>
+    process.nextTick(() =>
+        callback(
+            Object.assign(new Error(`getaddrinfo ENOTFOUND ${hostname}`), { code: 'ENOTFOUND' }),
+        ),
+    );
 
 /** @param {string} entry */
 const loggedFields = entry =>
@@ -169,6 +189,8 @@ describe('performance', () => {
         const logger = { info: vi.fn() };
         /** @type {import('./async-context.js').Timing[]} */
         let timings;
+        /** @type {import('./async-context.js').Timing[]} */
+        let lookups;
         /** @param {() => Promise<unknown>} callback */
         const inRequest = callback =>
             context.run(
@@ -176,12 +198,26 @@ describe('performance', () => {
                 new Map([
                     ['logger', logger],
                     ['timings', timings],
+                    ['lookups', lookups],
                 ]),
                 callback,
             );
+        /**
+         * A connection of its own, since a pooled one makes no lookup.
+         * @param {string} url
+         * @param {import('node:http').RequestOptions} [options]
+         */
+        const getOwnConnection = (url, options = {}) =>
+            new Promise(resolve => {
+                get(url, { agent: false, ...options }, res => res.resume().on('close', resolve)).on(
+                    'error',
+                    resolve,
+                );
+            });
 
         beforeEach(() => {
             timings = [];
+            lookups = [];
             logger.info.mockClear();
         });
 
@@ -201,6 +237,13 @@ describe('performance', () => {
             ]);
         });
 
+        it('should record no lookup for a host that is an IP address', async () => {
+            await inRequest(() => getOwnConnection(`http://127.0.0.1:${port}/ip`));
+
+            expect(timings).toHaveLength(1);
+            expect(lookups).toEqual([]);
+        });
+
         it('should record a failed request with its error, even an empty one', async () => {
             await inRequest(async () => {
                 await fetch(`http://127.0.0.1:${port}/reset/failed`)
@@ -218,28 +261,80 @@ describe('performance', () => {
         });
 
         /**
-         * The lookup completes in an async hook's destroy callback, which runs
-         * in no request's context; read there, the logger was the root one.
+         * localhost resolves to two addresses, and the socket emits 'lookup'
+         * for each one; it is still one lookup.
          */
-        it("should log a DNS lookup through the request's logger", async () => {
-            // A connection of its own, since a pooled one needs no lookup and
-            // would leave later tests none to make
-            await inRequest(
-                () =>
-                    new Promise(resolve => {
-                        get(`http://localhost:${port}/lookup`, { agent: false }, res =>
-                            res.resume().on('close', resolve),
-                        );
-                    }),
+        it("should record a DNS lookup against the request, and log it through the request's logger", async () => {
+            await inRequest(() => getOwnConnection(`http://localhost:${port}/lookup`));
+
+            expect(lookups).toStrictEqual([{ host: 'localhost', duration: expect.any(Number) }]);
+            expect(logger.info).toHaveBeenCalledWith(
+                { entry: 'DNS Lookup: localhost', duration: expect.any(Number), error: undefined },
+                'Performance Measurement',
+            );
+            expect(loggedFields('DNS Lookup: localhost')).toBeUndefined();
+        });
+
+        it('should record the lookup a fetch or a node:http2 session makes', async () => {
+            await inRequest(async () => {
+                await (await fetch(`http://localhost:${port}/lookup/fetch`)).text();
+                const session = connect(`http://localhost:${http2Port}`);
+                const stream = session.request({ ':path': '/lookup/http2' });
+
+                stream.resume();
+                await once(stream, 'close');
+                session.close();
+            });
+
+            expect(lookups).toStrictEqual([
+                { host: 'localhost', duration: expect.any(Number) },
+                { host: 'localhost', duration: expect.any(Number) },
+            ]);
+        });
+
+        it('should record a failed lookup with its error, and the request it failed', async () => {
+            await inRequest(() =>
+                getOwnConnection(`http://localhost:${port}/lookup/failed`, {
+                    lookup: failingLookup,
+                }),
             );
 
-            await vi.waitFor(() => {
-                expect(logger.info).toHaveBeenCalledWith(
-                    expect.objectContaining({ entry: 'DNS Lookup: localhost' }),
-                    'Performance Measurement',
-                );
-            });
-            expect(loggedFields('DNS Lookup: localhost')).toBeUndefined();
+            expect(lookups).toStrictEqual([
+                {
+                    host: 'localhost',
+                    duration: expect.any(Number),
+                    error: 'getaddrinfo ENOTFOUND localhost',
+                },
+            ]);
+            expect(timings).toStrictEqual([
+                {
+                    host: `localhost:${port}`,
+                    duration: expect.any(Number),
+                    error: 'getaddrinfo ENOTFOUND localhost',
+                },
+            ]);
+            expect(logger.info).toHaveBeenCalledWith(
+                {
+                    entry: 'DNS Lookup: localhost',
+                    duration: expect.any(Number),
+                    error: 'getaddrinfo ENOTFOUND localhost',
+                },
+                'Performance Measurement',
+            );
+        });
+
+        it('should not record a lookup that completes after being disabled', async () => {
+            await inRequest(() =>
+                getOwnConnection(`http://localhost:${port}/lookup/disabled`, {
+                    lookup: (hostname, options, callback) => {
+                        performanceHook.disable();
+                        dnsLookup(hostname, options, callback);
+                    },
+                }),
+            );
+
+            expect(lookups).toEqual([]);
+            expect(logger.info).not.toHaveBeenCalled();
         });
 
         it('should record without logging when each request is not logged', async () => {
@@ -248,10 +343,12 @@ describe('performance', () => {
 
             await inRequest(async () => {
                 await (await fetch(`http://127.0.0.1:${port}/quiet`)).text();
+                await getOwnConnection(`http://localhost:${port}/lookup/quiet`);
             });
             await new Promise(resolve => setTimeout(resolve, 10));
 
-            expect(timings).toHaveLength(1);
+            expect(timings).toHaveLength(2);
+            expect(lookups).toHaveLength(1);
             expect(logger.info).not.toHaveBeenCalled();
             expect(log.info).not.toHaveBeenCalled();
         });
@@ -263,9 +360,7 @@ describe('performance', () => {
         });
 
         expectHeadersThenBody(loggedFields(`HTTP Request: GET http://localhost:${port}/http?q=1`));
-        await vi.waitFor(() => {
-            expect(loggedFields('DNS Lookup: localhost')?.duration).toEqual(expect.any(Number));
-        });
+        expect(loggedFields('DNS Lookup: localhost')?.duration).toEqual(expect.any(Number));
     });
 
     it('should time node:http2 to its response headers and body', async () => {
@@ -356,11 +451,9 @@ describe('performance', () => {
     });
 
     it('should leave nothing on the performance timeline', async () => {
-        await (await fetch(`http://localhost:${port}/timeline`)).text();
+        await (await fetch(`http://localhost:${port}/lookup/timeline`)).text();
 
-        await vi.waitFor(() => {
-            expect(loggedFields('DNS Lookup: localhost')).toBeDefined();
-        });
+        expect(loggedFields('DNS Lookup: localhost')).toBeDefined();
         expect(performance.getEntriesByType('mark')).toHaveLength(0);
         expect(performance.getEntriesByType('measure')).toHaveLength(0);
     });
@@ -388,4 +481,23 @@ describe('performance', () => {
             loggedFields(`HTTP Request: GET http://127.0.0.1:${port}/in-flight`),
         ).toBeUndefined();
     });
+});
+
+describe('logsEach', () => {
+    it.each([
+        ['true', 'production', true],
+        ['true', 'development', true],
+        ['false', 'production', false],
+        ['false', 'development', false],
+        [undefined, 'production', false],
+        [undefined, 'development', true],
+        [undefined, 'test', false],
+        ['yes', 'production', false],
+        ['yes', 'development', true],
+    ])(
+        'with PERFORMANCE_LOG=%s under NODE_ENV=%s, should be %s',
+        (PERFORMANCE_LOG, NODE_ENV, expected) => {
+            expect(logsEach({ PERFORMANCE_LOG, NODE_ENV })).toBe(expected);
+        },
+    );
 });

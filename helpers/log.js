@@ -67,6 +67,7 @@ const contextMiddleware = (_req, _res, next) => {
 
     store.set('logger', child);
     store.set('timings', []);
+    store.set('lookups', []);
 
     return context.run(store, next);
 };

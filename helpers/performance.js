@@ -1,5 +1,4 @@
 // @ts-check
-import { createHook } from 'node:async_hooks';
 import { subscribe, unsubscribe } from 'node:diagnostics_channel';
 import { performance } from 'node:perf_hooks';
 
@@ -23,46 +22,63 @@ const elapsed = start => Math.round((performance.now() - start) * 1000) / 1000;
 let logEach = false;
 
 /**
- * The request-scoped logger, read when a measurement starts. Read when it
- * completes instead, it is whatever context the completing callback runs in:
- * for a DNS lookup, that is none, so the lookup was logged without the
- * traceId of the request that caused it.
+ * Whether each measurement is logged by default: `PERFORMANCE_LOG` when it is
+ * `true` or `false`, and otherwise only in development. Every measurement is
+ * recorded against its request either way.
+ *
+ * @param {{ PERFORMANCE_LOG?: string, NODE_ENV?: string }} [env]
+ */
+const logsEach = ({ PERFORMANCE_LOG, NODE_ENV } = process.env) =>
+    PERFORMANCE_LOG === 'true' || PERFORMANCE_LOG === 'false'
+        ? PERFORMANCE_LOG === 'true'
+        : NODE_ENV === 'development';
+
+/**
+ * The request-scoped logger, read when a measurement starts, so that it
+ * belongs to the request that started it whatever context completes it.
  */
 const requestLogger = () => context.getStore()?.get('logger') ?? log;
 
 /**
- * Node publishes no diagnostics channel for DNS lookups, so they are the one
- * thing still timed with an async hook. Only enabled when each measurement is
- * logged: an init hook runs for every async resource the process creates.
- * @type {Map<number, { entry: string, start: number, logger: import('pino').Logger }>}
+ * DNS lookups, keyed by the socket that makes them. Node publishes no
+ * diagnostics channel for DNS, but every client socket - node:http, node:https,
+ * node:http2 and fetch's - is published on net.client.socket before it looks
+ * its host up, and emits 'lookup' once the lookup completes, failed or not.
+ * Replaced on disable, like `requests`, since the socket still holds the
+ * listener.
+ * @type {WeakMap<object, { start: number, logger: import('pino').Logger, requestLookups?: import('./async-context.js').Timing[] }>}
  */
-const lookups = new Map();
-const hook = createHook({
-    init(id, type, _triggerID, resource) {
-        if (type === 'GETADDRINFOREQWRAP') {
-            lookups.set(id, {
-                entry: `DNS Lookup: ${/** @type {{ hostname: string }} */ (resource).hostname}`,
-                start: performance.now(),
-                logger: requestLogger(),
-            });
-        }
-    },
-    destroy(id) {
-        const lookup = lookups.get(id);
+let lookups = new WeakMap();
+/** @param {import('node:net').Socket} socket */
+const startLookup = socket => {
+    lookups.set(socket, {
+        start: performance.now(),
+        logger: requestLogger(),
+        requestLookups: context.getStore()?.get('lookups'),
+    });
+    // A host with several addresses emits 'lookup' for each one; the first
+    // completes the lookup, and once lets the listener go with it
+    socket.once('lookup', (error, _address, _family, host) => {
+        const lookup = lookups.get(socket);
 
         if (lookup) {
-            lookups.delete(id);
-            lookup.logger.info(
-                { entry: lookup.entry, duration: elapsed(lookup.start) },
-                'Performance Measurement',
-            );
+            const duration = elapsed(lookup.start);
+
+            lookups.delete(socket);
+            lookup.requestLookups?.push({ host, duration, ...(error && { error: error.message }) });
+            if (logEach) {
+                lookup.logger.info(
+                    { entry: `DNS Lookup: ${host}`, duration, error: error?.message },
+                    'Performance Measurement',
+                );
+            }
         }
-    },
-});
+    });
+};
 
 /**
  * @typedef {object} PendingRequest
- * @property {string} entry
+ * @property {string} [entry] - built only when it will be logged
  * @property {string} host
  * @property {number} start
  * @property {import('pino').Logger} logger
@@ -82,7 +98,8 @@ const hook = createHook({
 let requests = new WeakMap();
 /**
  * The URL is censored here because Pino's redaction works on object paths and
- * cannot see a credential inside the query string of `entry`.
+ * cannot see a credential inside the query string of `entry`, which is built
+ * only when the request will be logged on its own.
  *
  * @param {object} key
  * @param {string} method
@@ -90,7 +107,7 @@ let requests = new WeakMap();
  */
 const startRequest = (key, method, url) => {
     requests.set(key, {
-        entry: `HTTP Request: ${method} ${redactUrl(url)}`,
+        ...(logEach && { entry: `HTTP Request: ${method} ${redactUrl(url)}` }),
         host: URL.parse(url)?.host ?? '',
         start: performance.now(),
         logger: requestLogger(),
@@ -188,6 +205,12 @@ const completeRequest = (key, error) => {
  */
 /** @type {Array<[string, (message: any) => void]>} */
 const channels = [
+    // DNS lookups, from every client
+    [
+        'net.client.socket',
+        /** @param {{ socket: import('node:net').Socket }} message */
+        ({ socket }) => startLookup(socket),
+    ],
     // node:http and node:https (axios, Twilio, Cosmos, Application Insights, ...)
     [
         'http.client.request.start',
@@ -271,27 +294,25 @@ const channels = [
 
 export default {
     /**
-     * Times every outbound HTTP request, recording each against the inbound
-     * request that made it so httpLog can summarize them.
+     * Times every outbound HTTP request and DNS lookup, recording each
+     * against the inbound request that made it so httpLog can summarize them.
      *
      * @param {{ log?: boolean }} [options] - also log each request, and each
      * DNS lookup, as it completes
      */
     enable({ log: logEachRequest = true } = {}) {
         logEach = logEachRequest;
-        if (logEach) {
-            hook.enable();
-        }
         for (const [name, onMessage] of channels) {
             subscribe(name, onMessage);
         }
     },
     disable() {
-        hook.disable();
         for (const [name, onMessage] of channels) {
             unsubscribe(name, onMessage);
         }
-        lookups.clear();
+        lookups = new WeakMap();
         requests = new WeakMap();
     },
 };
+
+export { logsEach };
