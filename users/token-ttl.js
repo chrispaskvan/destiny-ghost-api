@@ -8,11 +8,7 @@
  * either channel would decide `join` on its own (#571).
  *
  * The longer window does not make the six-digit code guessable: `join` also
- * needs the 128-bit email token, and `decipher` the user's session and one of
- * the code's few attempts.
- *
- * Also the lifetime of a code's attempt count (`cipher-attempt` in
- * `helpers/rate-limiter.middleware.js`), so the two can't drift apart.
+ * needs the 128-bit email token.
  * @type {number}
  */
 const TOKEN_TTL_SECONDS = 900;

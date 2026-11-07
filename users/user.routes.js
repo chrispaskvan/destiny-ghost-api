@@ -4,8 +4,6 @@ import { Router } from 'express';
 import { z } from 'zod';
 import AuthenticationMiddleWare from '../authentication/authentication.middleware.js';
 import UserController from './user.controller.js';
-import CipherAttemptsExceededError from './cipher-attempts-exceeded.error.js';
-import InvalidCipherError from './invalid-cipher.error.js';
 import InvalidPhoneNumberError from './invalid-phone-number.error.js';
 import cleanPhoneNumber from './clean-phone-number.js';
 import csrfProtection, { generateToken } from '../helpers/csrf.middleware.js';
@@ -131,12 +129,11 @@ function signIn(req, res, user, next) {
 
 /**
  * @typedef {Object} UserRoutesOptions
- * @property {(key: string) => Promise<boolean>} allowCipherAttempt - see `UserController`
  * @property {AuthenticationController} authenticationController
  * @property {import('../destiny/destiny.service.js').default} destinyService
  * @property {import('../notifications/notification.service.js').default} notificationService
  * @property {UserControllerOptions['readConsent']} readConsent - see `UserController`
- * @property {{ signUp: RequestHandler, resend: RequestHandler, cipher: RequestHandler }} rateLimiters
+ * @property {{ signUp: RequestHandler, resend: RequestHandler }} rateLimiters
  * - per-account limits on the endpoints that send billed messages
  * @property {import('./user.service.js').default} userService
  * @property {import('../helpers/world2.js').default} worldRepository
@@ -146,7 +143,6 @@ function signIn(req, res, user, next) {
  * @param {UserRoutesOptions} options
  */
 const routes = ({
-    allowCipherAttempt,
     authenticationController,
     destinyService,
     notificationService,
@@ -157,7 +153,6 @@ const routes = ({
 }) => {
     const middleware = new AuthenticationMiddleWare({ authenticationController });
     const userController = new UserController({
-        allowCipherAttempt,
         destinyService,
         notificationService,
         readConsent,
@@ -167,7 +162,7 @@ const routes = ({
     const userRouter = Router();
 
     /**
-     * Ahead of the per-channel limits, so a malformed request neither spends
+     * Ahead of the per-channel limit, so a malformed request neither spends
      * one nor gets a bucket of its own.
      * @type {import('express').RequestHandler}
      */
@@ -249,172 +244,6 @@ const routes = ({
             }
 
             return res.status(StatusCodes.UNAUTHORIZED).end();
-        },
-    );
-
-    /**
-     * @openapi
-     * /users/current/ciphers:
-     *   post:
-     *     summary: Request a verification code for the current user.
-     *     operationId: requestVerificationCode
-     *     description: Sends a time-sensitive verification code to the user's registered email or phone. This code is required to verify ownership of the contact method before performing sensitive operations like profile edits.
-     *     tags:
-     *       - Users
-     *     security:
-     *       - bungieOAuth: []
-     *     parameters:
-     *       - $ref: '#/components/parameters/CsrfToken'
-     *     requestBody:
-     *       required: true
-     *       content:
-     *         application/json:
-     *           schema:
-     *             type: object
-     *             required:
-     *               - channel
-     *             properties:
-     *               channel:
-     *                 type: string
-     *                 enum:
-     *                   - email
-     *                   - phone
-     *                 description: The communication channel to send the verification code to (must be registered with the user's profile).
-     *             examples:
-     *               - channel: email
-     *     responses:
-     *       202:
-     *         description: Verification code successfully requested and is being sent. The user should check their email or phone.
-     *       400:
-     *         description: Bad Request. E.g., channel not specified, or user does not have the specified contact method registered and verified.
-     *       401:
-     *         description: Unauthorized. Bungie OAuth token missing or invalid.
-     *       403:
-     *         description: Forbidden. Missing or invalid CSRF token.
-     *       429:
-     *         description: Too Many Requests. Three codes per channel every 15 minutes.
-     */
-    userRouter.route('/current/ciphers').post(
-        (req, res, next) => middleware.authenticateUser(req, res, next),
-        csrfProtection,
-        requireChannel,
-        rateLimiters.cipher,
-        async (req, res) => {
-            try {
-                const {
-                    body: { channel },
-                } = req;
-                const { displayName, membershipType } = /** @type {AuthenticatedSessionData} */ (
-                    /** @type {unknown} */ (req.session)
-                );
-
-                await userController.sendCipher({
-                    displayName,
-                    membershipType,
-                    channel,
-                });
-
-                return res.status(StatusCodes.ACCEPTED).end();
-            } catch (err) {
-                /**
-                 * Exact: a provider error can say "not found" too (Twilio
-                 * 20404), and it is not the user's missing registration.
-                 */
-                if (err instanceof Error && err.message === 'registration not found') {
-                    return res.status(StatusCodes.BAD_REQUEST).send('User registration not found.');
-                }
-
-                throw err;
-            }
-        },
-    );
-
-    /**
-     * @openapi
-     * /users/current/cryptarch:
-     *   post:
-     *     summary: Validate a verification code for the current user.
-     *     operationId: validateVerificationCode
-     *     description: Validates the provided verification code for the currently authenticated user. This code is used to verify ownership of the contact method before performing sensitive operations like profile edits.
-     *     tags:
-     *       - Users
-     *     security:
-     *       - bungieOAuth: []
-     *     parameters:
-     *       - $ref: '#/components/parameters/CsrfToken'
-     *     requestBody:
-     *       required: true
-     *       content:
-     *         application/json:
-     *           schema:
-     *             type: object
-     *             required:
-     *               - channel
-     *               - code
-     *             properties:
-     *               channel:
-     *                 type: string
-     *                 enum:
-     *                   - email
-     *                   - phone
-     *                 description: The communication channel to send the verification code to (must be registered with the user's profile).
-     *               code:
-     *                 type: string
-     *                 description: The verification code received by the user.
-     *                 examples: [123456]
-     *     responses:
-     *       204:
-     *         description: Verification code successfully validated.
-     *       400:
-     *         description: Bad Request. E.g., channel not specified, or user does not have the specified contact method registered and verified.
-     *       401:
-     *         description: Unauthorized. Bungie OAuth token missing or invalid.
-     *       403:
-     *         description: Forbidden. Missing or invalid CSRF token.
-     *       404:
-     *         description: Not Found. No pending verification found for this user and channel, or the code has already been used/invalidated.
-     *       429:
-     *         description: >
-     *           Too Many Requests. This code has had its five attempts, right or wrong, and
-     *           no longer works. Request a new code.
-     */
-    userRouter.route('/current/cryptarch').post(
-        (req, res, next) => middleware.authenticateUser(req, res, next),
-        csrfProtection,
-        requireChannel,
-        async (req, res) => {
-            try {
-                const {
-                    body: { channel, code },
-                } = req;
-                const { displayName, membershipType } = /** @type {AuthenticatedSessionData} */ (
-                    /** @type {unknown} */ (req.session)
-                );
-
-                await userController.decipher({
-                    displayName,
-                    membershipType,
-                    channel,
-                    code,
-                });
-
-                return res.status(StatusCodes.NO_CONTENT).end();
-            } catch (err) {
-                if (err instanceof InvalidCipherError) {
-                    return res.status(StatusCodes.NOT_FOUND).send('Invalid cipher.');
-                }
-                /**
-                 * No Retry-After: waiting doesn't help. The code is spent,
-                 * and only a new one can be checked.
-                 */
-                if (err instanceof CipherAttemptsExceededError) {
-                    return res
-                        .status(StatusCodes.TOO_MANY_REQUESTS)
-                        .send('Too many attempts. Request a new code.');
-                }
-
-                throw err;
-            }
         },
     );
 

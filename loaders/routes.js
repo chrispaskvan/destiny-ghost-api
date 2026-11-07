@@ -41,8 +41,6 @@ import pool from '../helpers/pool.js';
 import McpRouter from '../mcp/mcp.routes.js';
 import { readConsent } from '../helpers/consent-marker.js';
 import rateLimiterMiddleware, {
-    allowCipherAttempt,
-    cipherRateLimiterMiddleware,
     resendRateLimiterMiddleware,
     signUpRateLimiterMiddleware,
 } from '../helpers/rate-limiter.middleware.js';
@@ -166,14 +164,12 @@ export default () => {
     routes.use('/notifications', notificationRouter);
 
     const userRouter = UserRouter({
-        allowCipherAttempt,
         authenticationController,
         destinyService,
         notificationService,
         rateLimiters: {
             signUp: signUpRateLimiterMiddleware,
             resend: resendRateLimiterMiddleware,
-            cipher: cipherRateLimiterMiddleware,
         },
         readConsent,
         userService,
