@@ -6,6 +6,7 @@ import { createResponse, createRequest } from 'node-mocks-http';
 import UserController from './user.controller.js';
 import UserRouter from './user.routes.js';
 import UserService from './user.service.js';
+import { enqueueResend, enqueueSignUp } from './sign-up.queue.js';
 
 /**
  * Hoisted rather than instance fields so the sign-up tests have a stable
@@ -23,6 +24,29 @@ const { postmasterConfirm, postmasterRegister } = vi.hoisted(() => ({
  * rather than assumed.
  */
 const { logInfo, logWarn } = vi.hoisted(() => ({ logInfo: vi.fn(), logWarn: vi.fn() }));
+
+/**
+ * The sign-up routes queue their work (#795). Here the queue runs it at
+ * once, through the worker `UserController` registered, so these specs still
+ * cover a sign-up end to end; the ones that check the route doesn't wait on
+ * it override `enqueue…`.
+ */
+const { queued } = vi.hoisted(() => ({ queued: { work: undefined } }));
+
+vi.mock('../helpers/subscriber.js', () => ({
+    default: {
+        listen: vi.fn((work, queueName) => {
+            if (queueName === 'sign-up') {
+                queued.work = work;
+            }
+        }),
+    },
+}));
+vi.mock('./sign-up.queue.js', () => ({
+    QUEUE_NAME: 'sign-up',
+    enqueueSignUp: vi.fn(data => queued.work(structuredClone(data), {}, { name: 'sign-up' })),
+    enqueueResend: vi.fn(data => queued.work(structuredClone(data), {}, { name: 'resend' })),
+}));
 
 vi.mock('../helpers/log.js', () => ({
     default: { error: vi.fn(), info: logInfo, warn: logWarn },
@@ -370,6 +394,59 @@ describe('UserRouter', () => {
             userService.getUserByEmailAddress.mockResolvedValue(undefined);
             userService.getUserByPhoneNumber.mockResolvedValue(undefined);
             userService.updateUser.mockResolvedValue(undefined);
+        });
+
+        /**
+         * The answer mustn't wait on the work: its latency told a conflict
+         * from a sign-up (#795). The account read pends for ever here, so a
+         * route that waited on it would never answer.
+         */
+        it('should answer once the sign-up is queued, before any of it runs', async () => {
+            userService.getUserByDisplayName.mockReturnValueOnce(new Promise(() => {}));
+            enqueueSignUp.mockImplementationOnce(data => {
+                queued.work(structuredClone(data), {}, { name: 'sign-up' });
+
+                return Promise.resolve({ id: 'job-1' });
+            });
+
+            const ended = new Promise(resolve => res.on('end', () => resolve('answered')));
+
+            userRouter(signUpRequest(validBody), res, next);
+
+            await expect(
+                Promise.race([ended, new Promise(resolve => setTimeout(resolve, 200, 'waited'))]),
+            ).resolves.toBe('answered');
+            expect(res.statusCode).toEqual(StatusCodes.NO_CONTENT);
+            expect(enqueueSignUp).toHaveBeenCalledExactlyOnceWith({
+                displayName: 'test-user',
+                membershipType: 2,
+                contact: validBody,
+            });
+            expect(userService.updateUser).not.toHaveBeenCalled();
+            expect(notificationService.sendMessage).not.toHaveBeenCalled();
+        });
+
+        it('should hand a failed enqueue to the error handler, before any lookup', async () => {
+            /** Nothing has been read yet, so the 500 says nothing about the contact. */
+            const err = new Error('Redis unavailable');
+            const failed = new Promise(resolve => next.mockImplementationOnce(resolve));
+
+            enqueueSignUp.mockRejectedValueOnce(err);
+            userRouter(signUpRequest(validBody), res, next);
+
+            await expect(failed).resolves.toBe(err);
+            expect(userService.getUserByEmailAddress).not.toHaveBeenCalled();
+            expect(userService.getUserByPhoneNumber).not.toHaveBeenCalled();
+        });
+
+        it('should queue nothing for a request it rejects', async () => {
+            const ended = new Promise(resolve => res.on('end', resolve));
+
+            userRouter(signUpRequest({ ...validBody, phoneNumber: 'nope' }), res, next);
+            await ended;
+
+            expect(res.statusCode).toEqual(StatusCodes.UNPROCESSABLE_ENTITY);
+            expect(enqueueSignUp).not.toHaveBeenCalled();
         });
 
         it.each([
@@ -1050,6 +1127,34 @@ describe('UserRouter', () => {
 
         beforeEach(() => {
             userService.updateUser.mockResolvedValue(undefined);
+        });
+
+        it('should answer once the resend is queued, before any of it runs', async () => {
+            /** A resend after a conflict found nothing and returned at once (#795). */
+            userService.getUserByDisplayName.mockReturnValueOnce(new Promise(() => {}));
+            enqueueResend.mockImplementationOnce(data => {
+                queued.work(structuredClone(data), {}, { name: 'resend' });
+
+                return Promise.resolve({ id: 'job-1' });
+            });
+
+            const answered = ended().then(() => 'answered');
+
+            userRouter(resendRequest({ channel: 'phone' }), res, next);
+
+            await expect(
+                Promise.race([
+                    answered,
+                    new Promise(resolve => setTimeout(resolve, 200, 'waited')),
+                ]),
+            ).resolves.toBe('answered');
+            expect(res.statusCode).toEqual(StatusCodes.NO_CONTENT);
+            expect(enqueueResend).toHaveBeenCalledExactlyOnceWith({
+                displayName,
+                membershipType,
+                channel: 'phone',
+            });
+            expect(notificationService.sendMessage).not.toHaveBeenCalled();
         });
 
         it.each([

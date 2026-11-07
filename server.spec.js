@@ -13,6 +13,7 @@ const {
     publisherClose,
     consentQueueClose,
     broadcastQueueClose,
+    signUpQueueClose,
     subscriberClose,
     processExternalPromisesWithTimeout,
     trackMetric,
@@ -31,6 +32,7 @@ const {
     publisherClose: vi.fn(),
     consentQueueClose: vi.fn(),
     broadcastQueueClose: vi.fn(),
+    signUpQueueClose: vi.fn(),
     subscriberClose: vi.fn(),
     processExternalPromisesWithTimeout: vi.fn(),
     trackMetric: vi.fn(),
@@ -50,6 +52,7 @@ vi.mock('./helpers/publisher.js', () => ({ default: { close: publisherClose } })
 vi.mock('./helpers/subscriber.js', () => ({ default: { close: subscriberClose } }));
 vi.mock('./twilio/consent.queue.js', () => ({ default: { close: consentQueueClose } }));
 vi.mock('./notifications/broadcast.queue.js', () => ({ default: { close: broadcastQueueClose } }));
+vi.mock('./users/sign-up.queue.js', () => ({ default: { close: signUpQueueClose } }));
 vi.mock('./helpers/process-external-promises-with-timeout.js', () => ({
     default: processExternalPromisesWithTimeout,
 }));
@@ -59,7 +62,7 @@ vi.mock('./helpers/event-loop-delay.js', () => ({ readStartupEventLoopDelay }));
 
 const world2 = { items: [] };
 const workers = [subscriberClose];
-const producers = [publisherClose, consentQueueClose, broadcastQueueClose];
+const producers = [publisherClose, consentQueueClose, broadcastQueueClose, signUpQueueClose];
 const connections = [cacheQuit, jobsQuit, poolClose];
 const allCloses = [...workers, ...producers, ...connections];
 const settle = () => new Promise(resolve => setImmediate(resolve));
@@ -186,7 +189,15 @@ describe('startServer shutdown wiring', () => {
         expect(httpServer.close).not.toHaveBeenCalled();
         expect(processExternalPromisesWithTimeout.mock.calls).toEqual([
             [[expect.any(Promise)], 10_000],
-            [[expect.any(Promise), expect.any(Promise), expect.any(Promise)], 3000],
+            [
+                [
+                    expect.any(Promise),
+                    expect.any(Promise),
+                    expect.any(Promise),
+                    expect.any(Promise),
+                ],
+                3000,
+            ],
             [[expect.any(Promise), expect.any(Promise), expect.any(Promise)], 3000],
         ]);
     });

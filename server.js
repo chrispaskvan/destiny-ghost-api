@@ -18,6 +18,7 @@ import loaders from './loaders/index.js';
 import publisher from './helpers/publisher.js';
 import subscriber from './helpers/subscriber.js';
 import consentQueue from './twilio/consent.queue.js';
+import signUpQueue from './users/sign-up.queue.js';
 import broadcastQueue from './notifications/broadcast.queue.js';
 import processExternalPromisesWithTimeout from './helpers/process-external-promises-with-timeout.js';
 import pool from './helpers/pool.js';
@@ -55,6 +56,7 @@ const shutdownStages = [
             ['Publisher', () => publisher.close()],
             ['Consent queue', () => consentQueue.close()],
             ['Broadcast queue', () => broadcastQueue.close()],
+            ['Sign-up queue', () => signUpQueue.close()],
         ],
         timeout: 3000,
     },
