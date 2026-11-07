@@ -1409,6 +1409,25 @@ describe('UserService', () => {
         });
     });
 
+    describe('hasPendingSignUp', () => {
+        it('should look for the number among pending sign-ups', async () => {
+            documentService.getDocuments.mockResolvedValueOnce([{ id: '1' }]);
+
+            await expect(userService.hasPendingSignUp('+12085550123')).resolves.toBe(true);
+
+            const [, query] = documentService.getDocuments.mock.calls[0];
+
+            expect(JSON.stringify(query)).toContain('membership.pending.phoneNumber');
+            expect(JSON.stringify(query)).toContain('+12085550123');
+        });
+
+        it('should say no when none holds it', async () => {
+            documentService.getDocuments.mockResolvedValueOnce([]);
+
+            await expect(userService.hasPendingSignUp('+12085550123')).resolves.toBe(false);
+        });
+    });
+
     describe('changing contact', () => {
         const stored = {
             ...structuredClone(user),

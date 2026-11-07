@@ -61,6 +61,7 @@ const userService = {
     movePlatform: vi.fn().mockImplementation(user => Promise.resolve(user)),
     updateAnonymousUser: vi.fn().mockImplementation(user => Promise.resolve(user)),
     updateUser: vi.fn().mockImplementation(user => Promise.resolve(user)),
+    updateUserSubscription: vi.fn().mockResolvedValue(),
 };
 const worldRepository = {
     getVendorIcon: vi.fn().mockResolvedValue('some-vendor-icon'),
@@ -361,6 +362,7 @@ describe('UserController', () => {
             userService.getUserByEmailAddressToken.mockReset();
             userService.getUserByEmailAddress.mockReset();
             userService.getUserByPhoneNumber.mockReset();
+            userService.getUserByDisplayName.mockReset();
             readConsent.mockReset().mockResolvedValue(undefined);
         });
 
@@ -480,14 +482,55 @@ describe('UserController', () => {
                 expect(saved().isSubscribed).toBe(true);
             });
 
-            it('should keep a STOP the number sent before joining', async () => {
+            it('should keep a STOP the number sent before joining, with its timestamp', async () => {
                 /** No document held the pending number, so only the marker has it. */
-                readConsent.mockResolvedValueOnce({ isSubscribed: false, receivedAt: 1 });
+                readConsent.mockResolvedValueOnce({ isSubscribed: false, receivedAt: 200 });
                 userService.getUserByEmailAddressToken.mockResolvedValueOnce(signedUp());
+                userService.getUserByDisplayName.mockResolvedValueOnce({
+                    id: 'doc-1',
+                    _etag: 'e2',
+                });
 
                 await join();
 
                 expect(saved().isSubscribed).toBe(false);
+                /**
+                 * Through the write that sets the watermark: `updateUser`
+                 * keeps the stored one, so a delayed START older than this
+                 * STOP would otherwise still win.
+                 */
+                expect(userService.getUserByDisplayName).toHaveBeenCalledWith(
+                    displayName,
+                    membershipType,
+                    true,
+                );
+                expect(userService.updateUserSubscription).toHaveBeenCalledExactlyOnceWith(
+                    { id: 'doc-1', _etag: 'e2' },
+                    false,
+                    200,
+                );
+            });
+
+            it('should still join when the consent stamp fails', async () => {
+                readConsent.mockResolvedValueOnce({ isSubscribed: false, receivedAt: 200 });
+                userService.getUserByEmailAddressToken.mockResolvedValueOnce(signedUp());
+                userService.getUserByDisplayName.mockResolvedValueOnce({ id: 'doc-1' });
+                userService.updateUserSubscription.mockRejectedValueOnce(new Error('412'));
+
+                await expect(join()).resolves.toBeDefined();
+                expect(saved().isSubscribed).toBe(false);
+                expect(logError).toHaveBeenCalledWith(
+                    expect.objectContaining({ displayName, membershipType }),
+                    "Failed to stamp the new number's consent.",
+                );
+            });
+
+            it('should stamp nothing without a consent marker', async () => {
+                userService.getUserByEmailAddressToken.mockResolvedValueOnce(signedUp());
+
+                await join();
+
+                expect(userService.updateUserSubscription).not.toHaveBeenCalled();
             });
 
             it('should seed all known notification types', async () => {
@@ -1094,17 +1137,45 @@ describe('UserController', () => {
                 expect(receipts.membership).not.toHaveProperty('postmark');
             });
 
-            it('should not undo a join that lands while the messages are sending', async () => {
+            it('should keep a write that lands while the messages are sending', async () => {
                 notificationService.sendMessage.mockImplementationOnce(() => {
-                    stored.dateRegistered = '2026-11-03T00:00:00.000Z';
+                    stored.firstName = 'Grace';
 
                     return Promise.resolve(sms);
                 });
 
                 await signUp();
 
-                expect(stored.dateRegistered).toEqual('2026-11-03T00:00:00.000Z');
+                expect(stored.firstName).toEqual('Grace');
                 expect(stored.membership.message).toEqual(sms);
+            });
+
+            it('should log, not save, its receipts when a join promotes the sign-up mid-send', async () => {
+                /**
+                 * A join spends the tokens, so the receipts no longer match
+                 * a saved sign-up. They are logged with the provider's ids
+                 * for reconciliation; an append-only record (#793) keeps them.
+                 */
+                notificationService.sendMessage.mockImplementationOnce(() => {
+                    const { pending } = stored.membership;
+
+                    Object.assign(stored, pending, { dateRegistered: '2026-11-03T00:00:00.000Z' });
+                    stored.membership = {};
+
+                    return Promise.resolve(sms);
+                });
+
+                await signUp();
+
+                expect(stored).toMatchObject({
+                    dateRegistered: '2026-11-03T00:00:00.000Z',
+                    emailAddress: contact.emailAddress,
+                });
+                expect(stored.membership).toEqual({});
+                expect(logWarn).toHaveBeenCalledWith(
+                    expect.objectContaining({ sid: sms.sid, messageId: email.messageId }),
+                    'The saved tokens have changed; not saving their receipts.',
+                );
             });
 
             it('should not save its receipts onto a newer sign-up', async () => {

@@ -48,6 +48,7 @@ const mmsService = { process: vi.fn() };
 const userService = {
     addUserMessage: vi.fn(),
     getUserByPhoneNumber: vi.fn(),
+    hasPendingSignUp: vi.fn().mockResolvedValue(false),
     updateUserSubscription: vi.fn(),
 };
 const worldRepository = {
@@ -683,6 +684,25 @@ describe('TwilioController', () => {
             });
 
             expect(userService.addUserMessage).not.toHaveBeenCalled();
+        });
+
+        it("should record a pending sign-up's verification SMS reports", async () => {
+            /**
+             * The number is pending, so the verified-only lookup misses it;
+             * its reports are kept all the same.
+             */
+            userService.getUserByPhoneNumber.mockResolvedValue(undefined);
+            userService.hasPendingSignUp.mockResolvedValueOnce(true);
+
+            await twilioController.statusCallback({
+                To: phoneNumber,
+                MessageStatus: 'delivered',
+            });
+
+            expect(userService.hasPendingSignUp).toHaveBeenCalledWith(phoneNumber);
+            expect(userService.addUserMessage).toHaveBeenCalledWith(
+                expect.objectContaining({ SmsStatus: 'delivered' }),
+            );
         });
 
         it('should record the delivery outcome against the message', async () => {

@@ -892,6 +892,27 @@ class UserService {
     }
 
     /**
+     * Whether a sign-up not yet joined is waiting on this number. Its
+     * contact sits under `membership.pending`, which ordinary lookups don't
+     * read: they hold verified contact only. Kept separate for the one
+     * caller that needs it, the status callback, so a verification SMS's
+     * delivery reports are still recorded.
+     * @param {string} phoneNumber
+     * @returns {Promise<boolean>}
+     */
+    async hasPendingSignUp(phoneNumber) {
+        const documents = await this.documents.getDocuments(
+            userCollectionId,
+            new QueryBuilder()
+                .select('id')
+                .where('membership.pending.phoneNumber', phoneNumber)
+                .getQuery(),
+        );
+
+        return documents.length > 0;
+    }
+
+    /**
      * Whether the account behind a number is part way through a platform move:
      * it has documents, and every one is marked `movedTo`. `movePlatform`
      * marks the old copy before creating the new one, so this is the gap

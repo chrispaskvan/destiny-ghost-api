@@ -81,7 +81,7 @@ import notificationTypes from '../notifications/notification.types.js';
  * spent (see `helpers/rate-limiter.middleware.js`)
  * @property {import('../destiny/destiny.service.js').default} destinyService
  * @property {import('../notifications/notification.service.js').default} notificationService
- * @property {(phoneNumber: string) => Promise<{ isSubscribed: boolean } | undefined>} readConsent
+ * @property {(phoneNumber: string) => Promise<{ isSubscribed: boolean, receivedAt: number } | undefined>} readConsent
  * - a STOP or START for the number that the stored documents may not hold yet
  * (see `helpers/consent-marker.js`)
  * @property {import('./user.service.js').default} userService
@@ -483,10 +483,13 @@ class UserController {
          * only the consent marker holds, as no document had the number then.
          * An unchanged number keeps what it has.
          */
-        if (isNewRegistration || user.phoneNumber !== pending.phoneNumber) {
-            const consent = await this.#readConsent(pending.phoneNumber);
+        const consent =
+            isNewRegistration || user.phoneNumber !== pending.phoneNumber
+                ? { found: await this.#readConsent(pending.phoneNumber) }
+                : undefined;
 
-            user.isSubscribed = consent ? consent.isSubscribed : true;
+        if (consent) {
+            user.isSubscribed = consent.found ? consent.found.isSubscribed : true;
         }
 
         Object.assign(user, pending);
@@ -511,6 +514,10 @@ class UserController {
         }
 
         await this.users.updateUser(/** @type {User} */ (/** @type {unknown} */ (user)));
+
+        if (consent?.found) {
+            await this.#stampConsent({ displayName, membershipType }, consent.found);
+        }
 
         if (isNewRegistration) {
             try {
@@ -898,6 +905,37 @@ class UserController {
         }
 
         await this.#saveReceipts({ displayName, membershipType, tokens }, receipts);
+    }
+
+    /**
+     * Record the new number's consent with its own timestamp, through the one
+     * write that sets the watermark (`updateUser` keeps the stored one, which
+     * is the old number's, or none). Without it, a delayed consent change
+     * for the number, older than this one, would still win.
+     *
+     * Best effort: the promotion already wrote `isSubscribed`, so a failure
+     * here only leaves the watermark behind, and is logged.
+     * @param {{ displayName: string, membershipType: number }} account
+     * @param {{ isSubscribed: boolean, receivedAt: number }} consent
+     * @returns {Promise<void>}
+     */
+    async #stampConsent({ displayName, membershipType }, { isSubscribed, receivedAt }) {
+        try {
+            const promoted = await this.users.getUserByDisplayName(
+                displayName,
+                membershipType,
+                true,
+            );
+
+            if (promoted) {
+                await this.users.updateUserSubscription(promoted, isSubscribed, receivedAt);
+            }
+        } catch (err) {
+            log.error(
+                { err, displayName, membershipType },
+                "Failed to stamp the new number's consent.",
+            );
+        }
     }
 
     /**
