@@ -1,3 +1,6 @@
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import aiInstance from './ai.js';
 import { withRetry, isTransientError } from './retry.js';
@@ -470,6 +473,103 @@ describe('AI', () => {
             const result = await aiInstance.getPlayersFromFile(testFilePath);
 
             expect(result).toEqual(['', 'Player1', 'Player2', 'Player3', '']);
+        });
+    });
+
+    describe('getRosterProbability', () => {
+        let directory;
+        let imagePath;
+
+        /**
+         * A real file, because the image is read and sent inline rather than
+         * through the mocked Files API.
+         */
+        beforeEach(async () => {
+            directory = await mkdtemp(join(tmpdir(), 'ai-spec-'));
+            imagePath = join(directory, 'image.jpeg');
+            await writeFile(imagePath, 'image-bytes');
+        });
+
+        afterEach(async () => {
+            vi.unstubAllGlobals();
+            await rm(directory, { force: true, recursive: true });
+        });
+
+        const importWithDecisionModel = async () => {
+            vi.resetModules();
+            vi.doMock('./config.js', () => ({
+                default: {
+                    gemini: {
+                        apiKey: 'test-api-key',
+                        decisionModel: 'gemini-decision-1',
+                        decisionTimeout: 5000,
+                        model: 'test-model',
+                    },
+                },
+            }));
+
+            const { default: configuredAi } = await import('./ai.js');
+
+            return configuredAi;
+        };
+
+        it('should skip the screen when no decision model is configured', async () => {
+            const fetchMock = vi.fn();
+
+            vi.stubGlobal('fetch', fetchMock);
+
+            await expect(
+                aiInstance.getRosterProbability(imagePath, 'image/jpeg'),
+            ).resolves.toBeUndefined();
+            expect(fetchMock).not.toHaveBeenCalled();
+        });
+
+        it('should ask one yes/no question about the inline image', async () => {
+            const configuredAi = await importWithDecisionModel();
+            const fetchMock = vi.fn().mockResolvedValue(
+                Response.json({
+                    answers: { is_roster: { confidence: 0.97, noul: 0.97, type: 'noul' } },
+                }),
+            );
+
+            vi.stubGlobal('fetch', fetchMock);
+
+            await expect(configuredAi.getRosterProbability(imagePath, 'image/jpeg')).resolves.toBe(
+                0.97,
+            );
+
+            const [url, { body, headers, method, signal }] = fetchMock.mock.calls[0];
+            const { input, model, questions } = JSON.parse(body);
+
+            expect(url).toBe('https://generativelanguage.googleapis.com/v1beta/decisions');
+            expect(method).toBe('POST');
+            expect(headers).toEqual(expect.objectContaining({ 'x-goog-api-key': 'test-api-key' }));
+            expect(signal).toBeInstanceOf(AbortSignal);
+            expect(model).toBe('gemini-decision-1');
+            expect(input).toEqual([
+                {
+                    type: 'image',
+                    data: Buffer.from('image-bytes').toString('base64'),
+                    mime_type: 'image/jpeg',
+                    resolution: 'low',
+                },
+            ]);
+            expect(questions.is_roster).toEqual(
+                expect.objectContaining({
+                    type: 'noul',
+                    instructions: configuredAi.constructor.prompts.rosterQuestion,
+                }),
+            );
+        });
+
+        it('should throw with the status when the request fails', async () => {
+            const configuredAi = await importWithDecisionModel();
+
+            vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 429 })));
+
+            await expect(
+                configuredAi.getRosterProbability(imagePath, 'image/jpeg'),
+            ).rejects.toMatchObject({ status: 429 });
         });
     });
 
