@@ -168,6 +168,12 @@ class AI {
             'The AI screened the image',
         );
 
+        // Anything but a probability would read as "not a roster" to the
+        // caller's threshold check, so it is thrown instead, failing open.
+        if (!Number.isFinite(noul) || noul < 0 || noul > 1) {
+            throw new TypeError(`Decisions returned an invalid probability: ${noul}`);
+        }
+
         return noul;
     }
 

@@ -562,6 +562,26 @@ describe('AI', () => {
             );
         });
 
+        it.each([null, '0.9', Number.NaN, -0.1, 1.5])(
+            'should throw rather than return an invalid probability (%s)',
+            async noul => {
+                const configuredAi = await importWithDecisionModel();
+
+                vi.stubGlobal(
+                    'fetch',
+                    vi
+                        .fn()
+                        .mockResolvedValue(
+                            Response.json({ answers: { is_roster: { confidence: 0.5, noul } } }),
+                        ),
+                );
+
+                await expect(
+                    configuredAi.getRosterProbability(imagePath, 'image/jpeg'),
+                ).rejects.toThrow(TypeError);
+            },
+        );
+
         it('should throw with the status when the request fails', async () => {
             const configuredAi = await importWithDecisionModel();
 
