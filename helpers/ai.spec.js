@@ -492,18 +492,20 @@ describe('AI', () => {
 
         afterEach(async () => {
             vi.unstubAllGlobals();
+            vi.doUnmock('./config.js');
+            vi.resetModules();
             await rm(directory, { force: true, recursive: true });
         });
 
-        const importWithDecisionModel = async () => {
+        const importWithDecisionModel = async (settings = { decisionTimeout: 5000 }) => {
             vi.resetModules();
             vi.doMock('./config.js', () => ({
                 default: {
                     gemini: {
                         apiKey: 'test-api-key',
                         decisionModel: 'gemini-decision-1',
-                        decisionTimeout: 5000,
                         model: 'test-model',
+                        ...settings,
                     },
                 },
             }));
@@ -590,6 +592,96 @@ describe('AI', () => {
             await expect(
                 configuredAi.getRosterProbability(imagePath, 'image/jpeg'),
             ).rejects.toMatchObject({ status: 429 });
+        });
+
+        it.each([{}, { answers: {} }])(
+            'should throw when the answer is missing (%j)',
+            async body => {
+                const configuredAi = await importWithDecisionModel();
+
+                vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json(body)));
+
+                await expect(
+                    configuredAi.getRosterProbability(imagePath, 'image/jpeg'),
+                ).rejects.toThrow(TypeError);
+            },
+        );
+
+        /**
+         * A fetch that settles only when its signal aborts, so the test hangs
+         * (and fails on the test timeout) unless the decision timeout fires.
+         */
+        const pendUntilAborted = () =>
+            vi.fn(
+                (_url, { signal }) =>
+                    new Promise((_resolve, reject) => {
+                        signal.addEventListener('abort', () => reject(signal.reason));
+                    }),
+            );
+
+        it('should abandon a call that outlasts the decision timeout', async () => {
+            const configuredAi = await importWithDecisionModel({ decisionTimeout: 20 });
+
+            vi.stubGlobal('fetch', pendUntilAborted());
+
+            await expect(
+                configuredAi.getRosterProbability(imagePath, 'image/jpeg'),
+            ).rejects.toMatchObject({ name: 'TimeoutError' });
+        });
+
+        it('should log how long the call took even when it fails', async () => {
+            const configuredAi = await importWithDecisionModel({ decisionTimeout: 20 });
+            const { default: log } = await import('./log.js');
+
+            vi.stubGlobal('fetch', pendUntilAborted());
+
+            await expect(
+                configuredAi.getRosterProbability(imagePath, 'image/jpeg'),
+            ).rejects.toThrow();
+            expect(log.info).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    durationMs: expect.any(Number),
+                    model: 'gemini-decision-1',
+                }),
+                'The AI screened the image',
+            );
+        });
+
+        it.each([
+            ['unset', {}],
+            ['a string', { decisionTimeout: '10000' }],
+            ['negative', { decisionTimeout: -1 }],
+            ['fractional', { decisionTimeout: 1.5 }],
+        ])('should time out after 2 s when the setting is %s', async (label, settings) => {
+            const timeout = vi.spyOn(AbortSignal, 'timeout');
+
+            try {
+                const configuredAi = await importWithDecisionModel(settings);
+                const { default: log } = await import('./log.js');
+
+                vi.stubGlobal(
+                    'fetch',
+                    vi.fn().mockResolvedValue(
+                        Response.json({
+                            answers: { is_roster: { confidence: 0.9, noul: 0.9 } },
+                        }),
+                    ),
+                );
+
+                await configuredAi.getRosterProbability(imagePath, 'image/jpeg');
+
+                expect(timeout).toHaveBeenCalledWith(2000);
+                if (label === 'unset') {
+                    expect(log.warn).not.toHaveBeenCalled();
+                } else {
+                    expect(log.warn).toHaveBeenCalledWith(
+                        expect.objectContaining({ decisionTimeout: settings.decisionTimeout }),
+                        'Ignoring an invalid decisionTimeout setting',
+                    );
+                }
+            } finally {
+                timeout.mockRestore();
+            }
         });
     });
 

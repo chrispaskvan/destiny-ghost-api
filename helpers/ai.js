@@ -18,8 +18,9 @@ const DEFAULT_TIMEOUT = 120000;
  * How long the roster screen may take. The model answers in a few hundred
  * milliseconds, and the screen is only an optimization - a call that runs long
  * is abandoned and the image goes on to extraction as if it had never run.
+ * Kept short because every image waits on it, real rosters included.
  */
-const DEFAULT_DECISION_TIMEOUT = 10000;
+const DEFAULT_DECISION_TIMEOUT = 2000;
 
 /**
  * Called directly rather than through the SDK: `decisions` first appears in
@@ -32,7 +33,7 @@ const {
     gemini: {
         apiKey,
         decisionModel,
-        decisionTimeout = DEFAULT_DECISION_TIMEOUT,
+        decisionTimeout: configuredDecisionTimeout = DEFAULT_DECISION_TIMEOUT,
         model,
         thinkingBudget,
         timeout = DEFAULT_TIMEOUT,
@@ -51,6 +52,23 @@ const {
  * outside it, so each attempt gets the full allowance.
  */
 const httpOptions = { timeout };
+
+/**
+ * Checked once here rather than left to AbortSignal.timeout, which throws on
+ * anything but a non-negative integer. That throw would land in the caller's
+ * catch on every image, so a bad setting would quietly switch the screen off.
+ */
+const decisionTimeout =
+    Number.isInteger(configuredDecisionTimeout) && configuredDecisionTimeout > 0
+        ? configuredDecisionTimeout
+        : DEFAULT_DECISION_TIMEOUT;
+
+if (decisionTimeout !== configuredDecisionTimeout) {
+    log.warn(
+        { decisionTimeout: configuredDecisionTimeout, fallback: DEFAULT_DECISION_TIMEOUT },
+        'Ignoring an invalid decisionTimeout setting',
+    );
+}
 
 /**
  * Thinking is left at the model's own default unless settings ask for a budget,
@@ -124,53 +142,63 @@ class AI {
 
         const data = (await readFile(path)).toString('base64');
         const startedAt = performance.now();
-        const response = await fetch(DECISIONS_URL, {
-            body: JSON.stringify({
-                model: decisionModel,
-                input: [{ type: 'image', data, mime_type: mimeType, resolution: 'low' }],
-                questions: {
-                    is_roster: {
-                        type: 'noul',
-                        instructions: AI.prompts.rosterQuestion,
-                        criteria: {
-                            true_description: AI.prompts.rosterTrue,
-                            false_description: AI.prompts.rosterFalse,
+        /** @type {{ confidence?: number, noul?: number } | undefined} */
+        let answer;
+
+        try {
+            const response = await fetch(DECISIONS_URL, {
+                body: JSON.stringify({
+                    model: decisionModel,
+                    input: [{ type: 'image', data, mime_type: mimeType, resolution: 'low' }],
+                    questions: {
+                        is_roster: {
+                            type: 'noul',
+                            instructions: AI.prompts.rosterQuestion,
+                            criteria: {
+                                true_description: AI.prompts.rosterTrue,
+                                false_description: AI.prompts.rosterFalse,
+                            },
                         },
                     },
-                },
-            }),
-            headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-            method: 'POST',
-            signal: AbortSignal.timeout(decisionTimeout),
-        });
-
-        if (!response.ok) {
-            throw Object.assign(new Error('Decisions request failed'), {
-                status: response.status,
+                }),
+                headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+                method: 'POST',
+                signal: AbortSignal.timeout(decisionTimeout),
             });
+
+            if (!response.ok) {
+                throw Object.assign(new Error('Decisions request failed'), {
+                    status: response.status,
+                });
+            }
+
+            ({
+                answers: { is_roster: answer },
+            } = /** @type {{ answers: { is_roster: { confidence: number, noul: number } } }} */ (
+                await response.json()
+            ));
+        } finally {
+            /**
+             * Reported whether the call answers, fails or times out, so a slow
+             * endpoint reads differently in the log from one that refuses, and
+             * the thresholds and timeout can both be tuned from it.
+             */
+            log.info(
+                {
+                    confidence: answer?.confidence,
+                    durationMs: Math.round(performance.now() - startedAt),
+                    model: decisionModel,
+                    noul: answer?.noul,
+                },
+                'The AI screened the image',
+            );
         }
 
-        const {
-            answers: {
-                is_roster: { confidence, noul },
-            },
-        } = /** @type {{ answers: { is_roster: { confidence: number, noul: number } } }} */ (
-            await response.json()
-        );
-
-        log.info(
-            {
-                confidence,
-                durationMs: Math.round(performance.now() - startedAt),
-                model: decisionModel,
-                noul,
-            },
-            'The AI screened the image',
-        );
+        const noul = answer?.noul;
 
         // Anything but a probability would read as "not a roster" to the
         // caller's threshold check, so it is thrown instead, failing open.
-        if (!Number.isFinite(noul) || noul < 0 || noul > 1) {
+        if (typeof noul !== 'number' || !Number.isFinite(noul) || noul < 0 || noul > 1) {
             throw new TypeError(`Decisions returned an invalid probability: ${noul}`);
         }
 
