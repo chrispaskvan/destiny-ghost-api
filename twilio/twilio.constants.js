@@ -101,6 +101,16 @@ export const PLAYER_LOOKUP_CONCURRENCY = 6;
 
 /**
  * @constant
+ * @type {number}
+ * @description The roster screen's probability at or below which an image is
+ * turned away before extraction. Set low on purpose: a real roster refused
+ * costs the sender their answer, while junk let through only costs the
+ * extraction call it would have cost anyway.
+ */
+export const ROSTER_REJECT_THRESHOLD = 0.2;
+
+/**
+ * @constant
  * @description Maps emoji-only inbound messages to an intent-specific reply,
  * so a 👍 or ❤️ doesn't fall through to item search and come back empty.
  * Keys are normalized (via {@link normalizeEmoji}) to their base sequence,

@@ -23,6 +23,7 @@ import {
     MEDIA_ERROR_REPLY,
     MEDIA_NO_PLAYERS_REPLY,
     PLAYER_LOOKUP_CONCURRENCY,
+    ROSTER_REJECT_THRESHOLD,
     TWILIO_MEDIA_HOST,
     UNKNOWN_STATISTIC,
 } from './twilio.constants.js';
@@ -175,16 +176,47 @@ class MmsService {
     }
 
     /**
+     * Whether the image could be a roster, by the AI's quick screen.
+     *
+     * Fails open: an unconfigured screen, a timeout or an error all answer yes,
+     * leaving the image to extraction exactly as it went before the screen
+     * existed.
+     *
+     * @param {string} filePath
+     * @param {string} mimeType
+     * @returns {Promise<boolean>}
+     */
+    async #mayBeRoster(filePath, mimeType) {
+        try {
+            const probability = await this.ai.getRosterProbability(filePath, mimeType);
+
+            return probability === undefined || probability > ROSTER_REJECT_THRESHOLD;
+        } catch (err) {
+            log.warn({ err, filePath }, 'Failed to screen the image; analyzing it anyway');
+
+            return true;
+        }
+    }
+
+    /**
      * Read the display names off the downloaded image.
      *
      * The AI answers with one comma delimited line, so a blank response yields a
      * single empty entry rather than no entries - both mean the same thing here
-     * and both collapse to an empty list.
+     * and both collapse to an empty list. An image the screen turns away yields
+     * an empty list too, since to the sender it is the same answer.
      *
      * @param {string} filePath - Path to the downloaded image.
+     * @param {string} mimeType - e.g. `image/jpeg`.
      * @returns {Promise<string[]>} Display names, in the order they appear.
      */
-    async analyzeImage(filePath) {
+    async analyzeImage(filePath, mimeType) {
+        if (!(await this.#mayBeRoster(filePath, mimeType))) {
+            log.info({ filePath }, 'Image does not look like a roster');
+
+            return [];
+        }
+
         const players = (await this.ai.getPlayersFromFile(filePath)) ?? [];
         const displayNames = players.map(player => player.trim()).filter(Boolean);
 
@@ -289,7 +321,7 @@ class MmsService {
                 try {
                     const filePath = await this.#download(item, directory);
 
-                    players = await this.analyzeImage(filePath);
+                    players = await this.analyzeImage(filePath, item.contentType);
                 } finally {
                     try {
                         await rm(directory, { force: true, recursive: true });
