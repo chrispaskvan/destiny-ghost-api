@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { startServer, stopServer } from './server.js';
 
@@ -133,9 +134,15 @@ describe('startServer once listening', () => {
         );
     });
 
+    /**
+     * The version comes from package.json, not npm_package_version, which is
+     * unset now that production starts node rather than a pnpm script.
+     */
     it('should report the version and build label the image was built as', async () => {
+        const { version } = JSON.parse(readFileSync('package.json', 'utf8'));
+
         vi.stubEnv('GIT_SHA', '461d38c7-dirty');
-        vi.stubEnv('npm_package_version', '2.32.2-The-Martlet');
+        vi.stubEnv('npm_package_version', '');
 
         try {
             await startServer();
@@ -143,7 +150,7 @@ describe('startServer once listening', () => {
             expect(logInfo).toHaveBeenCalledWith(
                 expect.objectContaining({
                     build: '461d38c7-dirty',
-                    version: '2.32.2-The-Martlet',
+                    version,
                 }),
                 'HTTP server is listening',
             );
