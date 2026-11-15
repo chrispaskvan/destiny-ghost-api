@@ -30,6 +30,14 @@ const DEFAULT_DECISION_TIMEOUT = 2000;
  */
 const NO_RETRIES = /** @type {const} */ ({ strategy: 'none' });
 
+/**
+ * The SDK sends `decisions.create` to v1 unless told otherwise, and v1 has no
+ * decisions endpoint: in production it answered 404 with an empty body, which
+ * the screen fails open on, so every image went to extraction unscreened.
+ * v1beta is the version the screen works against.
+ */
+const DECISIONS_API_VERSION = 'v1beta';
+
 const {
     gemini: {
         apiKey,
@@ -151,6 +159,7 @@ class AI {
         try {
             const { answers } = await this.ai.decisions.create(
                 {
+                    api_version: DECISIONS_API_VERSION,
                     model: decisionModel,
                     input: [{ type: 'image', data, mime_type: mimeType, resolution: 'low' }],
                     questions: {

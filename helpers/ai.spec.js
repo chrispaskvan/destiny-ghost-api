@@ -573,9 +573,10 @@ describe('AI', () => {
             const body = await request.json();
             const { input, model, questions } = body;
 
-            expect(request.url).toBe('https://generativelanguage.googleapis.com/v1/decisions');
+            expect(request.url).toBe('https://generativelanguage.googleapis.com/v1beta/decisions');
             expect(request.method).toBe('POST');
             expect(request.headers.get('x-goog-api-key')).toBe('test-api-key');
+            expect(body).not.toHaveProperty('api_version');
             expect(model).toBe('gemini-decision-1');
             expect(input).toEqual([
                 {
