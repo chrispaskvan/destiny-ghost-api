@@ -7,8 +7,6 @@ import { basename, join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { setTimeout } from 'node:timers/promises';
 import { StatusCodes } from 'http-status-codes';
-// @types/node does not yet declare Node's zlib zip API (this Node version supports it).
-// @ts-expect-error
 import { ZipFile } from 'node:zlib';
 import log from './log.js';
 import sanitizeDirectory from './sanitize-directory.js';
