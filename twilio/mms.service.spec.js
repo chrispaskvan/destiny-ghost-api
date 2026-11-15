@@ -25,7 +25,7 @@ vi.mock('../helpers/cache.js', () => {
 
 const from = '+15005550006';
 const url = 'https://api.twilio.com/2010-04-01/Accounts/AC123/Messages/MM123/Media/ME123';
-const aiService = { getPlayersFromFile: vi.fn() };
+const aiService = { getPlayersFromFile: vi.fn(), getRosterProbability: vi.fn() };
 
 /**
  * findPlayers is static on the real service and reached through the instance's
@@ -60,6 +60,7 @@ let mmsService;
 beforeEach(() => {
     vi.clearAllMocks();
     aiService.getPlayersFromFile.mockResolvedValue(['Player1', 'Player2']);
+    aiService.getRosterProbability.mockResolvedValue(undefined);
     FakeDestiny2Service.findPlayers.mockImplementation(async name => [playerMatching(name)]);
     destiny2Service.getPlayerStatistics.mockResolvedValue({ pvp: { kdr: '1.42' } });
     /**
@@ -496,6 +497,61 @@ describe('MmsService', () => {
 
                 expect(notificationService.sendMessage).toHaveBeenCalledWith(
                     MEDIA_NO_PLAYERS_REPLY,
+                    from,
+                    undefined,
+                    expect.objectContaining({ guard: expect.any(Function) }),
+                );
+            });
+        });
+
+        describe('when the roster screen is configured', () => {
+            beforeEach(() => {
+                vi.stubGlobal(
+                    'fetch',
+                    vi.fn().mockResolvedValue(new Response('image-bytes', { status: 200 })),
+                );
+            });
+
+            it('should screen the downloaded image with its content type', async () => {
+                aiService.getRosterProbability.mockResolvedValue(0.95);
+
+                await mmsService.process({ from, media: [{ contentType: 'image/png', url }] });
+
+                expect(aiService.getRosterProbability).toHaveBeenCalledWith(
+                    expect.stringMatching(/image\.png$/),
+                    'image/png',
+                );
+                expect(aiService.getPlayersFromFile).toHaveBeenCalledOnce();
+            });
+
+            it.each([0.01, 0.2])(
+                'should skip extraction and say no players were found at %s',
+                async probability => {
+                    aiService.getRosterProbability.mockResolvedValue(probability);
+
+                    await mmsService.process({ from, media: [{ contentType: 'image/jpeg', url }] });
+
+                    expect(aiService.getPlayersFromFile).not.toHaveBeenCalled();
+                    expect(FakeDestiny2Service.findPlayers).not.toHaveBeenCalled();
+                    expect(notificationService.sendMessage).toHaveBeenCalledWith(
+                        MEDIA_NO_PLAYERS_REPLY,
+                        from,
+                        undefined,
+                        expect.objectContaining({ guard: expect.any(Function) }),
+                    );
+                },
+            );
+
+            it('should analyze the image anyway when the screen fails', async () => {
+                aiService.getRosterProbability.mockRejectedValue(
+                    Object.assign(new Error('Decisions request failed'), { status: 503 }),
+                );
+
+                await mmsService.process({ from, media: [{ contentType: 'image/jpeg', url }] });
+
+                expect(aiService.getPlayersFromFile).toHaveBeenCalledOnce();
+                expect(notificationService.sendMessage).toHaveBeenCalledWith(
+                    '\n\n1.42 Player1\n1.42 Player2',
                     from,
                     undefined,
                     expect.objectContaining({ guard: expect.any(Function) }),

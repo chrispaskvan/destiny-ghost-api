@@ -1,4 +1,6 @@
 // @ts-check
+import { readFile } from 'node:fs/promises';
+
 import { GoogleGenAI } from '@google/genai';
 import configuration from './config.js';
 import log from './log.js';
@@ -12,8 +14,30 @@ import { withRetry, isTransientError } from './retry.js';
  */
 const DEFAULT_TIMEOUT = 120000;
 
+/**
+ * How long the roster screen may take. The model answers in a few hundred
+ * milliseconds, and the screen is only an optimization - a call that runs long
+ * is abandoned and the image goes on to extraction as if it had never run.
+ * Kept short because every image waits on it, real rosters included.
+ */
+const DEFAULT_DECISION_TIMEOUT = 2000;
+
+/**
+ * Called directly rather than through the SDK: `decisions` first appears in
+ * `@google/genai` 3.2, a major version past the one the upload and extraction
+ * calls are written against, and this is one POST.
+ */
+const DECISIONS_URL = 'https://generativelanguage.googleapis.com/v1beta/decisions';
+
 const {
-    gemini: { apiKey, model, thinkingBudget, timeout = DEFAULT_TIMEOUT },
+    gemini: {
+        apiKey,
+        decisionModel,
+        decisionTimeout: configuredDecisionTimeout = DEFAULT_DECISION_TIMEOUT,
+        model,
+        thinkingBudget,
+        timeout = DEFAULT_TIMEOUT,
+    },
 } = configuration;
 
 /**
@@ -30,6 +54,23 @@ const {
 const httpOptions = { timeout };
 
 /**
+ * Checked once here rather than left to AbortSignal.timeout, which throws on
+ * anything but a non-negative integer. That throw would land in the caller's
+ * catch on every image, so a bad setting would quietly switch the screen off.
+ */
+const decisionTimeout =
+    Number.isInteger(configuredDecisionTimeout) && configuredDecisionTimeout > 0
+        ? configuredDecisionTimeout
+        : DEFAULT_DECISION_TIMEOUT;
+
+if (decisionTimeout !== configuredDecisionTimeout) {
+    log.warn(
+        { decisionTimeout: configuredDecisionTimeout, fallback: DEFAULT_DECISION_TIMEOUT },
+        'Ignoring an invalid decisionTimeout setting',
+    );
+}
+
+/**
  * Thinking is left at the model's own default unless settings ask for a budget,
  * because setting the field at all is an error on models that do not support
  * thinking. Reading names off a screenshot is extraction rather than reasoning,
@@ -44,6 +85,12 @@ class AI {
             "The image is a list of players in a video game player versus player match. The player's display name is followed by the player's clan in square brackets.",
         extractionInstruction:
             'List the 12 display names in the image in the order they appear. Respond with a comma delimited string. Do not remove any whitespace between characters and do not add any spaces between commas.',
+        rosterQuestion:
+            'Is this image a screenshot of a Destiny 2 player versus player match roster, listing the display names of the players in the match?',
+        rosterTrue:
+            'A screenshot or photo of a game screen listing the players in a PvP match by display name.',
+        rosterFalse:
+            'Anything else: a photo of people or places, a meme, a different game screen, or an image with no readable list of player names.',
     };
 
     constructor() {
@@ -69,6 +116,93 @@ class AI {
         } catch (err) {
             log.warn({ err, name }, 'Failed to delete the uploaded file');
         }
+    }
+
+    /**
+     * Ask the decision model whether an image is a PvP roster at all, before
+     * the slower extraction call is spent on it.
+     *
+     * Off unless settings name a `decisionModel`. The image goes inline rather
+     * than through the Files API: it is already capped at the MMS size limit,
+     * and inline leaves no uploaded copy to delete. Low resolution is enough to
+     * tell a roster from a selfie and keeps the token count down.
+     *
+     * Not retried. The caller treats any failure as "unknown" and carries on,
+     * so a retry would only add latency to a request that loses nothing
+     * without it.
+     *
+     * @param {string} path - Path to the downloaded image.
+     * @param {string} mimeType - e.g. `image/jpeg`.
+     * @returns {Promise<number | undefined>} Calibrated probability, in
+     * `[0.01, 0.99]`, that the image is a roster - or undefined when the
+     * screen is not configured.
+     */
+    async getRosterProbability(path, mimeType) {
+        if (!decisionModel) return undefined;
+
+        const data = (await readFile(path)).toString('base64');
+        const startedAt = performance.now();
+        /** @type {{ confidence?: number, noul?: number } | undefined} */
+        let answer;
+
+        try {
+            const response = await fetch(DECISIONS_URL, {
+                body: JSON.stringify({
+                    model: decisionModel,
+                    input: [{ type: 'image', data, mime_type: mimeType, resolution: 'low' }],
+                    questions: {
+                        is_roster: {
+                            type: 'noul',
+                            instructions: AI.prompts.rosterQuestion,
+                            criteria: {
+                                true_description: AI.prompts.rosterTrue,
+                                false_description: AI.prompts.rosterFalse,
+                            },
+                        },
+                    },
+                }),
+                headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+                method: 'POST',
+                signal: AbortSignal.timeout(decisionTimeout),
+            });
+
+            if (!response.ok) {
+                throw Object.assign(new Error('Decisions request failed'), {
+                    status: response.status,
+                });
+            }
+
+            ({
+                answers: { is_roster: answer },
+            } = /** @type {{ answers: { is_roster: { confidence: number, noul: number } } }} */ (
+                await response.json()
+            ));
+        } finally {
+            /**
+             * Reported whether the call answers, fails or times out, so a slow
+             * endpoint reads differently in the log from one that refuses, and
+             * the thresholds and timeout can both be tuned from it.
+             */
+            log.info(
+                {
+                    confidence: answer?.confidence,
+                    durationMs: Math.round(performance.now() - startedAt),
+                    model: decisionModel,
+                    noul: answer?.noul,
+                },
+                'The AI screened the image',
+            );
+        }
+
+        const noul = answer?.noul;
+
+        // Anything but a probability would read as "not a roster" to the
+        // caller's threshold check, so it is thrown instead, failing open.
+        if (typeof noul !== 'number' || !Number.isFinite(noul) || noul < 0 || noul > 1) {
+            throw new TypeError(`Decisions returned an invalid probability: ${noul}`);
+        }
+
+        return noul;
     }
 
     /**
