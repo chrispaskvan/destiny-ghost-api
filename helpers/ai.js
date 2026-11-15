@@ -23,11 +23,12 @@ const DEFAULT_TIMEOUT = 120000;
 const DEFAULT_DECISION_TIMEOUT = 2000;
 
 /**
- * Called directly rather than through the SDK: `decisions` first appears in
- * `@google/genai` 3.2, a major version past the one the upload and extraction
- * calls are written against, and this is one POST.
+ * The SDK retries `decisions.create` by default (up to four retries with
+ * backoff, on 408, 409, 429 and 5xx), which could hold an image for half a
+ * minute before extraction. The screen is only an optimization, so a failure
+ * goes straight to the caller, which lets the image through.
  */
-const DECISIONS_URL = 'https://generativelanguage.googleapis.com/v1beta/decisions';
+const NO_RETRIES = /** @type {const} */ ({ strategy: 'none' });
 
 const {
     gemini: {
@@ -41,12 +42,12 @@ const {
 } = configuration;
 
 /**
- * Given to the client rather than to each call. The SDK merges client options
- * into every request (ApiClient.patchHttpOptions), so the ceiling still reaches
- * all three - and files.upload is the reason it has to be done this way:
- * ApiClient.fetchUploadUrl *replaces* its own options with whatever a call
- * passes, discarding the empty apiVersion and the X-Goog-Upload-* headers a
- * resumable upload needs, which fails the upload with a 404.
+ * Given to the client rather than to each call, so one setting reaches upload,
+ * extraction and delete: the SDK merges client options into every request
+ * (ApiClient.patchHttpOptions). On 2.x this was also the only way that worked,
+ * because ApiClient.fetchUploadUrl replaced its options with whatever a call
+ * passed and dropped the headers a resumable upload needs; 3.x merges them.
+ * The roster screen overrides it per call with its own, shorter limit.
  *
  * Per request is still the granularity that applies: retry backoff sleeps fall
  * outside it, so each attempt gets the full allowance.
@@ -54,9 +55,11 @@ const {
 const httpOptions = { timeout };
 
 /**
- * Checked once here rather than left to AbortSignal.timeout, which throws on
- * anything but a non-negative integer. That throw would land in the caller's
- * catch on every image, so a bad setting would quietly switch the screen off.
+ * Checked once here rather than trusted per call. The SDK treats a falsy
+ * `timeout_ms` as unset and falls back to the client's two-minute ceiling, so
+ * a 0 would hold every image for up to two minutes, and what it makes of a
+ * string or a negative number is undocumented. A bad setting falls back to the
+ * default instead, with a warning.
  */
 const decisionTimeout =
     Number.isInteger(configuredDecisionTimeout) && configuredDecisionTimeout > 0
@@ -127,9 +130,9 @@ class AI {
      * and inline leaves no uploaded copy to delete. Low resolution is enough to
      * tell a roster from a selfie and keeps the token count down.
      *
-     * Not retried. The caller treats any failure as "unknown" and carries on,
-     * so a retry would only add latency to a request that loses nothing
-     * without it.
+     * Not retried (see NO_RETRIES). The caller treats any failure as "unknown"
+     * and carries on, so a retry would only add latency to a request that
+     * loses nothing without it.
      *
      * @param {string} path - Path to the downloaded image.
      * @param {string} mimeType - e.g. `image/jpeg`.
@@ -146,8 +149,8 @@ class AI {
         let answer;
 
         try {
-            const response = await fetch(DECISIONS_URL, {
-                body: JSON.stringify({
+            const { answers } = await this.ai.decisions.create(
+                {
                     model: decisionModel,
                     input: [{ type: 'image', data, mime_type: mimeType, resolution: 'low' }],
                     questions: {
@@ -160,23 +163,15 @@ class AI {
                             },
                         },
                     },
-                }),
-                headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-                method: 'POST',
-                signal: AbortSignal.timeout(decisionTimeout),
-            });
+                },
+                { retries: NO_RETRIES, timeout_ms: decisionTimeout },
+            );
 
-            if (!response.ok) {
-                throw Object.assign(new Error('Decisions request failed'), {
-                    status: response.status,
-                });
-            }
-
-            ({
-                answers: { is_roster: answer },
-            } = /** @type {{ answers: { is_roster: { confidence: number, noul: number } } }} */ (
-                await response.json()
-            ));
+            // Typed as an answer, but not checked by the SDK: the probability
+            // is validated below before anything relies on it.
+            answer = /** @type {{ confidence?: number, noul?: number } | undefined} */ (
+                answers?.is_roster
+            );
         } finally {
             /**
              * Reported whether the call answers, fails or times out, so a slow

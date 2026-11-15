@@ -5,16 +5,24 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import aiInstance from './ai.js';
 import { withRetry, isTransientError } from './retry.js';
 
-vi.mock('@google/genai', () => ({
-    GoogleGenAI: class {
-        files = { delete: vi.fn(), upload: vi.fn() };
-        models = { generateContent: vi.fn() };
+/**
+ * Hoisted so the roster-screen specs, which load the real SDK, can put the
+ * mock back for whatever runs after them.
+ */
+const { mockGenAI } = vi.hoisted(() => ({
+    mockGenAI: () => ({
+        GoogleGenAI: class {
+            files = { delete: vi.fn(), upload: vi.fn() };
+            models = { generateContent: vi.fn() };
 
-        constructor(options) {
-            this.options = options;
-        }
-    },
+            constructor(options) {
+                this.options = options;
+            }
+        },
+    }),
 }));
+
+vi.mock('@google/genai', mockGenAI);
 vi.mock('./config.js', () => ({
     default: {
         gemini: {
@@ -493,12 +501,19 @@ describe('AI', () => {
         afterEach(async () => {
             vi.unstubAllGlobals();
             vi.doUnmock('./config.js');
+            vi.doMock('@google/genai', mockGenAI);
             vi.resetModules();
             await rm(directory, { force: true, recursive: true });
         });
 
+        /**
+         * Loads the real SDK, so these specs check the request it actually
+         * sends - and its retry and timeout behavior - with only `fetch`
+         * stubbed underneath it.
+         */
         const importWithDecisionModel = async (settings = { decisionTimeout: 5000 }) => {
             vi.resetModules();
+            vi.doUnmock('@google/genai');
             vi.doMock('./config.js', () => ({
                 default: {
                     gemini: {
@@ -515,6 +530,20 @@ describe('AI', () => {
             return configuredAi;
         };
 
+        /**
+         * The SDK may call fetch with a Request or with a URL and init, so
+         * every assertion reads the request through one shape. A Request is
+         * returned as is: a copy's signal is only a follower of the original's,
+         * and once the response is back it no longer reports the SDK's timeout,
+         * so a stub listening on it would never see a stalled body aborted.
+         */
+        const requestOf = call =>
+            call[0] instanceof Request && call.length === 1
+                ? call[0]
+                : new Request(call[0], call[1]);
+
+        const answering = body => vi.fn(async () => Response.json(body));
+
         it('should skip the screen when no decision model is configured', async () => {
             const fetchMock = vi.fn();
 
@@ -528,11 +557,9 @@ describe('AI', () => {
 
         it('should ask one yes/no question about the inline image', async () => {
             const configuredAi = await importWithDecisionModel();
-            const fetchMock = vi.fn().mockResolvedValue(
-                Response.json({
-                    answers: { is_roster: { confidence: 0.97, noul: 0.97, type: 'noul' } },
-                }),
-            );
+            const fetchMock = answering({
+                answers: { is_roster: { confidence: 0.97, noul: 0.97, type: 'noul' } },
+            });
 
             vi.stubGlobal('fetch', fetchMock);
 
@@ -540,13 +567,15 @@ describe('AI', () => {
                 0.97,
             );
 
-            const [url, { body, headers, method, signal }] = fetchMock.mock.calls[0];
-            const { input, model, questions } = JSON.parse(body);
+            expect(fetchMock).toHaveBeenCalledTimes(1);
 
-            expect(url).toBe('https://generativelanguage.googleapis.com/v1beta/decisions');
-            expect(method).toBe('POST');
-            expect(headers).toEqual(expect.objectContaining({ 'x-goog-api-key': 'test-api-key' }));
-            expect(signal).toBeInstanceOf(AbortSignal);
+            const request = requestOf(fetchMock.mock.calls[0]);
+            const body = await request.json();
+            const { input, model, questions } = body;
+
+            expect(request.url).toBe('https://generativelanguage.googleapis.com/v1/decisions');
+            expect(request.method).toBe('POST');
+            expect(request.headers.get('x-goog-api-key')).toBe('test-api-key');
             expect(model).toBe('gemini-decision-1');
             expect(input).toEqual([
                 {
@@ -571,11 +600,7 @@ describe('AI', () => {
 
                 vi.stubGlobal(
                     'fetch',
-                    vi
-                        .fn()
-                        .mockResolvedValue(
-                            Response.json({ answers: { is_roster: { confidence: 0.5, noul } } }),
-                        ),
+                    answering({ answers: { is_roster: { confidence: 0.5, noul } } }),
                 );
 
                 await expect(
@@ -584,22 +609,29 @@ describe('AI', () => {
             },
         );
 
-        it('should throw with the status when the request fails', async () => {
-            const configuredAi = await importWithDecisionModel();
+        it.each([429, 503])(
+            'should throw with the status, without retrying, when the request fails (%i)',
+            async status => {
+                const configuredAi = await importWithDecisionModel();
+                const fetchMock = vi.fn(async () =>
+                    Response.json({ error: { message: 'nope' } }, { status }),
+                );
 
-            vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 429 })));
+                vi.stubGlobal('fetch', fetchMock);
 
-            await expect(
-                configuredAi.getRosterProbability(imagePath, 'image/jpeg'),
-            ).rejects.toMatchObject({ status: 429 });
-        });
+                await expect(
+                    configuredAi.getRosterProbability(imagePath, 'image/jpeg'),
+                ).rejects.toMatchObject({ status });
+                expect(fetchMock).toHaveBeenCalledTimes(1);
+            },
+        );
 
         it.each([{}, { answers: {} }])(
             'should throw when the answer is missing (%j)',
             async body => {
                 const configuredAi = await importWithDecisionModel();
 
-                vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json(body)));
+                vi.stubGlobal('fetch', answering(body));
 
                 await expect(
                     configuredAi.getRosterProbability(imagePath, 'image/jpeg'),
@@ -612,21 +644,54 @@ describe('AI', () => {
          * (and fails on the test timeout) unless the decision timeout fires.
          */
         const pendUntilAborted = () =>
-            vi.fn(
-                (_url, { signal }) =>
-                    new Promise((_resolve, reject) => {
-                        signal.addEventListener('abort', () => reject(signal.reason));
-                    }),
-            );
+            vi.fn((...call) => {
+                const { signal } = requestOf(call);
+
+                return new Promise((_resolve, reject) => {
+                    signal.addEventListener('abort', () => reject(signal.reason));
+                });
+            });
 
         it('should abandon a call that outlasts the decision timeout', async () => {
             const configuredAi = await importWithDecisionModel({ decisionTimeout: 20 });
+            const fetchMock = pendUntilAborted();
 
-            vi.stubGlobal('fetch', pendUntilAborted());
+            vi.stubGlobal('fetch', fetchMock);
+
+            await expect(
+                configuredAi.getRosterProbability(imagePath, 'image/jpeg'),
+            ).rejects.toThrow(/timed out/i);
+            expect(fetchMock).toHaveBeenCalledTimes(1);
+        });
+
+        /**
+         * Headers arrive at once but the body never finishes, until the
+         * signal aborts. The timeout has to cover reading the body too, or a
+         * stalled response would hold the image past the decision timeout.
+         */
+        it('should abandon a call whose body stalls after the headers arrive', async () => {
+            const configuredAi = await importWithDecisionModel({ decisionTimeout: 20 });
+            const fetchMock = vi.fn(async (...call) => {
+                const { signal } = requestOf(call);
+                const body = new ReadableStream({
+                    start(controller) {
+                        controller.enqueue(new TextEncoder().encode('{"answers":'));
+                        signal.addEventListener('abort', () => controller.error(signal.reason));
+                    },
+                });
+
+                return new Response(body, {
+                    headers: { 'content-type': 'application/json' },
+                    status: 200,
+                });
+            });
+
+            vi.stubGlobal('fetch', fetchMock);
 
             await expect(
                 configuredAi.getRosterProbability(imagePath, 'image/jpeg'),
             ).rejects.toMatchObject({ name: 'TimeoutError' });
+            expect(fetchMock).toHaveBeenCalledTimes(1);
         });
 
         it('should log how long the call took even when it fails', async () => {
@@ -650,37 +715,32 @@ describe('AI', () => {
         it.each([
             ['unset', {}],
             ['a string', { decisionTimeout: '10000' }],
+            ['zero', { decisionTimeout: 0 }],
             ['negative', { decisionTimeout: -1 }],
             ['fractional', { decisionTimeout: 1.5 }],
         ])('should time out after 2 s when the setting is %s', async (label, settings) => {
-            const timeout = vi.spyOn(AbortSignal, 'timeout');
+            const configuredAi = await importWithDecisionModel(settings);
+            const { default: log } = await import('./log.js');
+            const create = vi.spyOn(configuredAi.ai.decisions, 'create');
 
-            try {
-                const configuredAi = await importWithDecisionModel(settings);
-                const { default: log } = await import('./log.js');
+            vi.stubGlobal(
+                'fetch',
+                answering({ answers: { is_roster: { confidence: 0.9, noul: 0.9 } } }),
+            );
 
-                vi.stubGlobal(
-                    'fetch',
-                    vi.fn().mockResolvedValue(
-                        Response.json({
-                            answers: { is_roster: { confidence: 0.9, noul: 0.9 } },
-                        }),
-                    ),
+            await configuredAi.getRosterProbability(imagePath, 'image/jpeg');
+
+            expect(create).toHaveBeenCalledWith(expect.anything(), {
+                retries: { strategy: 'none' },
+                timeout_ms: 2000,
+            });
+            if (label === 'unset') {
+                expect(log.warn).not.toHaveBeenCalled();
+            } else {
+                expect(log.warn).toHaveBeenCalledWith(
+                    expect.objectContaining({ decisionTimeout: settings.decisionTimeout }),
+                    'Ignoring an invalid decisionTimeout setting',
                 );
-
-                await configuredAi.getRosterProbability(imagePath, 'image/jpeg');
-
-                expect(timeout).toHaveBeenCalledWith(2000);
-                if (label === 'unset') {
-                    expect(log.warn).not.toHaveBeenCalled();
-                } else {
-                    expect(log.warn).toHaveBeenCalledWith(
-                        expect.objectContaining({ decisionTimeout: settings.decisionTimeout }),
-                        'Ignoring an invalid decisionTimeout setting',
-                    );
-                }
-            } finally {
-                timeout.mockRestore();
             }
         });
     });
