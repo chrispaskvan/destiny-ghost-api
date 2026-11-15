@@ -48,39 +48,42 @@ export const STOP_REPLY =
  * @description Reply sent after a HELP keyword is received.
  */
 export const HELP_REPLY =
-    'SMS alerts, up to 10 msgs/week. Msg&data rates may apply. Reply STOP to cancel. Help: banshee-44@destiny-ghost.com';
+    'SMS alerts, up to 1 msg/week. Msg&data rates may apply. Reply STOP to cancel. Help: banshee-44@destiny-ghost.com';
 
 /**
  * @constant
  * @description Reply sent after a START keyword is received.
  */
 export const START_REPLY =
-    "You're re-subscribed. Up to 10 msgs/week. Msg&data rates may apply. Reply HELP for help, STOP to cancel.";
+    "You're re-subscribed. Up to 1 msg/week. Msg&data rates may apply. Reply HELP for help, STOP to cancel.";
 
 /**
  * @constant
  * @description Reply acknowledging receipt of an MMS image queued for analysis.
  */
-export const MEDIA_RECEIVED_REPLY = 'Got it. Your image is being analyzed.';
+export const MEDIA_RECEIVED_REPLY = 'Scanning ...';
 
 /**
  * @constant
  * @description Reply sent when an MMS attachment is not an image.
  */
-export const MEDIA_UNSUPPORTED_REPLY = 'Sorry, I can only analyze images.';
+export const MEDIA_UNSUPPORTED_REPLY =
+    'Negative, Guardian. Golden Age protocols are restricting me to optical scans only.';
 
 /**
  * @constant
  * @description Follow-up message sent when downloading or analyzing an MMS image fails.
  */
-export const MEDIA_ERROR_REPLY = "Sorry, I couldn't process your image. Please try again.";
+export const MEDIA_ERROR_REPLY =
+    'Scan inconclusive. Which usually means something big is about to try and kill us. Eyes up.';
 
 /**
  * @constant
  * @description Follow-up message sent when an image analyzed cleanly but held no
  * recognizable display names.
  */
-export const MEDIA_NO_PLAYERS_REPLY = "I couldn't make out any players in that image.";
+export const MEDIA_NO_PLAYERS_REPLY =
+    "Well, either everyone already went back to orbit, or my optics are glitching. I can't make out a single Guardian here.";
 
 /**
  * @constant

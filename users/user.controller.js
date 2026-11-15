@@ -200,7 +200,7 @@ class UserController {
      * @returns {string}
      */
     static #buildVerificationMessage(code) {
-        return `Enter ${code} to verify your phone number. Up to 10 msgs/week. Msg&data rates may apply. Reply HELP for help, STOP to cancel.`;
+        return `Enter ${code} to verify your phone number. Up to 1 msg/week. Msg&data rates may apply. Reply HELP for help, STOP to cancel.`;
     }
 
     /**
