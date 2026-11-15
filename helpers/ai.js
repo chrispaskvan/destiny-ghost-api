@@ -30,13 +30,6 @@ const DEFAULT_DECISION_TIMEOUT = 2000;
  */
 const NO_RETRIES = /** @type {const} */ ({ strategy: 'none' });
 
-/**
- * The SDK sends `decisions.create` to v1 unless told otherwise. v1beta is the
- * version the screen was proven against in production, so it stays pinned
- * there until decisions is confirmed on v1.
- */
-const DECISIONS_API_VERSION = 'v1beta';
-
 const {
     gemini: {
         apiKey,
@@ -158,7 +151,6 @@ class AI {
         try {
             const { answers } = await this.ai.decisions.create(
                 {
-                    api_version: DECISIONS_API_VERSION,
                     model: decisionModel,
                     input: [{ type: 'image', data, mime_type: mimeType, resolution: 'low' }],
                     questions: {
