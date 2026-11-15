@@ -532,9 +532,15 @@ describe('AI', () => {
 
         /**
          * The SDK may call fetch with a Request or with a URL and init, so
-         * every assertion reads the request through one shape.
+         * every assertion reads the request through one shape. A Request is
+         * returned as is: a copy's signal is only a follower of the original's,
+         * and once the response is back it no longer reports the SDK's timeout,
+         * so a stub listening on it would never see a stalled body aborted.
          */
-        const requestOf = call => new Request(call[0], call[1]);
+        const requestOf = call =>
+            call[0] instanceof Request && call.length === 1
+                ? call[0]
+                : new Request(call[0], call[1]);
 
         const answering = body => vi.fn(async () => Response.json(body));
 
@@ -655,6 +661,36 @@ describe('AI', () => {
             await expect(
                 configuredAi.getRosterProbability(imagePath, 'image/jpeg'),
             ).rejects.toThrow(/timed out/i);
+            expect(fetchMock).toHaveBeenCalledTimes(1);
+        });
+
+        /**
+         * Headers arrive at once but the body never finishes, until the
+         * signal aborts. The timeout has to cover reading the body too, or a
+         * stalled response would hold the image past the decision timeout.
+         */
+        it('should abandon a call whose body stalls after the headers arrive', async () => {
+            const configuredAi = await importWithDecisionModel({ decisionTimeout: 20 });
+            const fetchMock = vi.fn(async (...call) => {
+                const { signal } = requestOf(call);
+                const body = new ReadableStream({
+                    start(controller) {
+                        controller.enqueue(new TextEncoder().encode('{"answers":'));
+                        signal.addEventListener('abort', () => controller.error(signal.reason));
+                    },
+                });
+
+                return new Response(body, {
+                    headers: { 'content-type': 'application/json' },
+                    status: 200,
+                });
+            });
+
+            vi.stubGlobal('fetch', fetchMock);
+
+            await expect(
+                configuredAi.getRosterProbability(imagePath, 'image/jpeg'),
+            ).rejects.toMatchObject({ name: 'TimeoutError' });
             expect(fetchMock).toHaveBeenCalledTimes(1);
         });
 
