@@ -3,9 +3,16 @@ const { join } = require('node:path');
 
 const isProduction = process.env.NODE_ENV === 'production';
 const packageJson = JSON.parse(readFileSync(join(__dirname, 'package.json'), 'utf8'));
-// GIT_SHA is passed into the Docker build so the docs identify the deployed commit.
-const gitSha = process.env.GIT_SHA?.slice(0, 8);
-const version = gitSha ? `${packageJson.version}.${gitSha}` : packageJson.version;
+/**
+ * The image build passes GIT_SHA (`pnpm docker:build`) so the docs identify the
+ * deployed commit: its first 8 characters, plus -dirty when tracked files had
+ * uncommitted changes. A full SHA is cut to the same 8. A production
+ * build without one says "unknown" rather than passing for a clean release.
+ */
+const build =
+    process.env.GIT_SHA?.replace(/^([0-9a-f]{8})[0-9a-f]+/, '$1') ||
+    (isProduction ? 'unknown' : undefined);
+const version = build ? `${packageJson.version}.${build}` : packageJson.version;
 
 module.exports = {
     openapi: '3.1.1',

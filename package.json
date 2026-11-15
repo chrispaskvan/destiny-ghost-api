@@ -6,6 +6,8 @@
     "type": "module",
     "scripts": {
         "coverage": "pnpm test:watch --coverage --run",
+        "docker:build": "docker build --platform linux/amd64 --build-arg GIT_SHA=$(git rev-parse --short=8 HEAD)$(git diff --quiet HEAD || echo -dirty) -t chrispaskvan/destiny-ghost-api .",
+        "docker:deploy": "pnpm docker:build && docker push chrispaskvan/destiny-ghost-api:latest",
         "format": "remark . --quiet --frail --output",
         "lint": "biome check --write .",
         "lint:ci": "biome check .",

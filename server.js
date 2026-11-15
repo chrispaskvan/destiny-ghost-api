@@ -181,7 +181,15 @@ const startServer = async ({ grpc = false } = {}) => {
         });
 
         log.info(
-            { port, cpuCount, duration, sinceProcessStart, eventLoopDelay },
+            {
+                build: process.env.GIT_SHA,
+                cpuCount,
+                duration,
+                eventLoopDelay,
+                port,
+                sinceProcessStart,
+                version: process.env.npm_package_version,
+            },
             'HTTP server is listening',
         );
     });

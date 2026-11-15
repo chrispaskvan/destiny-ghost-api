@@ -132,6 +132,25 @@ describe('startServer once listening', () => {
             'HTTP server is listening',
         );
     });
+
+    it('should report the version and build label the image was built as', async () => {
+        vi.stubEnv('GIT_SHA', '461d38c7-dirty');
+        vi.stubEnv('npm_package_version', '2.32.2-The-Martlet');
+
+        try {
+            await startServer();
+            await vi.waitFor(() => expect(logInfo).toHaveBeenCalled());
+            expect(logInfo).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    build: '461d38c7-dirty',
+                    version: '2.32.2-The-Martlet',
+                }),
+                'HTTP server is listening',
+            );
+        } finally {
+            vi.unstubAllEnvs();
+        }
+    });
 });
 
 describe('startServer shutdown wiring', () => {

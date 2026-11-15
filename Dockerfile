@@ -16,7 +16,8 @@ RUN pnpm install --frozen-lockfile
 # Copy source code
 COPY . .
 
-# Commit SHA appended to the OpenAPI version (.git is excluded from the build context)
+# Build label appended to the OpenAPI version (.git is excluded from the build
+# context, so `pnpm docker:build` works it out and passes it in)
 ARG GIT_SHA
 
 # Generate OpenAPI documentation for production
@@ -82,5 +83,10 @@ COPY --chown=node:node . .
 
 # Create writable databases directories
 RUN mkdir -p "$DESTINY_DATABASE_DIR" "$DESTINY2_DATABASE_DIR"
+
+# The same build label, for the startup log. Declared last so a new label only
+# rebuilds this layer.
+ARG GIT_SHA
+ENV GIT_SHA=$GIT_SHA
 
 CMD ["pnpm", "run", "start:production"]
