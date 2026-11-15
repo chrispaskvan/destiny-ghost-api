@@ -91,14 +91,19 @@ export default app => {
     /**
      * Requests that never read a session skip loading one, which is a Redis
      * round trip: Twilio webhooks; liveness and health, which can then report
-     * diagnostics during a store outage; and the API docs, each of whose
-     * static assets otherwise waited on a session it did not use.
+     * diagnostics during a store outage; the API docs, each of whose
+     * static assets otherwise waited on a session it did not use; and Azure's
+     * warm-up probe, /robots933456.txt. A new container takes traffic only
+     * once that probe answers; on one deploy every attempt waited on the
+     * session store past the 5-second timeout while the container was still
+     * starting, and the old container kept serving.
      *
      * @param {import('express').Request} req
      * @param {import('express').Response} res
      */
     const isSessionless = (req, res) =>
-        res.locals.isTwilioWebhook || /^\/(?:docs|health|ping)(?:\/|$)/i.test(req.path);
+        res.locals.isTwilioWebhook ||
+        /^\/(?:docs|health|ping|robots933456\.txt)(?:\/|$)/i.test(req.path);
 
     app.use((req, res, next) => {
         if (isSessionless(req, res)) {

@@ -87,7 +87,7 @@ describe('Express session and webhook boundaries', () => {
         },
     );
 
-    it.each(['/docs', '/docs/swagger-ui.css', '/health/metrics', '/ping'])(
+    it.each(['/docs', '/docs/swagger-ui.css', '/health/metrics', '/ping', '/robots933456.txt'])(
         'serves %s without loading a session even when the store throws',
         async path => {
             sessionMiddleware.mockImplementation((_req, _res, next) =>
@@ -101,7 +101,7 @@ describe('Express session and webhook boundaries', () => {
         },
     );
 
-    it.each(['/users', '/director', '/twilio-other', '/docsify'])(
+    it.each(['/users', '/director', '/twilio-other', '/docsify', '/robots933456.txtx'])(
         'still requires a session for %s',
         async path => {
             const res = await request(path);
