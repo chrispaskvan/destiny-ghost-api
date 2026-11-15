@@ -15,12 +15,13 @@ import { withRetry, isTransientError } from './retry.js';
 const DEFAULT_TIMEOUT = 120000;
 
 /**
- * How long the roster screen may take. The model answers in a few hundred
- * milliseconds, and the screen is only an optimization - a call that runs long
- * is abandoned and the image goes on to extraction as if it had never run.
- * Kept short because every image waits on it, real rosters included.
+ * How long the roster screen may take. At medium resolution it has answered in
+ * 1.25 to 1.6 s in production, and the screen is only an optimization - a call
+ * that runs long is abandoned and the image goes on to extraction as if it had
+ * never run. Kept short because every image waits on it, real rosters
+ * included, but with room above the slowest answer seen so far.
  */
-const DEFAULT_DECISION_TIMEOUT = 2000;
+const DEFAULT_DECISION_TIMEOUT = 3000;
 
 /**
  * The SDK retries `decisions.create` by default (up to four retries with
@@ -37,6 +38,14 @@ const NO_RETRIES = /** @type {const} */ ({ strategy: 'none' });
  * v1beta is the version the screen works against.
  */
 const DECISIONS_API_VERSION = 'v1beta';
+
+/**
+ * How finely the screen samples the image: low is 64 tokens, medium 256. At low,
+ * a real roster scored 0.21 in production, barely above the reject threshold,
+ * and barely above a non-roster at 0.10. Medium is on trial to see whether more
+ * detail separates the two, at four times the image tokens.
+ */
+const DECISION_RESOLUTION = 'medium';
 
 const {
     gemini: {
@@ -135,8 +144,8 @@ class AI {
      *
      * Off unless settings name a `decisionModel`. The image goes inline rather
      * than through the Files API: it is already capped at the MMS size limit,
-     * and inline leaves no uploaded copy to delete. Low resolution is enough to
-     * tell a roster from a selfie and keeps the token count down.
+     * and inline leaves no uploaded copy to delete. See DECISION_RESOLUTION
+     * for how much of the image the model gets to see.
      *
      * Not retried (see NO_RETRIES). The caller treats any failure as "unknown"
      * and carries on, so a retry would only add latency to a request that
@@ -161,7 +170,14 @@ class AI {
                 {
                     api_version: DECISIONS_API_VERSION,
                     model: decisionModel,
-                    input: [{ type: 'image', data, mime_type: mimeType, resolution: 'low' }],
+                    input: [
+                        {
+                            type: 'image',
+                            data,
+                            mime_type: mimeType,
+                            resolution: DECISION_RESOLUTION,
+                        },
+                    ],
                     questions: {
                         is_roster: {
                             type: 'noul',

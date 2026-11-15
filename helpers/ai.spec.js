@@ -583,7 +583,7 @@ describe('AI', () => {
                     type: 'image',
                     data: Buffer.from('image-bytes').toString('base64'),
                     mime_type: 'image/jpeg',
-                    resolution: 'low',
+                    resolution: 'medium',
                 },
             ]);
             expect(questions.is_roster).toEqual(
@@ -719,7 +719,7 @@ describe('AI', () => {
             ['zero', { decisionTimeout: 0 }],
             ['negative', { decisionTimeout: -1 }],
             ['fractional', { decisionTimeout: 1.5 }],
-        ])('should time out after 2 s when the setting is %s', async (label, settings) => {
+        ])('should time out after 3 s when the setting is %s', async (label, settings) => {
             const configuredAi = await importWithDecisionModel(settings);
             const { default: log } = await import('./log.js');
             const create = vi.spyOn(configuredAi.ai.decisions, 'create');
@@ -733,7 +733,7 @@ describe('AI', () => {
 
             expect(create).toHaveBeenCalledWith(expect.anything(), {
                 retries: { strategy: 'none' },
-                timeout_ms: 2000,
+                timeout_ms: 3000,
             });
             if (label === 'unset') {
                 expect(log.warn).not.toHaveBeenCalled();
