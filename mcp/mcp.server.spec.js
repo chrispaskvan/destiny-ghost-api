@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { createMcpServer } from './mcp.server.js';
@@ -36,19 +37,12 @@ describe('createMcpServer', () => {
         });
     });
 
-    it('should create and configure an McpServer instance', () => {
-        createMcpServer({
-            destinyController: mockDestinyController,
-            user: mockUser,
-        });
-
-        expect(McpServer).toHaveBeenCalledWith({
-            name: 'destiny-ghost',
-            version: process.env.npm_package_version ?? '0.0.0',
-        });
-    });
-
-    it('should fall back to a default version when npm_package_version is unset', () => {
+    /**
+     * From package.json rather than npm_package_version, which production
+     * no longer sets now that it starts node rather than a pnpm script.
+     */
+    it("should create and configure an McpServer instance with package.json's version", () => {
+        const { version } = JSON.parse(readFileSync('package.json', 'utf8'));
         const originalVersion = process.env.npm_package_version;
 
         delete process.env.npm_package_version;
@@ -59,14 +53,9 @@ describe('createMcpServer', () => {
                 user: mockUser,
             });
 
-            expect(McpServer).toHaveBeenCalledWith({
-                name: 'destiny-ghost',
-                version: '0.0.0',
-            });
+            expect(McpServer).toHaveBeenCalledWith({ name: 'destiny-ghost', version });
         } finally {
-            if (originalVersion === undefined) {
-                delete process.env.npm_package_version;
-            } else {
+            if (originalVersion !== undefined) {
                 process.env.npm_package_version = originalVersion;
             }
         }

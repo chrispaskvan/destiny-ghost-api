@@ -22,6 +22,7 @@ import signUpQueue from './users/sign-up.queue.js';
 import broadcastQueue from './notifications/broadcast.queue.js';
 import processExternalPromisesWithTimeout from './helpers/process-external-promises-with-timeout.js';
 import pool from './helpers/pool.js';
+import version from './helpers/version.js';
 import { startServer as startGrpcServer, stopServer as stopGrpcServer } from './grpc.js';
 
 let insecureConnection;
@@ -188,7 +189,7 @@ const startServer = async ({ grpc = false } = {}) => {
                 eventLoopDelay,
                 port,
                 sinceProcessStart,
-                version: process.env.npm_package_version,
+                version,
             },
             'HTTP server is listening',
         );

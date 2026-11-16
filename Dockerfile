@@ -89,4 +89,8 @@ RUN mkdir -p "$DESTINY_DATABASE_DIR" "$DESTINY2_DATABASE_DIR"
 ARG GIT_SHA
 ENV GIT_SHA=$GIT_SHA
 
-CMD ["pnpm", "run", "start:production"]
+# Node directly, not `pnpm run start:production`: on a one-core plan starting
+# pnpm alone took 11 seconds of every container start, and node as PID 1 gets
+# SIGTERM itself for a graceful shutdown. The flags must match that script,
+# which dockerfile.spec.js checks; NODE_ENV comes from the ENV above.
+CMD ["node", "--permission", "--allow-fs-read=./", "--allow-fs-read=/var/tmp/", "--allow-fs-read=/proc/self/status", "--allow-fs-write=./databases", "--allow-fs-write=/var/tmp/", "--allow-worker", "--allow-addons", "--allow-net", "--disable-proto=delete", "--disable-warning=SecurityWarning", "--disable-warning=ExperimentalWarning", "--env-file-if-exists=.env", "--max-old-space-size=768", "--unhandled-rejections=strict", "start.js"]

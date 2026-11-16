@@ -1,6 +1,7 @@
 // @ts-check
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import version from '../helpers/version.js';
 
 /**
  * Factory to create and configure a new McpServer.
@@ -15,7 +16,7 @@ import { z } from 'zod';
 export function createMcpServer({ destinyController, user }) {
     const server = new McpServer({
         name: 'destiny-ghost',
-        version: process.env.npm_package_version ?? '0.0.0',
+        version,
     });
     const characterSchema = z.object({
         characterId: z.string(),
