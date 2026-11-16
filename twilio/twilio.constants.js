@@ -125,7 +125,7 @@ export const EMOJI_INTENT_REPLIES = new Map([
     ['👎', "I swear this worked in the Golden Age. Reply HELP if something's broken."],
     ['❤', 'Just doing my job, Guardian. ❤️'],
     ['🙏', 'Happy to help. Someone has to keep us from getting vaporized.'],
-    ['‼', 'Noted, Guardian. ‼️'],
+    ['‼', 'Eyes up, Guardian! ‼️'],
     ['❓', HELP_REPLY],
     ['❔', HELP_REPLY],
     ['🔥', "If Shaxx sees this, he's going to start yelling again. 🔥"],
