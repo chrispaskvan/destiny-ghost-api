@@ -121,16 +121,19 @@ export const ROSTER_REJECT_THRESHOLD = 0.2;
  * variants (e.g. a bare ❤ or a skin-toned 👎) still match.
  */
 export const EMOJI_INTENT_REPLIES = new Map([
-    ['👍', 'Got it 👍'],
-    ['👎', "Sorry to hear that. Reply HELP if something's not working."],
-    ['❤', 'Glad to help! ❤️'],
-    ['🙏', "You're welcome!"],
+    ['👍', 'Copy that, Guardian. 👍'],
+    ['👎', "I swear this worked in the Golden Age. Reply HELP if something's broken."],
+    ['❤', 'Just doing my job, Guardian. ❤️'],
+    ['🙏', 'Happy to help. Someone has to keep us from getting vaporized.'],
     ['❓', HELP_REPLY],
     ['❔', HELP_REPLY],
-    ['🔥', 'Right?! 🔥'],
+    ['🔥', "If Shaxx sees this, he's going to start yelling again. 🔥"],
     ['😂', '😂'],
-    ['😢', 'Sorry to hear that. Reply HELP if you need a hand.'],
-    ['👋', 'Hey there! Text a weapon name to look it up or HELP for options.'],
+    ['😢', "I've got your back, Guardian. Reply HELP if you need a hand."],
+    [
+        '👋',
+        'Ready when you are, Guardian. Text a weapon name to scan, or reply HELP before we get shot at.',
+    ],
 ]);
 
 /**
