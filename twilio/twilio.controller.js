@@ -9,7 +9,7 @@ import ClaimCheck from '../helpers/claim-check.js';
 import getShortUrl from '../helpers/bitly.js';
 import log from '../helpers/log.js';
 import DestinyError from '../destiny/destiny.error.js';
-import { extractEmoji, normalizeEmoji, stripEmoji } from '../helpers/emoji.js';
+import { extractEmoji, normalizeEmoji, parseReaction, toKeyword } from '../helpers/emoji.js';
 import { withRetry, isTransientError } from '../helpers/retry.js';
 import { recordConsent } from '../helpers/consent-marker.js';
 import subscriber from '../helpers/subscriber.js';
@@ -536,16 +536,14 @@ class TwilioController {
         const rawMessage = /** @type {string} */ (body.Body).trim();
         const emojiMatches = extractEmoji(rawMessage);
         /**
-         * Emoji are stripped before keyword/search matching so a message like
-         * "gjallarhorn 🔥" resolves the same way "gjallarhorn" would. Stripping
-         * also normalizes surrounding whitespace, so it's only applied when
-         * emoji are actually present - messages with no emoji at all are left
-         * completely untouched (no incidental whitespace collapsing, no
-         * redundant regex pass). Emoji-only messages are handled separately
-         * below, before falling through to item search.
+         * One normalization for keywords and item search alike, the one the
+         * route used when exempting STOP/HELP/START from the rate limit. It
+         * strips emoji, so "gjallarhorn 🔥" resolves the same way
+         * "gjallarhorn" would, along with the invisible selectors and joiners
+         * a keyboard can leave in plain text. Emoji-only messages are handled
+         * separately below, before falling through to item search.
          */
-        const strippedMessage = emojiMatches.length ? stripEmoji(rawMessage) : rawMessage;
-        const message = strippedMessage.toLowerCase();
+        const message = toKeyword(rawMessage);
 
         /**
          * Carrier compliance requires STOP/HELP/START to work for any inbound
@@ -632,11 +630,29 @@ class TwilioController {
 
         const { itemHash } = cookies;
 
-        if (emojiMatches.length && !strippedMessage) {
+        if (emojiMatches.length && !message) {
             const reply =
                 EMOJI_INTENT_REPLIES.get(normalizeEmoji(emojiMatches[0])) ?? EMOJI_DEFAULT_REPLY;
 
             return { cookies: responseCookies, message: reply };
+        }
+
+        /**
+         * A reaction to one of our replies arrives as text, e.g.
+         * `Reacted 👍 to “…”`, and would otherwise be searched as an item
+         * name. Taking a reaction back gets no reply.
+         */
+        const reaction = parseReaction(rawMessage);
+
+        if (reaction) {
+            if ('removed' in reaction) {
+                return {};
+            }
+
+            return {
+                cookies: responseCookies,
+                message: EMOJI_INTENT_REPLIES.get(reaction.emoji ?? '') ?? EMOJI_DEFAULT_REPLY,
+            };
         }
 
         if (this.itemKeywords.has(message)) {

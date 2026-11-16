@@ -170,6 +170,19 @@ describe('TwilioController', () => {
             expect(result.message).toBe(STOP_REPLY);
         });
 
+        it.each([
+            ['STOP\u{200D}', STOP_REPLY],
+            ['HELP\u{FE0F}', HELP_REPLY],
+        ])(
+            'should match %j as the route does when exempting it from the rate limit',
+            async (text, reply) => {
+                const result = await twilioController.request({ body: inbound(text), cookies: {} });
+
+                expect(result.message).toBe(reply);
+                expect(worldRepository.getItemByName).not.toHaveBeenCalled();
+            },
+        );
+
         it('should fall back to an inline write when the queue will not take it', async () => {
             enqueueConsentChange.mockRejectedValue(new Error('queue unavailable'));
 
@@ -402,6 +415,71 @@ describe('TwilioController', () => {
                 });
 
                 expect(message).toBe(EMOJI_DEFAULT_REPLY);
+                expect(worldRepository.getItemByName).not.toHaveBeenCalled();
+            });
+
+            it('should answer an emoji followed by a stray variation selector', async () => {
+                const { message } = await twilioController.request({
+                    body: inbound('👍\u{FE0F}'),
+                    cookies: {},
+                });
+
+                expect(message).toBe(EMOJI_INTENT_REPLIES.get('👍'));
+                expect(worldRepository.getItemByName).not.toHaveBeenCalled();
+            });
+
+            it.each([
+                ['Reacted 👍 to “Got it 👍”', '👍'],
+                ['Loved “Glad to help! ❤️”', '❤'],
+            ])('should answer the reaction %j as its emoji', async (text, emoji) => {
+                const { message } = await twilioController.request({
+                    body: inbound(text),
+                    cookies: {},
+                });
+
+                expect(message).toBe(EMOJI_INTENT_REPLIES.get(emoji));
+                expect(worldRepository.getItemByName).not.toHaveBeenCalled();
+            });
+
+            it.each(['Reacted with a sticker to “Got it”', 'Reacted 🦄 to “Got it”'])(
+                'should answer the reaction %j with the default',
+                async text => {
+                    const { message } = await twilioController.request({
+                        body: inbound(text),
+                        cookies: {},
+                    });
+
+                    expect(message).toBe(EMOJI_DEFAULT_REPLY);
+                    expect(worldRepository.getItemByName).not.toHaveBeenCalled();
+                },
+            );
+
+            it('should answer Emphasized with its own reply', async () => {
+                const { message } = await twilioController.request({
+                    body: inbound('Emphasized “Got it”'),
+                    cookies: {},
+                });
+
+                expect(message).toBe(EMOJI_INTENT_REPLIES.get('‼'));
+                expect(message).not.toBe(EMOJI_DEFAULT_REPLY);
+            });
+
+            it('should search plain text without the selector a keyboard left in it', async () => {
+                await twilioController.request({
+                    body: inbound('Gjallarhorn\u{FE0F}'),
+                    cookies: {},
+                });
+
+                expect(worldRepository.getItemByName).toHaveBeenCalledWith('gjallarhorn');
+            });
+
+            it('should not reply when a reaction is taken back', async () => {
+                const reply = await twilioController.request({
+                    body: inbound('Removed a like from “Got it 👍”'),
+                    cookies: {},
+                });
+
+                expect(reply).toEqual({});
                 expect(worldRepository.getItemByName).not.toHaveBeenCalled();
             });
 
