@@ -125,6 +125,14 @@ describe('parseReaction()', () => {
         expect(parseReaction(text)).toEqual({ emoji });
     });
 
+    it.each([
+        'Reacted with a sticker to “Got it”',
+        'Reacted 👍🔥 to “Got it”',
+        'Reacted badly to “Got it”',
+    ])('should read %j as a reaction without one emoji to answer', text => {
+        expect(parseReaction(text)).toEqual({});
+    });
+
     it.each(['Removed a like from “Got it”', 'Removed 👍 from “Got it”'])(
         'should read %j as taking a reaction back',
         text => {
@@ -136,7 +144,6 @@ describe('parseReaction()', () => {
         'gjallarhorn',
         '👍',
         'Liked gjallarhorn',
-        'Reacted badly to “Got it”',
         'Reacted 👍 to gjallarhorn',
         'I liked “Got it”',
         '',

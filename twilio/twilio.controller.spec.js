@@ -441,6 +441,38 @@ describe('TwilioController', () => {
                 expect(worldRepository.getItemByName).not.toHaveBeenCalled();
             });
 
+            it.each(['Reacted with a sticker to “Got it”', 'Reacted 🦄 to “Got it”'])(
+                'should answer the reaction %j with the default',
+                async text => {
+                    const { message } = await twilioController.request({
+                        body: inbound(text),
+                        cookies: {},
+                    });
+
+                    expect(message).toBe(EMOJI_DEFAULT_REPLY);
+                    expect(worldRepository.getItemByName).not.toHaveBeenCalled();
+                },
+            );
+
+            it('should answer Emphasized with its own reply', async () => {
+                const { message } = await twilioController.request({
+                    body: inbound('Emphasized “Got it”'),
+                    cookies: {},
+                });
+
+                expect(message).toBe(EMOJI_INTENT_REPLIES.get('‼'));
+                expect(message).not.toBe(EMOJI_DEFAULT_REPLY);
+            });
+
+            it('should search plain text without the selector a keyboard left in it', async () => {
+                await twilioController.request({
+                    body: inbound('Gjallarhorn\u{FE0F}'),
+                    cookies: {},
+                });
+
+                expect(worldRepository.getItemByName).toHaveBeenCalledWith('gjallarhorn');
+            });
+
             it('should not reply when a reaction is taken back', async () => {
                 const reply = await twilioController.request({
                     body: inbound('Removed a like from “Got it 👍”'),

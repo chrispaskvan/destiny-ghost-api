@@ -1535,8 +1535,13 @@ describe('TwilioRouter', () => {
                 }));
         });
 
+        /**
+         * Search and the keywords share one normalization, so a stray
+         * selector or joiner a keyboard leaves in plain text is stripped for
+         * both; collapsing whitespace comes with it.
+         */
         describe('when the message has no emoji but multiple internal spaces', () => {
-            it('should search with the text unchanged, not collapsing whitespace', () =>
+            it('should search with the whitespace collapsed, as keywords are matched', () =>
                 new Promise((done, reject) => {
                     const body = signedBody({ Body: 'gjallarhorn  rifle' });
                     const req = signedRequest({ body });
@@ -1545,7 +1550,7 @@ describe('TwilioRouter', () => {
                         try {
                             expect(res.statusCode).toEqual(StatusCodes.OK);
                             expect(worldRepository.getItemByName).toHaveBeenCalledWith(
-                                'gjallarhorn  rifle',
+                                'gjallarhorn rifle',
                             );
                             done();
                         } catch (err) {

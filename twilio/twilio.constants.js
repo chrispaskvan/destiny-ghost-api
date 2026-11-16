@@ -125,6 +125,7 @@ export const EMOJI_INTENT_REPLIES = new Map([
     ['👎', "I swear this worked in the Golden Age. Reply HELP if something's broken."],
     ['❤', 'Just doing my job, Guardian. ❤️'],
     ['🙏', 'Happy to help. Someone has to keep us from getting vaporized.'],
+    ['‼', 'Noted, Guardian. ‼️'],
     ['❓', HELP_REPLY],
     ['❔', HELP_REPLY],
     ['🔥', "If Shaxx sees this, he's going to start yelling again. 🔥"],
@@ -141,7 +142,7 @@ export const EMOJI_INTENT_REPLIES = new Map([
  * @description Reply sent when an emoji-only message doesn't match a known
  * intent in {@link EMOJI_INTENT_REPLIES}.
  */
-export const EMOJI_DEFAULT_REPLY = EMOJI_INTENT_REPLIES.get('👍') ?? 'Got it 👍';
+export const EMOJI_DEFAULT_REPLY = /** @type {string} */ (EMOJI_INTENT_REPLIES.get('👍'));
 
 /**
  * @constant
