@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extractEmoji, normalizeEmoji, stripEmoji } from './emoji.js';
+import { extractEmoji, normalizeEmoji, parseReaction, stripEmoji } from './emoji.js';
 
 describe('extractEmoji()', () => {
     describe('when the text contains a single emoji', () => {
@@ -93,5 +93,54 @@ describe('normalizeEmoji()', () => {
         it('should return an empty string', () => {
             expect(normalizeEmoji()).toEqual('');
         });
+    });
+});
+
+describe('stripEmoji() leftovers', () => {
+    it.each([
+        ['a variation selector emoji-regex leaves after 👍', '👍\u{FE0F}'],
+        ['a text-presentation selector', '👍\u{FE0E}'],
+        ['a zero-width joiner between emoji', '🦄\u{200D}🔥'],
+    ])('should remove %s', (_, text) => {
+        expect(stripEmoji(text)).toBe('');
+    });
+});
+
+describe('parseReaction()', () => {
+    it.each([
+        ['Reacted 👍 to “Got it 👍”', '👍'],
+        ['Reacted 👍🏽 to “Got it”', '👍'],
+        ['Reacted ❤️ to "Glad to help!"', '❤'],
+        ['Reacted 👍\u{FE0F} to “Got it”', '👍'],
+        ['Reacted 🔥 to an image', '🔥'],
+        ['Liked “Got it 👍”', '👍'],
+        ['Loved “Glad to help!”', '❤'],
+        ['Disliked “Are you sure that’s how it’s spelled?”', '👎'],
+        ['Laughed at “😂”', '😂'],
+        ['Emphasized “Got it”', '‼'],
+        ['Questioned “Got it”', '❓'],
+        ['Liked an image', '👍'],
+        ['Liked “two\nlines”', '👍'],
+    ])('should read %j as %s', (text, emoji) => {
+        expect(parseReaction(text)).toEqual({ emoji });
+    });
+
+    it.each(['Removed a like from “Got it”', 'Removed 👍 from “Got it”'])(
+        'should read %j as taking a reaction back',
+        text => {
+            expect(parseReaction(text)).toEqual({ removed: true });
+        },
+    );
+
+    it.each([
+        'gjallarhorn',
+        '👍',
+        'Liked gjallarhorn',
+        'Reacted badly to “Got it”',
+        'Reacted 👍 to gjallarhorn',
+        'I liked “Got it”',
+        '',
+    ])('should not read %j as a reaction', text => {
+        expect(parseReaction(text)).toBeUndefined();
     });
 });

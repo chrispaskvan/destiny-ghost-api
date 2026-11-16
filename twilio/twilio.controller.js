@@ -9,7 +9,7 @@ import ClaimCheck from '../helpers/claim-check.js';
 import getShortUrl from '../helpers/bitly.js';
 import log from '../helpers/log.js';
 import DestinyError from '../destiny/destiny.error.js';
-import { extractEmoji, normalizeEmoji, stripEmoji } from '../helpers/emoji.js';
+import { extractEmoji, normalizeEmoji, parseReaction, stripEmoji } from '../helpers/emoji.js';
 import { withRetry, isTransientError } from '../helpers/retry.js';
 import { recordConsent } from '../helpers/consent-marker.js';
 import subscriber from '../helpers/subscriber.js';
@@ -637,6 +637,24 @@ class TwilioController {
                 EMOJI_INTENT_REPLIES.get(normalizeEmoji(emojiMatches[0])) ?? EMOJI_DEFAULT_REPLY;
 
             return { cookies: responseCookies, message: reply };
+        }
+
+        /**
+         * A reaction to one of our replies arrives as text, e.g.
+         * `Reacted 👍 to “…”`, and would otherwise be searched as an item
+         * name. Taking a reaction back gets no reply.
+         */
+        const reaction = parseReaction(rawMessage);
+
+        if (reaction) {
+            if ('removed' in reaction) {
+                return {};
+            }
+
+            return {
+                cookies: responseCookies,
+                message: EMOJI_INTENT_REPLIES.get(reaction.emoji) ?? EMOJI_DEFAULT_REPLY,
+            };
         }
 
         if (this.itemKeywords.has(message)) {

@@ -405,6 +405,39 @@ describe('TwilioController', () => {
                 expect(worldRepository.getItemByName).not.toHaveBeenCalled();
             });
 
+            it('should answer an emoji followed by a stray variation selector', async () => {
+                const { message } = await twilioController.request({
+                    body: inbound('👍\u{FE0F}'),
+                    cookies: {},
+                });
+
+                expect(message).toBe(EMOJI_INTENT_REPLIES.get('👍'));
+                expect(worldRepository.getItemByName).not.toHaveBeenCalled();
+            });
+
+            it.each([
+                ['Reacted 👍 to “Got it 👍”', '👍'],
+                ['Loved “Glad to help! ❤️”', '❤'],
+            ])('should answer the reaction %j as its emoji', async (text, emoji) => {
+                const { message } = await twilioController.request({
+                    body: inbound(text),
+                    cookies: {},
+                });
+
+                expect(message).toBe(EMOJI_INTENT_REPLIES.get(emoji));
+                expect(worldRepository.getItemByName).not.toHaveBeenCalled();
+            });
+
+            it('should not reply when a reaction is taken back', async () => {
+                const reply = await twilioController.request({
+                    body: inbound('Removed a like from “Got it 👍”'),
+                    cookies: {},
+                });
+
+                expect(reply).toEqual({});
+                expect(worldRepository.getItemByName).not.toHaveBeenCalled();
+            });
+
             it('should still search when an emoji rides along with text', async () => {
                 await twilioController.request({ body: inbound('gjallarhorn 🔥'), cookies: {} });
 
