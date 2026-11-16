@@ -170,6 +170,19 @@ describe('TwilioController', () => {
             expect(result.message).toBe(STOP_REPLY);
         });
 
+        it.each([
+            ['STOP\u{200D}', STOP_REPLY],
+            ['HELP\u{FE0F}', HELP_REPLY],
+        ])(
+            'should match %j as the route does when exempting it from the rate limit',
+            async (text, reply) => {
+                const result = await twilioController.request({ body: inbound(text), cookies: {} });
+
+                expect(result.message).toBe(reply);
+                expect(worldRepository.getItemByName).not.toHaveBeenCalled();
+            },
+        );
+
         it('should fall back to an inline write when the queue will not take it', async () => {
             enqueueConsentChange.mockRejectedValue(new Error('queue unavailable'));
 

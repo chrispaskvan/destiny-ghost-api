@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extractEmoji, normalizeEmoji, parseReaction, stripEmoji } from './emoji.js';
+import { extractEmoji, normalizeEmoji, parseReaction, stripEmoji, toKeyword } from './emoji.js';
 
 describe('extractEmoji()', () => {
     describe('when the text contains a single emoji', () => {
@@ -142,5 +142,16 @@ describe('parseReaction()', () => {
         '',
     ])('should not read %j as a reaction', text => {
         expect(parseReaction(text)).toBeUndefined();
+    });
+});
+
+describe('toKeyword()', () => {
+    it.each([
+        ['STOP', 'stop'],
+        ['  Stop 🔥 ', 'stop'],
+        ['STOP\u{200D}', 'stop'],
+        ['HELP\u{FE0F}', 'help'],
+    ])('should read %j as %j', (text, keyword) => {
+        expect(toKeyword(text)).toBe(keyword);
     });
 });

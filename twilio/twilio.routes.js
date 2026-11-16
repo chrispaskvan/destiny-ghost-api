@@ -20,7 +20,7 @@ import {
     twilioFallbackRateLimiterMiddleware,
     rejectTwilioRequest,
 } from '../helpers/rate-limiter.middleware.js';
-import { stripEmoji } from '../helpers/emoji.js';
+import { toKeyword } from '../helpers/emoji.js';
 import {
     BRAND_PREFIX,
     MAX_SMS_MESSAGE_LENGTH,
@@ -144,7 +144,7 @@ const routes = ({
             }
         },
         (req, res, next) => {
-            const message = stripEmoji(req.body.Body).trim().toLowerCase();
+            const message = toKeyword(req.body.Body);
 
             if (
                 STOP_KEYWORDS.has(message) ||

@@ -106,4 +106,17 @@ function parseReaction(text = '') {
     return verb ? { emoji: /** @type {string} */ (TAPBACK_EMOJI.get(verb)) } : undefined;
 }
 
-export { extractEmoji, stripEmoji, normalizeEmoji, parseReaction };
+/**
+ * @function
+ * @param {string} text - Inbound message text.
+ * @returns {string} - The text as STOP, HELP and START are matched against.
+ * @description The one normalization for those keywords. The route uses it to
+ * exempt them from the per-sender rate limit and the controller to act on
+ * them, so a message can't be exempted as a keyword and then not be handled
+ * as one.
+ */
+function toKeyword(text = '') {
+    return stripEmoji(text).toLowerCase();
+}
+
+export { extractEmoji, stripEmoji, normalizeEmoji, parseReaction, toKeyword };
