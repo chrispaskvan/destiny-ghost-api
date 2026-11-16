@@ -27,10 +27,10 @@ const EMOJI_LEFTOVERS = /[\u{FE0E}\u{FE0F}\u{200D}]/gu;
 const REACTION_TARGET = String.raw`(?:[“"][\s\S]*[”"]|an? (?:image|photo|video|movie|attachment|audio message))`;
 const EMOJI_REACTION = new RegExp(String.raw`^Reacted (\S+) to ${REACTION_TARGET}$`, 'u');
 const TAPBACK_REACTION = new RegExp(
-    String.raw`^(Liked|Loved|Disliked|Laughed at|Emphasized|Questioned) ${REACTION_TARGET}$`,
+    `^(Liked|Loved|Disliked|Laughed at|Emphasized|Questioned) ${REACTION_TARGET}$`,
     'u',
 );
-const REMOVED_REACTION = new RegExp(String.raw`^Removed .+? from ${REACTION_TARGET}$`, 'u');
+const REMOVED_REACTION = new RegExp(`^Removed .+? from ${REACTION_TARGET}$`, 'u');
 const TAPBACK_EMOJI = new Map([
     ['Liked', '👍'],
     ['Loved', '❤'],
