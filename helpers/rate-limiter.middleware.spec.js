@@ -189,6 +189,41 @@ describe('rateLimiterMiddleware', () => {
         expect(consume).toHaveBeenCalledExactlyOnceWith(req.ip, 10);
     });
 
+    /**
+     * Azure forwards the client as `ip:port`, so keying on the raw `req.ip`
+     * gave every connection its own bucket.
+     */
+    it('keys an anonymous client by address, not by connection', async () => {
+        consume.mockResolvedValue({ remainingPoints: 90, msBeforeNext: 1000 });
+
+        for (const port of [60926, 32774]) {
+            req.ip = `207.175.165.55:${port}`;
+            await rateLimiterMiddleware(req, res, next);
+        }
+
+        expect(consume.mock.calls).toEqual([
+            ['207.175.165.55', 10],
+            ['207.175.165.55', 10],
+        ]);
+    });
+
+    it('counts failed signatures against the address, not the connection', async () => {
+        req.ip = '207.175.165.55:60926';
+        invalidGet.mockResolvedValueOnce({
+            consumedPoints: 10,
+            remainingPoints: 0,
+            msBeforeNext: 500,
+        });
+        req.headers['x-twilio-signature'] = `${'A'.repeat(27)}=`;
+
+        await twilioPreflightMiddleware(req, res, next);
+        req.headers['x-twilio-signature'] = undefined;
+        await twilioPreflightMiddleware(req, res, next);
+
+        expect(invalidGet).toHaveBeenCalledWith('207.175.165.55');
+        expect(invalidConsume).toHaveBeenCalledExactlyOnceWith('207.175.165.55', 1);
+    });
+
     it.each([undefined, '', '   ', ['signature']])(
         'rejects a missing or empty signature %j without parsing a body',
         async signature => {

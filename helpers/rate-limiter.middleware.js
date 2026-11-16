@@ -2,6 +2,7 @@
 import { StatusCodes } from 'http-status-codes';
 import { RateLimiterRedis, RateLimiterRes } from 'rate-limiter-flexible';
 import client from './cache.js';
+import clientIp from './client-ip.js';
 
 // rate-limiter-flexible picks its node-redis code path by the client's class name (`Commander`),
 // which node-redis v6 no longer uses. Without `useRedisPackage` every consume throws, and
@@ -146,7 +147,7 @@ const rateLimiterMiddleware = (req, res, next) => {
      */
     return consumePoints(
         rateLimiter,
-        /** @type {string} */ (membershipId || req.ip),
+        /** @type {string} */ (membershipId || clientIp(req)),
         dateRegistered ? 1 : 10,
         res,
         next,
@@ -170,7 +171,7 @@ const twilioRateLimiterMiddleware = (req, res, next, onLimit) =>
  * @param {import('express').NextFunction} next
  */
 const twilioIngressRateLimiterMiddleware = (req, res, next) =>
-    consumePoints(twilioIngressLimiter, /** @type {string} */ (req.ip), 1, res, next);
+    consumePoints(twilioIngressLimiter, clientIp(req), 1, res, next);
 
 /**
  * Protect delivery callbacks independently of inbound message capacity.
@@ -179,7 +180,7 @@ const twilioIngressRateLimiterMiddleware = (req, res, next) =>
  * @param {import('express').NextFunction} next
  */
 const twilioCallbackRateLimiterMiddleware = (req, res, next) =>
-    consumePoints(twilioCallbackLimiter, /** @type {string} */ (req.ip), 1, res, next);
+    consumePoints(twilioCallbackLimiter, clientIp(req), 1, res, next);
 
 /**
  * @param {import('express').Request} req
@@ -187,7 +188,7 @@ const twilioCallbackRateLimiterMiddleware = (req, res, next) =>
  * @param {import('express').NextFunction} next
  */
 const twilioFallbackRateLimiterMiddleware = (req, res, next) =>
-    consumePoints(twilioFallbackLimiter, /** @type {string} */ (req.ip), 1, res, next);
+    consumePoints(twilioFallbackLimiter, clientIp(req), 1, res, next);
 
 /**
  * @param {import('express').Response} res
@@ -211,9 +212,7 @@ const forbiddenTwilioResponse = res => {
  */
 const rejectTwilioRequest = async (req, res) => {
     if (client.isReady) {
-        await twilioInvalidLimiter
-            .consume(/** @type {string} */ (req.ip), 1)
-            .catch(() => undefined);
+        await twilioInvalidLimiter.consume(clientIp(req), 1).catch(() => undefined);
     }
     return forbiddenTwilioResponse(res);
 };
@@ -237,7 +236,7 @@ const twilioPreflightMiddleware = async (req, res, next) => {
 
     let result;
     try {
-        result = await twilioInvalidLimiter.get(/** @type {string} */ (req.ip));
+        result = await twilioInvalidLimiter.get(clientIp(req));
     } catch {
         return next();
     }
