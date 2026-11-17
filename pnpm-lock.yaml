@@ -15,8 +15,8 @@ importers:
         specifier: ^4.12.1
         version: 4.12.1
       '@google/genai':
-        specifier: ^3.3.0
-        version: 3.3.0(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))
+        specifier: ^3.4.0
+        version: 3.4.0(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))
       '@grpc/grpc-js':
         specifier: ^1.14.7
         version: 1.14.7
@@ -36,14 +36,14 @@ importers:
         specifier: ^7.8.0
         version: 7.8.0
       bullmq:
-        specifier: ^6.7.6
-        version: 6.7.6(ioredis@6.0.0)(redis@6.3.1(@opentelemetry/api@1.10.0))
+        specifier: ^6.7.7
+        version: 6.7.7(ioredis@6.0.0)(redis@6.3.1(@opentelemetry/api@1.10.0))
       compression:
         specifier: ^1.8.2
         version: 1.8.2
       connect-redis:
-        specifier: ^10.0.0
-        version: 10.0.0(express-session@1.19.0)(redis@6.3.1(@opentelemetry/api@1.10.0))
+        specifier: ^11.0.0
+        version: 11.0.0(express-session@1.19.0)(redis@6.3.1(@opentelemetry/api@1.10.0))
       cookie-parser:
         specifier: ^1.4.7
         version: 1.4.7
@@ -403,8 +403,8 @@ packages:
   '@godaddy/terminus@4.12.1':
     resolution: {integrity: sha512-Tm+wVu1/V37uZXcT7xOhzdpFoovQReErff8x3y82k6YyWa1gzxWBjTyrx4G2enjEqoXPnUUmJ3MOmwH+TiP6Sw==}
 
-  '@google/genai@3.3.0':
-    resolution: {integrity: sha512-XLjXedj0X8UrULZz1GnlTMSQxBDFdr+NCKZkOBaSVVYqmK30C6FCnKW31Ppn0ItO9DpNspCHFui257kPNpumKQ==}
+  '@google/genai@3.4.0':
+    resolution: {integrity: sha512-qjsg+KMRSUmQSkg/BVwcbgE/ROVo91Lx933SOicDlS7viU+Z7sBwK/c8TMvW/9W0OvBy17rwa+/sXn0kdKrDZw==}
     engines: {node: '>=22.0.0'}
     peerDependencies:
       '@modelcontextprotocol/sdk': ^1.25.2
@@ -1444,8 +1444,8 @@ packages:
   buffer-from@1.1.2:
     resolution: {integrity: sha512-E+XQCRwSbaaiChtv6k6Dwgc+bx+Bs6vuKJHHl5kox/BaKbhiXzqQOwK4cO22yElGp2OCmjwVhT3HmxgyPGnJfQ==}
 
-  bullmq@6.7.6:
-    resolution: {integrity: sha512-ykp2HGMkOz8BtuE/FBFRMetpI6RHDyFvAkUawqKJv7sDWIaZPz1cPtpzIad879iwW2oMJY4CFMPvfBKnWdB3Rw==}
+  bullmq@6.7.7:
+    resolution: {integrity: sha512-UYCta40FLxOTEYqFZmwvQhnqqYbUCkYRsjOhCyQ6/fH5vbRsHvQPEljorbE7Jm4w5uyfZV9ri3N1U95mskGgLg==}
     engines: {node: '>=14.18.0'}
     peerDependencies:
       bullmq-otel: '>=2.0.0'
@@ -1547,8 +1547,8 @@ packages:
     resolution: {integrity: sha512-MWufYdFw53ccGjCA+Ol7XJYpAlW6/prSMzuPOTRnJGcGzuhLn4Scrz7qf6o8bROZ514ltazcIFJZevcfbo0x7A==}
     engines: {'0': node >= 6.0}
 
-  connect-redis@10.0.0:
-    resolution: {integrity: sha512-x6EotIY20pvocamMtcOsgxFzYufAMfipE+rjWa0cZMeSx+3K0yoHi4Nv4sfMlgF+Z5KnUbMFxyCx9pDZP39p0Q==}
+  connect-redis@11.0.0:
+    resolution: {integrity: sha512-lVO16GY2/iNmddbOkjU7nZJtCS4ArDA+BHK+3mLVOEjcs6LyIzuDqa0EaTA7iP9eg2meLZ8uSis7byiwv+beWA==}
     engines: {node: '>=22'}
     peerDependencies:
       express-session: '>=1'
@@ -1592,8 +1592,8 @@ packages:
     resolution: {integrity: sha512-tJtZBBHA6vjIAaF6EnIaq6laBBP9aq/Y3ouVJjEfoHbRBcHBAHYcMh/w8LDrk2PvIMMq8gmopa5D4V8RmbrxGw==}
     engines: {node: '>= 0.10'}
 
-  cron-parser@5.10.4:
-    resolution: {integrity: sha512-TagNqYzoV/C7Ty7VAQjrQg+57WsEOuQEUh0tWT5Dc+l/GOuoAdWVIzFU0CqYdQswqdjUalrdmOvaMtQhErYZTA==}
+  cron-parser@5.10.5:
+    resolution: {integrity: sha512-zxFew0gkBdb9HudAqeNLIZ2Phczw8oQDGDMYc1HUYvAaxZqhML2gZyUwVqaOs23YKDWXRRvd/nNo0ycGdXt80A==}
     engines: {node: '>=18'}
 
   cross-spawn@7.0.6:
@@ -3702,7 +3702,7 @@ snapshots:
     dependencies:
       stoppable: 1.1.0
 
-  '@google/genai@3.3.0(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))':
+  '@google/genai@3.4.0(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))':
     dependencies:
       google-auth-library: 10.9.1
       p-retry: 4.6.2
@@ -4752,9 +4752,9 @@ snapshots:
 
   buffer-from@1.1.2: {}
 
-  bullmq@6.7.6(ioredis@6.0.0)(redis@6.3.1(@opentelemetry/api@1.10.0)):
+  bullmq@6.7.7(ioredis@6.0.0)(redis@6.3.1(@opentelemetry/api@1.10.0)):
     dependencies:
-      cron-parser: 5.10.4
+      cron-parser: 5.10.5
       msgpackr: 2.1.4
       node-abort-controller: 3.1.1
       semver: 7.8.6
@@ -4853,7 +4853,7 @@ snapshots:
       readable-stream: 3.6.2
       typedarray: 0.0.6
 
-  connect-redis@10.0.0(express-session@1.19.0)(redis@6.3.1(@opentelemetry/api@1.10.0)):
+  connect-redis@11.0.0(express-session@1.19.0)(redis@6.3.1(@opentelemetry/api@1.10.0)):
     dependencies:
       express-session: 1.19.0
       redis: 6.3.1(@opentelemetry/api@1.10.0)
@@ -4886,7 +4886,7 @@ snapshots:
       object-assign: 4.1.1
       vary: 1.1.2
 
-  cron-parser@5.10.4:
+  cron-parser@5.10.5:
     dependencies:
       luxon: 3.7.2
 
