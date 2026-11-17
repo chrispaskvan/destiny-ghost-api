@@ -37,7 +37,7 @@ describe('Dockerfile', () => {
                 .split('\n')
                 .map(line => line.trim())
                 .filter(line => line && !line.startsWith('#') && !line.startsWith('!'))
-                .map(line => line.replace(/\/\*?$/, '').toLowerCase());
+                .map(line => line.replace(/\/\*?$/, ''));
         const excluded = entries('.dockerignore');
         const leaked = entries('.gitignore').filter(
             entry => !shipped.includes(entry) && !excluded.includes(entry),
