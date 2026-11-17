@@ -20,4 +20,29 @@ describe('Dockerfile', () => {
     it('should set NODE_ENV=production itself, since the script did', () => {
         expect(readFileSync('Dockerfile', 'utf8')).toMatch(/^ENV NODE_ENV=production$/m);
     });
+
+    /**
+     * `COPY . .` puts everything .dockerignore does not name into the image,
+     * and what git ignores is mostly what must not ship: the development TLS
+     * key in security/ and the API client collections in .bruno/ were both
+     * in pushed images. So anything git ignores has to be ignored here too,
+     * unless it is named below as something production reads.
+     */
+    it('should keep everything git ignores out of the image, settings aside', () => {
+        // config.js reads settings/ as it loads, so the image carries it for now
+        const shipped = ['settings'];
+        /** @param {string} file */
+        const entries = file =>
+            readFileSync(file, 'utf8')
+                .split('\n')
+                .map(line => line.trim())
+                .filter(line => line && !line.startsWith('#') && !line.startsWith('!'))
+                .map(line => line.replace(/\/\*?$/, ''));
+        const excluded = entries('.dockerignore');
+        const leaked = entries('.gitignore').filter(
+            entry => !shipped.includes(entry) && !excluded.includes(entry),
+        );
+
+        expect(leaked).toEqual([]);
+    });
 });

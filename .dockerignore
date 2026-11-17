@@ -1,14 +1,17 @@
 .artillery
+.bruno
 .claude
 .claudeignore
 .clinic
 .cursorignore
 .dockerignore
 .DS_Store
+**/.DS_Store
 .env
 .git
 .github
 .gitignore
+.graphify
 .husky
 .pnpm-store
 .vscode
@@ -22,6 +25,7 @@ mocks
 node_modules
 README.md
 references.txt
+security
 tasks
 tmp
 ToDo.md
