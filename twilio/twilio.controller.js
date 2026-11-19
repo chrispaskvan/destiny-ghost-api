@@ -618,12 +618,19 @@ class TwilioController {
             }
 
             /**
-             * Deliberately not awaited: downloading and analyzing can exceed
-             * Twilio's webhook timeout, so acknowledge now and let the
-             * processing (which handles its own errors) finish in the
-             * background.
+             * Queued, not processed: downloading and analyzing can exceed
+             * Twilio's webhook timeout. Awaited, so the receipt is
+             * acknowledged only once the image is recorded. A failure to
+             * queue it rejects, and the webhook's error answer lets Twilio
+             * deliver it again; the message SID keeps that from being
+             * processed twice.
              */
-            void this.mms.process({ from: body.From, media });
+            await this.mms.enqueue({
+                /** Required on this route by `bodySchema` in twilio.routes.js. */
+                messageSid: /** @type {string} */ (body.MessageSid),
+                from: body.From,
+                media,
+            });
 
             return { cookies: responseCookies, message: MEDIA_RECEIVED_REPLY };
         }

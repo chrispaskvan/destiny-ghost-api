@@ -18,10 +18,13 @@ import configuration from '../helpers/config.js';
 import mayDeliver from '../helpers/consent.js';
 import log from '../helpers/log.js';
 import { isTransientError, withRetry } from '../helpers/retry.js';
+import subscriber from '../helpers/subscriber.js';
+import { enqueueMms, QUEUE_NAME as MMS_QUEUE } from './mms.queue.js';
 import {
     MAX_MEDIA_BYTES,
     MEDIA_ERROR_REPLY,
     MEDIA_NO_PLAYERS_REPLY,
+    MMS_CONCURRENCY,
     PLAYER_LOOKUP_CONCURRENCY,
     ROSTER_REJECT_THRESHOLD,
     TWILIO_MEDIA_HOST,
@@ -84,6 +87,26 @@ class MmsService {
         this.destiny2 = options.destiny2Service;
         this.notifications = options.notificationService;
         this.users = options.userService;
+
+        /**
+         * Each job holds an AI call for most of its run, so only a few run
+         * at once. A job whose worker died is picked up again and resumes
+         * from the images it had already analyzed.
+         */
+        subscriber.listen((body, _properties, job) => this.process(body, job), MMS_QUEUE, {
+            concurrency: MMS_CONCURRENCY,
+            onGiveUp: ({ messageSid, from }) => this.#apologize(messageSid, from),
+        });
+    }
+
+    /**
+     * Record an inbound message's images for processing. Resolves once they
+     * are queued, so the receipt is acknowledged only after that.
+     * @param {import('./mms.queue.js').MmsJob} mms
+     * @returns {Promise<void>}
+     */
+    async enqueue(mms) {
+        await enqueueMms(mms);
     }
 
     /**
@@ -290,96 +313,145 @@ class MmsService {
     }
 
     /**
-     * Download each image, read the roster off it, reply with each player's
-     * kill/death ratio, and clean up.
-     * Never rejects: the webhook has already acknowledged receipt, so failures
-     * are logged and reported to the sender as a follow-up message instead.
+     * Download an image, read the roster off it, look each player up, and
+     * clean up. The download is removed before the lookups, so neither
+     * Bungie nor the AI can keep the image on disk while they take their
+     * time.
      *
-     * @param {Object} options
-     * @param {string} options.from - The sender's phone number.
-     * @param {MmsMedia[]} options.media
+     * @param {MmsMedia} item
+     * @returns {Promise<string>} The reply for this image.
+     */
+    async #analyze(item) {
+        /**
+         * mkdtemp creates a private (0700) directory, keeping the image out
+         * of the shared, world-writable temp directory (CodeQL
+         * js/insecure-temporary-file). Owned here for its whole lifecycle:
+         * created before the download, removed after analysis or on any
+         * failure in between. In production the image sets TMPDIR to a
+         * directory the permission model grants both read and write access
+         * to, since /tmp is neither - the recursive rm below lstats the
+         * directory, so a write-only grant leaks it.
+         */
+        const directory = await mkdtemp(join(tmpdir(), 'mms-'));
+        let players;
+
+        try {
+            const filePath = await this.#download(item, directory);
+
+            players = await this.analyzeImage(filePath, item.contentType);
+        } finally {
+            try {
+                await rm(directory, { force: true, recursive: true });
+            } catch (rmErr) {
+                log.warn({ err: rmErr, directory }, 'Failed to delete downloaded media');
+            }
+        }
+
+        const roster = players.length ? await this.#getRoster(players) : [];
+
+        /**
+         * The leading break pair puts the roster on its own lines: the brand
+         * prefix is added centrally when the message is sent, and a column
+         * reads badly when the first row starts after it.
+         */
+        return roster.length ? `\n\n${formatRoster(roster)}` : MEDIA_NO_PLAYERS_REPLY;
+    }
+
+    /**
+     * Send one reply to the sender, at most once per key.
+     *
+     * The key is a claim check for the record `sendMessage` keeps around the
+     * provider call, so a retry after Twilio took the reply, or may have,
+     * settles it rather than sending it again.
+     *
+     * Gated on consent inside the rate limiter's slot: the reply follows a
+     * download, an AI call and the wait for that slot - the widest gap
+     * between an inbound message and its answer anywhere in the app, and
+     * wide enough for a STOP to arrive in.
+     *
+     * @param {string} message
+     * @param {string} from
+     * @param {string} key
+     * @returns {Promise<boolean>} Whether it was sent, or already had been.
+     */
+    async #reply(message, from, key) {
+        const sent = await this.notifications.sendMessage(message, from, undefined, {
+            claimCheckNumber: key,
+            guard: () => mayDeliver({ users: this.users, phoneNumber: from }),
+        });
+
+        if (!sent) {
+            log.info({ from }, 'Suppressing the MMS reply: consent was withdrawn.');
+        }
+
+        return Boolean(sent);
+    }
+
+    /**
+     * Tell the sender their image could not be read, once per message. Never
+     * rejects: it runs where nothing is left to retry it.
+     *
+     * @param {string} messageSid
+     * @param {string} from
      * @returns {Promise<void>}
      */
-    async process({ from, media }) {
+    async #apologize(messageSid, from) {
         try {
-            for (const item of media) {
-                /**
-                 * mkdtemp creates a private (0700) directory, keeping the image
-                 * out of the shared, world-writable temp directory (CodeQL
-                 * js/insecure-temporary-file). Owned here for its whole
-                 * lifecycle: created before the download, removed after
-                 * analysis or on any failure in between. In production the
-                 * image sets TMPDIR to a directory the permission model grants
-                 * both read and write access to, since /tmp is neither - the
-                 * recursive rm below lstats the directory, so a write-only
-                 * grant leaks it.
-                 */
-                const directory = await mkdtemp(join(tmpdir(), 'mms-'));
+            await this.#reply(MEDIA_ERROR_REPLY, from, `mms:${messageSid}:error`);
+        } catch (err) {
+            log.error({ err, from }, 'Failed to send the media failure reply');
+        }
+    }
 
-                let players;
+    /**
+     * Work through a queued message's images: analyze each one, and reply
+     * with each player's kill/death ratio.
+     *
+     * Resumable. Each image's reply is saved on the job before it is sent,
+     * so an attempt that follows a crash or a retryable failure skips the
+     * images already analyzed rather than asking the AI again, and settles
+     * each reply rather than repeating it.
+     *
+     * A retryable failure rejects, for BullMQ to try again. Any other sends
+     * the failure reply and resolves, as does a retryable one on the last
+     * attempt, through the queue's give-up handler.
+     *
+     * @param {import('./mms.queue.js').MmsJob} mms
+     * @param {import('bullmq').Job} job
+     * @returns {Promise<void>}
+     */
+    async process({ messageSid, from, media }, job) {
+        /**
+         * Before any download, so an image from a number that has opted out
+         * since costs neither a download nor an AI call.
+         */
+        if (!(await mayDeliver({ users: this.users, phoneNumber: from }))) {
+            log.info({ from }, 'Not processing the MMS: consent was withdrawn.');
 
-                try {
-                    const filePath = await this.#download(item, directory);
+            return;
+        }
 
-                    players = await this.analyzeImage(filePath, item.contentType);
-                } finally {
-                    try {
-                        await rm(directory, { force: true, recursive: true });
-                    } catch (rmErr) {
-                        log.warn({ err: rmErr, directory }, 'Failed to delete downloaded media');
-                    }
+        /** @type {string[]} */
+        const replies = [...(job.data.progress?.replies ?? [])];
+
+        try {
+            for (const [index, item] of media.entries()) {
+                if (replies[index] === undefined) {
+                    replies[index] = await this.#analyze(item);
+                    await job.updateData({ ...job.data, progress: { replies } });
                 }
 
-                /**
-                 * Looked up and sent after the cleanup above rather than inside
-                 * the try, so neither Bungie nor Twilio can keep the image on
-                 * disk while they take their time.
-                 */
-                const roster = players.length ? await this.#getRoster(players) : [];
-
-                /**
-                 * `request()` checked consent before handing the image over,
-                 * but a download, an AI call and a wait for a rate limiter slot
-                 * ago - the widest gap between an inbound message and its reply
-                 * anywhere in the app, and wide enough for a STOP to have
-                 * arrived inside it. Passed as a guard rather than checked
-                 * here so it runs inside that slot, with nothing left after it.
-                 *
-                 * No claim check: this reply belongs to no notification run, so
-                 * a withheld send is recorded in the log alone.
-                 *
-                 * The leading break pair puts the roster on its own lines: the
-                 * brand prefix is added centrally when the message is sent, and
-                 * a column reads badly when the first row starts after it.
-                 */
-                const sent = await this.notifications.sendMessage(
-                    roster.length ? `\n\n${formatRoster(roster)}` : MEDIA_NO_PLAYERS_REPLY,
-                    from,
-                    undefined,
-                    { guard: () => mayDeliver({ users: this.users, phoneNumber: from }) },
-                );
-
-                if (!sent) {
-                    log.info({ from }, 'Suppressing the MMS reply: consent was withdrawn.');
-
+                if (!(await this.#reply(replies[index], from, `mms:${messageSid}:${index}`))) {
                     return;
                 }
             }
         } catch (err) {
-            log.error({ err, from }, 'Failed to process MMS media');
-
-            try {
-                /**
-                 * Gated too. An apology is still an outbound message to a
-                 * number that may have opted out while the work was running,
-                 * and it carries no information the sender asked for.
-                 */
-                await this.notifications.sendMessage(MEDIA_ERROR_REPLY, from, undefined, {
-                    guard: () => mayDeliver({ users: this.users, phoneNumber: from }),
-                });
-            } catch (sendErr) {
-                log.error({ err: sendErr, from }, 'Failed to send the media failure reply');
+            if (err instanceof Error && isTransientError(err)) {
+                throw err;
             }
+
+            log.error({ err, from }, 'Failed to process MMS media');
+            await this.#apologize(messageSid, from);
         }
     }
 }

@@ -105,6 +105,14 @@ export const PLAYER_LOOKUP_CONCURRENCY = 6;
 /**
  * @constant
  * @type {number}
+ * @description How many inbound MMS jobs one instance processes at once. Each
+ * holds an AI call for most of its run, and production runs on a single core.
+ */
+export const MMS_CONCURRENCY = 2;
+
+/**
+ * @constant
+ * @type {number}
  * @description The roster screen's probability at or below which an image is
  * turned away before extraction. Set low on purpose: a real roster refused
  * costs the sender their answer, while junk let through only costs the

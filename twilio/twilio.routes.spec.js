@@ -25,8 +25,9 @@ import {
     START_KEYWORDS,
 } from './twilio.constants.js';
 
-const { enqueueConsentChange, listen } = vi.hoisted(() => ({
+const { enqueueConsentChange, enqueueMms, listen } = vi.hoisted(() => ({
     enqueueConsentChange: vi.fn(),
+    enqueueMms: vi.fn(),
     listen: vi.fn(),
 }));
 
@@ -34,6 +35,12 @@ vi.mock('./consent.queue.js', () => ({
     default: {},
     enqueueConsentChange,
     QUEUE_NAME: 'consent',
+}));
+
+vi.mock('./mms.queue.js', () => ({
+    default: {},
+    enqueueMms,
+    QUEUE_NAME: 'mms',
 }));
 
 /**
@@ -1341,11 +1348,9 @@ describe('TwilioRouter', () => {
         });
 
         describe('when the message includes an image attachment', () => {
-            it('should acknowledge receipt and process the media in the background', () =>
+            it('should acknowledge receipt once the media is queued for processing', () =>
                 new Promise((done, reject) => {
-                    const processSpy = vi
-                        .spyOn(MmsService.prototype, 'process')
-                        .mockResolvedValue();
+                    enqueueMms.mockResolvedValueOnce({});
                     const body = signedBody({
                         Body: '',
                         NumMedia: '1',
@@ -1358,15 +1363,14 @@ describe('TwilioRouter', () => {
                         try {
                             expect(res.statusCode).toEqual(StatusCodes.OK);
                             expect(res._getData()).toContain(MEDIA_RECEIVED_REPLY);
-                            expect(processSpy).toHaveBeenCalledWith({
+                            expect(enqueueMms).toHaveBeenCalledExactlyOnceWith({
+                                messageSid: body.MessageSid,
                                 from: body.From,
                                 media: [{ contentType: 'image/jpeg', url: body.MediaUrl0 }],
                             });
                             done();
                         } catch (err) {
                             reject(err);
-                        } finally {
-                            processSpy.mockRestore();
                         }
                     });
 
@@ -1377,9 +1381,6 @@ describe('TwilioRouter', () => {
         describe('when the attachment is not an image', () => {
             it('should reply that only images are supported without downloading anything', () =>
                 new Promise((done, reject) => {
-                    const processSpy = vi
-                        .spyOn(MmsService.prototype, 'process')
-                        .mockResolvedValue();
                     const body = signedBody({
                         Body: '',
                         NumMedia: '1',
@@ -1392,12 +1393,10 @@ describe('TwilioRouter', () => {
                         try {
                             expect(res.statusCode).toEqual(StatusCodes.OK);
                             expect(res._getData()).toContain(MEDIA_UNSUPPORTED_REPLY);
-                            expect(processSpy).not.toHaveBeenCalled();
+                            expect(enqueueMms).not.toHaveBeenCalled();
                             done();
                         } catch (err) {
                             reject(err);
-                        } finally {
-                            processSpy.mockRestore();
                         }
                     });
 

@@ -2,11 +2,13 @@ import { existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import SendOutcomeUnknownError from '../notifications/send-outcome-unknown.error.js';
 import MmsService from './mms.service.js';
 import {
     MAX_MEDIA_BYTES,
     MEDIA_ERROR_REPLY,
     MEDIA_NO_PLAYERS_REPLY,
+    MMS_CONCURRENCY,
     UNKNOWN_STATISTIC,
 } from './twilio.constants.js';
 
@@ -15,6 +17,12 @@ import {
  * (#783). Reached through the consent gate's marker read, which finds no
  * marker and leaves the decision to the stored state.
  */
+const { enqueueMms, listen } = vi.hoisted(() => ({ enqueueMms: vi.fn(), listen: vi.fn() }));
+
+/** The service registers its worker on construction, and both modules connect on import. */
+vi.mock('../helpers/subscriber.js', () => ({ default: { listen } }));
+vi.mock('./mms.queue.js', () => ({ enqueueMms, QUEUE_NAME: 'mms' }));
+
 vi.mock('../helpers/cache.js', () => {
     const cache = { hGetAll: vi.fn(async () => ({})), eval: vi.fn(async () => 1) };
 
@@ -24,6 +32,7 @@ vi.mock('../helpers/cache.js', () => {
 });
 
 const from = '+15005550006';
+const messageSid = `MM${'1'.repeat(32)}`;
 const url = 'https://api.twilio.com/2010-04-01/Accounts/AC123/Messages/MM123/Media/ME123';
 const aiService = { getPlayersFromFile: vi.fn(), getRosterProbability: vi.fn() };
 
@@ -56,6 +65,27 @@ const playerMatching = (bungieGlobalDisplayName, overrides = {}) => ({
 });
 
 let mmsService;
+let job;
+
+/**
+ * A job as BullMQ hands it over, whose `updateData` saves the way Redis
+ * would, so a second run of the same job sees what the first one saved.
+ * @param {object} [progress]
+ */
+const jobWith = progress => {
+    const fake = {
+        data: { body: '{}', ...(progress && { progress }) },
+        updateData: vi.fn(async data => {
+            fake.data = data;
+        }),
+    };
+
+    return fake;
+};
+
+/** Run the worker on a message with the given media. */
+const run = ({ from: sender = from, media }) =>
+    mmsService.process({ messageSid, from: sender, media }, job);
 
 beforeEach(() => {
     vi.clearAllMocks();
@@ -74,6 +104,7 @@ beforeEach(() => {
     );
     userService.getConsentByPhoneNumber.mockResolvedValue({ isSubscribed: true });
     mmsService = new MmsService({ aiService, destiny2Service, notificationService, userService });
+    job = jobWith();
 });
 
 afterEach(() => {
@@ -102,7 +133,7 @@ describe('MmsService', () => {
 
                 vi.stubGlobal('fetch', fetchMock);
 
-                await mmsService.process({ from, media: [{ contentType: 'image/jpeg', url }] });
+                await run({ from, media: [{ contentType: 'image/jpeg', url }] });
 
                 expect(fetchMock).toHaveBeenCalledWith(url, {
                     headers: {
@@ -126,7 +157,7 @@ describe('MmsService', () => {
                     vi.fn().mockResolvedValue(new Response('image-bytes', { status: 200 })),
                 );
 
-                await mmsService.process({ from, media: [{ contentType: 'image/jpeg', url }] });
+                await run({ from, media: [{ contentType: 'image/jpeg', url }] });
 
                 expect(notificationService.sendMessage).toHaveBeenCalledWith(
                     '\n\n1.42 Player1\n0.87 Player2',
@@ -158,11 +189,14 @@ describe('MmsService', () => {
                     'fetch',
                     vi.fn().mockResolvedValue(new Response('image-bytes', { status: 200 })),
                 );
-                userService.getConsentByPhoneNumber.mockResolvedValue({ isSubscribed: false });
+                /** Subscribed when the job starts, opted out by the time it replies. */
+                userService.getConsentByPhoneNumber
+                    .mockResolvedValueOnce({ isSubscribed: true })
+                    .mockResolvedValue({ isSubscribed: false });
             });
 
             it('should withhold the roster reply', async () => {
-                await mmsService.process({ from, media: [{ contentType: 'image/jpeg', url }] });
+                await run({ from, media: [{ contentType: 'image/jpeg', url }] });
 
                 expect(aiService.getPlayersFromFile).toHaveBeenCalled();
                 await expect(guardFromLastSend()()).resolves.toBe(false);
@@ -171,7 +205,7 @@ describe('MmsService', () => {
             it('should read the consent projection rather than the whole user', async () => {
                 userService.getConsentByPhoneNumber.mockResolvedValue({ isSubscribed: true });
 
-                await mmsService.process({ from, media: [{ contentType: 'image/jpeg', url }] });
+                await run({ from, media: [{ contentType: 'image/jpeg', url }] });
                 await guardFromLastSend()();
 
                 expect(userService.getConsentByPhoneNumber).toHaveBeenCalledWith(from);
@@ -180,7 +214,7 @@ describe('MmsService', () => {
             it('should withhold the failure reply too', async () => {
                 aiService.getPlayersFromFile.mockRejectedValue(new Error('analysis failed'));
 
-                await mmsService.process({ from, media: [{ contentType: 'image/jpeg', url }] });
+                await run({ from, media: [{ contentType: 'image/jpeg', url }] });
 
                 expect(notificationService.sendMessage).toHaveBeenCalledWith(
                     MEDIA_ERROR_REPLY,
@@ -192,7 +226,7 @@ describe('MmsService', () => {
             });
 
             it('should stop before processing any remaining attachments', async () => {
-                await mmsService.process({
+                await run({
                     from,
                     media: [
                         { contentType: 'image/jpeg', url },
@@ -206,7 +240,7 @@ describe('MmsService', () => {
             it('should withhold when consent storage is unavailable', async () => {
                 userService.getConsentByPhoneNumber.mockRejectedValue(new Error('Cosmos is down'));
 
-                await mmsService.process({ from, media: [{ contentType: 'image/jpeg', url }] });
+                await run({ from, media: [{ contentType: 'image/jpeg', url }] });
 
                 await expect(guardFromLastSend()()).resolves.toBe(false);
             });
@@ -219,7 +253,7 @@ describe('MmsService', () => {
                     vi.fn().mockResolvedValue(new Response(null, { status: 404 })),
                 );
 
-                await mmsService.process({ from, media: [{ contentType: 'image/jpeg', url }] });
+                await run({ from, media: [{ contentType: 'image/jpeg', url }] });
 
                 expect(aiService.getPlayersFromFile).not.toHaveBeenCalled();
                 expect(notificationService.sendMessage).toHaveBeenCalledWith(
@@ -242,7 +276,7 @@ describe('MmsService', () => {
                         ),
                 );
 
-                await mmsService.process({ from, media: [{ contentType: 'image/jpeg', url }] });
+                await run({ from, media: [{ contentType: 'image/jpeg', url }] });
 
                 expect(aiService.getPlayersFromFile).not.toHaveBeenCalled();
                 expect(notificationService.sendMessage).toHaveBeenCalledWith(
@@ -260,7 +294,7 @@ describe('MmsService', () => {
 
                 vi.stubGlobal('fetch', fetchMock);
 
-                await mmsService.process({
+                await run({
                     from,
                     media: [{ contentType: 'image/jpeg', url: 'https://evil.example.com/ME123' }],
                 });
@@ -281,7 +315,7 @@ describe('MmsService', () => {
 
                 vi.stubGlobal('fetch', fetchMock);
 
-                await mmsService.process({
+                await run({
                     from,
                     media: [{ contentType: 'image/jpeg', url: url.replace('https:', 'http:') }],
                 });
@@ -310,7 +344,7 @@ describe('MmsService', () => {
                     vi.fn().mockResolvedValue(new Response('image-bytes', { status: 200 })),
                 );
 
-                await mmsService.process({ from, media: [{ contentType: 'image/jpeg', url }] });
+                await run({ from, media: [{ contentType: 'image/jpeg', url }] });
 
                 expect(aiService.getPlayersFromFile).toHaveBeenCalledOnce();
                 expect(existsSync(analyzedPath)).toBe(false);
@@ -339,7 +373,7 @@ describe('MmsService', () => {
                     vi.fn().mockResolvedValue(new Response('image-bytes', { status: 200 })),
                 );
 
-                await mmsService.process({ from, media: [{ contentType: 'image/jpeg', url }] });
+                await run({ from, media: [{ contentType: 'image/jpeg', url }] });
 
                 expect(notificationService.sendMessage).toHaveBeenCalledWith(
                     [
@@ -381,7 +415,7 @@ describe('MmsService', () => {
             ])('should list the player without a ratio when %s', async (_, searchResults) => {
                 FakeDestiny2Service.findPlayers.mockResolvedValue(searchResults);
 
-                await mmsService.process({ from, media: [{ contentType: 'image/jpeg', url }] });
+                await run({ from, media: [{ contentType: 'image/jpeg', url }] });
 
                 expect(destiny2Service.getPlayerStatistics).not.toHaveBeenCalled();
                 expect(notificationService.sendMessage).toHaveBeenCalledWith(
@@ -411,7 +445,7 @@ describe('MmsService', () => {
                         }),
                     ]);
 
-                    await mmsService.process({ from, media: [{ contentType: 'image/jpeg', url }] });
+                    await run({ from, media: [{ contentType: 'image/jpeg', url }] });
 
                     expect(FakeDestiny2Service.findPlayers).toHaveBeenCalledWith('Player1', 0);
                     expect(destiny2Service.getPlayerStatistics).toHaveBeenCalledWith(
@@ -432,7 +466,7 @@ describe('MmsService', () => {
                     playerMatching('Player1', { bungieGlobalDisplayNameCode: 420 }),
                 ]);
 
-                await mmsService.process({ from, media: [{ contentType: 'image/jpeg', url }] });
+                await run({ from, media: [{ contentType: 'image/jpeg', url }] });
 
                 expect(destiny2Service.getPlayerStatistics).toHaveBeenCalledWith('4611686018', 3);
                 expect(notificationService.sendMessage).toHaveBeenCalledWith(
@@ -447,7 +481,7 @@ describe('MmsService', () => {
                 aiService.getPlayersFromFile.mockResolvedValue(['Player1#????']);
                 FakeDestiny2Service.findPlayers.mockResolvedValue([playerMatching('Player1')]);
 
-                await mmsService.process({ from, media: [{ contentType: 'image/jpeg', url }] });
+                await run({ from, media: [{ contentType: 'image/jpeg', url }] });
 
                 expect(notificationService.sendMessage).toHaveBeenCalledWith(
                     '\n\n1.42 Player1#????',
@@ -471,7 +505,7 @@ describe('MmsService', () => {
                     vi.fn().mockResolvedValue(new Response('image-bytes', { status: 200 })),
                 );
 
-                await mmsService.process({ from, media: [{ contentType: 'image/jpeg', url }] });
+                await run({ from, media: [{ contentType: 'image/jpeg', url }] });
 
                 expect(notificationService.sendMessage).toHaveBeenCalledWith(
                     `\n\n${UNKNOWN_STATISTIC} Player1\n1.42 Player2`,
@@ -493,7 +527,7 @@ describe('MmsService', () => {
                     vi.fn().mockResolvedValue(new Response('image-bytes', { status: 200 })),
                 );
 
-                await mmsService.process({ from, media: [{ contentType: 'image/jpeg', url }] });
+                await run({ from, media: [{ contentType: 'image/jpeg', url }] });
 
                 expect(notificationService.sendMessage).toHaveBeenCalledWith(
                     MEDIA_NO_PLAYERS_REPLY,
@@ -515,7 +549,7 @@ describe('MmsService', () => {
             it('should screen the downloaded image with its content type', async () => {
                 aiService.getRosterProbability.mockResolvedValue(0.95);
 
-                await mmsService.process({ from, media: [{ contentType: 'image/png', url }] });
+                await run({ from, media: [{ contentType: 'image/png', url }] });
 
                 expect(aiService.getRosterProbability).toHaveBeenCalledWith(
                     expect.stringMatching(/image\.png$/),
@@ -529,7 +563,7 @@ describe('MmsService', () => {
                 async probability => {
                     aiService.getRosterProbability.mockResolvedValue(probability);
 
-                    await mmsService.process({ from, media: [{ contentType: 'image/jpeg', url }] });
+                    await run({ from, media: [{ contentType: 'image/jpeg', url }] });
 
                     expect(aiService.getPlayersFromFile).not.toHaveBeenCalled();
                     expect(FakeDestiny2Service.findPlayers).not.toHaveBeenCalled();
@@ -547,7 +581,7 @@ describe('MmsService', () => {
                     Object.assign(new Error('Decisions request failed'), { status: 503 }),
                 );
 
-                await mmsService.process({ from, media: [{ contentType: 'image/jpeg', url }] });
+                await run({ from, media: [{ contentType: 'image/jpeg', url }] });
 
                 expect(aiService.getPlayersFromFile).toHaveBeenCalledOnce();
                 expect(notificationService.sendMessage).toHaveBeenCalledWith(
@@ -567,7 +601,7 @@ describe('MmsService', () => {
                     vi.fn().mockResolvedValue(new Response('image-bytes', { status: 200 })),
                 );
 
-                await mmsService.process({ from, media: [{ contentType: 'image/jpeg', url }] });
+                await run({ from, media: [{ contentType: 'image/jpeg', url }] });
 
                 expect(notificationService.sendMessage).toHaveBeenLastCalledWith(
                     MEDIA_ERROR_REPLY,
@@ -619,9 +653,146 @@ describe('MmsService', () => {
                 );
 
                 await expect(
-                    mmsService.process({ from, media: [{ contentType: 'image/jpeg', url }] }),
+                    run({ from, media: [{ contentType: 'image/jpeg', url }] }),
                 ).resolves.toBeUndefined();
             });
+        });
+    });
+
+    describe('as the MMS queue worker', () => {
+        const image = { contentType: 'image/jpeg', url };
+        const keyOf = call => call[3].claimCheckNumber;
+
+        beforeEach(() => {
+            vi.stubGlobal(
+                'fetch',
+                vi.fn(async () => new Response('image-bytes', { status: 200 })),
+            );
+        });
+
+        it('should work the MMS queue a few jobs at a time, apologizing when it gives up', () => {
+            expect(listen).toHaveBeenCalledExactlyOnceWith(expect.any(Function), 'mms', {
+                concurrency: MMS_CONCURRENCY,
+                onGiveUp: expect.any(Function),
+            });
+        });
+
+        it('should queue a message through the MMS queue', async () => {
+            const mms = { messageSid, from, media: [image] };
+
+            await mmsService.enqueue(mms);
+
+            expect(enqueueMms).toHaveBeenCalledExactlyOnceWith(mms);
+        });
+
+        it('should not process an image from a sender who has opted out since', async () => {
+            userService.getConsentByPhoneNumber.mockResolvedValue({ isSubscribed: false });
+
+            await run({ media: [image] });
+
+            expect(fetch).not.toHaveBeenCalled();
+            expect(aiService.getPlayersFromFile).not.toHaveBeenCalled();
+            expect(notificationService.sendMessage).not.toHaveBeenCalled();
+        });
+
+        it("should save each image's reply on the job before sending it", async () => {
+            await run({ media: [image] });
+
+            expect(job.updateData).toHaveBeenCalledExactlyOnceWith({
+                body: '{}',
+                progress: { replies: [expect.stringContaining('1.42 Player1')] },
+            });
+            expect(job.updateData.mock.invocationCallOrder[0]).toBeLessThan(
+                notificationService.sendMessage.mock.invocationCallOrder[0],
+            );
+        });
+
+        it('should not analyze an image again once its reply is saved', async () => {
+            job = jobWith({ replies: ['\n\nsaved roster'] });
+
+            await run({ media: [image] });
+
+            expect(fetch).not.toHaveBeenCalled();
+            expect(aiService.getPlayersFromFile).not.toHaveBeenCalled();
+            expect(notificationService.sendMessage).toHaveBeenCalledExactlyOnceWith(
+                '\n\nsaved roster',
+                from,
+                undefined,
+                expect.objectContaining({ claimCheckNumber: `mms:${messageSid}:0` }),
+            );
+        });
+
+        it('should key each reply by the message and the image, so a retry settles it', async () => {
+            await run({ media: [image, { ...image, contentType: 'image/png' }] });
+
+            expect(notificationService.sendMessage.mock.calls.map(keyOf)).toEqual([
+                `mms:${messageSid}:0`,
+                `mms:${messageSid}:1`,
+            ]);
+        });
+
+        it('should resume after a retryable failure without analyzing the first image again', async () => {
+            const media = [image, { ...image, contentType: 'image/png' }];
+
+            notificationService.sendMessage
+                .mockResolvedValueOnce(sentMessage)
+                .mockRejectedValueOnce(new SendOutcomeUnknownError('Twilio may have it'));
+
+            await expect(run({ media })).rejects.toBeInstanceOf(SendOutcomeUnknownError);
+            expect(aiService.getPlayersFromFile).toHaveBeenCalledTimes(2);
+
+            await run({ media });
+
+            expect(aiService.getPlayersFromFile).toHaveBeenCalledTimes(2);
+            expect(notificationService.sendMessage.mock.calls.map(keyOf)).toEqual([
+                `mms:${messageSid}:0`,
+                `mms:${messageSid}:1`,
+                `mms:${messageSid}:0`,
+                `mms:${messageSid}:1`,
+            ]);
+        });
+
+        it('should leave a retryable failure to BullMQ, sending no failure reply', async () => {
+            const unavailable = Object.assign(new Error('Service Unavailable'), { status: 503 });
+
+            aiService.getPlayersFromFile.mockRejectedValue(unavailable);
+
+            await expect(run({ media: [image] })).rejects.toBe(unavailable);
+            expect(notificationService.sendMessage).not.toHaveBeenCalled();
+        });
+
+        it('should send one failure reply, keyed to the message, for a permanent failure', async () => {
+            aiService.getPlayersFromFile.mockRejectedValue(new Error('unreadable'));
+
+            await run({ media: [image] });
+
+            expect(notificationService.sendMessage).toHaveBeenCalledExactlyOnceWith(
+                MEDIA_ERROR_REPLY,
+                from,
+                undefined,
+                expect.objectContaining({ claimCheckNumber: `mms:${messageSid}:error` }),
+            );
+        });
+
+        it('should send the same failure reply once BullMQ gives up', async () => {
+            const [, , { onGiveUp }] = listen.mock.calls[0];
+
+            await onGiveUp({ messageSid, from, media: [image] });
+
+            expect(notificationService.sendMessage).toHaveBeenCalledExactlyOnceWith(
+                MEDIA_ERROR_REPLY,
+                from,
+                undefined,
+                expect.objectContaining({ claimCheckNumber: `mms:${messageSid}:error` }),
+            );
+        });
+
+        it('should not reject when the failure reply cannot be sent after giving up', async () => {
+            const [, , { onGiveUp }] = listen.mock.calls[0];
+
+            notificationService.sendMessage.mockRejectedValue(new Error('twilio down'));
+
+            await expect(onGiveUp({ messageSid, from, media: [image] })).resolves.toBeUndefined();
         });
     });
 });
