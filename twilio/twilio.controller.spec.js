@@ -19,6 +19,7 @@ import {
     EMOJI_INTENT_REPLIES,
     HELP_REPLY,
     MEDIA_RECEIVED_REPLY,
+    MEDIA_RETRY_REPLY,
     MEDIA_UNSUPPORTED_REPLY,
     START_REPLY,
     STOP_REPLY,
@@ -44,7 +45,7 @@ const accessToken = chance.string({ length: 20 });
 
 const authenticationService = { authenticate: vi.fn() };
 const destinyService = { getProfile: vi.fn(), getXur: vi.fn() };
-const mmsService = { process: vi.fn() };
+const mmsService = { enqueue: vi.fn() };
 const userService = {
     addUserMessage: vi.fn(),
     getUserByPhoneNumber: vi.fn(),
@@ -320,47 +321,63 @@ describe('TwilioController', () => {
         });
 
         describe('media', () => {
-            it('should hand images off for analysis', async () => {
-                const body = inbound('', {
+            const messageSid = `MM${'0'.repeat(32)}`;
+            const image = () =>
+                inbound('', {
+                    MessageSid: messageSid,
                     NumMedia: '1',
                     MediaContentType0: 'image/jpeg',
                     MediaUrl0: 'https://api.twilio.com/media/ME1',
                 });
 
-                const { message } = await twilioController.request({ body, cookies: {} });
+            it('should queue images under their message SID for analysis', async () => {
+                const { message } = await twilioController.request({ body: image(), cookies: {} });
 
                 expect(message).toBe(MEDIA_RECEIVED_REPLY);
-                expect(mmsService.process).toHaveBeenCalledWith({
+                expect(mmsService.enqueue).toHaveBeenCalledExactlyOnceWith({
+                    messageSid,
                     from: phoneNumber,
                     media: [{ contentType: 'image/jpeg', url: 'https://api.twilio.com/media/ME1' }],
                 });
             });
 
             /**
-             * Downloading and analysing an image can outlast Twilio's webhook
-             * timeout, so the handoff is deliberately not awaited. Proving
-             * that needs the analysis left outstanding while the reply is
-             * asked for: a test that only checks `process` was called passes
-             * just as well when the source awaits it, because the double
-             * settles immediately.
+             * The queue is the image's durable record, so the receipt waits
+             * for it. Proving that needs the queueing left outstanding while
+             * the reply is asked for: a double that settles immediately would
+             * pass just as well against a source that didn't wait.
              */
-            it('should acknowledge while the analysis is still running', async () => {
-                const analysing = Promise.withResolvers();
-                const body = inbound('', {
-                    NumMedia: '1',
-                    MediaContentType0: 'image/jpeg',
-                    MediaUrl0: 'https://api.twilio.com/media/ME1',
-                });
+            it('should acknowledge only once the image is queued', async () => {
+                const queueing = Promise.withResolvers();
+                let answered = false;
 
-                mmsService.process.mockReturnValueOnce(analysing.promise);
+                mmsService.enqueue.mockReturnValueOnce(queueing.promise);
 
-                try {
-                    const { message } = await twilioController.request({ body, cookies: {} });
+                const reply = twilioController
+                    .request({ body: image(), cookies: {} })
+                    .then(result => {
+                        answered = true;
 
-                    expect(message).toBe(MEDIA_RECEIVED_REPLY);
-                } finally {
-                    analysing.resolve(undefined);
-                }
+                        return result;
+                    });
+
+                await new Promise(resolve => setImmediate(resolve));
+                expect(answered).toBe(false);
+
+                queueing.resolve(undefined);
+                await expect(reply).resolves.toMatchObject({ message: MEDIA_RECEIVED_REPLY });
+            });
+
+            /**
+             * Twilio does not redeliver an inbound message whose webhook
+             * fails, so the sender is asked for the image again instead.
+             */
+            it('should ask for an image again when it could not be queued', async () => {
+                mmsService.enqueue.mockRejectedValueOnce(new Error('Redis unavailable'));
+
+                const { message } = await twilioController.request({ body: image(), cookies: {} });
+
+                expect(message).toBe(MEDIA_RETRY_REPLY);
             });
 
             it('should refuse an attachment that is not an image', async () => {
@@ -373,7 +390,7 @@ describe('TwilioController', () => {
                 const { message } = await twilioController.request({ body, cookies: {} });
 
                 expect(message).toBe(MEDIA_UNSUPPORTED_REPLY);
-                expect(mmsService.process).not.toHaveBeenCalled();
+                expect(mmsService.enqueue).not.toHaveBeenCalled();
             });
 
             it('should keep only the image among mixed attachments', async () => {
@@ -387,10 +404,14 @@ describe('TwilioController', () => {
 
                 await twilioController.request({ body, cookies: {} });
 
-                expect(mmsService.process).toHaveBeenCalledWith({
-                    from: phoneNumber,
-                    media: [{ contentType: 'image/png', url: 'https://api.twilio.com/media/ME2' }],
-                });
+                expect(mmsService.enqueue).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        from: phoneNumber,
+                        media: [
+                            { contentType: 'image/png', url: 'https://api.twilio.com/media/ME2' },
+                        ],
+                    }),
+                );
             });
         });
 

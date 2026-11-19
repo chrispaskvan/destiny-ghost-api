@@ -148,6 +148,14 @@ describe('mayDeliver', () => {
         await expect(mayDeliver({ users, phoneNumber })).resolves.toBe(false);
     });
 
+    it('should reject with the storage error when asked to, instead of suppressing', async () => {
+        const err = new Error('Cosmos is down');
+
+        users.getConsentByPhoneNumber.mockRejectedValue(err);
+
+        await expect(mayDeliver({ users, phoneNumber, throwIfUnreadable: true })).rejects.toBe(err);
+    });
+
     describe('vendor preferences', () => {
         it('should suppress when the sender disabled that vendor', async () => {
             users.getConsentByPhoneNumber.mockResolvedValue({

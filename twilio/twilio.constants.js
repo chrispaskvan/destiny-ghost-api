@@ -65,6 +65,13 @@ export const MEDIA_RECEIVED_REPLY = 'Scanning ...';
 
 /**
  * @constant
+ * @description Reply sent when an MMS image could not be queued for analysis,
+ * asking for it again: Twilio does not redeliver an inbound message on its own.
+ */
+export const MEDIA_RETRY_REPLY = 'Signal lost before I could scan that. Send it again, Guardian.';
+
+/**
+ * @constant
  * @description Reply sent when an MMS attachment is not an image.
  */
 export const MEDIA_UNSUPPORTED_REPLY =
@@ -101,6 +108,23 @@ export const UNKNOWN_STATISTIC = '?.??';
  * firing all of them at the shared Bungie circuit breaker at once.
  */
 export const PLAYER_LOOKUP_CONCURRENCY = 6;
+
+/**
+ * @constant
+ * @type {number}
+ * @description How many inbound MMS jobs one instance processes at once. Each
+ * holds an AI call for most of its run, and production runs on a single core.
+ */
+export const MMS_CONCURRENCY = 2;
+
+/**
+ * @constant
+ * @type {number}
+ * @description How many times an MMS job whose worker died is picked up again
+ * before it is failed. A job resumes from its saved progress, so it is allowed
+ * as many as a broadcast.
+ */
+export const MMS_MAX_STALLED_COUNT = 5;
 
 /**
  * @constant

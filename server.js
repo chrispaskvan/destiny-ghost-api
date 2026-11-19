@@ -20,6 +20,7 @@ import subscriber from './helpers/subscriber.js';
 import consentQueue from './twilio/consent.queue.js';
 import signUpQueue from './users/sign-up.queue.js';
 import broadcastQueue from './notifications/broadcast.queue.js';
+import mmsQueue from './twilio/mms.queue.js';
 import processExternalPromisesWithTimeout from './helpers/process-external-promises-with-timeout.js';
 import pool from './helpers/pool.js';
 import version from './helpers/version.js';
@@ -41,8 +42,8 @@ let secureConnection;
  * Workers come first because an active job still needs everything after
  * them: Redis for its claim-check receipt and the Twilio rate limiter, the
  * worker pool for manifest reads. `subscriber.close()` waits for those jobs
- * to finish. A notification or consent job outliving the drain timeout is
- * not lost - BullMQ finds it stalled and runs it again, which is the
+ * to finish. A notification, consent or MMS job outliving the drain timeout
+ * is not lost - BullMQ finds it stalled and runs it again, which is the
  * at-least-once delivery those queues promise. A sign-up or resend is the
  * exception: it may already have sent, and billed, its messages, so it is
  * never run again (`maxStalledCount: 0`) and one cut off here is dropped,
@@ -62,6 +63,7 @@ const shutdownStages = [
             ['Consent queue', () => consentQueue.close()],
             ['Broadcast queue', () => broadcastQueue.close()],
             ['Sign-up queue', () => signUpQueue.close()],
+            ['MMS queue', () => mmsQueue.close()],
         ],
         timeout: 3000,
     },
