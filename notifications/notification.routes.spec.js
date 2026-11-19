@@ -83,15 +83,34 @@ describe('NotificationRouter', () => {
      * Resolves with the error handed to `next`, or once the response ends.
      * @param {Record<string, string>} headers
      */
-    const broadcast = (headers = { 'idempotency-key': reservation.key }) =>
+    const broadcast = (headers = { 'idempotency-key': reservation.key }, subscription = 'Xur') =>
         new Promise(resolve => {
             res.on('end', () => resolve(undefined));
-            router(createRequest({ method: 'POST', url: '/Xur', headers }), res, err =>
+            router(createRequest({ method: 'POST', url: `/${subscription}`, headers }), res, err =>
                 resolve(err),
             );
         });
 
+    /** Resolves with the error handed to `next`, or once the response ends. */
+    const notify = (subscription, phoneNumber = '+15555550100') =>
+        new Promise(resolve => {
+            res.on('end', () => resolve(undefined));
+            router(
+                createRequest({ method: 'POST', url: `/${subscription}/${phoneNumber}` }),
+                res,
+                err => resolve(err),
+            );
+        });
+
     describe('POST /:subscription', () => {
+        it('should 404 a type there is no sender for before reserving the key', async () => {
+            await broadcast(undefined, 'Crucible');
+
+            expect(res.statusCode).toBe(StatusCodes.NOT_FOUND);
+            expect(reserve).not.toHaveBeenCalled();
+            expect(controller.create).not.toHaveBeenCalled();
+        });
+
         it.each([
             ['missing', {}],
             ['empty', { 'idempotency-key': '' }],
@@ -244,6 +263,25 @@ describe('NotificationRouter', () => {
             expect(res.getHeader('Destiny-Ghost-Postmaster')).toBe('op-new');
             expect(log.warn).toHaveBeenCalledOnce();
             expect(stopKeepAlive).toHaveBeenCalledOnce();
+        });
+    });
+
+    describe('POST /:subscription/:phoneNumber', () => {
+        it('should queue a supported type, answering with its claim check', async () => {
+            await notify('Xur');
+
+            expect(controller.create).toHaveBeenCalledExactlyOnceWith('Xur', {
+                phoneNumber: '+15555550100',
+            });
+            expect(res.statusCode).toBe(StatusCodes.ACCEPTED);
+            expect(res.getHeader('Destiny-Ghost-Postmaster')).toBe('op-new');
+        });
+
+        it('should 404 a type there is no sender for without queueing anything', async () => {
+            await notify('Crucible');
+
+            expect(res.statusCode).toBe(StatusCodes.NOT_FOUND);
+            expect(controller.create).not.toHaveBeenCalled();
         });
     });
 

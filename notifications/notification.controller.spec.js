@@ -92,6 +92,11 @@ const mockUser = {
 const mockCharacter = {
     characterId,
 };
+/** Consent as stored for a user who has turned Xur alerts on. */
+const optedIn = {
+    isSubscribed: true,
+    notifications: [{ type: notificationTypes.Xur, enabled: true }],
+};
 const mockItem = {
     hash: 123456,
     displayProperties: { name: 'Test Weapon' },
@@ -157,7 +162,7 @@ beforeEach(() => {
     // Default: consent still permits delivery. The gate runs before the job
     // starts and again inside the limiter slot, so without this each test
     // would exercise suppression.
-    userService.getConsentByPhoneNumber.mockResolvedValue({ isSubscribed: true });
+    userService.getConsentByPhoneNumber.mockResolvedValue(optedIn);
     notificationService.settleEarlier.mockResolvedValue({ seen: null });
     notificationService.sendMessage.mockImplementation(sendMessageHonouringGuard());
     notificationController = new NotificationController({
@@ -247,6 +252,17 @@ describe('NotificationController', () => {
                 );
                 expect(publisher.sendNotification).not.toHaveBeenCalled();
             });
+
+            it('should refuse a type there is no sender for before recording or queueing anything', async () => {
+                userService.getUserByPhoneNumber.mockResolvedValue(mockUser);
+
+                await expect(
+                    notificationController.create('Crucible', { phoneNumber }),
+                ).rejects.toThrow('notificationType is not valid');
+                expect(ClaimCheck).not.toHaveBeenCalled();
+                expect(userService.getUserByPhoneNumber).not.toHaveBeenCalled();
+                expect(publisher.sendNotification).not.toHaveBeenCalled();
+            });
         });
 
         describe('when phone number is not provided', () => {
@@ -271,10 +287,11 @@ describe('NotificationController', () => {
                 expect(result).toEqual({ claimCheckNumber });
             });
 
-            it('should refuse a type there are no subscriptions for, without recording it', async () => {
-                await expect(notificationController.create('not-a-type')).rejects.toThrow(
+            it('should refuse a type there is no sender for without recording it', async () => {
+                await expect(notificationController.create('Crucible')).rejects.toThrow(
                     'notificationType is not valid',
                 );
+                expect(ClaimCheck).not.toHaveBeenCalled();
                 expect(enqueueBroadcast).not.toHaveBeenCalled();
             });
 
@@ -757,7 +774,7 @@ describe('NotificationController', () => {
             it('should go ahead if the move lands between the consent read and the move check', async () => {
                 userService.getConsentByPhoneNumber
                     .mockResolvedValueOnce(undefined)
-                    .mockResolvedValue({ isSubscribed: true });
+                    .mockResolvedValue(optedIn);
                 userService.isMovingPlatforms.mockResolvedValue(false);
                 authenticationService.authenticate.mockResolvedValue(undefined);
 
@@ -865,13 +882,37 @@ describe('NotificationController', () => {
                 });
             });
 
+            it.each([
+                ['has no entry for it', []],
+                ['has an entry that does not say enabled', [{ type: notificationTypes.Xur }]],
+            ])('should not send to a user who %s', async (_label, notifications) => {
+                userService.getConsentByPhoneNumber.mockResolvedValue({
+                    isSubscribed: true,
+                    notifications,
+                });
+                userService.isMovingPlatforms.mockResolvedValue(false);
+
+                await sendMethod(mockUser, {
+                    claimCheckNumber,
+                    notificationType: notificationTypes.Xur,
+                });
+
+                expect(authenticationService.authenticate).not.toHaveBeenCalled();
+                expect(notificationService.sendMessage).not.toHaveBeenCalled();
+                expect(ClaimCheck.advance).toHaveBeenCalledExactlyOnceWith(
+                    claimCheckNumber,
+                    phoneNumber,
+                    { status: SKIPPED, reason: 'opted-out' },
+                );
+            });
+
             it('should still send when a different vendor is the disabled one', async () => {
                 const weaponCategoryHash = 1;
 
                 userService.getConsentByPhoneNumber.mockResolvedValue({
                     isSubscribed: true,
                     notifications: [
-                        { type: notificationTypes.IronBanner, enabled: false },
+                        { type: 'Crucible', enabled: false },
                         { type: notificationTypes.Xur, enabled: true },
                     ],
                 });
@@ -914,7 +955,7 @@ describe('NotificationController', () => {
             /** Subscribed at the early gate, opted out by the time we send. */
             const optOutOnSecondCheck = () => {
                 userService.getConsentByPhoneNumber
-                    .mockResolvedValueOnce({ isSubscribed: true })
+                    .mockResolvedValueOnce(optedIn)
                     .mockResolvedValue({ isSubscribed: false });
             };
 
@@ -1468,14 +1509,15 @@ describe('NotificationController', () => {
             });
         });
 
-        describe('when notification type is not Xur', () => {
-            it('should not process non-Xur notifications, recording why', async () => {
+        describe('when a job was queued under a type with no sender', () => {
+            it('should not process it, recording why', async () => {
                 await sendMethod(mockUser, {
                     claimCheckNumber,
-                    notificationType: notificationTypes.Gunsmith,
+                    notificationType: 'Crucible',
                 });
 
                 expect(notificationService.settleEarlier).not.toHaveBeenCalled();
+                expect(userService.getConsentByPhoneNumber).not.toHaveBeenCalled();
                 expect(authenticationService.authenticate).not.toHaveBeenCalled();
                 expect(destinyService.getProfile).not.toHaveBeenCalled();
                 expect(notificationService.sendMessage).not.toHaveBeenCalled();

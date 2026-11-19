@@ -63,9 +63,10 @@
           },
           "type": {
             "type": "string",
-            "examples": [
+            "enum": [
               "Xur"
-            ]
+            ],
+            "description": "A notification type there is a sender for."
           }
         }
       },

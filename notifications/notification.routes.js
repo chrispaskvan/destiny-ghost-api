@@ -11,7 +11,7 @@ import {
 } from '../helpers/idempotency-keys.js';
 import log from '../helpers/log.js';
 import { BroadcastConflictError } from './broadcast.queue.js';
-import notificationTypes from './notification.types.js';
+import { isSupportedNotificationType } from './notification.types.js';
 import NotificationController from './notification.controller.js';
 import authorizeUser from '../authorization/authorization.middleware.js';
 
@@ -29,11 +29,13 @@ import authorizeUser from '../authorization/authorization.middleware.js';
  *            type: boolean
  *          type:
  *            type: string
- *            examples: [Xur]
+ *            enum: [Xur]
+ *            description: A notification type there is a sender for.
  */
 
 const idempotencyKeySchema = z.string().min(1).max(255);
 const MISMATCH = 'This Idempotency-Key was already used for a different request.';
+const UNRECOGNIZED = 'That subscription is not recognized.';
 
 /**
  * @typedef {Object} NotificationRoutesOptions
@@ -115,6 +117,17 @@ const routes = ({
         const {
             params: { subscription },
         } = req;
+
+        /**
+         * Checked before the key is reserved: a type with no sender would
+         * otherwise hold the key for a broadcast that can never run.
+         */
+        if (!isSupportedNotificationType(subscription)) {
+            res.status(StatusCodes.NOT_FOUND).send(UNRECOGNIZED);
+
+            return;
+        }
+
         const key = idempotencyKeySchema.safeParse(req.headers['idempotency-key']);
 
         if (!key.success) {
@@ -212,8 +225,8 @@ const routes = ({
                 params: { subscription, phoneNumber },
             } = req;
 
-            if (!Object.keys(notificationTypes).find(key => key === subscription)) {
-                res.status(StatusCodes.NOT_FOUND).send('That subscription is not recognized.');
+            if (!isSupportedNotificationType(subscription)) {
+                res.status(StatusCodes.NOT_FOUND).send(UNRECOGNIZED);
 
                 return;
             }
