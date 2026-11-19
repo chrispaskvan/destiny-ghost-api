@@ -5,7 +5,7 @@ import publisher from '../helpers/publisher.js';
 import { isTransientError } from '../helpers/retry.js';
 import subscriber from '../helpers/subscriber.js';
 import NotificationError from './notification.error.js';
-import notificationTypes from './notification.types.js';
+import notificationTypes, { isSupportedNotificationType } from './notification.types.js';
 import DestinyError from '../destiny/destiny.error.js';
 import XurUnavailableError from './xur-unavailable.error.js';
 import SendOutcomeUnknownError from './send-outcome-unknown.error.js';
@@ -287,19 +287,29 @@ class NotificationController {
         const { membershipId, membershipType, phoneNumber } = user;
 
         /**
+         * No other type has a sender, and `create` refuses them, but a job
+         * queued before that can still arrive. Recorded first, rather than
+         * left to the consent check, which no user can pass for it, so the
+         * receipt says why nothing was sent.
+         */
+        if (!isSupportedNotificationType(notificationType)) {
+            await ClaimCheck.advance(claimCheckNumber, phoneNumber, {
+                status: SKIPPED,
+                reason: 'unsupported-type',
+            });
+
+            return;
+        }
+
+        /**
          * A retry whose message already went out reports it and stops, before
          * the consent check and the calls to Bungie: a send already made is
          * not taken back by anything that has changed since, and the work it
          * would repeat could fail or skip before `sendMessage` found out.
          * Throws, for BullMQ to retry, when an earlier attempt cannot be
-         * settled yet. Only a type with a sender can have sent anything
-         * (#722), so the others skip the lookup.
+         * settled yet.
          */
-        /** @type {import('./notification.service.js').Settled} */
-        const settled =
-            notificationType === notificationTypes.Xur
-                ? await this.notifications.settleEarlier(claimCheckNumber, phoneNumber)
-                : { seen: null };
+        const settled = await this.notifications.settleEarlier(claimCheckNumber, phoneNumber);
 
         if (settled.earlier) {
             await ClaimCheck.advance(
@@ -316,9 +326,8 @@ class NotificationController {
          * however long ago the queue is behind - long enough for a STOP to
          * have landed in between.
          *
-         * This early check is the cheap one: it sits before the branch below
-         * so the types that are not implemented yet (#722) inherit it, and
-         * before `authenticate` so an opted-out user costs neither a token
+         * This early check is the cheap one: it sits before `authenticate`
+         * so an opted-out user costs neither a token
          * refresh nor a call to Bungie on their behalf. It is not the
          * authoritative one - several network round trips separate it from the
          * send - so consent is read again immediately before each outbound
@@ -479,16 +488,6 @@ class NotificationController {
 
                 throw NotificationController.#forBullMQ(err);
             }
-        } else {
-            /**
-             * No other type has a sender yet (#722). Recorded rather than
-             * left pending, so the receipt says nothing was sent instead of
-             * looking like a job still waiting to run.
-             */
-            await ClaimCheck.advance(claimCheckNumber, phoneNumber, {
-                status: SKIPPED,
-                reason: 'unsupported-type',
-            });
         }
     }
 
@@ -688,6 +687,15 @@ class NotificationController {
      * durably recorded
      */
     async create(subscription, { operationId, phoneNumber } = {}) {
+        /**
+         * Before the claim check, on both paths: a type with no sender must
+         * not become an accepted operation that finishes having sent
+         * nothing.
+         */
+        if (!isSupportedNotificationType(subscription)) {
+            throw new Error('notificationType is not valid');
+        }
+
         const claimCheck = new ClaimCheck(operationId);
         const claimCheckNumber = claimCheck.number;
 
@@ -717,10 +725,6 @@ class NotificationController {
             }
 
             throw new NotificationError('user not found');
-        }
-
-        if (!Object.values(notificationTypes).includes(subscription)) {
-            throw new Error('notificationType is not valid');
         }
 
         await enqueueBroadcast({

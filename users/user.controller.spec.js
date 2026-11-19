@@ -618,15 +618,12 @@ describe('UserController', () => {
                 expect(userService.updateUserSubscription).not.toHaveBeenCalled();
             });
 
-            it('should seed all known notification types', async () => {
+            it('should seed only the notification types there is a sender for', async () => {
                 userService.getUserByEmailAddressToken.mockResolvedValueOnce(signedUp());
 
                 await join();
 
                 expect(saved().notifications).toEqual([
-                    { enabled: false, type: 'Orders', messages: [] },
-                    { enabled: false, type: 'Banshee-44', messages: [] },
-                    { enabled: false, type: 'Lord Saladin', messages: [] },
                     { enabled: false, type: 'Xur', messages: [] },
                 ]);
             });
@@ -1857,7 +1854,7 @@ describe('UserController', () => {
                     displayName,
                     emailAddress: 'old@example.com',
                     membershipType,
-                    notifications: [{ enabled: false, type: 'Orders', messages: [] }],
+                    notifications: [{ enabled: false, type: 'Xur', messages: [] }],
                 };
                 const mock = userService.updateUser;
 
@@ -1874,7 +1871,7 @@ describe('UserController', () => {
                     displayName,
                     emailAddress: 'old@example.com',
                     membershipType,
-                    notifications: [{ enabled: false, type: 'Orders', messages: [] }],
+                    notifications: [{ enabled: false, type: 'Xur', messages: [] }],
                     version: 2,
                     patches: [
                         {

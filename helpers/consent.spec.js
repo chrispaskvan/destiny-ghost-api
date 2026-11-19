@@ -167,20 +167,44 @@ describe('mayDeliver', () => {
                 isSubscribed: true,
                 notifications: [
                     { type: notificationTypes.Xur, enabled: false },
-                    { type: notificationTypes.IronBanner, enabled: true },
+                    { type: 'Banshee-44', enabled: true },
                 ],
             });
 
             await expect(
-                mayDeliver({ users, phoneNumber, notificationType: notificationTypes.IronBanner }),
+                mayDeliver({ users, phoneNumber, notificationType: 'Banshee-44' }),
             ).resolves.toBe(true);
         });
 
-        it('should allow when the user has no entry for that vendor', async () => {
+        it('should suppress when the user has no entry for that vendor', async () => {
             users.getConsentByPhoneNumber.mockResolvedValue({
                 phoneNumber,
                 isSubscribed: true,
-                notifications: [{ type: notificationTypes.IronBanner, enabled: true }],
+                notifications: [{ type: 'Banshee-44', enabled: true }],
+            });
+
+            await expect(
+                mayDeliver({ users, phoneNumber, notificationType: notificationTypes.Xur }),
+            ).resolves.toBe(false);
+        });
+
+        it('should suppress when the entry for that vendor does not say enabled', async () => {
+            users.getConsentByPhoneNumber.mockResolvedValue({
+                phoneNumber,
+                isSubscribed: true,
+                notifications: [{ type: notificationTypes.Xur }],
+            });
+
+            await expect(
+                mayDeliver({ users, phoneNumber, notificationType: notificationTypes.Xur }),
+            ).resolves.toBe(false);
+        });
+
+        it('should allow when the entry for that vendor is enabled', async () => {
+            users.getConsentByPhoneNumber.mockResolvedValue({
+                phoneNumber,
+                isSubscribed: true,
+                notifications: [{ type: notificationTypes.Xur, enabled: true }],
             });
 
             await expect(

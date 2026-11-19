@@ -95,7 +95,7 @@ sequenceDiagram
         API->>API: Validate both against the token pair's TTL, for the session's own sign-up
         API->>API: Re-check the pending contact isn't registered to another account
         API->>API: Promote the pending contact to the account's contact; consent for a new number from its consent marker, else subscribed
-        API->>API: First sign-up only: set dateRegistered, seed notifications (Orders, Banshee-44, Lord Saladin, Xur, all disabled), send welcome SMS
+        API->>API: First sign-up only: set dateRegistered, seed notifications (one per supported type, currently Xur, all disabled), send welcome SMS
         API-->>WebApp: 200 success, or 400 if expired/mismatched/conflicting (resubmit signUp to retry)
     end
 

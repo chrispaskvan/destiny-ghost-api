@@ -8,11 +8,9 @@
  * and an AI call before it answers. Either window is long enough for a STOP to
  * arrive, so the state is read again here, immediately before the send.
  *
- * This asks whether consent has been *withdrawn* since the work was queued,
- * not whether the user was eligible for it in the first place. Eligibility is
- * settled at enqueue; repeating it here would duplicate rules that can then
- * drift apart. That is why only an explicit `enabled: false` suppresses below
- * and a missing vendor entry does not - see the comment on that check.
+ * A vendor alert goes out only to a user whose entry for that vendor says
+ * `enabled: true`, checked here because one route queues a single recipient
+ * without consulting their preferences at all.
  *
  * Two sources, because consent becomes durable somewhere other than where it
  * arrives. A STOP is acknowledged before its write is applied, so Cosmos alone
@@ -132,19 +130,16 @@ const mayDeliver = async ({ users, phoneNumber, notificationType }) => {
     }
 
     /**
-     * Only an explicit `enabled: false` counts as a withdrawal. A missing
-     * entry is not one: `POST /notifications/:subscription/:phoneNumber`
-     * enqueues without requiring an entry at all, and names the type by key
-     * ('Gunsmith') where a stored entry holds the value ('Banshee-44'), so a
-     * lookup miss is the normal case on that route rather than a signal.
+     * Opt-in, not opt-out: a missing entry, or one without `enabled: true`,
+     * is not permission.
      */
     if (notificationType) {
         const preference = user.notifications?.find(({ type }) => type === notificationType);
 
-        if (preference?.enabled === false) {
+        if (preference?.enabled !== true) {
             log.info(
                 { phoneNumber, notificationType },
-                'Suppressing the notification: the sender disabled this vendor.',
+                'Suppressing the notification: the sender has not enabled this vendor.',
             );
 
             return false;
