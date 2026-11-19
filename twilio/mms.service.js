@@ -19,6 +19,7 @@ import mayDeliver from '../helpers/consent.js';
 import log from '../helpers/log.js';
 import { isTransientError, withRetry } from '../helpers/retry.js';
 import subscriber from '../helpers/subscriber.js';
+import SendOutcomeUnknownError from '../notifications/send-outcome-unknown.error.js';
 import ConsentUnavailableError from './consent-unavailable.error.js';
 import { enqueueMms, QUEUE_NAME as MMS_QUEUE } from './mms.queue.js';
 import ProgressUnsavedError from './progress-unsaved.error.js';
@@ -27,6 +28,7 @@ import {
     MEDIA_ERROR_REPLY,
     MEDIA_NO_PLAYERS_REPLY,
     MMS_CONCURRENCY,
+    MMS_MAX_STALLED_COUNT,
     PLAYER_LOOKUP_CONCURRENCY,
     ROSTER_REJECT_THRESHOLD,
     TWILIO_MEDIA_HOST,
@@ -93,11 +95,13 @@ class MmsService {
         /**
          * Each job holds an AI call for most of its run, so only a few run
          * at once. A job whose worker died is picked up again and resumes
-         * from the images it had already analyzed.
+         * from the images it had already analyzed, so it may stall as often
+         * as a broadcast: a deploy can restart the instance more than once.
          */
         subscriber.listen((body, _properties, job) => this.process(body, job), MMS_QUEUE, {
             concurrency: MMS_CONCURRENCY,
-            onGiveUp: ({ messageSid, from }) => this.#apologize(messageSid, from),
+            maxStalledCount: MMS_MAX_STALLED_COUNT,
+            onGiveUp: (mms, _properties, _job, err) => this.#gaveUp(mms, err),
         });
     }
 
@@ -413,18 +417,53 @@ class MmsService {
     }
 
     /**
-     * Tell the sender their image could not be read, once per message. Never
-     * rejects: it runs where nothing is left to retry it.
+     * Tell the sender their image could not be read, once per message.
      *
      * @param {string} messageSid
      * @param {string} from
      * @returns {Promise<void>}
+     * @throws when the reply's send can be retried. Any other failure is
+     * logged, as there is nothing more to tell the sender.
      */
     async #apologize(messageSid, from) {
         try {
             await this.#reply(MEDIA_ERROR_REPLY, from, `mms:${messageSid}:error`);
         } catch (err) {
+            if (err instanceof Error && isTransientError(err)) {
+                throw err;
+            }
+
             log.error({ err, from }, 'Failed to send the media failure reply');
+        }
+    }
+
+    /**
+     * Once BullMQ has failed a job for good. Never rejects: nothing is left
+     * to retry it.
+     *
+     * A job that gave up not knowing whether Twilio took a reply sends no
+     * apology: the sender may well have the roster, and an apology after it
+     * would contradict it. It is logged as an error instead, since only
+     * Twilio's console can settle it now.
+     *
+     * @param {import('./mms.queue.js').MmsJob} mms
+     * @param {Error} err - what the last attempt failed with
+     * @returns {Promise<void>}
+     */
+    async #gaveUp({ messageSid, from }, err) {
+        if (err instanceof SendOutcomeUnknownError || err?.name === SendOutcomeUnknownError.name) {
+            log.error(
+                { err, from, messageSid },
+                'Gave up on the MMS not knowing whether a reply was sent; check Twilio.',
+            );
+
+            return;
+        }
+
+        try {
+            await this.#apologize(messageSid, from);
+        } catch (sendErr) {
+            log.error({ err: sendErr, from }, 'Failed to send the media failure reply');
         }
     }
 
@@ -439,7 +478,9 @@ class MmsService {
      *
      * A retryable failure rejects, for BullMQ to try again. Any other sends
      * the failure reply and resolves, as does a retryable one on the last
-     * attempt, through the queue's give-up handler.
+     * attempt, through the queue's give-up handler, unless a reply's outcome
+     * is still unknown. A failure reply that hits a retryable error rejects
+     * too, so it is not lost.
      *
      * @param {import('./mms.queue.js').MmsJob} mms
      * @param {import('bullmq').Job} job

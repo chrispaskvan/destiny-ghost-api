@@ -19,6 +19,7 @@ import {
     EMOJI_INTENT_REPLIES,
     HELP_REPLY,
     MEDIA_RECEIVED_REPLY,
+    MEDIA_RETRY_REPLY,
     MEDIA_UNSUPPORTED_REPLY,
     START_REPLY,
     STOP_REPLY,
@@ -367,14 +368,16 @@ describe('TwilioController', () => {
                 await expect(reply).resolves.toMatchObject({ message: MEDIA_RECEIVED_REPLY });
             });
 
-            it('should not acknowledge an image that could not be queued', async () => {
-                const err = new Error('Redis unavailable');
+            /**
+             * Twilio does not redeliver an inbound message whose webhook
+             * fails, so the sender is asked for the image again instead.
+             */
+            it('should ask for an image again when it could not be queued', async () => {
+                mmsService.enqueue.mockRejectedValueOnce(new Error('Redis unavailable'));
 
-                mmsService.enqueue.mockRejectedValueOnce(err);
+                const { message } = await twilioController.request({ body: image(), cookies: {} });
 
-                await expect(twilioController.request({ body: image(), cookies: {} })).rejects.toBe(
-                    err,
-                );
+                expect(message).toBe(MEDIA_RETRY_REPLY);
             });
 
             it('should refuse an attachment that is not an image', async () => {

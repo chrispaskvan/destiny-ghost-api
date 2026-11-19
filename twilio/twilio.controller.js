@@ -21,6 +21,7 @@ import {
     HELP_REPLY,
     MAX_SMS_MESSAGE_LENGTH,
     MEDIA_RECEIVED_REPLY,
+    MEDIA_RETRY_REPLY,
     MEDIA_UNSUPPORTED_REPLY,
     START_KEYWORDS,
     START_REPLY,
@@ -620,17 +621,22 @@ class TwilioController {
             /**
              * Queued, not processed: downloading and analyzing can exceed
              * Twilio's webhook timeout. Awaited, so the receipt is
-             * acknowledged only once the image is recorded. A failure to
-             * queue it rejects, and the webhook's error answer lets Twilio
-             * deliver it again; the message SID keeps that from being
-             * processed twice.
+             * acknowledged only once the image is recorded. Twilio does not
+             * redeliver an inbound message whose webhook fails, so an image
+             * that could not be queued is asked for again instead.
              */
-            await this.mms.enqueue({
-                /** Required on this route by `bodySchema` in twilio.routes.js. */
-                messageSid: /** @type {string} */ (body.MessageSid),
-                from: body.From,
-                media,
-            });
+            try {
+                await this.mms.enqueue({
+                    /** Required on this route by `bodySchema` in twilio.routes.js. */
+                    messageSid: /** @type {string} */ (body.MessageSid),
+                    from: body.From,
+                    media,
+                });
+            } catch (err) {
+                log.error({ err, from: body.From }, 'Failed to queue the MMS media');
+
+                return { cookies: responseCookies, message: MEDIA_RETRY_REPLY };
+            }
 
             return { cookies: responseCookies, message: MEDIA_RECEIVED_REPLY };
         }

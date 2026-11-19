@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import SendDeferredError from '../notifications/send-deferred.error.js';
 import SendOutcomeUnknownError from '../notifications/send-outcome-unknown.error.js';
 import ConsentUnavailableError from './consent-unavailable.error.js';
 import ProgressUnsavedError from './progress-unsaved.error.js';
@@ -11,6 +12,7 @@ import {
     MEDIA_ERROR_REPLY,
     MEDIA_NO_PLAYERS_REPLY,
     MMS_CONCURRENCY,
+    MMS_MAX_STALLED_COUNT,
     UNKNOWN_STATISTIC,
 } from './twilio.constants.js';
 
@@ -699,11 +701,13 @@ describe('MmsService', () => {
             );
         });
 
-        it('should work the MMS queue a few jobs at a time, apologizing when it gives up', () => {
+        it('should work the MMS queue a few jobs at a time, resuming a job that stalls', () => {
             expect(listen).toHaveBeenCalledExactlyOnceWith(expect.any(Function), 'mms', {
                 concurrency: MMS_CONCURRENCY,
+                maxStalledCount: MMS_MAX_STALLED_COUNT,
                 onGiveUp: expect.any(Function),
             });
+            expect(MMS_MAX_STALLED_COUNT).toBeGreaterThan(1);
         });
 
         it('should queue a message through the MMS queue', async () => {
@@ -821,6 +825,35 @@ describe('MmsService', () => {
                 undefined,
                 expect.objectContaining({ claimCheckNumber: `mms:${messageSid}:error` }),
             );
+        });
+
+        it.each([
+            ['the error itself', () => new SendOutcomeUnknownError('Twilio may have it')],
+            [
+                'one from another copy of the module',
+                () =>
+                    Object.assign(new Error('Twilio may have it'), {
+                        name: 'SendOutcomeUnknownError',
+                    }),
+            ],
+        ])(
+            'should send no failure reply after giving up on a reply whose outcome is unknown, given %s',
+            async (_label, make) => {
+                const [, , { onGiveUp }] = listen.mock.calls[0];
+
+                await onGiveUp({ messageSid, from, media: [image] }, {}, job, make());
+
+                expect(notificationService.sendMessage).not.toHaveBeenCalled();
+            },
+        );
+
+        it('should leave a failure reply that hits a retryable error to BullMQ', async () => {
+            const deferred = new SendDeferredError('Unable to record the send.');
+
+            aiService.getPlayersFromFile.mockRejectedValue(new Error('unreadable'));
+            notificationService.sendMessage.mockRejectedValueOnce(deferred);
+
+            await expect(run({ media: [image] })).rejects.toBe(deferred);
         });
 
         it('should not reject when the failure reply cannot be sent after giving up', async () => {

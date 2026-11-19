@@ -175,7 +175,7 @@ const routes = ({
                  * A missing message means the reply is intentionally
                  * suppressed (e.g. an opted-out user), not that the request
                  * failed - reply 200 with empty TwiML so Twilio doesn't
-                 * treat this as an error and retry the webhook.
+                 * log it as an error or turn to the fallback URL.
                  */
                 res.writeHead(StatusCodes.OK, {
                     'Content-Type': 'text/xml',
