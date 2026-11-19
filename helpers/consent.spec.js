@@ -167,12 +167,12 @@ describe('mayDeliver', () => {
                 isSubscribed: true,
                 notifications: [
                     { type: notificationTypes.Xur, enabled: false },
-                    { type: 'Crucible', enabled: true },
+                    { type: 'Banshee-44', enabled: true },
                 ],
             });
 
             await expect(
-                mayDeliver({ users, phoneNumber, notificationType: 'Crucible' }),
+                mayDeliver({ users, phoneNumber, notificationType: 'Banshee-44' }),
             ).resolves.toBe(true);
         });
 
@@ -180,7 +180,7 @@ describe('mayDeliver', () => {
             users.getConsentByPhoneNumber.mockResolvedValue({
                 phoneNumber,
                 isSubscribed: true,
-                notifications: [{ type: 'Crucible', enabled: true }],
+                notifications: [{ type: 'Banshee-44', enabled: true }],
             });
 
             await expect(

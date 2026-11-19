@@ -257,7 +257,7 @@ describe('NotificationController', () => {
                 userService.getUserByPhoneNumber.mockResolvedValue(mockUser);
 
                 await expect(
-                    notificationController.create('Crucible', { phoneNumber }),
+                    notificationController.create('Banshee-44', { phoneNumber }),
                 ).rejects.toThrow('notificationType is not valid');
                 expect(ClaimCheck).not.toHaveBeenCalled();
                 expect(userService.getUserByPhoneNumber).not.toHaveBeenCalled();
@@ -288,7 +288,7 @@ describe('NotificationController', () => {
             });
 
             it('should refuse a type there is no sender for without recording it', async () => {
-                await expect(notificationController.create('Crucible')).rejects.toThrow(
+                await expect(notificationController.create('Banshee-44')).rejects.toThrow(
                     'notificationType is not valid',
                 );
                 expect(ClaimCheck).not.toHaveBeenCalled();
@@ -912,7 +912,7 @@ describe('NotificationController', () => {
                 userService.getConsentByPhoneNumber.mockResolvedValue({
                     isSubscribed: true,
                     notifications: [
-                        { type: 'Crucible', enabled: false },
+                        { type: 'Banshee-44', enabled: false },
                         { type: notificationTypes.Xur, enabled: true },
                     ],
                 });
@@ -1513,7 +1513,7 @@ describe('NotificationController', () => {
             it('should not process it, recording why', async () => {
                 await sendMethod(mockUser, {
                     claimCheckNumber,
-                    notificationType: 'Crucible',
+                    notificationType: 'Banshee-44',
                 });
 
                 expect(notificationService.settleEarlier).not.toHaveBeenCalled();

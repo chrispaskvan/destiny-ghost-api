@@ -104,7 +104,7 @@ describe('NotificationRouter', () => {
 
     describe('POST /:subscription', () => {
         it('should 404 a type there is no sender for before reserving the key', async () => {
-            await broadcast(undefined, 'Crucible');
+            await broadcast(undefined, 'Banshee-44');
 
             expect(res.statusCode).toBe(StatusCodes.NOT_FOUND);
             expect(reserve).not.toHaveBeenCalled();
@@ -278,7 +278,7 @@ describe('NotificationRouter', () => {
         });
 
         it('should 404 a type there is no sender for without queueing anything', async () => {
-            await notify('Crucible');
+            await notify('Banshee-44');
 
             expect(res.statusCode).toBe(StatusCodes.NOT_FOUND);
             expect(controller.create).not.toHaveBeenCalled();
