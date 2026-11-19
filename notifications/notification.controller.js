@@ -8,9 +8,8 @@ import NotificationError from './notification.error.js';
 import notificationTypes, { isSupportedNotificationType } from './notification.types.js';
 import DestinyError from '../destiny/destiny.error.js';
 import XurUnavailableError from './xur-unavailable.error.js';
-import SendOutcomeUnknownError from './send-outcome-unknown.error.js';
+import { isA, outcomeUnknown, recordOfSend } from './send-outcome.js';
 import ClaimCheck, { DUPLICATE, ERROR, SKIPPED } from '../helpers/claim-check.js';
-import DispatchRecord from '../helpers/dispatch-record.js';
 import mayDeliver from '../helpers/consent.js';
 import { isExhausted, isLastAttempt } from '../helpers/job-attempts.js';
 import log from '../helpers/log.js';
@@ -25,17 +24,6 @@ import {
     getBroadcast,
     QUEUE_NAME as BROADCAST_QUEUE,
 } from './broadcast.queue.js';
-
-/**
- * Whether `err` is one of `type`, or carries its name: matched by name as
- * well, as BullMQ matches its own, so one from another copy of the module is
- * not missed.
- * @param {unknown} err
- * @param {new (...args: any[]) => Error} type
- * @returns {boolean}
- */
-const isA = (err, type) =>
-    err instanceof type || /** @type {{ name?: unknown }} */ (err)?.name === type.name;
 
 /**
  * Constructor options for NotificationController.
@@ -196,7 +184,7 @@ class NotificationController {
      * @returns {Promise<void>}
      */
     async #gaveUp({ phoneNumber }, { claimCheckNumber }, job, err) {
-        const record = await NotificationController.#recordOfSend(claimCheckNumber, phoneNumber);
+        const record = await recordOfSend(claimCheckNumber, phoneNumber);
 
         /**
          * Twilio took the message, and only what came after failed - a crash
@@ -215,7 +203,7 @@ class NotificationController {
         }
 
         const permanent = isA(err, UnrecoverableError);
-        const unknown = isA(err, SendOutcomeUnknownError) || record?.state === 'attempting';
+        const unknown = outcomeUnknown(err, record);
 
         if (unknown) {
             log.error(
@@ -255,27 +243,6 @@ class NotificationController {
         unrecoverableError.cause = err;
 
         return unrecoverableError;
-    }
-
-    /**
-     * The record of this recipient's send, for a job BullMQ has given up on.
-     * `null` when there is none, or it cannot be read: the last error then
-     * decides on its own.
-     * @param {string} claimCheckNumber
-     * @param {string} phoneNumber
-     * @returns {Promise<import('../helpers/dispatch-record.js').DispatchRecord | null>}
-     */
-    static async #recordOfSend(claimCheckNumber, phoneNumber) {
-        try {
-            return await DispatchRecord.read(claimCheckNumber, phoneNumber);
-        } catch (err) {
-            log.warn(
-                { err, claimCheckNumber, phoneNumber },
-                'Unable to read the record of the send; going by the last error.',
-            );
-
-            return null;
-        }
     }
 
     /**

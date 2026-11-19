@@ -19,7 +19,7 @@ import mayDeliver from '../helpers/consent.js';
 import log from '../helpers/log.js';
 import { isTransientError, withRetry } from '../helpers/retry.js';
 import subscriber from '../helpers/subscriber.js';
-import SendOutcomeUnknownError from '../notifications/send-outcome-unknown.error.js';
+import { outcomeUnknown, recordOfSend } from '../notifications/send-outcome.js';
 import ConsentUnavailableError from './consent-unavailable.error.js';
 import { enqueueMms, QUEUE_NAME as MMS_QUEUE } from './mms.queue.js';
 import ProgressUnsavedError from './progress-unsaved.error.js';
@@ -444,14 +444,20 @@ class MmsService {
      * A job that gave up not knowing whether Twilio took a reply sends no
      * apology: the sender may well have the roster, and an apology after it
      * would contradict it. It is logged as an error instead, since only
-     * Twilio's console can settle it now.
+     * Twilio's console can settle it now. Each image's reply record is read
+     * as well as the last error, since a job failed for stalling can have
+     * died with a reply mid-send.
      *
      * @param {import('./mms.queue.js').MmsJob} mms
      * @param {Error} err - what the last attempt failed with
      * @returns {Promise<void>}
      */
-    async #gaveUp({ messageSid, from }, err) {
-        if (err instanceof SendOutcomeUnknownError || err?.name === SendOutcomeUnknownError.name) {
+    async #gaveUp({ messageSid, from, media }, err) {
+        const records = await Promise.all(
+            media.map((_, index) => recordOfSend(MmsService.#replyKey(messageSid, index), from)),
+        );
+
+        if ([null, ...records].some(record => outcomeUnknown(err, record))) {
             log.error(
                 { err, from, messageSid },
                 'Gave up on the MMS not knowing whether a reply was sent; check Twilio.',
@@ -464,6 +470,32 @@ class MmsService {
             await this.#apologize(messageSid, from);
         } catch (sendErr) {
             log.error({ err: sendErr, from }, 'Failed to send the media failure reply');
+        }
+    }
+
+    /**
+     * The claim check that keys one image's reply.
+     * @param {string} messageSid
+     * @param {number} index
+     * @returns {string}
+     */
+    static #replyKey(messageSid, index) {
+        return `mms:${messageSid}:${index}`;
+    }
+
+    /**
+     * Save how far the job has got.
+     * @param {import('bullmq').Job} job
+     * @param {{ replies: string[], failed?: boolean }} progress
+     * @returns {Promise<void>}
+     * @throws {ProgressUnsavedError} for BullMQ to retry, rather than abandon
+     * work already done
+     */
+    static async #saveProgress(job, progress) {
+        try {
+            await job.updateData({ ...job.data, progress });
+        } catch (err) {
+            throw new ProgressUnsavedError('Unable to save the MMS progress.', { cause: err });
         }
     }
 
@@ -497,24 +529,35 @@ class MmsService {
             return;
         }
 
+        const progress = job.data.progress ?? {};
         /** @type {string[]} */
-        const replies = [...(job.data.progress?.replies ?? [])];
+        const replies = [...(progress.replies ?? [])];
+
+        /**
+         * A failure an earlier attempt saved goes straight to its apology.
+         * Analyzing the image again could read it this time, and send a
+         * roster after an apology that may already have gone out.
+         */
+        if (progress.failed) {
+            await this.#apologize(messageSid, from);
+
+            return;
+        }
 
         try {
             for (const [index, item] of media.entries()) {
                 if (replies[index] === undefined) {
                     replies[index] = await this.#analyze(item);
-
-                    try {
-                        await job.updateData({ ...job.data, progress: { replies } });
-                    } catch (err) {
-                        throw new ProgressUnsavedError('Unable to save the MMS progress.', {
-                            cause: err,
-                        });
-                    }
+                    await MmsService.#saveProgress(job, { replies });
                 }
 
-                if (!(await this.#reply(replies[index], from, `mms:${messageSid}:${index}`))) {
+                if (
+                    !(await this.#reply(
+                        replies[index],
+                        from,
+                        MmsService.#replyKey(messageSid, index),
+                    ))
+                ) {
                     return;
                 }
             }
@@ -524,6 +567,7 @@ class MmsService {
             }
 
             log.error({ err, from }, 'Failed to process MMS media');
+            await MmsService.#saveProgress(job, { replies, failed: true });
             await this.#apologize(messageSid, from);
         }
     }

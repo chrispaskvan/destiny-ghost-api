@@ -68,6 +68,13 @@ describe('MMS queue', () => {
         expect(defaultJobOptions.removeOnFail.age).toBe(604_800);
     });
 
+    it('should cap kept jobs by count, as each holds its saved replies', () => {
+        const [, { defaultJobOptions }] = mocks.constructorArgs;
+
+        expect(defaultJobOptions.removeOnComplete).toEqual({ age: 86_400, count: 1000 });
+        expect(defaultJobOptions.removeOnFail).toEqual({ age: 604_800, count: 500 });
+    });
+
     /**
      * A reply whose outcome is unknown can be settled only once Twilio has had
      * time to list it. If the job's retries ran out first, the roster would be

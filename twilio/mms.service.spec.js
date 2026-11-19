@@ -21,7 +21,14 @@ import {
  * (#783). Reached through the consent gate's marker read, which finds no
  * marker and leaves the decision to the stored state.
  */
-const { enqueueMms, listen } = vi.hoisted(() => ({ enqueueMms: vi.fn(), listen: vi.fn() }));
+const { enqueueMms, listen, readRecord } = vi.hoisted(() => ({
+    enqueueMms: vi.fn(),
+    listen: vi.fn(),
+    readRecord: vi.fn(),
+}));
+
+/** The record of each reply's send, which the give-up handler reads. */
+vi.mock('../helpers/dispatch-record.js', () => ({ default: { read: readRecord } }));
 
 /** The service registers its worker on construction, and both modules connect on import. */
 vi.mock('../helpers/subscriber.js', () => ({ default: { listen } }));
@@ -107,6 +114,7 @@ beforeEach(() => {
             guard && !(await guard()) ? undefined : sentMessage,
     );
     userService.getConsentByPhoneNumber.mockResolvedValue({ isSubscribed: true });
+    readRecord.mockResolvedValue(null);
     mmsService = new MmsService({ aiService, destiny2Service, notificationService, userService });
     job = jobWith();
 });
@@ -846,6 +854,55 @@ describe('MmsService', () => {
                 expect(notificationService.sendMessage).not.toHaveBeenCalled();
             },
         );
+
+        it('should send no failure reply after giving up with a reply still mid-send', async () => {
+            const [, , { onGiveUp }] = listen.mock.calls[0];
+            const stalled = new Error('job stalled more than allowable limit');
+
+            readRecord.mockImplementation(async claimCheckNumber =>
+                claimCheckNumber === `mms:${messageSid}:1` ? { state: 'attempting' } : null,
+            );
+
+            await onGiveUp({ messageSid, from, media: [image, image] }, {}, job, stalled);
+
+            expect(readRecord).toHaveBeenCalledWith(`mms:${messageSid}:0`, from);
+            expect(readRecord).toHaveBeenCalledWith(`mms:${messageSid}:1`, from);
+            expect(notificationService.sendMessage).not.toHaveBeenCalled();
+        });
+
+        it('should save a permanent failure before apologizing for it', async () => {
+            aiService.getPlayersFromFile.mockRejectedValue(new Error('unreadable'));
+
+            await run({ media: [image] });
+
+            expect(job.updateData).toHaveBeenLastCalledWith({
+                body: '{}',
+                progress: { replies: [], failed: true },
+            });
+            expect(job.updateData.mock.invocationCallOrder.at(-1)).toBeLessThan(
+                notificationService.sendMessage.mock.invocationCallOrder[0],
+            );
+        });
+
+        /**
+         * The apology may have gone out on the attempt that saved the failure.
+         * Analyzing the image again could read it this time, and send a roster
+         * after that apology.
+         */
+        it('should go straight to the apology on a retry after a saved failure', async () => {
+            job = jobWith({ replies: [], failed: true });
+
+            await run({ media: [image] });
+
+            expect(fetch).not.toHaveBeenCalled();
+            expect(aiService.getPlayersFromFile).not.toHaveBeenCalled();
+            expect(notificationService.sendMessage).toHaveBeenCalledExactlyOnceWith(
+                MEDIA_ERROR_REPLY,
+                from,
+                undefined,
+                expect.objectContaining({ claimCheckNumber: `mms:${messageSid}:error` }),
+            );
+        });
 
         it('should leave a failure reply that hits a retryable error to BullMQ', async () => {
             const deferred = new SendDeferredError('Unable to record the send.');

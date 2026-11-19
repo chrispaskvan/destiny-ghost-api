@@ -20,8 +20,9 @@ const DEDUPLICATION_TTL_MS = 86_400_000;
 /**
  * The job is the image's durable record: once added, it is processed by
  * `MmsService`'s worker whether or not the process that acknowledged it
- * survives. Completions are kept a day and failures a week, like the other
- * queues.
+ * survives. Completions are kept a day and failures a week, and each is
+ * capped by count, like the other queues, since a job holds its saved reply
+ * text.
  *
  * Five attempts, as for notifications: a reply whose outcome is unknown can
  * be settled only once Twilio has had time to list it, and retries landing
@@ -39,9 +40,11 @@ const queue = new Queue(QUEUE_NAME, {
         },
         removeOnComplete: {
             age: 86_400,
+            count: 1000,
         },
         removeOnFail: {
             age: 604_800,
+            count: 500,
         },
     },
 });
