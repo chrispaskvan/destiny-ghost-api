@@ -884,6 +884,22 @@ describe('MmsService', () => {
                 expect(notificationService.sendMessage).not.toHaveBeenCalled();
             });
 
+            it("should send no failure reply when a reply's record cannot be read", async () => {
+                const [, , { onGiveUp }] = listen.mock.calls[0];
+
+                readRecord.mockImplementation(async claimCheckNumber => {
+                    if (claimCheckNumber === `mms:${messageSid}:1`) {
+                        throw new Error('Redis timed out');
+                    }
+
+                    return accepted;
+                });
+
+                await onGiveUp({ messageSid, from, media: [image, image] }, {}, job, stalled);
+
+                expect(notificationService.sendMessage).not.toHaveBeenCalled();
+            });
+
             it('should still apologize when an image was left unanswered', async () => {
                 const [, , { onGiveUp }] = listen.mock.calls[0];
 

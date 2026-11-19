@@ -38,6 +38,7 @@ describe('send outcome', () => {
             ['the record is still attempting', new Error('stalled'), { state: 'attempting' }, true],
             ['Twilio took it', new Error('stalled'), { state: 'accepted', sid: 'SM1' }, false],
             ['nothing was attempted', new Error('stalled'), null, false],
+            ['the record could not be read', new Error('stalled'), undefined, false],
         ])('should be %s', (_label, err, record, expected) => {
             expect(outcomeUnknown(err, record)).toBe(expected);
         });
@@ -54,10 +55,17 @@ describe('send outcome', () => {
             expect(read).toHaveBeenCalledWith('cc-1', '+15005550006');
         });
 
-        it('should answer null, and say so, when the record cannot be read', async () => {
-            read.mockRejectedValueOnce(new Error('Redis unavailable'));
+        it('should answer null when there is no record', async () => {
+            read.mockResolvedValueOnce(null);
 
             await expect(recordOfSend('cc-1', '+15005550006')).resolves.toBeNull();
+            expect(log.warn).not.toHaveBeenCalled();
+        });
+
+        it('should answer undefined, and say so, when the record cannot be read', async () => {
+            read.mockRejectedValueOnce(new Error('Redis unavailable'));
+
+            await expect(recordOfSend('cc-1', '+15005550006')).resolves.toBeUndefined();
             expect(log.warn).toHaveBeenCalledOnce();
         });
     });

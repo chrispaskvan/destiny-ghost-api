@@ -21,11 +21,13 @@ const isA = (err, type) =>
     err instanceof type || /** @type {{ name?: unknown }} */ (err)?.name === type.name;
 
 /**
- * The record of a send, for a job BullMQ has given up on. `null` when there
- * is none, or it cannot be read: the last error then decides on its own.
+ * The record of a send, for a job BullMQ has given up on: `null` when there
+ * is none, and `undefined` when it cannot be read. A caller that only asks
+ * about its state treats both alike, leaving the last error to decide; one
+ * that must not act on a guess can tell them apart.
  * @param {string} claimCheckNumber
  * @param {string} phoneNumber
- * @returns {Promise<import('../helpers/dispatch-record.js').DispatchRecord | null>}
+ * @returns {Promise<import('../helpers/dispatch-record.js').DispatchRecord | null | undefined>}
  */
 const recordOfSend = async (claimCheckNumber, phoneNumber) => {
     try {
@@ -36,7 +38,7 @@ const recordOfSend = async (claimCheckNumber, phoneNumber) => {
             'Unable to read the record of the send; going by the last error.',
         );
 
-        return null;
+        return undefined;
     }
 };
 
@@ -46,7 +48,7 @@ const recordOfSend = async (claimCheckNumber, phoneNumber) => {
  * reached Twilio can be followed by one that fails for some other reason, or
  * stalls, before it gets as far as looking.
  * @param {unknown} err - what the last attempt failed with
- * @param {import('../helpers/dispatch-record.js').DispatchRecord | null} record
+ * @param {import('../helpers/dispatch-record.js').DispatchRecord | null | undefined} record
  * @returns {boolean}
  */
 const outcomeUnknown = (err, record) =>

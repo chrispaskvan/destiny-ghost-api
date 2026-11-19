@@ -467,6 +467,20 @@ class MmsService {
         }
 
         /**
+         * A record that cannot be read could hide a reply Twilio took, so
+         * whether this image was answered is unknown too. Silence is the
+         * safer guess: an apology could contradict a roster the sender has.
+         */
+        if (records.some(record => record === undefined)) {
+            log.error(
+                { err, from, messageSid },
+                'Gave up on the MMS unable to read whether its replies were sent; check Twilio.',
+            );
+
+            return;
+        }
+
+        /**
          * Every image answered, and only the job's completion was lost, as
          * when the worker dies after the last reply on every pickup BullMQ
          * allows. An apology would contradict the rosters the sender has.
