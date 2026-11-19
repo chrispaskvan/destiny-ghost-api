@@ -31,19 +31,23 @@ import log from './log.js';
  * @property {string} phoneNumber
  * @property {string} [notificationType] - Omitted for a reply that belongs to
  * no vendor, such as the MMS roster, where only global consent applies.
+ * @property {boolean} [throwIfUnreadable] - Reject with the storage error
+ * instead of suppressing, for a caller that can try again later rather than
+ * lose the work.
  */
 
 /**
  * Whether an alert may still be delivered to this number.
  *
- * Suppresses when consent storage cannot be reached, and when the account has
- * gone: neither can be read as permission, and an unwanted message after a
- * STOP is the one outcome here that cannot be taken back.
+ * Suppresses when consent storage cannot be reached, unless asked to throw,
+ * and when the account has gone: neither can be read as permission, and an
+ * unwanted message after a STOP is the one outcome here that cannot be taken
+ * back.
  *
  * @param {ConsentQuery} query
  * @returns {Promise<boolean>}
  */
-const mayDeliver = async ({ users, phoneNumber, notificationType }) => {
+const mayDeliver = async ({ users, phoneNumber, notificationType, throwIfUnreadable = false }) => {
     let user;
     /** @type {import('./consent-marker.js').ConsentMarker | undefined} */
     let marker;
@@ -67,6 +71,10 @@ const mayDeliver = async ({ users, phoneNumber, notificationType }) => {
             users.getConsentByPhoneNumber(phoneNumber),
         ]);
     } catch (err) {
+        if (throwIfUnreadable) {
+            throw err;
+        }
+
         log.warn(
             { err, phoneNumber, notificationType },
             'Consent could not be read; suppressing the notification.',

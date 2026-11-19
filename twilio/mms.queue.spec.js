@@ -27,6 +27,13 @@ vi.mock('../helpers/jobs.js', () => ({
     default: { host: 'localhost', port: 6379 },
 }));
 
+/**
+ * The shared Redis client connects as it is imported, and the retry-window
+ * check below reaches it by importing the notification service.
+ */
+vi.mock('../helpers/cache.js', () => ({ default: { withCommandOptions: vi.fn() } }));
+vi.mock('../helpers/application-insights.js', () => ({ default: { trackMetric: vi.fn() } }));
+
 const bindings = vi.fn(() => ({ traceId: 'trace-1' }));
 
 vi.mock('../helpers/async-context.js', () => ({
@@ -53,12 +60,35 @@ describe('MMS queue', () => {
         expect(options.connection).toEqual({ host: 'localhost', port: 6379 });
     });
 
-    it('should retry a few times and keep failures for a week', () => {
+    it('should retry five times and keep failures for a week', () => {
         const [, { defaultJobOptions }] = mocks.constructorArgs;
 
-        expect(defaultJobOptions.attempts).toBe(3);
+        expect(defaultJobOptions.attempts).toBe(5);
         expect(defaultJobOptions.backoff).toEqual({ type: 'exponential', delay: 5000 });
         expect(defaultJobOptions.removeOnFail.age).toBe(604_800);
+    });
+
+    /**
+     * A reply whose outcome is unknown can be settled only once Twilio has had
+     * time to list it. If the job's retries ran out first, the roster would be
+     * neither found nor resent.
+     */
+    it('should leave a retry after the longest wait an unsettled reply can need', async () => {
+        const { RECONCILE_AFTER_MS, TWILIO_REQUEST_TIMEOUT_MS } = await import(
+            '../notifications/notification.service.js'
+        );
+        const [, { defaultJobOptions }] = mocks.constructorArgs;
+        const { attempts, backoff } = defaultJobOptions;
+        /** BullMQ's exponential backoff: delay × 2^(retry - 1). */
+        const lastRetryAfterFirstFailure = Array.from(
+            { length: attempts - 1 },
+            (_, retry) => backoff.delay * 2 ** retry,
+        ).reduce((total, delay) => total + delay, 0);
+
+        expect(backoff.type).toBe('exponential');
+        expect(lastRetryAfterFirstFailure).toBeGreaterThan(
+            TWILIO_REQUEST_TIMEOUT_MS + RECONCILE_AFTER_MS,
+        );
     });
 
     it('should deduplicate on the message SID, so a redelivered webhook adds nothing', async () => {

@@ -19,7 +19,9 @@ import mayDeliver from '../helpers/consent.js';
 import log from '../helpers/log.js';
 import { isTransientError, withRetry } from '../helpers/retry.js';
 import subscriber from '../helpers/subscriber.js';
+import ConsentUnavailableError from './consent-unavailable.error.js';
 import { enqueueMms, QUEUE_NAME as MMS_QUEUE } from './mms.queue.js';
+import ProgressUnsavedError from './progress-unsaved.error.js';
 import {
     MAX_MEDIA_BYTES,
     MEDIA_ERROR_REPLY,
@@ -358,6 +360,29 @@ class MmsService {
     }
 
     /**
+     * Whether the sender still consents. A store that cannot be read is not
+     * an opt-out here: the image was acknowledged, so the job waits for the
+     * store to come back rather than finishing without a reply.
+     *
+     * @param {string} from
+     * @returns {Promise<boolean>}
+     * @throws {ConsentUnavailableError} when consent could not be read
+     */
+    async #consents(from) {
+        try {
+            return await mayDeliver({
+                users: this.users,
+                phoneNumber: from,
+                throwIfUnreadable: true,
+            });
+        } catch (err) {
+            throw new ConsentUnavailableError('Consent could not be read; trying again later.', {
+                cause: err,
+            });
+        }
+    }
+
+    /**
      * Send one reply to the sender, at most once per key.
      *
      * The key is a claim check for the record `sendMessage` keeps around the
@@ -377,7 +402,7 @@ class MmsService {
     async #reply(message, from, key) {
         const sent = await this.notifications.sendMessage(message, from, undefined, {
             claimCheckNumber: key,
-            guard: () => mayDeliver({ users: this.users, phoneNumber: from }),
+            guard: () => this.#consents(from),
         });
 
         if (!sent) {
@@ -425,7 +450,7 @@ class MmsService {
          * Before any download, so an image from a number that has opted out
          * since costs neither a download nor an AI call.
          */
-        if (!(await mayDeliver({ users: this.users, phoneNumber: from }))) {
+        if (!(await this.#consents(from))) {
             log.info({ from }, 'Not processing the MMS: consent was withdrawn.');
 
             return;
@@ -438,7 +463,14 @@ class MmsService {
             for (const [index, item] of media.entries()) {
                 if (replies[index] === undefined) {
                     replies[index] = await this.#analyze(item);
-                    await job.updateData({ ...job.data, progress: { replies } });
+
+                    try {
+                        await job.updateData({ ...job.data, progress: { replies } });
+                    } catch (err) {
+                        throw new ProgressUnsavedError('Unable to save the MMS progress.', {
+                            cause: err,
+                        });
+                    }
                 }
 
                 if (!(await this.#reply(replies[index], from, `mms:${messageSid}:${index}`))) {

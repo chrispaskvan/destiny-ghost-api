@@ -3,6 +3,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SendOutcomeUnknownError from '../notifications/send-outcome-unknown.error.js';
+import ConsentUnavailableError from './consent-unavailable.error.js';
+import ProgressUnsavedError from './progress-unsaved.error.js';
 import MmsService from './mms.service.js';
 import {
     MAX_MEDIA_BYTES,
@@ -237,12 +239,39 @@ describe('MmsService', () => {
                 expect(aiService.getPlayersFromFile).toHaveBeenCalledTimes(1);
             });
 
-            it('should withhold when consent storage is unavailable', async () => {
-                userService.getConsentByPhoneNumber.mockRejectedValue(new Error('Cosmos is down'));
+            /**
+             * The image was acknowledged, so a store that cannot be read
+             * must not end the job the way an opt-out does: the job is
+             * retried, and nothing is sent until consent can be confirmed.
+             */
+            it('should leave the job to be retried when consent cannot be read before the reply', async () => {
+                userService.getConsentByPhoneNumber
+                    .mockReset()
+                    .mockResolvedValueOnce({ isSubscribed: true })
+                    .mockRejectedValue(new Error('Cosmos is down'));
 
-                await run({ from, media: [{ contentType: 'image/jpeg', url }] });
+                await expect(
+                    run({ from, media: [{ contentType: 'image/jpeg', url }] }),
+                ).rejects.toBeInstanceOf(ConsentUnavailableError);
+                expect(notificationService.sendMessage).toHaveBeenCalledOnce();
+                expect(notificationService.sendMessage).not.toHaveBeenCalledWith(
+                    MEDIA_ERROR_REPLY,
+                    expect.anything(),
+                    expect.anything(),
+                    expect.anything(),
+                );
+            });
 
-                await expect(guardFromLastSend()()).resolves.toBe(false);
+            it('should leave the job to be retried when consent cannot be read at the start', async () => {
+                userService.getConsentByPhoneNumber
+                    .mockReset()
+                    .mockRejectedValue(new Error('Cosmos is down'));
+
+                await expect(
+                    run({ from, media: [{ contentType: 'image/jpeg', url }] }),
+                ).rejects.toBeInstanceOf(ConsentUnavailableError);
+                expect(aiService.getPlayersFromFile).not.toHaveBeenCalled();
+                expect(notificationService.sendMessage).not.toHaveBeenCalled();
             });
         });
 
@@ -750,6 +779,13 @@ describe('MmsService', () => {
                 `mms:${messageSid}:0`,
                 `mms:${messageSid}:1`,
             ]);
+        });
+
+        it('should leave a failed progress save to BullMQ, sending no failure reply', async () => {
+            job.updateData.mockRejectedValueOnce(new Error('Connection is closed.'));
+
+            await expect(run({ media: [image] })).rejects.toBeInstanceOf(ProgressUnsavedError);
+            expect(notificationService.sendMessage).not.toHaveBeenCalled();
         });
 
         it('should leave a retryable failure to BullMQ, sending no failure reply', async () => {

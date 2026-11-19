@@ -20,14 +20,19 @@ const DEDUPLICATION_TTL_MS = 86_400_000;
 /**
  * The job is the image's durable record: once added, it is processed by
  * `MmsService`'s worker whether or not the process that acknowledged it
- * survives. Retried a few times, as each attempt can hold an AI call, and
- * each attempt resumes from the images already analyzed. Completions are
- * kept a day and failures a week, like the other queues.
+ * survives. Completions are kept a day and failures a week, like the other
+ * queues.
+ *
+ * Five attempts, as for notifications: a reply whose outcome is unknown can
+ * be settled only once Twilio has had time to list it, and retries landing
+ * about 5, 15, 35 and 75 seconds after the first failure leave one after
+ * that. Each attempt resumes from the images already analyzed, so a retry
+ * repeats an AI call only for an image that never got that far.
  */
 const queue = new Queue(QUEUE_NAME, {
     connection: client,
     defaultJobOptions: {
-        attempts: 3,
+        attempts: 5,
         backoff: {
             type: 'exponential',
             delay: 5000,
