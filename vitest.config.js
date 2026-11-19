@@ -16,8 +16,8 @@ export default defineConfig({
             reporter: ['clover', 'html', 'json'],
             thresholds: {
                 autoUpdate: true,
-                statements: 94.24,
-                branches: 88.9,
+                statements: 94.25,
+                branches: 88.91,
                 functions: 93.82,
                 lines: 94.31,
             },

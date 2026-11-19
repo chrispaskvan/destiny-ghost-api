@@ -466,6 +466,17 @@ class MmsService {
             return;
         }
 
+        /**
+         * Every image answered, and only the job's completion was lost, as
+         * when the worker dies after the last reply on every pickup BullMQ
+         * allows. An apology would contradict the rosters the sender has.
+         */
+        if (records.every(record => record?.state === 'accepted')) {
+            log.info({ err, from, messageSid }, 'Gave up on the MMS after every reply was sent.');
+
+            return;
+        }
+
         try {
             await this.#apologize(messageSid, from);
         } catch (sendErr) {

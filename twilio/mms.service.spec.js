@@ -870,6 +870,38 @@ describe('MmsService', () => {
             expect(notificationService.sendMessage).not.toHaveBeenCalled();
         });
 
+        describe('after giving up for stalling', () => {
+            const stalled = new Error('job stalled more than allowable limit');
+            const accepted = { state: 'accepted', sid: 'SM1' };
+
+            it('should send no failure reply once every image was answered', async () => {
+                const [, , { onGiveUp }] = listen.mock.calls[0];
+
+                readRecord.mockResolvedValue(accepted);
+
+                await onGiveUp({ messageSid, from, media: [image, image] }, {}, job, stalled);
+
+                expect(notificationService.sendMessage).not.toHaveBeenCalled();
+            });
+
+            it('should still apologize when an image was left unanswered', async () => {
+                const [, , { onGiveUp }] = listen.mock.calls[0];
+
+                readRecord.mockImplementation(async claimCheckNumber =>
+                    claimCheckNumber === `mms:${messageSid}:0` ? accepted : null,
+                );
+
+                await onGiveUp({ messageSid, from, media: [image, image] }, {}, job, stalled);
+
+                expect(notificationService.sendMessage).toHaveBeenCalledExactlyOnceWith(
+                    MEDIA_ERROR_REPLY,
+                    from,
+                    undefined,
+                    expect.objectContaining({ claimCheckNumber: `mms:${messageSid}:error` }),
+                );
+            });
+        });
+
         it('should save a permanent failure before apologizing for it', async () => {
             aiService.getPlayersFromFile.mockRejectedValue(new Error('unreadable'));
 
