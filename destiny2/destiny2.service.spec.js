@@ -4,6 +4,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Destiny2Service from './destiny2.service.js';
 import DestinyError from '../destiny/destiny.error.js';
+import ResponseError from '../helpers/response.error.js';
+import { isTransientError } from '../helpers/retry.js';
 import mockManifestResponse from '../mocks/manifestResponse.json';
 import mockProfileCharactersResponse from '../mocks/profileCharactersResponse.json';
 import mockPlayerStatisticsResponse from '../mocks/playerStatisticsResponse.json';
@@ -330,6 +332,92 @@ describe('Destiny2Service', () => {
                 await expect(
                     destiny2Service.getProfile(mockUser.membershipId, mockUser.membershipType),
                 ).rejects.toThrow(DestinyError);
+            });
+
+            it('should be retried when Bungie is down for maintenance', async () => {
+                get.mockResolvedValue({
+                    ErrorCode: 5,
+                    ErrorStatus: 'SystemDisabled',
+                    Message: 'This system is temporarily disabled for maintenance.',
+                });
+
+                const err = await destiny2Service
+                    .getProfile(mockUser.membershipId, mockUser.membershipType)
+                    .catch(e => e);
+
+                expect(err).toBeInstanceOf(DestinyError);
+                expect(isTransientError(err)).toBe(true);
+            });
+        });
+
+        /**
+         * Each still reaches callers as a DestinyError, whose message an SMS
+         * reply quotes, but one a notification job retries if the failure
+         * underneath was worth another attempt.
+         */
+        describe('when the request fails', () => {
+            it.each([
+                [
+                    'a 503',
+                    () =>
+                        new ResponseError({
+                            response: { data: '', status: 503, statusText: 'Unavailable' },
+                        }),
+                ],
+                [
+                    'a dropped connection',
+                    () => Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' }),
+                ],
+                ['a failed fetch', () => new TypeError('fetch failed')],
+                [
+                    'an open circuit',
+                    () =>
+                        Object.assign(new Error('Bungie API circuit breaker is open.'), {
+                            code: 'EOPENBREAKER',
+                            retryable: true,
+                        }),
+                ],
+            ])('should retry %s, keeping it as the cause', async (_, make) => {
+                const cause = make();
+
+                get.mockRejectedValue(cause);
+
+                const err = await destiny2Service
+                    .getProfile(mockUser.membershipId, mockUser.membershipType)
+                    .catch(e => e);
+
+                expect(err).toBeInstanceOf(DestinyError);
+                expect(err.message).toBe('Failed to get characters from profile.');
+                expect(err.cause).toBe(cause);
+                expect(isTransientError(err)).toBe(true);
+            });
+
+            it('should not retry a refused request, and keep what Bungie said', async () => {
+                const cause = new ResponseError({
+                    response: {
+                        data: {
+                            ErrorCode: 1601,
+                            ErrorStatus: 'DestinyAccountNotFound',
+                            Message: 'We were unable to find your Destiny account information.',
+                        },
+                        status: 404,
+                        statusText: 'Not Found',
+                    },
+                });
+
+                get.mockRejectedValue(cause);
+
+                const err = await destiny2Service
+                    .getProfile(mockUser.membershipId, mockUser.membershipType)
+                    .catch(e => e);
+
+                expect(err).toMatchObject({
+                    code: 1601,
+                    message: 'We were unable to find your Destiny account information.',
+                    status: 'DestinyAccountNotFound',
+                });
+                expect(err.cause).toBe(cause);
+                expect(isTransientError(err)).toBe(false);
             });
         });
     });

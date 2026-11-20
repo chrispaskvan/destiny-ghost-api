@@ -161,6 +161,8 @@ describe('bungie.request', () => {
             await expect(bungie.get({ url: 'https://example.com/api' })).rejects.toMatchObject({
                 code: 'EOPENBREAKER',
                 message: 'Bungie API circuit breaker is open.',
+                // The circuit closes again, so a job that met it open retries
+                retryable: true,
                 statusCode: StatusCodes.SERVICE_UNAVAILABLE,
             });
             expect(httpGet).toHaveBeenCalledTimes(5);

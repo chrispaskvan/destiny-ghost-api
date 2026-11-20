@@ -153,6 +153,7 @@ describe('Destiny2Router', () => {
                 const req = createRequest({
                     method: 'GET',
                     url: '/inventory',
+                    signal: new AbortController().signal,
                     query: {},
                 });
 
@@ -185,13 +186,14 @@ describe('Destiny2Router', () => {
                     }
                 },
             };
-            const respond = query =>
+            const respond = (query, signal = new AbortController().signal) =>
                 new Promise(resolve => {
                     res.on('end', resolve);
                     destiny2Router(
                         createRequest({
                             method: 'GET',
                             url: '/inventory',
+                            signal,
                             query,
                             headers: configuration.notificationHeaders,
                         }),
@@ -252,6 +254,22 @@ describe('Destiny2Router', () => {
                 expect(res.statusCode).toEqual(StatusCodes.OK);
                 expect(JSON.parse(res._getData())).toEqual(definitions);
             });
+
+            it('should stop streaming once the client leaves', async () => {
+                const controller = new AbortController();
+                const write = res.write.bind(res);
+
+                res.write = vi.fn(chunk => {
+                    write(chunk);
+                    controller.abort();
+
+                    return true;
+                });
+                await respond({}, controller.signal);
+
+                expect(res.write).toHaveBeenCalledOnce();
+                expect(res._getData()).toEqual(JSON.stringify([definitions[0]]).slice(0, -1));
+            });
         });
 
         it('should paginate using the first value when page/size are repeated query parameters', () =>
@@ -265,6 +283,7 @@ describe('Destiny2Router', () => {
                 const req = createRequest({
                     method: 'GET',
                     url: '/inventory',
+                    signal: new AbortController().signal,
                     query: { page: ['1', '2'], size: ['2', '3'] },
                     headers: configuration.notificationHeaders,
                 });
@@ -292,6 +311,7 @@ describe('Destiny2Router', () => {
                 const req = createRequest({
                     method: 'GET',
                     url: '/inventory',
+                    signal: new AbortController().signal,
                     query: {},
                     headers: configuration.notificationHeaders,
                 });
@@ -342,6 +362,7 @@ describe('Destiny2Router', () => {
                 const req = createRequest({
                     method: 'GET',
                     url: '/inventory',
+                    signal: new AbortController().signal,
                     query: {},
                     headers: configuration.notificationHeaders,
                 });
@@ -399,6 +420,7 @@ describe('Destiny2Router', () => {
                 const req = createRequest({
                     method: 'GET',
                     url: '/inventory',
+                    signal: new AbortController().signal,
                     query: {},
                     headers: configuration.notificationHeaders,
                 });
@@ -452,6 +474,7 @@ describe('Destiny2Router', () => {
                 const req = createRequest({
                     method: 'GET',
                     url: '/inventory',
+                    signal: new AbortController().signal,
                     query: {},
                     headers: configuration.notificationHeaders,
                 });
@@ -524,6 +547,7 @@ describe('Destiny2Router', () => {
                 const req = createRequest({
                     method: 'GET',
                     url: '/inventory',
+                    signal: new AbortController().signal,
                     query: {},
                     headers: configuration.notificationHeaders,
                 });

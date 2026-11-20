@@ -1336,6 +1336,49 @@ describe('NotificationController', () => {
                 expect(ClaimCheck.advance).not.toHaveBeenCalled();
             });
 
+            /**
+             * What the Destiny 2 service actually throws when Bungie is down:
+             * a DestinyError, which the job must retry rather than give up on.
+             */
+            it.each([
+                [
+                    'getProfile',
+                    'during maintenance',
+                    () => new DestinyError(5, 'Down', 'SystemDisabled'),
+                ],
+                [
+                    'getProfile',
+                    'during an outage',
+                    () => new DestinyError(-1, 'Failed', '', { retryable: true }),
+                ],
+                [
+                    'getXur',
+                    'during maintenance',
+                    () => new DestinyError(5, 'Down', 'SystemDisabled'),
+                ],
+            ])(
+                'should re-throw a %s DestinyError %s, for BullMQ to retry',
+                async (method, _, make) => {
+                    const err = make();
+                    const actual = await vi.importActual('../helpers/retry.js');
+
+                    isTransientError.mockImplementation(actual.isTransientError);
+                    authenticationService.authenticate.mockResolvedValue({
+                        bungie: { access_token: accessToken },
+                    });
+                    destinyService.getProfile.mockResolvedValue([mockCharacter]);
+                    destinyService[method].mockRejectedValue(err);
+
+                    await expect(
+                        sendMethod(mockUser, {
+                            claimCheckNumber,
+                            notificationType: notificationTypes.Xur,
+                        }),
+                    ).rejects.toBe(err);
+                    expect(notificationService.sendMessage).not.toHaveBeenCalled();
+                },
+            );
+
             it('should re-throw transient getXur error for BullMQ retry', async () => {
                 const transientError = new Error('Service Unavailable');
                 transientError.status = 503;

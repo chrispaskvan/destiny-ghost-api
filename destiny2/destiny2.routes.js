@@ -208,14 +208,6 @@ const routes = ({ authenticationController, destiny2Controller }) => {
      *          description: Returns the complete Destiny 2 item inventory.
      */
     destiny2Router.route('/inventory').get(authorizeUser, async (req, res) => {
-        let aborted = false;
-
-        req.on('close', () => {
-            if (!res.writableEnded) {
-                aborted = true;
-            }
-        });
-
         const items = await destiny2Controller.getInventory();
 
         if (!items?.length) {
@@ -245,7 +237,8 @@ const routes = ({ authenticationController, destiny2Controller }) => {
 
             // An array, or a ManifestTable reading the manifest a batch at a time
             for await (const [index, item] of items.entries()) {
-                if (aborted) {
+                // Aborts only when the client leaves before the response ends
+                if (req.signal.aborted) {
                     log.info(
                         `${req.method} ${req.url} request aborted at item ${index} of ${items.length}`,
                     );
