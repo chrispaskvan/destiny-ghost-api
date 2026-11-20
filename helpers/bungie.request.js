@@ -82,12 +82,17 @@ async function fire(fn, ...args) {
     try {
         return await breaker.fire(fn, ...args);
     } catch (err) {
-        /** @type {Error & { code?: string, statusCode?: number }} */
+        /** @type {Error & { code?: string, statusCode?: number, retryable?: boolean }} */
         const typedErr = /** @type {*} */ (err);
 
         if (typedErr.code === 'EOPENBREAKER') {
             typedErr.message = 'Bungie API circuit breaker is open.';
             typedErr.statusCode = StatusCodes.SERVICE_UNAVAILABLE;
+            /**
+             * The circuit closes again once Bungie answers, so a job that
+             * met it open should try again later rather than give up.
+             */
+            typedErr.retryable = true;
         }
 
         throw typedErr;

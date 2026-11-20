@@ -14,6 +14,7 @@ import DestinyError from '../destiny/destiny.error.js';
 import DestinyService from '../destiny/destiny.service.js';
 import configuration from '../helpers/config.js';
 import log from '../helpers/log.js';
+import { isTransientError } from '../helpers/retry.js';
 import { strangeGearOffersHash } from './destiny2.constants.js';
 import { get, post } from '../helpers/bungie.request.js';
 
@@ -245,7 +246,16 @@ class Destiny2Service extends DestinyService {
                     err
                 );
 
-            throw new DestinyError(code ?? -1, message, status ?? '');
+            /**
+             * Still a DestinyError, so an SMS reply keeps quoting its message,
+             * but one that keeps whether the failure underneath was worth
+             * another attempt - an outage, a dropped connection, an open
+             * circuit - so a notification job retries it.
+             */
+            throw new DestinyError(code ?? -1, message, status ?? '', {
+                cause: err,
+                retryable: err instanceof Error && isTransientError(err),
+            });
         }
     }
 
