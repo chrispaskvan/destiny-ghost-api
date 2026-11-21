@@ -9,6 +9,7 @@ import ClaimCheck from '../helpers/claim-check.js';
 import getShortUrl from '../helpers/bitly.js';
 import log from '../helpers/log.js';
 import DestinyError from '../destiny/destiny.error.js';
+import { getXurWeapons } from '../destiny2/xur-inventory.js';
 import { extractEmoji, normalizeEmoji, parseReaction, toKeyword } from '../helpers/emoji.js';
 import { withRetry, isTransientError } from '../helpers/retry.js';
 import { recordConsent } from '../helpers/consent-marker.js';
@@ -302,26 +303,16 @@ class TwilioController {
             const { bungie, membershipId, membershipType } = authenticatedUser;
             const { access_token: accessToken } =
                 /** @type {NonNullable<UserDocument['bungie']>} */ (bungie);
-            const characters = await this.destiny.getProfile(membershipId, membershipType);
-
-            if (characters?.length) {
-                const itemHashes = await this.destiny.getXur(
+            const weapons = await getXurWeapons(
+                { destiny: this.destiny, world: this.world },
+                {
                     membershipId,
                     membershipType,
-                    characters[0].characterId,
-                    /** @type {string} */ (accessToken),
-                );
-                const weaponCategory = await this.world.getWeaponCategory();
-                const items = /** @type {ItemDefinition[]} */ (
-                    (
-                        await Promise.all(
-                            itemHashes.map(itemHash => this.world.getItemByHash(itemHash)),
-                        )
-                    ).filter(Boolean)
-                );
-                const weapons = items.filter(({ itemCategoryHashes = [] }) =>
-                    itemCategoryHashes.includes(weaponCategory),
-                );
+                    accessToken: /** @type {string} */ (accessToken),
+                },
+            );
+
+            if (weapons) {
                 const result = weapons
                     .reduce(
                         (memo, { displayProperties }) =>

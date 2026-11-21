@@ -6,6 +6,7 @@
  * @author Chris Paskvan
  */
 import DestinyController from '../destiny/destiny.controller.js';
+import { getXurInventory } from './xur-inventory.js';
 
 /** @typedef {import('./destiny2.cache.js').Destiny2Character} Destiny2Character */
 
@@ -104,7 +105,7 @@ class Destiny2Controller extends DestinyController {
      * @param {string} displayName - The display name of the user.
      * @param {number} membershipType - The membership type of the user.
      * @param {string} [characterId] - The character ID to use (optional).
-     * @returns {Promise<Array<import('../helpers/world2.js').ItemDefinition | undefined> | number[] | undefined>}
+     * @returns {Promise<import('../helpers/world2.js').ItemDefinition[] | undefined>}
      */
     async getXur(displayName, membershipType, characterId) {
         const currentUser = await this.users.getUserByDisplayName(displayName, membershipType);
@@ -117,31 +118,11 @@ class Destiny2Controller extends DestinyController {
             bungie: { access_token: accessToken },
             membershipId,
         } = currentUser;
-        const characters = await this.destiny.getProfile(membershipId, membershipType);
 
-        if (characters?.length) {
-            const itemHashes = await this.destiny.getXur(
-                membershipId,
-                membershipType,
-                characterId || characters[0].characterId,
-                accessToken,
-            );
-
-            if (!itemHashes.length) {
-                return itemHashes;
-            }
-
-            const items = await Promise.all(
-                itemHashes.map(
-                    async (/** @type {number} */ itemHash) =>
-                        await this.world.getItemByHash(itemHash),
-                ),
-            );
-
-            return items;
-        }
-
-        return undefined;
+        return getXurInventory(
+            { destiny: this.destiny, world: this.world },
+            { membershipId, membershipType, accessToken, characterId },
+        );
     }
 }
 
