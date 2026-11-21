@@ -29,11 +29,11 @@ class UserCache {
     }
 
     /**
-     * @param {...(string | number)} teeth
+     * @param {...(string | number)} segments
      * @returns {string}
      */
-    static #getCacheKey(...teeth) {
-        return teeth.join('|');
+    static #getCacheKey(...segments) {
+        return segments.join('|');
     }
 
     /**
@@ -51,29 +51,18 @@ class UserCache {
      * @returns {Promise<[number | void, number | void, number | void]>}
      */
     deleteUser({ displayName, emailAddress, membershipType, phoneNumber }) {
-        let promise1;
-        let promise2;
-        let promise3;
+        const byPhoneNumber = phoneNumber
+            ? this.#deleteCache(UserCache.#getCacheKey(phoneNumber))
+            : Promise.resolve();
+        const byDisplayName =
+            displayName && membershipType
+                ? this.#deleteCache(UserCache.#getCacheKey(displayName, membershipType))
+                : Promise.resolve();
+        const byEmailAddress = emailAddress
+            ? this.#deleteCache(UserCache.#getCacheKey(emailAddress))
+            : Promise.resolve();
 
-        if (phoneNumber) {
-            promise1 = this.#deleteCache(UserCache.#getCacheKey(phoneNumber));
-        } else {
-            promise1 = Promise.resolve();
-        }
-
-        if (displayName && membershipType) {
-            promise2 = this.#deleteCache(UserCache.#getCacheKey(displayName, membershipType));
-        } else {
-            promise2 = Promise.resolve();
-        }
-
-        if (emailAddress) {
-            promise3 = this.#deleteCache(UserCache.#getCacheKey(emailAddress));
-        } else {
-            promise3 = Promise.resolve();
-        }
-
-        return Promise.all([promise1, promise2, promise3]);
+        return Promise.all([byPhoneNumber, byDisplayName, byEmailAddress]);
     }
 
     /**
@@ -90,11 +79,11 @@ class UserCache {
     /**
      * Get cached user by one or more cache-key segments (displayName+membershipType,
      * phoneNumber, or emailAddress). Follows pointer keys back to the full user record.
-     * @param {...(string | number)} teeth
+     * @param {...(string | number)} segments
      * @returns {Promise<Record<string, unknown> | undefined>}
      */
-    async getUser(...teeth) {
-        const key = UserCache.#getCacheKey(...teeth);
+    async getUser(...segments) {
+        const key = UserCache.#getCacheKey(...segments);
 
         const user = await this.getCache(key);
         if (user) {

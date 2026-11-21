@@ -181,8 +181,8 @@ class AuthenticationService {
         // surfaced whatever came back; both reach the client as a 500, so failing
         // here only trades an opaque remote error for a clear local one.
         if (!refreshToken) {
-            // The handler returns `message` verbatim to the client, so the
-            // field-level detail stays in the log.
+            // The message goes only to the log (the handler replies with the
+            // status's reason phrase), so the warning carries the user's id.
             log.warn(
                 { userId: user.id },
                 'Stored Bungie token has no refresh_token; cannot refresh.',

@@ -52,7 +52,7 @@ describe('bungie.request', () => {
 
         for (let i = 0; i < 5; i++) {
             await expect(bungie.get({ url: 'https://example.com/api' })).rejects.toMatchObject({
-                name: 'RequestError',
+                name: 'ResponseError',
             });
         }
     }
@@ -213,7 +213,7 @@ describe('bungie.request', () => {
             await vi.advanceTimersByTimeAsync(30000);
 
             await expect(bungie.get({ url: 'https://example.com/api' })).rejects.toMatchObject({
-                name: 'RequestError',
+                name: 'ResponseError',
             });
             expect(breaker.opened).toBe(true);
 
