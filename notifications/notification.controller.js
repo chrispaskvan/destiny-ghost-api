@@ -8,6 +8,7 @@ import NotificationError from './notification.error.js';
 import notificationTypes, { isSupportedNotificationType } from './notification.types.js';
 import DestinyError from '../destiny/destiny.error.js';
 import XurUnavailableError from './xur-unavailable.error.js';
+import { getXurWeapons } from '../destiny2/xur-inventory.js';
 import { isA, outcomeUnknown, recordOfSend } from './send-outcome.js';
 import ClaimCheck, { DUPLICATE, ERROR, SKIPPED } from '../helpers/claim-check.js';
 import mayDeliver from '../helpers/consent.js';
@@ -338,50 +339,32 @@ class NotificationController {
                     membershipId: liveMembershipId = membershipId,
                     membershipType: liveMembershipType = membershipType,
                 } = authenticatedUser;
-                const characters = await this.destiny.getProfile(
-                    liveMembershipId,
-                    liveMembershipType,
-                );
+                let weapons;
 
-                if (characters?.length) {
-                    let itemHashes;
-
-                    try {
-                        itemHashes = await this.destiny.getXur(
-                            liveMembershipId,
-                            liveMembershipType,
-                            characters[0].characterId,
+                try {
+                    weapons = await getXurWeapons(
+                        { destiny: this.destiny, world: this.world },
+                        {
+                            membershipId: liveMembershipId,
+                            membershipType: liveMembershipType,
                             accessToken,
-                        );
-                    } catch (xurErr) {
-                        if (xurErr instanceof Error && isTransientError(xurErr)) throw xurErr;
-                        if (
-                            xurErr instanceof DestinyError &&
-                            xurErr.status === 'DestinyVendorNotFound'
-                        ) {
-                            throw new XurUnavailableError(xurErr.code, xurErr.message, {
-                                cause: xurErr,
-                            });
-                        }
-                        throw xurErr;
-                    }
-
-                    const weaponCategory = await this.world.getWeaponCategory();
-                    const items = (
-                        await Promise.all(
-                            itemHashes.map(
-                                /** @param {number} itemHash */
-                                itemHash => this.world.getItemByHash(itemHash),
-                            ),
-                        )
-                    ).filter(
-                        /** @returns {item is import('../helpers/world2.js').ItemDefinition} */
-                        item => Boolean(item),
+                        },
                     );
-                    const message = items
-                        .filter(({ itemCategoryHashes = [] }) =>
-                            itemCategoryHashes.includes(weaponCategory),
-                        )
+                } catch (xurErr) {
+                    if (xurErr instanceof Error && isTransientError(xurErr)) throw xurErr;
+                    if (
+                        xurErr instanceof DestinyError &&
+                        xurErr.status === 'DestinyVendorNotFound'
+                    ) {
+                        throw new XurUnavailableError(xurErr.code, xurErr.message, {
+                            cause: xurErr,
+                        });
+                    }
+                    throw xurErr;
+                }
+
+                if (weapons) {
+                    const message = weapons
                         .map(({ displayProperties: { name } = {} }) => name)
                         .join('\n');
                     /**
