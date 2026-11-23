@@ -63,8 +63,50 @@ const spend = async (limiter, key) => {
 };
 
 /**
+ * Give back a destination's point, for a text the service cap then withheld.
+ * Without it, a number asking during a saturated hour would spend its whole
+ * day's share on texts it never got, and stay locked out once the hour had
+ * passed. Best effort: failing to refund only leaves the point spent.
+ * @param {string} key
+ * @returns {Promise<void>}
+ */
+const refund = key =>
+    perDestination.reward(key, 1).then(
+        () => undefined,
+        err => log.warn({ err }, "Unable to refund a destination's verification point."),
+    );
+
+/**
+ * The bucket an email address is charged to: the mailbox it delivers to, as
+ * far as the address can tell, so aliases of one inbox share its share. Only
+ * a key; the message still goes to the address as given.
+ *
+ * A `+tag` is dropped for every domain: subaddressing is how Gmail, Outlook,
+ * iCloud and Fastmail all spell an alias of one mailbox, and the rare provider
+ * that treats `+` as part of a distinct name only has two people share five a
+ * day. Dots are dropped for Gmail alone, the provider that ignores them, and
+ * googlemail.com is the same domain.
+ * @param {string} address - validated as an email address at sign-up
+ * @returns {string}
+ */
+const mailboxOf = address => {
+    const at = address.lastIndexOf('@');
+    const domain = address.slice(at + 1).toLowerCase();
+    const name = address.slice(0, at).toLowerCase();
+    const untagged = name.split('+')[0] || name;
+
+    return ['gmail.com', 'googlemail.com'].includes(domain)
+        ? `${untagged.replaceAll('.', '')}@gmail.com`
+        : `${untagged}@${domain}`;
+};
+
+/**
  * Whether one more verification message may go to `destination`, spending
  * its share of the limits when it may.
+ *
+ * The destination is charged first, so a flood at one number or address
+ * spends its own share and none of the service's. A text the service cap then
+ * withholds gets the destination's point back.
  *
  * Fails closed, unlike the route limits: what it guards is billed, the
  * caller has had its answer whatever happens here, and a sign-up whose
@@ -81,8 +123,10 @@ const allowVerification = async (channel, destination) => {
         return false;
     }
 
+    const key = `${channel}:${channel === 'email' ? mailboxOf(destination) : destination}`;
+
     try {
-        if (!(await spend(perDestination, `${channel}:${destination.toLowerCase()}`))) {
+        if (!(await spend(perDestination, key))) {
             log.warn(
                 { channel, limit: PER_DESTINATION_PER_DAY },
                 'Verification message withheld: its destination has had its share for the day.',
@@ -90,22 +134,32 @@ const allowVerification = async (channel, destination) => {
 
             return false;
         }
-
-        if (channel === 'phone' && !(await spend(allTexts, 'all'))) {
-            log.error(
-                { limit: TEXTS_PER_HOUR },
-                "Verification text withheld: the service's hourly limit is spent.",
-            );
-
-            return false;
-        }
-
-        return true;
     } catch (err) {
         log.error({ err, channel }, 'Unable to check the verification limits; withholding it.');
 
         return false;
     }
+
+    if (channel === 'email') {
+        return true;
+    }
+
+    try {
+        if (await spend(allTexts, 'all')) {
+            return true;
+        }
+
+        log.error(
+            { limit: TEXTS_PER_HOUR },
+            "Verification text withheld: the service's hourly limit is spent.",
+        );
+    } catch (err) {
+        log.error({ err, channel }, 'Unable to check the verification limits; withholding it.');
+    }
+
+    await refund(key);
+
+    return false;
 };
 
 export default allowVerification;
