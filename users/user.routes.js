@@ -481,7 +481,9 @@ const routes = ({
      *            contact this way, and keeps its current contact until then. Signing up again
      *            sends new codes on both channels and replaces the earlier ones. A phone number
      *            or email address receives at most five verification messages a day, from
-     *            any account; one over that is not sent. The answer comes once the sign-up is
+     *            any account; one over that is not sent. A text is also not sent while the
+     *            service is at its hourly limit for verification texts; resend it after the
+     *            hour. The answer comes once the sign-up is
      *            queued, before any of this is checked or sent, so its timing discloses
      *            nothing either; the messages follow shortly.
      *        403:
@@ -594,8 +596,9 @@ const routes = ({
      *           No Content. Returned whether or not there was a pending sign-up to resend,
      *           and whether or not the message could be sent, so a conflict at sign-up is
      *           not disclosed. Answered once the resend is queued, before any of this is
-     *           checked, so its timing discloses nothing either. If nothing arrives, sign
-     *           up again.
+     *           checked, so its timing discloses nothing either. A text is not sent while
+     *           the service is at its hourly limit for verification texts. If nothing
+     *           arrives, try again after the hour, or sign up again.
      *       400:
      *         description: Bad Request. The channel is missing or not "email" or "phone".
      *       403:
