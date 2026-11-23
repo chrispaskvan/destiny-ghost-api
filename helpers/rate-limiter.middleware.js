@@ -2,7 +2,7 @@
 import { StatusCodes } from 'http-status-codes';
 import { RateLimiterRedis, RateLimiterRes } from 'rate-limiter-flexible';
 import client from './cache.js';
-import clientIp from './client-ip.js';
+import clientIp, { clientNetwork } from './client-ip.js';
 
 // rate-limiter-flexible picks its node-redis code path by the client's class name (`Commander`),
 // which node-redis v6 no longer uses. Without `useRedisPackage` every consume throws, and
@@ -301,13 +301,14 @@ const perChannel = limiter => (req, res, next) =>
 const resendRateLimiterMiddleware = perChannel(resendLimiter);
 
 /**
- * Limit sign-ups and resends together per client address.
+ * Limit sign-ups and resends together per client network: an IPv4 address
+ * or an IPv6 /64.
  * @param {import('express').Request} req
  * @param {import('express').Response} res
  * @param {import('express').NextFunction} next
  */
 const signUpNetworkRateLimiterMiddleware = (req, res, next) =>
-    consumePoints(signUpNetworkLimiter, clientIp(req), 1, res, next);
+    consumePoints(signUpNetworkLimiter, clientNetwork(req), 1, res, next);
 
 export default rateLimiterMiddleware;
 export {

@@ -137,6 +137,19 @@ describe('verification limits', () => {
         expect(next).toHaveBeenCalledTimes(2);
     });
 
+    it('charges every address in an IPv6 /64 to one bucket', async () => {
+        networkConsume.mockResolvedValue({ remainingPoints: 19, msBeforeNext: 1000 });
+
+        for (const ip of ['2001:db8:0:1::1', '2001:db8:0:1::2']) {
+            await signUpNetworkRateLimiterMiddleware({ ...req, ip }, res, next);
+        }
+
+        expect(networkConsume.mock.calls).toEqual([
+            ['2001:db8:0:1::/64', 1],
+            ['2001:db8:0:1::/64', 1],
+        ]);
+    });
+
     it("answers 429 with Retry-After once the network's hour is spent", async () => {
         networkConsume.mockRejectedValueOnce(new MockRateLimiterRes(0, 1_200_000));
 
