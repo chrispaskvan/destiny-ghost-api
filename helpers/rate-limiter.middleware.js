@@ -62,6 +62,19 @@ const resendLimiter = new RateLimiterRedis({
     duration: 15 * 60,
 });
 /**
+ * Sign-ups and resends from one network, whichever accounts send them. The
+ * per-account limits alone let a sender multiply its share by the Bungie
+ * accounts it can make; this one bucket, shared by both endpoints, doesn't
+ * grow with them. Roomy enough for a household or a campus behind one
+ * address.
+ */
+const signUpNetworkLimiter = new RateLimiterRedis({
+    ...store,
+    keyPrefix: 'sign-up-network',
+    points: 20,
+    duration: 60 * 60,
+});
+/**
  * @param {import('rate-limiter-flexible').RateLimiterRes} rateLimiterRes
  * @param {import('express').Response} res
  * @param {number} limit
@@ -287,6 +300,15 @@ const perChannel = limiter => (req, res, next) =>
 /** Limit sign-up resends per account and channel. */
 const resendRateLimiterMiddleware = perChannel(resendLimiter);
 
+/**
+ * Limit sign-ups and resends together per client address.
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ */
+const signUpNetworkRateLimiterMiddleware = (req, res, next) =>
+    consumePoints(signUpNetworkLimiter, clientIp(req), 1, res, next);
+
 export default rateLimiterMiddleware;
 export {
     twilioRateLimiterMiddleware,
@@ -296,5 +318,6 @@ export {
     twilioPreflightMiddleware,
     rejectTwilioRequest,
     signUpRateLimiterMiddleware,
+    signUpNetworkRateLimiterMiddleware,
     resendRateLimiterMiddleware,
 };

@@ -11,6 +11,7 @@ const {
     invalidGet,
     signUpConsume,
     resendConsume,
+    networkConsume,
     MockRateLimiterRes,
     limiterOptions,
 } = vi.hoisted(() => ({
@@ -25,6 +26,7 @@ const {
     invalidGet: vi.fn(),
     signUpConsume: vi.fn(),
     resendConsume: vi.fn(),
+    networkConsume: vi.fn(),
     MockRateLimiterRes: class RateLimiterRes {
         constructor(remainingPoints, msBeforeNext) {
             this.remainingPoints = remainingPoints;
@@ -48,6 +50,7 @@ vi.mock('rate-limiter-flexible', () => ({
                 'twilio-invalid': invalidConsume,
                 'sign-up': signUpConsume,
                 'sign-up-resend': resendConsume,
+                'sign-up-network': networkConsume,
             }[keyPrefix];
             this.get = invalidGet;
         }
@@ -67,6 +70,7 @@ import rateLimiterMiddleware, {
     twilioPreflightMiddleware,
     rejectTwilioRequest,
     signUpRateLimiterMiddleware,
+    signUpNetworkRateLimiterMiddleware,
     resendRateLimiterMiddleware,
 } from './rate-limiter.middleware.js';
 
@@ -81,6 +85,7 @@ describe('rate limiter store', () => {
             'twilio-invalid',
             'sign-up',
             'sign-up-resend',
+            'sign-up-network',
         ]);
         for (const options of limiterOptions) {
             expect(options).toMatchObject({ storeClient: cache, useRedisPackage: true });
@@ -108,6 +113,38 @@ describe('verification limits', () => {
     it('allows 5 sign-ups an hour and 3 resends per channel per 15 minutes', () => {
         expect(limits('sign-up')).toMatchObject({ points: 5, duration: 60 * 60 });
         expect(limits('sign-up-resend')).toMatchObject({ points: 3, duration: 15 * 60 });
+    });
+
+    it('allows 20 sign-ups and resends together an hour from one network', () => {
+        expect(limits('sign-up-network')).toMatchObject({ points: 20, duration: 60 * 60 });
+    });
+
+    it('charges sign-ups from different accounts to their shared address', async () => {
+        networkConsume.mockResolvedValue({ remainingPoints: 19, msBeforeNext: 1000 });
+
+        for (const displayName of ['Ada', 'Grace']) {
+            await signUpNetworkRateLimiterMiddleware(
+                { ...req, ip: '203.0.113.7:51234', session: { displayName, membershipType: 2 } },
+                res,
+                next,
+            );
+        }
+
+        expect(networkConsume.mock.calls).toEqual([
+            ['203.0.113.7', 1],
+            ['203.0.113.7', 1],
+        ]);
+        expect(next).toHaveBeenCalledTimes(2);
+    });
+
+    it("answers 429 with Retry-After once the network's hour is spent", async () => {
+        networkConsume.mockRejectedValueOnce(new MockRateLimiterRes(0, 1_200_000));
+
+        await signUpNetworkRateLimiterMiddleware(req, res, next);
+
+        expect(res.set).toHaveBeenCalledWith('Retry-After', '1200');
+        expect(res.status).toHaveBeenCalledWith(StatusCodes.TOO_MANY_REQUESTS);
+        expect(next).not.toHaveBeenCalled();
     });
 
     it('charges a sign-up to the session account', async () => {

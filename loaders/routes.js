@@ -40,8 +40,10 @@ import root from '../graphql/root.js';
 import pool from '../helpers/pool.js';
 import McpRouter from '../mcp/mcp.routes.js';
 import { readConsent } from '../helpers/consent-marker.js';
+import allowVerification from '../helpers/verification-limits.js';
 import rateLimiterMiddleware, {
     resendRateLimiterMiddleware,
+    signUpNetworkRateLimiterMiddleware,
     signUpRateLimiterMiddleware,
 } from '../helpers/rate-limiter.middleware.js';
 
@@ -164,10 +166,12 @@ export default () => {
     routes.use('/notifications', notificationRouter);
 
     const userRouter = UserRouter({
+        allowVerification,
         authenticationController,
         destinyService,
         notificationService,
         rateLimiters: {
+            network: signUpNetworkRateLimiterMiddleware,
             signUp: signUpRateLimiterMiddleware,
             resend: resendRateLimiterMiddleware,
         },
