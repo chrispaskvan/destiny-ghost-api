@@ -61,6 +61,8 @@ const notificationService = {
     sendMessage: vi.fn().mockResolvedValue(),
 };
 const readConsent = vi.fn().mockResolvedValue(undefined);
+/** Every message is within its limits unless a test says otherwise. */
+const allowVerification = vi.fn().mockResolvedValue(true);
 const userService = {
     createAnonymousUser: vi.fn().mockImplementation(user => Promise.resolve(user)),
     deleteUserMessages: vi.fn().mockResolvedValue(),
@@ -86,6 +88,7 @@ let userController;
 
 beforeEach(() => {
     userController = new UserController({
+        allowVerification,
         readConsent,
         destinyService,
         notificationService,
@@ -880,6 +883,70 @@ describe('UserController', () => {
             userService.getUserByPhoneNumber.mockReset();
         });
 
+        describe('when a verification message is over its limits', () => {
+            beforeEach(() => {
+                userService.getUserByDisplayName.mockResolvedValue(anonymous);
+            });
+
+            afterEach(() => {
+                allowVerification.mockReset().mockResolvedValue(true);
+            });
+
+            it('should check each message against its own destination', async () => {
+                await signUp();
+
+                expect(allowVerification).toHaveBeenCalledWith('phone', `+1${phoneNumber}`);
+                expect(allowVerification).toHaveBeenCalledWith('email', contact.emailAddress);
+            });
+
+            it.each([
+                [
+                    'phone',
+                    () => notificationService.sendMessage,
+                    () => userController.postmaster.register,
+                ],
+                [
+                    'email',
+                    () => userController.postmaster.register,
+                    () => notificationService.sendMessage,
+                ],
+            ])(
+                'should withhold the %s message and still send the other',
+                async (withheld, withheldSender, otherSender) => {
+                    allowVerification.mockImplementation(async channel => channel !== withheld);
+
+                    await expect(signUp()).resolves.toEqual({ undelivered: [withheld] });
+
+                    expect(withheldSender()).not.toHaveBeenCalled();
+                    expect(otherSender()).toHaveBeenCalled();
+                    /** Withheld isn't failed: the limits logged why. */
+                    expect(logError).not.toHaveBeenCalledWith(
+                        expect.anything(),
+                        'Failed to send a sign-up verification message.',
+                    );
+                },
+            );
+
+            it('should keep the saved codes when both are withheld', async () => {
+                allowVerification.mockResolvedValue(false);
+
+                await expect(signUp()).resolves.toEqual({ undelivered: ['phone', 'email'] });
+
+                expect(notificationService.sendMessage).not.toHaveBeenCalled();
+                expect(userController.postmaster.register).not.toHaveBeenCalled();
+                /** Saved before sending, as always; a resend can still deliver them. */
+                expect(userService.updateAnonymousUser).toHaveBeenCalledTimes(1);
+            });
+
+            it('should spend nothing on a conflict', async () => {
+                userService.getUserByPhoneNumber.mockResolvedValue(registeredElsewhere);
+
+                await signUp();
+
+                expect(allowVerification).not.toHaveBeenCalled();
+            });
+        });
+
         describe('when the account is not registered', () => {
             beforeEach(() => {
                 userService.getUserByDisplayName.mockResolvedValue(anonymous);
@@ -1332,12 +1399,27 @@ describe('UserController', () => {
             expect(
                 () =>
                     new UserController({
+                        allowVerification,
                         destinyService,
                         notificationService,
                         userService,
                         worldRepository,
                     }),
             ).toThrow(new TypeError('readConsent is required'));
+        });
+
+        it('should not construct without the verification limits', () => {
+            /** Without them, verification messages go wherever sign-up points them. */
+            expect(
+                () =>
+                    new UserController({
+                        destinyService,
+                        notificationService,
+                        readConsent,
+                        userService,
+                        worldRepository,
+                    }),
+            ).toThrow(new TypeError('allowVerification is required'));
         });
     });
 
@@ -1451,6 +1533,7 @@ describe('UserController', () => {
             subscriber.listen.mockClear();
 
             const controller = new UserController({
+                allowVerification,
                 readConsent,
                 destinyService,
                 notificationService,
@@ -1471,6 +1554,7 @@ describe('UserController', () => {
             subscriber.listen.mockClear();
 
             await new UserController({
+                allowVerification,
                 readConsent,
                 destinyService,
                 notificationService,
@@ -1557,6 +1641,32 @@ describe('UserController', () => {
                 displayName,
                 membershipType,
                 true,
+            );
+        });
+
+        it.each([
+            ['phone', `+1${phoneNumber}`],
+            ['email', 'ada@example.com'],
+        ])('should check a %s resend against its pending destination', async (channel, to) => {
+            await resend(channel);
+
+            expect(allowVerification).toHaveBeenCalledWith(channel, to);
+        });
+
+        it.each([
+            ['phone', () => notificationService.sendMessage],
+            ['email', () => userController.postmaster.register],
+        ])('should not resend a %s message over its limits', async (channel, sender) => {
+            allowVerification.mockResolvedValueOnce(false);
+
+            await resend(channel);
+
+            expect(sender()).not.toHaveBeenCalled();
+            expect(stored.membership.message).toEqual({ sid: 'SM-original' });
+            expect(logError).not.toHaveBeenCalled();
+            expect(logInfo).toHaveBeenCalledWith(
+                { displayName, membershipType, channel },
+                'Verification message not resent: over its limit.',
             );
         });
 
@@ -1934,6 +2044,7 @@ describe('UserController.signIn against the real Destiny and User services', () 
         vi.clearAllMocks();
 
         controller = new UserController({
+            allowVerification,
             readConsent,
             destinyService: new DestinyService({ cacheService: {} }),
             notificationService,

@@ -11,8 +11,8 @@ describe('cleanPhoneNumber', () => {
         expect(cleanPhoneNumber('2085550123')).toEqual('+12085550123');
     });
 
-    it('should keep a country code it is given', () => {
-        expect(cleanPhoneNumber('+44 20 7946 0958')).toEqual('+442079460958');
+    it('should accept a Canadian number', () => {
+        expect(cleanPhoneNumber('+1 416 555 0123')).toEqual('+14165550123');
     });
 
     it('should leave a number already in E.164 as it is', () => {
@@ -28,9 +28,24 @@ describe('cleanPhoneNumber', () => {
 
     it.each([
         ['CN', '+86 10 1234 5678'],
+        ['GB', '+44 20 7946 0958'],
         ['KP', '+850 2 381 2321'],
         ['RU', '+7 495 123 4567'],
-    ])('should reject a number from a barred region (%s)', (_, phoneNumber) => {
+    ])('should reject a number from an unsupported region (%s)', (_, phoneNumber) => {
+        expect(() => cleanPhoneNumber(phoneNumber)).toThrow(InvalidPhoneNumberError);
+    });
+
+    /**
+     * The rest of the +1 plan is where a number given without a country
+     * code lands outside the US and Canada, and its high-cost ranges are a
+     * favourite of pumping schemes.
+     */
+    it.each([
+        ['AG', '+1 268 464 1234'],
+        ['AG', '2684641234'],
+        ['JM', '+1 876 927 1234'],
+        ['JM', '8769271234'],
+    ])('should reject a +1 number outside the US and Canada (%s %s)', (_, phoneNumber) => {
         expect(() => cleanPhoneNumber(phoneNumber)).toThrow(InvalidPhoneNumberError);
     });
 });

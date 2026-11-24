@@ -129,12 +129,14 @@ function signIn(req, res, user, next) {
 
 /**
  * @typedef {Object} UserRoutesOptions
+ * @property {UserControllerOptions['allowVerification']} allowVerification - see `UserController`
  * @property {AuthenticationController} authenticationController
  * @property {import('../destiny/destiny.service.js').default} destinyService
  * @property {import('../notifications/notification.service.js').default} notificationService
  * @property {UserControllerOptions['readConsent']} readConsent - see `UserController`
- * @property {{ signUp: RequestHandler, resend: RequestHandler }} rateLimiters
- * - per-account limits on the endpoints that send billed messages
+ * @property {{ network: RequestHandler, signUp: RequestHandler, resend: RequestHandler }} rateLimiters
+ * - limits on the endpoints that send billed messages: per account, and per
+ * network across sign-ups and resends together
  * @property {import('./user.service.js').default} userService
  * @property {import('../helpers/world2.js').default} worldRepository
  */
@@ -143,6 +145,7 @@ function signIn(req, res, user, next) {
  * @param {UserRoutesOptions} options
  */
 const routes = ({
+    allowVerification,
     authenticationController,
     destinyService,
     notificationService,
@@ -153,6 +156,7 @@ const routes = ({
 }) => {
     const middleware = new AuthenticationMiddleWare({ authenticationController });
     const userController = new UserController({
+        allowVerification,
         destinyService,
         notificationService,
         readConsent,
@@ -475,17 +479,23 @@ const routes = ({
      *            so a conflict is not disclosed. The contact is held as pending until
      *            POST /users/join confirms both codes; a registered account changes its
      *            contact this way, and keeps its current contact until then. Signing up again
-     *            sends new codes on both channels and replaces the earlier ones. The answer
-     *            comes once the sign-up is queued, before any of this is checked or sent, so
-     *            its timing discloses nothing either; the messages follow shortly.
+     *            sends new codes on both channels and replaces the earlier ones. A phone number
+     *            or email address receives at most five verification messages a day, from
+     *            any account; one over that is not sent. A text is also not sent while the
+     *            service is at its hourly limit for verification texts; resend it after the
+     *            hour. The answer comes once the sign-up is
+     *            queued, before any of this is checked or sent, so its timing discloses
+     *            nothing either; the messages follow shortly.
      *        403:
      *          description: Forbidden. Missing or invalid CSRF token.
      *        422:
      *          description: >
      *            Unprocessable Entity. A field is missing, malformed, unexpected, or the phone
-     *            number cannot be used.
+     *            number cannot be used: only US and Canadian numbers can be verified.
      *        429:
-     *          description: Too Many Requests. Five sign-ups an hour per account.
+     *          description: >
+     *            Too Many Requests. Five sign-ups an hour per account, and twenty sign-ups
+     *            and resends an hour together from one network.
      */
     userRouter.route('/signUp').post(
         (req, res, next) => middleware.authenticateUser(req, res, next),
@@ -522,6 +532,7 @@ const routes = ({
             return next();
         },
         rateLimiters.signUp,
+        rateLimiters.network,
         async (req, res) => {
             const { displayName, membershipType } = /** @type {AuthenticatedSessionData} */ (
                 /** @type {unknown} */ (req.session)
@@ -585,20 +596,24 @@ const routes = ({
      *           No Content. Returned whether or not there was a pending sign-up to resend,
      *           and whether or not the message could be sent, so a conflict at sign-up is
      *           not disclosed. Answered once the resend is queued, before any of this is
-     *           checked, so its timing discloses nothing either. If nothing arrives, sign
-     *           up again.
+     *           checked, so its timing discloses nothing either. A text is not sent while
+     *           the service is at its hourly limit for verification texts. If nothing
+     *           arrives, try again after the hour, or sign up again.
      *       400:
      *         description: Bad Request. The channel is missing or not "email" or "phone".
      *       403:
      *         description: Forbidden. Missing or invalid CSRF token.
      *       429:
-     *         description: Too Many Requests. Three resends per channel every 15 minutes.
+     *         description: >
+     *           Too Many Requests. Three resends per channel every 15 minutes, and twenty
+     *           sign-ups and resends an hour together from one network.
      */
     userRouter.route('/signUp/resend').post(
         (req, res, next) => middleware.authenticateUser(req, res, next),
         csrfProtection,
         requireChannel,
         rateLimiters.resend,
+        rateLimiters.network,
         async (req, res) => {
             const { displayName, membershipType } = /** @type {AuthenticatedSessionData} */ (
                 /** @type {unknown} */ (req.session)

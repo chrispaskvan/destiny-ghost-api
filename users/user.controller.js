@@ -10,6 +10,7 @@ import { applyPatch, createPatch } from 'rfc6902';
 import cleanPhoneNumber from './clean-phone-number.js';
 import { limitConcurrency, QUEUE_NAME as SIGN_UP_QUEUE } from './sign-up.queue.js';
 import TOKEN_TTL_SECONDS from './token-ttl.js';
+import VerificationWithheldError from './verification-withheld.error.js';
 import Postmaster from '../helpers/postmaster.js';
 import getEpoch from '../helpers/get-epoch.js';
 import log, { runWithBindings } from '../helpers/log.js';
@@ -75,6 +76,9 @@ import notificationTypes from '../notifications/notification.types.js';
 /**
  * Constructor options for UserController.
  * @typedef {Object} UserControllerOptions
+ * @property {(channel: 'phone' | 'email', destination: string) => Promise<boolean>} allowVerification
+ * - whether a verification message may go to the destination, spending its
+ * share of the limits when it may (see `helpers/verification-limits.js`)
  * @property {import('../destiny/destiny.service.js').default} destinyService
  * @property {import('../notifications/notification.service.js').default} notificationService
  * @property {(phoneNumber: string) => Promise<{ isSubscribed: boolean, receivedAt: number } | undefined>} readConsent
@@ -88,6 +92,9 @@ import notificationTypes from '../notifications/notification.types.js';
  * User Controller Class
  */
 class UserController {
+    /** @type {UserControllerOptions['allowVerification']} */
+    #allowVerification;
+
     /** @type {UserControllerOptions['readConsent']} */
     #readConsent;
 
@@ -102,7 +109,15 @@ class UserController {
         if (typeof options.readConsent !== 'function') {
             throw new TypeError('readConsent is required');
         }
+        /**
+         * Required: without it, verification messages go wherever sign-up is
+         * pointed, as often as accounts can be made to ask.
+         */
+        if (typeof options.allowVerification !== 'function') {
+            throw new TypeError('allowVerification is required');
+        }
 
+        this.#allowVerification = options.allowVerification;
         this.#readConsent = options.readConsent;
         this.destiny = options.destinyService;
         this.notifications = options.notificationService;
@@ -738,19 +753,23 @@ class UserController {
          * nor undoes the save.
          */
         const [sms, email] = await Promise.allSettled([
-            this.notifications.sendMessage(
-                UserController.#buildVerificationMessage(
-                    /** @type {string} */ (membership.tokens?.code),
+            this.#sendVerification('phone', phoneNumber, () =>
+                this.notifications.sendMessage(
+                    UserController.#buildVerificationMessage(
+                        /** @type {string} */ (membership.tokens?.code),
+                    ),
+                    phoneNumber,
+                    user.type === 'mobile' ? (iconUrl ?? '') : '',
                 ),
-                phoneNumber,
-                user.type === 'mobile' ? (iconUrl ?? '') : '',
             ),
-            this.postmaster.register(
-                /** @type {import('../helpers/postmaster.js').EmailUser} */ (
-                    /** @type {unknown} */ ({ ...user, ...pending })
+            this.#sendVerification('email', contact.emailAddress, () =>
+                this.postmaster.register(
+                    /** @type {import('../helpers/postmaster.js').EmailUser} */ (
+                        /** @type {unknown} */ ({ ...user, ...pending })
+                    ),
+                    iconUrl,
+                    '/register',
                 ),
-                iconUrl,
-                '/register',
             ),
         ]);
 
@@ -767,10 +786,14 @@ class UserController {
                 receipts[field] = outcome.value;
             } else {
                 undelivered.push(channel);
-                log.error(
-                    { err: outcome.reason, channel, displayName, membershipType },
-                    'Failed to send a sign-up verification message.',
-                );
+
+                /** A withheld message isn't a fault; the limits logged why. */
+                if (!(outcome.reason instanceof VerificationWithheldError)) {
+                    log.error(
+                        { err: outcome.reason, channel, displayName, membershipType },
+                        'Failed to send a sign-up verification message.',
+                    );
+                }
             }
         }
 
@@ -840,28 +863,58 @@ class UserController {
             receipts =
                 channel === 'phone'
                     ? {
-                          message: await this.notifications.sendMessage(
-                              UserController.#buildVerificationMessage(tokens.code),
-                              pending.phoneNumber,
-                              user.type === 'mobile' ? (iconUrl ?? '') : '',
+                          message: await this.#sendVerification('phone', pending.phoneNumber, () =>
+                              this.notifications.sendMessage(
+                                  UserController.#buildVerificationMessage(
+                                      /** @type {string} */ (tokens.code),
+                                  ),
+                                  pending.phoneNumber,
+                                  user.type === 'mobile' ? (iconUrl ?? '') : '',
+                              ),
                           ),
                       }
                     : {
-                          postmark: await this.postmaster.register(
-                              /** @type {import('../helpers/postmaster.js').EmailUser} */ (
-                                  /** @type {unknown} */ ({ ...user, ...pending })
-                              ),
-                              iconUrl,
-                              '/register',
+                          postmark: await this.#sendVerification(
+                              'email',
+                              pending.emailAddress,
+                              () =>
+                                  this.postmaster.register(
+                                      /** @type {import('../helpers/postmaster.js').EmailUser} */ (
+                                          /** @type {unknown} */ ({ ...user, ...pending })
+                                      ),
+                                      iconUrl,
+                                      '/register',
+                                  ),
                           ),
                       };
         } catch (err) {
-            log.error({ err, ...context }, 'Failed to resend a sign-up verification message.');
+            if (err instanceof VerificationWithheldError) {
+                log.info(context, 'Verification message not resent: over its limit.');
+            } else {
+                log.error({ err, ...context }, 'Failed to resend a sign-up verification message.');
+            }
 
             return;
         }
 
         await this.#saveReceipts({ displayName, membershipType, tokens }, receipts);
+    }
+
+    /**
+     * Send a verification message if its destination's limits allow it.
+     * @template T
+     * @param {'phone' | 'email'} channel
+     * @param {string} destination - the number in E.164, or the email address
+     * @param {() => Promise<T>} send
+     * @returns {Promise<T>}
+     * @throws {VerificationWithheldError} when a limit is spent, before sending
+     */
+    async #sendVerification(channel, destination, send) {
+        if (!(await this.#allowVerification(channel, destination))) {
+            throw new VerificationWithheldError(channel);
+        }
+
+        return await send();
     }
 
     /**

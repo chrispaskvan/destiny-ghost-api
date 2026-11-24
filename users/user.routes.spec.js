@@ -112,8 +112,10 @@ const worldRepository = {
 };
 
 const readConsent = vi.fn().mockResolvedValue(undefined);
-/** Stand-ins for the per-account limits; their own specs are with the limiter. */
+const allowVerification = vi.fn().mockResolvedValue(true);
+/** Stand-ins for the route limits; their own specs are with the limiter. */
 const rateLimiters = {
+    network: vi.fn((_req, _res, next) => next()),
     signUp: vi.fn((_req, _res, next) => next()),
     resend: vi.fn((_req, _res, next) => next()),
 };
@@ -122,6 +124,7 @@ let userRouter;
 
 beforeEach(() => {
     userRouter = UserRouter({
+        allowVerification,
         readConsent,
         rateLimiters,
         authenticationController,
@@ -1014,6 +1017,7 @@ describe('UserRouter', () => {
                     }),
                 };
                 const router = UserRouter({
+                    allowVerification,
                     readConsent,
                     rateLimiters,
                     authenticationController,
@@ -1092,6 +1096,7 @@ describe('UserRouter', () => {
 
             /** Built after the spy, so its controller calls through it. */
             UserRouter({
+                allowVerification,
                 readConsent,
                 rateLimiters,
                 authenticationController,
@@ -1306,6 +1311,7 @@ describe('UserRouter', () => {
 
             expect(res.statusCode).toEqual(StatusCodes.UNPROCESSABLE_ENTITY);
             expect(rateLimiters.signUp).not.toHaveBeenCalled();
+            expect(rateLimiters.network).not.toHaveBeenCalled();
         });
 
         it('should stop at the sign-up limit before reading, saving or sending', async () => {
@@ -1339,6 +1345,63 @@ describe('UserRouter', () => {
             expect(userService.updateUser).not.toHaveBeenCalled();
             expect(notificationService.sendMessage).not.toHaveBeenCalled();
         });
+
+        it.each([
+            [
+                'a sign-up',
+                () => rateLimiters.signUp,
+                {
+                    url: '/signUp',
+                    body: {
+                        firstName: 'Ada',
+                        lastName: 'Lovelace',
+                        phoneNumber: '+12085550123',
+                        emailAddress: 'ada@example.com',
+                    },
+                },
+                enqueueSignUp,
+            ],
+            [
+                'a resend',
+                () => rateLimiters.resend,
+                { url: '/signUp/resend', body: { channel: 'phone' } },
+                enqueueResend,
+            ],
+        ])(
+            "should stop %s at the network's limit, charged after the account's, before queueing",
+            async (_, accountLimiter, { url, body }, enqueue) => {
+                /** The account's limit runs first, so it is what gets spent. */
+                const order = [];
+
+                accountLimiter().mockImplementationOnce((_req, _res, next) => {
+                    order.push('account');
+                    next();
+                });
+                rateLimiters.network.mockImplementationOnce((_req, limited) => {
+                    order.push('network');
+                    limited.status(StatusCodes.TOO_MANY_REQUESTS).end();
+                });
+
+                const done = new Promise(resolve => res.on('end', resolve));
+
+                userRouter(
+                    createRequest({
+                        method: 'POST',
+                        url,
+                        headers: { 'x-csrf-token': csrfToken },
+                        session: { csrfToken, displayName, membershipType, membershipId: 'm-1' },
+                        body,
+                    }),
+                    res,
+                    next,
+                );
+                await done;
+
+                expect(res.statusCode).toEqual(StatusCodes.TOO_MANY_REQUESTS);
+                expect(order).toEqual(['account', 'network']);
+                expect(enqueue).not.toHaveBeenCalled();
+            },
+        );
     });
 
     describe('retired verification codes (#799)', () => {
