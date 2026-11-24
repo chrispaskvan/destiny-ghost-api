@@ -110,8 +110,10 @@ const mailboxOf = address => {
  *
  * Fails closed, unlike the route limits: what it guards is billed, the
  * caller has had its answer whatever happens here, and a sign-up whose
- * message was withheld can be resent. Redis being unreachable also takes
- * down the sessions sign-up needs, so this rarely withholds anything real.
+ * message was withheld can sign up again for new codes once the limit
+ * clears (a resend can't help past the codes' 15 minutes). Redis being
+ * unreachable also takes down the sessions sign-up needs, so this rarely
+ * withholds anything real.
  * @param {'phone' | 'email'} channel
  * @param {string} destination - the number in E.164, or the email address
  * @returns {Promise<boolean>}
