@@ -16,14 +16,18 @@ import { recordConsent } from '../helpers/consent-marker.js';
 import subscriber from '../helpers/subscriber.js';
 import { enqueueConsentChange, QUEUE_NAME as CONSENT_QUEUE } from './consent.queue.js';
 import {
+    DAILY_LIMIT_REPLY,
     EMOJI_DEFAULT_REPLY,
     EMOJI_INTENT_REPLIES,
     HELP_KEYWORDS,
     HELP_REPLY,
+    MAX_IMAGES_PER_MESSAGE,
     MAX_SMS_MESSAGE_LENGTH,
+    MEDIA_LIMIT_REPLY,
     MEDIA_RECEIVED_REPLY,
     MEDIA_RETRY_REPLY,
     MEDIA_UNSUPPORTED_REPLY,
+    mediaPartialReply,
     START_KEYWORDS,
     START_REPLY,
     STOP_KEYWORDS,
@@ -133,6 +137,8 @@ function isRetryableConsentError(err) {
  * @property {import('../authentication/authentication.service.js').default} authenticationService
  * @property {import('../destiny2/destiny2.service.js').default} destinyService
  * @property {import('./mms.service.js').default} mmsService
+ * @property {import('../helpers/reply-limits.js').ReplyLimits} replyLimits - what
+ * one number's texts may spend a day (see `helpers/reply-limits.js`)
  * @property {import('../users/user.service.js').default} userService
  * @property {import('../helpers/world2.js').default} worldRepository
  */
@@ -146,6 +152,15 @@ class TwilioController {
      * @param {TwilioControllerOptions} options
      */
     constructor(options) {
+        /**
+         * Required: without them, one number can keep the per-minute limit up
+         * all day, in MMS replies and image scans.
+         */
+        if (!options.replyLimits) {
+            throw new TypeError('replyLimits is required');
+        }
+
+        this.limits = options.replyLimits;
         this.authentication = options.authenticationService;
         this.destiny = options.destinyService;
         this.mms = options.mmsService;
@@ -571,10 +586,26 @@ class TwilioController {
             return { message: START_REPLY };
         }
 
+        /**
+         * Charged before the lookup, so a number past its day costs neither a
+         * read nor a reply. Every other text counts, answered or not. The one
+         * notice still waits for the lookup, so it never reaches a number that
+         * has opted out.
+         */
+        const turn = await this.limits.answer(body.From);
+
+        if (turn === 'quiet') {
+            return {};
+        }
+
         const user = await this.users.getUserByPhoneNumber(body.From);
 
         if (user?.isSubscribed === false) {
             return {};
+        }
+
+        if (turn === 'notice') {
+            return { message: DAILY_LIMIT_REPLY };
         }
 
         if (!user?.dateRegistered) {
@@ -609,6 +640,17 @@ class TwilioController {
                 return { cookies: responseCookies, message: MEDIA_UNSUPPORTED_REPLY };
             }
 
+            const allowed = await this.limits.allowScans(
+                body.From,
+                Math.min(media.length, MAX_IMAGES_PER_MESSAGE),
+            );
+
+            if (!allowed) {
+                return { cookies: responseCookies, message: MEDIA_LIMIT_REPLY };
+            }
+
+            const scanning = media.slice(0, allowed);
+
             /**
              * Queued, not processed: downloading and analyzing can exceed
              * Twilio's webhook timeout. Awaited, so the receipt is
@@ -621,15 +663,23 @@ class TwilioController {
                     /** Required on this route by `bodySchema` in twilio.routes.js. */
                     messageSid: /** @type {string} */ (body.MessageSid),
                     from: body.From,
-                    media,
+                    media: scanning,
                 });
             } catch (err) {
                 log.error({ err, from: body.From }, 'Failed to queue the MMS media');
+                /** Asked to send again, so not charged for this try. */
+                await this.limits.refundScans(body.From, allowed);
 
                 return { cookies: responseCookies, message: MEDIA_RETRY_REPLY };
             }
 
-            return { cookies: responseCookies, message: MEDIA_RECEIVED_REPLY };
+            return {
+                cookies: responseCookies,
+                message:
+                    scanning.length < media.length
+                        ? mediaPartialReply(scanning.length, media.length)
+                        : MEDIA_RECEIVED_REPLY,
+            };
         }
 
         const { itemHash } = cookies;
@@ -695,7 +745,13 @@ class TwilioController {
                         0,
                         MAX_SMS_MESSAGE_LENGTH,
                     ),
-                    media: user.type === 'landline' ? undefined : item.icon,
+                    /** Past the day's icons, the same answer as plain SMS. */
+                    media:
+                        item.icon &&
+                        user.type !== 'landline' &&
+                        (await this.limits.allowIcon(body.From))
+                            ? item.icon
+                            : undefined,
                 };
             }
             default: {

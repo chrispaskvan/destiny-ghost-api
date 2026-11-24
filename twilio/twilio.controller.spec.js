@@ -15,9 +15,11 @@ import subscriber from '../helpers/subscriber.js';
 import { recordConsent } from '../helpers/consent-marker.js';
 import { enqueueConsentChange } from './consent.queue.js';
 import {
+    DAILY_LIMIT_REPLY,
     EMOJI_DEFAULT_REPLY,
     EMOJI_INTENT_REPLIES,
     HELP_REPLY,
+    MEDIA_LIMIT_REPLY,
     MEDIA_RECEIVED_REPLY,
     MEDIA_RETRY_REPLY,
     MEDIA_UNSUPPORTED_REPLY,
@@ -46,6 +48,13 @@ const accessToken = chance.string({ length: 20 });
 const authenticationService = { authenticate: vi.fn() };
 const destinyService = { getProfile: vi.fn(), getXur: vi.fn() };
 const mmsService = { enqueue: vi.fn() };
+/** Within every limit unless a test says otherwise; reset in `beforeEach`. */
+const replyLimits = {
+    answer: vi.fn(),
+    allowIcon: vi.fn(),
+    allowScans: vi.fn(),
+    refundScans: vi.fn(),
+};
 const userService = {
     addUserMessage: vi.fn(),
     getUserByPhoneNumber: vi.fn(),
@@ -85,16 +94,35 @@ beforeEach(() => {
     userService.getUserByPhoneNumber.mockResolvedValue(registeredUser());
     userService.addUserMessage.mockResolvedValue(undefined);
     worldRepository.getItemByName.mockResolvedValue([]);
+    replyLimits.answer.mockResolvedValue('reply');
+    replyLimits.allowIcon.mockResolvedValue(true);
+    replyLimits.allowScans.mockImplementation(async (_from, wanted) => wanted);
+    replyLimits.refundScans.mockResolvedValue(undefined);
     twilioController = new TwilioController({
         authenticationService,
         destinyService,
         mmsService,
+        replyLimits,
         userService,
         worldRepository,
     });
 });
 
 describe('TwilioController', () => {
+    it('should not construct without the reply limits', () => {
+        /** Without them, one number can keep the per-minute limit up all day. */
+        expect(
+            () =>
+                new TwilioController({
+                    authenticationService,
+                    destinyService,
+                    mmsService,
+                    userService,
+                    worldRepository,
+                }),
+        ).toThrow(new TypeError('replyLimits is required'));
+    });
+
     describe('the consent worker it subscribes', () => {
         it('should apply changes from the consent queue, one at a time', () => {
             expect(subscriber.listen).toHaveBeenCalledWith(
@@ -278,6 +306,62 @@ describe('TwilioController', () => {
     });
 
     describe('request', () => {
+        describe('the daily reply limit', () => {
+            it('should charge the sender before looking them up', async () => {
+                await twilioController.request({ body: inbound('gjallarhorn'), cookies: {} });
+
+                expect(replyLimits.answer).toHaveBeenCalledWith(phoneNumber);
+                expect(replyLimits.answer.mock.invocationCallOrder[0]).toBeLessThan(
+                    userService.getUserByPhoneNumber.mock.invocationCallOrder[0],
+                );
+            });
+
+            it('should tell the sender once that the day is spent', async () => {
+                replyLimits.answer.mockResolvedValue('notice');
+
+                await expect(
+                    twilioController.request({ body: inbound('gjallarhorn'), cookies: {} }),
+                ).resolves.toEqual({ message: DAILY_LIMIT_REPLY });
+                expect(userService.addUserMessage).not.toHaveBeenCalled();
+                expect(worldRepository.getItemByName).not.toHaveBeenCalled();
+            });
+
+            it('should not send the notice to a sender who opted out', async () => {
+                replyLimits.answer.mockResolvedValue('notice');
+                userService.getUserByPhoneNumber.mockResolvedValue({
+                    ...registeredUser(),
+                    isSubscribed: false,
+                });
+
+                await expect(
+                    twilioController.request({ body: inbound('gjallarhorn'), cookies: {} }),
+                ).resolves.toEqual({});
+            });
+
+            it('should then say nothing, and look nothing up', async () => {
+                replyLimits.answer.mockResolvedValue('quiet');
+
+                await expect(
+                    twilioController.request({ body: inbound('gjallarhorn'), cookies: {} }),
+                ).resolves.toEqual({});
+                expect(userService.getUserByPhoneNumber).not.toHaveBeenCalled();
+                expect(userService.addUserMessage).not.toHaveBeenCalled();
+            });
+
+            /** Carriers require these whatever the volume, so they're never charged. */
+            it.each(['STOP', 'HELP', 'START'])('should answer %s past the limit', async keyword => {
+                replyLimits.answer.mockResolvedValue('quiet');
+
+                const { message } = await twilioController.request({
+                    body: inbound(keyword),
+                    cookies: {},
+                });
+
+                expect(message).toEqual(expect.any(String));
+                expect(replyLimits.answer).not.toHaveBeenCalled();
+            });
+        });
+
         it('should say nothing at all to a sender who opted out', async () => {
             userService.getUserByPhoneNumber.mockResolvedValue({
                 ...registeredUser(),
@@ -378,6 +462,76 @@ describe('TwilioController', () => {
                 const { message } = await twilioController.request({ body: image(), cookies: {} });
 
                 expect(message).toBe(MEDIA_RETRY_REPLY);
+            });
+
+            /** Four images, as an MMS can carry up to ten. */
+            const images = (count = 4) =>
+                inbound('', {
+                    MessageSid: messageSid,
+                    NumMedia: String(count),
+                    ...Object.fromEntries(
+                        Array.from({ length: count }, (_, index) => [
+                            [`MediaContentType${index}`, 'image/jpeg'],
+                            [`MediaUrl${index}`, `https://api.twilio.com/media/ME${index}`],
+                        ]).flat(),
+                    ),
+                });
+
+            it('should scan only the first three images of a message', async () => {
+                const { message } = await twilioController.request({
+                    body: images(),
+                    cookies: {},
+                });
+
+                expect(replyLimits.allowScans).toHaveBeenCalledWith(phoneNumber, 3);
+                expect(mmsService.enqueue.mock.calls[0][0].media.map(({ url }) => url)).toEqual([
+                    'https://api.twilio.com/media/ME0',
+                    'https://api.twilio.com/media/ME1',
+                    'https://api.twilio.com/media/ME2',
+                ]);
+                expect(message).toBe('Scanning 3 of 4 ...');
+            });
+
+            it("should scan only what is left of the sender's day", async () => {
+                replyLimits.allowScans.mockResolvedValue(1);
+
+                const { message } = await twilioController.request({
+                    body: images(2),
+                    cookies: {},
+                });
+
+                expect(mmsService.enqueue.mock.calls[0][0].media).toHaveLength(1);
+                expect(message).toBe('Scanning 1 of 2 ...');
+            });
+
+            it("should queue nothing once the sender's scans are spent", async () => {
+                replyLimits.allowScans.mockResolvedValue(0);
+
+                const { message } = await twilioController.request({ body: image(), cookies: {} });
+
+                expect(message).toBe(MEDIA_LIMIT_REPLY);
+                expect(mmsService.enqueue).not.toHaveBeenCalled();
+            });
+
+            it('should give the scans back when the images could not be queued', async () => {
+                mmsService.enqueue.mockRejectedValueOnce(new Error('Redis unavailable'));
+
+                await twilioController.request({ body: images(2), cookies: {} });
+
+                /** The sender is asked to send them again, so not charged twice. */
+                expect(replyLimits.refundScans).toHaveBeenCalledExactlyOnceWith(phoneNumber, 2);
+            });
+
+            it('should not charge a scan for an attachment that is not an image', async () => {
+                const body = inbound('', {
+                    NumMedia: '1',
+                    MediaContentType0: 'application/pdf',
+                    MediaUrl0: 'https://api.twilio.com/media/ME1',
+                });
+
+                await twilioController.request({ body, cookies: {} });
+
+                expect(replyLimits.allowScans).not.toHaveBeenCalled();
             });
 
             it('should refuse an attachment that is not an image', async () => {
@@ -581,6 +735,32 @@ describe('TwilioController', () => {
                 expect(media).toBe('https://www.bungie.net/icon.png');
                 // Remembered so a following 'more' knows what it refers to.
                 expect(cookies.itemHash).toBe('1274330687');
+            });
+
+            it("should answer as plain SMS once the sender's icons are spent", async () => {
+                replyLimits.allowIcon.mockResolvedValue(false);
+                worldRepository.getItemByName.mockResolvedValue([weapon()]);
+
+                const { message, media } = await twilioController.request({
+                    body: inbound('gjallarhorn'),
+                    cookies: {},
+                });
+
+                expect(message).toContain('Gjallarhorn');
+                expect(media).toBeUndefined();
+                expect(replyLimits.allowIcon).toHaveBeenCalledWith(phoneNumber);
+            });
+
+            it('should not charge an icon to a landline', async () => {
+                userService.getUserByPhoneNumber.mockResolvedValue({
+                    ...registeredUser(),
+                    type: 'landline',
+                });
+                worldRepository.getItemByName.mockResolvedValue([weapon()]);
+
+                await twilioController.request({ body: inbound('gjallarhorn'), cookies: {} });
+
+                expect(replyLimits.allowIcon).not.toHaveBeenCalled();
             });
 
             it('should withhold the icon from a landline', async () => {
