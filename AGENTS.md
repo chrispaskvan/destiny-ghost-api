@@ -94,7 +94,7 @@ When adding tests:
 
 ```sh
 pnpm test              # run the full suite once (needs local-only setup, below)
-pnpm test:unit         # unit specs only (*.spec.js); what the pre-push hook runs; needs settings/
+pnpm test:unit         # unit specs only (*.spec.js); what the pre-push hook runs; specs that load helpers/config.js need settings/
 pnpm test:integration  # integration tests only (*.test.js); they reach the shared Redis
 pnpm test:watch        # watch mode
 pnpm coverage          # full suite with coverage; ratchets the thresholds
@@ -102,7 +102,7 @@ pnpm lint              # biome check --write (auto-fix)
 pnpm lint:ci           # biome check, no writes (what CI runs)
 pnpm typecheck         # tsc --noEmit against jsconfig.json
 pnpm swagger           # regenerate openapi.json from route JSDoc
-pnpm format            # remark: format Markdown files in place
+pnpm format            # remark: rewrites every Markdown file in place; not a check, don't run it as part of a change
 pnpm start:dev         # run locally (requires .env)
 ```
 
@@ -110,11 +110,11 @@ Node version is pinned by `.nvmrc` (`nvm use`) and `engines` requires Node 26.x 
 
 ### Local-only files
 
-`.env`, `settings/`, `security/` (TLS certificates), and `databases/` (downloaded manifests) are gitignored and exist only on the maintainer's machine. Don't create, edit, or commit them, and don't treat their absence as something to fix. Without them, only `pnpm lint` and `pnpm typecheck` are sure to run. `helpers/config.js` reads `settings/` as it is imported, so any spec that loads it, directly or through another module, fails during collection when `settings/` is absent. The integration tests and `pnpm start:dev` need all four.
+`.env`, `settings/`, `security/` (TLS certificates), and `databases/` (downloaded manifests) are gitignored and exist only on the maintainer's machine. Don't create, edit, or commit them, and don't treat their absence as something to fix. Without them, only `pnpm lint` and `pnpm typecheck` are sure to run. `helpers/config.js` reads `settings/` as it is imported, so any spec that loads it, directly or through another module, fails during collection when `settings/` is absent. The integration tests need `settings/` and `databases/` (plus Redis); `pnpm start:dev` also needs `.env` and `security/`.
 
 ### Knowledge graph hooks (optional)
 
-`.husky/post-commit` and `.husky/post-checkout` rebuild an optional [graphify](https://github.com/Graphify-Labs/graphify) knowledge graph and do nothing unless the gitignored `.graphify/` exists. Don't remove them, and don't worry about the `merge=graphify` entry in `.gitattributes`; it matches no tracked file.
+`.husky/post-commit` and `.husky/post-checkout` rebuild an optional [graphify](https://github.com/Graphify-Labs/graphify) knowledge graph and do nothing unless the gitignored `.graphify/` exists. Don't remove them, and don't rerun `graphify hook install`: it regenerates both hooks and discards this repo's changes to them, such as the `.graphify` output path. Don't worry about the `merge=graphify` entry in `.gitattributes`; it matches no tracked file.
 
 ## Working Style
 
