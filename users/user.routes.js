@@ -497,6 +497,10 @@ const routes = ({
      *          description: >
      *            Too Many Requests. Five sign-ups an hour per account, and twenty sign-ups
      *            and resends an hour together from one network.
+     *        503:
+     *          description: >
+     *            Service Unavailable. The limits couldn't be checked, so nothing was queued.
+     *            Retry after the Retry-After header's seconds.
      */
     userRouter.route('/signUp').post(
         (req, res, next) => middleware.authenticateUser(req, res, next),
@@ -609,6 +613,10 @@ const routes = ({
      *         description: >
      *           Too Many Requests. Three resends per channel every 15 minutes, and twenty
      *           sign-ups and resends an hour together from one network.
+     *       503:
+     *         description: >
+     *           Service Unavailable. The limits couldn't be checked, so nothing was queued.
+     *           Retry after the Retry-After header's seconds.
      */
     userRouter.route('/signUp/resend').post(
         (req, res, next) => middleware.authenticateUser(req, res, next),

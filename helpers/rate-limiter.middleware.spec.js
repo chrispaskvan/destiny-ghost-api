@@ -254,6 +254,56 @@ describe('verification limits', () => {
         expect(next).not.toHaveBeenCalled();
     });
 
+    /**
+     * Unlike the general bucket: each of these is in front of a billed send,
+     * and failing open would switch the limit off for the whole outage.
+     */
+    describe.each([
+        ['sign-up', () => signUpRateLimiterMiddleware, () => signUpConsume],
+        ['resend', () => resendRateLimiterMiddleware, () => resendConsume],
+        ['network', () => signUpNetworkRateLimiterMiddleware, () => networkConsume],
+    ])('the %s limit', (_, middleware, consumer) => {
+        beforeEach(() => {
+            req.body.channel = 'phone';
+        });
+
+        it('fails closed with 503 and Retry-After when Redis is not ready', async () => {
+            cache.isReady = false;
+
+            await middleware()(req, res, next);
+
+            expect(res.status).toHaveBeenCalledWith(StatusCodes.SERVICE_UNAVAILABLE);
+            expect(res.set).toHaveBeenCalledWith('Retry-After', '30');
+            expect(consumer()).not.toHaveBeenCalled();
+            expect(next).not.toHaveBeenCalled();
+        });
+
+        it('fails closed with 503 when Redis rejects the command, logging it', async () => {
+            const err = new Error('READONLY');
+
+            consumer().mockRejectedValueOnce(err);
+
+            await middleware()(req, res, next);
+
+            expect(res.status).toHaveBeenCalledWith(StatusCodes.SERVICE_UNAVAILABLE);
+            expect(log.error).toHaveBeenCalledWith(
+                expect.objectContaining({ err }),
+                expect.stringContaining('refusing'),
+            );
+            expect(next).not.toHaveBeenCalled();
+        });
+
+        it('still answers 429 with Retry-After at its limit', async () => {
+            consumer().mockRejectedValueOnce(new MockRateLimiterRes(0, 90_000));
+
+            await middleware()(req, res, next);
+
+            expect(res.status).toHaveBeenCalledWith(StatusCodes.TOO_MANY_REQUESTS);
+            expect(res.set).toHaveBeenCalledWith('Retry-After', '90');
+            expect(next).not.toHaveBeenCalled();
+        });
+    });
+
     it('charges a sign-up to the session account', async () => {
         signUpConsume.mockResolvedValueOnce({ remainingPoints: 4, msBeforeNext: 1000 });
 
