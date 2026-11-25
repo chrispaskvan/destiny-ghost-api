@@ -94,7 +94,7 @@ When adding tests:
 
 ```sh
 pnpm test              # run the full suite once (needs local-only setup, below)
-pnpm test:unit         # unit specs only (*.spec.js); what the pre-push hook runs
+pnpm test:unit         # unit specs only (*.spec.js); what the pre-push hook runs; needs settings/
 pnpm test:integration  # integration tests only (*.test.js); they reach the shared Redis
 pnpm test:watch        # watch mode
 pnpm coverage          # full suite with coverage; ratchets the thresholds
@@ -110,7 +110,7 @@ Node version is pinned by `.nvmrc` (`nvm use`) and `engines` requires Node 26.x 
 
 ### Local-only files
 
-`.env`, `settings/`, `security/` (TLS certificates), and `databases/` (downloaded manifests) are gitignored and exist only on the maintainer's machine. Don't create, edit, or commit them, and don't treat their absence as something to fix. Without them, the integration tests and `pnpm start:dev` can't run; the unit specs, lint, and typecheck can.
+`.env`, `settings/`, `security/` (TLS certificates), and `databases/` (downloaded manifests) are gitignored and exist only on the maintainer's machine. Don't create, edit, or commit them, and don't treat their absence as something to fix. Without them, only `pnpm lint` and `pnpm typecheck` are sure to run. `helpers/config.js` reads `settings/` as it is imported, so any spec that loads it, directly or through another module, fails during collection when `settings/` is absent. The integration tests and `pnpm start:dev` need all four.
 
 ### Knowledge graph hooks (optional)
 
@@ -123,5 +123,5 @@ These are values, not rules. They describe what good contributions look like her
 * **Surface your thinking.** If a request is ambiguous or you see multiple reasonable interpretations, name them rather than picking silently. If a simpler approach exists than what was asked for, propose it.
 * **Solve the actual problem, minimally.** No speculative abstractions, no configurability nobody asked for, no error handling or validation for scenarios that can't happen — trust internal code and framework guarantees. The best diff is the one where every changed line traces to the request.
 * **Keep diffs surgical.** Match the surrounding style even where you'd choose differently. Mention unrelated dead code or improvement opportunities instead of folding them into the current change — they're often welcome, but as their own change.
-* **Define done before you start.** Turn tasks into verifiable goals ("write a failing test, make it pass") and prove your work with `pnpm test:unit`, `pnpm lint`, and `pnpm typecheck` before calling it complete. Run `pnpm test:integration` too when the change touches HTTP behavior and the local-only setup is available; if it isn't, say so rather than skipping silently.
+* **Define done before you start.** Turn tasks into verifiable goals ("write a failing test, make it pass") and prove your work with `pnpm test:unit`, `pnpm lint`, and `pnpm typecheck` before calling it complete. Run `pnpm test:integration` too when the change touches HTTP behavior. Without the local-only files, the unit specs that load `helpers/config.js` and all integration tests can't run: report which ones you couldn't run as a setup limitation, not a regression, and don't skip them silently.
 * **Think out loud about tradeoffs.** This is a project that values learning — a well-reasoned unconventional approach beats an unexamined conventional one.
