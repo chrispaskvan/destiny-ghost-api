@@ -114,15 +114,16 @@ const spend = async (limiter, key) => {
 };
 
 /**
- * How to answer a number's next text: normally, with the one notice that its
- * day's replies are spent, or not at all.
+ * Charge a number's next text to its day's replies, and say how to answer it:
+ * normally, with the one notice that its day's replies are spent, or not at
+ * all.
  *
  * Fails open, as the per-sender limit does: replies are the service, and
  * the burst limit still bounds them while Redis is away.
  * @param {string} from - the sender, in E.164
  * @returns {Promise<'reply' | 'notice' | 'quiet'>}
  */
-const answer = async from => {
+const chargeText = async from => {
     if (!client.isReady) {
         return 'reply';
     }
@@ -236,14 +237,14 @@ const refundScans = async (from, count) => {
 
 /**
  * @typedef {Object} ReplyLimits
- * @property {typeof answer} answer
+ * @property {typeof chargeText} chargeText
  * @property {typeof allowIcon} allowIcon
  * @property {typeof allowScans} allowScans
  * @property {typeof refundScans} refundScans
  */
 
 /** @type {ReplyLimits} */
-const replyLimits = { answer, allowIcon, allowScans, refundScans };
+const replyLimits = { chargeText, allowIcon, allowScans, refundScans };
 
 export default replyLimits;
 export { ICONS_PER_DAY, REPLIES_PER_DAY, SCANS_PER_DAY };
