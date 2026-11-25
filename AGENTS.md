@@ -17,10 +17,13 @@ feature/
 ├── feature.routes.js      # Express Router + OpenAPI JSDoc annotations
 ├── feature.controller.js  # Orchestrates services; no Express types below this layer
 ├── feature.service.js     # Business logic and external API calls
-└── feature.cache.js       # Redis cache-aside wrappers
+├── feature.cache.js       # Redis cache-aside wrappers
+├── feature.constants.js   # Module-specific constants
+├── <name>.queue.js        # BullMQ queue for the feature's background jobs
+└── <name>.error.js        # One Error subclass per file
 ```
 
-Cross-cutting utilities live in `helpers/` (logging, caching, config, Redis pub/sub via BullMQ, worker pool, retry, rate limiting). App wiring lives in `loaders/`.
+`authorization/` holds only its middleware. Cross-cutting utilities live in `helpers/` (logging, caching, config, BullMQ job queues via `publisher.js` / `subscriber.js`, worker pool, retry, rate limiting). App wiring lives in `loaders/`.
 
 ### Dependency injection by convention
 
@@ -53,9 +56,9 @@ Biome enforces formatting and linting (`biome.json` is authoritative): 4-space i
 Conventions you'll see everywhere and should follow:
 
 * **ESM only** (`"type": "module"`), targeting Node 26. Modern platform features are used freely — the `Temporal` API (global), `fetch`, and Node's permission model in production.
-* **JSDoc** on modules, classes, and public methods. `pnpm typecheck` runs `tsc --noEmit` against `jsconfig.json`, but `checkJs` is off — only files with a `// @ts-check` pragma are type-checked (e.g., `users/user.service.js`). No TypeScript source files.
+* **JSDoc** on modules, classes, and public methods. `pnpm typecheck` runs `tsc --noEmit` against `jsconfig.json`, but `checkJs` is off — only files with a `// @ts-check` pragma are type-checked. Nearly every source file has one; start new files with it too. No TypeScript source files.
 * **`StatusCodes` from `http-status-codes`** instead of numeric literals.
-* **`log` from `helpers/log.js`** (Pino) — never `console.*`.
+* **`log` from `helpers/log.js`** (Pino) instead of `console.*`. The existing exceptions are known: the fatal-error handler in `start.js`, the shutdown messages in `server.js`, and the CLI scripts in `scripts/`. Don't convert them as a drive-by.
 * **Error messages are private by default.** The global handler (`loaders/error.middleware.js`) replies with the status's reason phrase and logs the real message, so a `throw` can say whatever is useful for debugging. To send a message to the client, set `expose = true` on the error (the `http-errors` convention) and write one that names no internal concept. See [the ADR](./adr-files/client-safe-error-messages.md).
 * **Zod** for input validation and schemas.
 * **Destructuring-heavy** style, `async/await` over promise chains, arrow functions with parens as-needed.
@@ -66,9 +69,9 @@ Commit messages follow Conventional Commits (`fix(logging): …`, `chore(deps): 
 
 Vitest, with `chance` for randomized test data, `node-mocks-http` for req/res mocks, and `nock` for intercepting external HTTP in integration tests. Coverage thresholds in `vitest.config.js` auto-update when `pnpm coverage` runs, ratcheting them to the current coverage — treat them as a floor and don't let a change lower them.
 
-Enforcement is split between CI and git hooks: GitHub Actions runs lint, typecheck, and the OpenAPI check, while the Husky pre-push hook runs the unit specs locally, under a time limit (`scripts/with-timeout.js`) so a run that never exits fails the push instead of blocking it. `vitest.setup.js` holds every test file to an allowlist of hosts and fails a file that connects anywhere else, naming what connected. Unit specs may reach only loopback; a spec that fails is usually loading a module that connects as it is imported (`helpers/cache.js`, `helpers/jobs.js`), which needs mocking. Integration tests may also reach the configured Redis host. The guard ignores the simulated sockets nock dials for the requests it intercepts or refuses.
+Enforcement is split between CI and git hooks: GitHub Actions runs lint, typecheck, and the OpenAPI check (it regenerates `openapi.json` and fails on any diff, so never hand-edit that file — run `pnpm swagger` after changing route JSDoc and commit the result). The Husky pre-commit hook runs `pnpm lint`, which rewrites files in place, and the pre-push hook runs the unit specs locally, under a time limit (`scripts/with-timeout.js`) so a run that never exits fails the push instead of blocking it. `vitest.setup.js` holds every test file to an allowlist of hosts and fails a file that connects anywhere else, naming what connected. Unit specs may reach only loopback; a spec that fails is usually loading a module that connects as it is imported (`helpers/cache.js`, `helpers/jobs.js`), which needs mocking. Integration tests may also reach the configured Redis host. The guard ignores the simulated sockets nock dials for the requests it intercepts or refuses.
 
-`vite` is a direct devDependency, though no file imports it, only to keep rolldown past 1.0.0-rc.16: Vite bundles `vitest.config.js` with rolldown at startup, and rc.16's native binding sometimes never finished, hanging Vitest before any test loaded (#789). Vite 8.3.5 brings rolldown 1.2.16. Bump `vite` together with `vitest`, and don't remove it as unused. If startup hangs come back, `--configLoader runner` skips the bundling.
+`vite` is a direct devDependency, though no file imports it, only to keep rolldown past 1.0.0-rc.16: Vite bundles `vitest.config.js` with rolldown at startup, and rc.16's native binding sometimes never finished, hanging Vitest before any test loaded (#789). Bump `vite` together with `vitest`, and don't remove it as unused. If startup hangs come back, `--configLoader runner` skips the bundling.
 
 ### Test file naming convention
 
@@ -76,7 +79,7 @@ Two suffixes distinguish test types:
 
 * `*.spec.js` — Unit tests. Dependencies are mocked; no server is started. Fast and isolated. Most modules have one, and new modules should too.
 * `*.test.js` — Integration tests. A real server is started via `startServer()` and requests are made over HTTP. These exist only where end-to-end HTTP behavior needs verification (e.g., `destiny2/destiny2.routes.test.js`). What they reach for real:
-  * **Redis**: the shared instance in `settings/`, through the real server. This is by design; a disposable Redis was considered and declined (#716).
+  * **Redis**: the shared instance configured in `settings/` (gitignored), through the real server. This is by design; a disposable Redis was considered and declined (#716).
   * **Nothing else.** `vitest.setup.js` arms `nock.disableNetConnect()` before the test file loads and allows only `127.0.0.1`, so every other HTTP call is refused, even one to `localhost` or `::1`. That includes the Bungie manifest-version checks the server fires at startup, which log `manifest update failed`. That's expected.
   * **The manifest databases on disk.** The Destiny and Destiny 2 tests read the SQLite manifests in `DESTINY_DATABASE_DIR` / `DESTINY2_DATABASE_DIR`, and the download is refused like any other call. On a fresh checkout, run the server once to download them, or those tests fail. `pnpm start:dev` does that, but it serves HTTPS, so it also needs the TLS certificates in `security/`.
 
@@ -90,23 +93,28 @@ When adding tests:
 ## Commands
 
 ```sh
-pnpm test              # run the full suite once
+pnpm test              # run the full suite once (needs local-only setup, below)
 pnpm test:unit         # unit specs only (*.spec.js); what the pre-push hook runs
 pnpm test:integration  # integration tests only (*.test.js); they reach the shared Redis
 pnpm test:watch        # watch mode
-pnpm lint        # biome check --write (auto-fix)
-pnpm typecheck   # tsc --noEmit against jsconfig.json
-pnpm swagger     # regenerate openapi.json from route JSDoc
-pnpm start:dev   # run locally (requires .env)
+pnpm coverage          # full suite with coverage; ratchets the thresholds
+pnpm lint              # biome check --write (auto-fix)
+pnpm lint:ci           # biome check, no writes (what CI runs)
+pnpm typecheck         # tsc --noEmit against jsconfig.json
+pnpm swagger           # regenerate openapi.json from route JSDoc
+pnpm format            # remark: format Markdown files in place
+pnpm start:dev         # run locally (requires .env)
 ```
 
 Node version is pinned by `.nvmrc` (`nvm use`) and `engines` requires Node 26.x with pnpm 10+.
 
+### Local-only files
+
+`.env`, `settings/`, `security/` (TLS certificates), and `databases/` (downloaded manifests) are gitignored and exist only on the maintainer's machine. Don't create, edit, or commit them, and don't treat their absence as something to fix. Without them, the integration tests and `pnpm start:dev` can't run; the unit specs, lint, and typecheck can.
+
 ### Knowledge graph hooks (optional)
 
-`.husky/post-commit` and `.husky/post-checkout` rebuild a [graphify](https://github.com/Graphify-Labs/graphify) knowledge graph in the gitignored `.graphify/`. Both exit silently when that directory is absent, so they are a no-op unless you opt in by building a graph. They need an interpreter that can import `graphify`, `numpy`, and `tree_sitter` — resolved from `GRAPHIFY_PYTHON_BIN`, then `.graphify/.graphify_python` (written by every graphify run), then `PATH`. Note that `graphify hook install` regenerates both hooks and drops the `.graphify` output path along with the rest of these changes.
-
-`.gitattributes` assigns `merge=graphify` to `.graphify/graph.json`. That driver is not registered by cloning — it needs `git config merge.graphify.driver "<python> -m graphify merge-driver %O %A %B"` locally, which `graphify hook install` sets up. Nothing breaks without it: `.graphify/` is gitignored here, so the attribute matches no tracked file and stays inert unless you start committing graph outputs.
+`.husky/post-commit` and `.husky/post-checkout` rebuild an optional [graphify](https://github.com/Graphify-Labs/graphify) knowledge graph and do nothing unless the gitignored `.graphify/` exists. Don't remove them, and don't worry about the `merge=graphify` entry in `.gitattributes`; it matches no tracked file.
 
 ## Working Style
 
@@ -115,5 +123,5 @@ These are values, not rules. They describe what good contributions look like her
 * **Surface your thinking.** If a request is ambiguous or you see multiple reasonable interpretations, name them rather than picking silently. If a simpler approach exists than what was asked for, propose it.
 * **Solve the actual problem, minimally.** No speculative abstractions, no configurability nobody asked for, no error handling or validation for scenarios that can't happen — trust internal code and framework guarantees. The best diff is the one where every changed line traces to the request.
 * **Keep diffs surgical.** Match the surrounding style even where you'd choose differently. Mention unrelated dead code or improvement opportunities instead of folding them into the current change — they're often welcome, but as their own change.
-* **Define done before you start.** Turn tasks into verifiable goals ("write a failing test, make it pass") and prove your work with `pnpm test`, `pnpm lint`, and `pnpm typecheck` before calling it complete.
+* **Define done before you start.** Turn tasks into verifiable goals ("write a failing test, make it pass") and prove your work with `pnpm test:unit`, `pnpm lint`, and `pnpm typecheck` before calling it complete. Run `pnpm test:integration` too when the change touches HTTP behavior and the local-only setup is available; if it isn't, say so rather than skipping silently.
 * **Think out loud about tradeoffs.** This is a project that values learning — a well-reasoned unconventional approach beats an unexamined conventional one.
