@@ -38,6 +38,7 @@ import UserRouter from '../users/user.routes.js';
 import schema from '../graphql/schema.js';
 import root from '../graphql/root.js';
 import maxRootFields from '../graphql/max-root-fields.js';
+import { assertCredentials } from '../authorization/authorization.middleware.js';
 import pool from '../helpers/pool.js';
 import McpRouter from '../mcp/mcp.routes.js';
 import { readConsent } from '../helpers/consent-marker.js';
@@ -56,6 +57,12 @@ const {
 } = configuration;
 
 export default () => {
+    /**
+     * Before any route that `authorizeUser` guards is mounted: credentials
+     * missing a name or value would let every request through it.
+     */
+    assertCredentials();
+
     const routes = Router();
 
     /**
