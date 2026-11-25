@@ -226,6 +226,13 @@ function signedStatusRequest({ body, signature: signatureOverride }) {
 const authenticationService = { authenticate: vi.fn() };
 const destinyService = { getProfile: vi.fn() };
 const mmsService = new MmsService({ notificationService: { sendMessage: vi.fn() } });
+/** Every reply within its limits; the limits have their own specs. */
+const replyLimits = {
+    answer: async () => 'reply',
+    allowIcon: async () => true,
+    allowScans: async (_from, wanted) => wanted,
+    refundScans: async () => undefined,
+};
 const userService = {
     addUserMessage: vi.fn(),
     getUserByPhoneNumber: vi.fn(),
@@ -282,6 +289,7 @@ beforeEach(() => {
         authenticationService,
         destinyService,
         mmsService,
+        replyLimits,
         userService,
         worldRepository,
     });
@@ -815,6 +823,7 @@ describe('TwilioRouter', () => {
                     authenticationService,
                     destinyService,
                     mmsService,
+                    replyLimits,
                     userService: new UserService({
                         cacheService: cacheStub,
                         client: {},

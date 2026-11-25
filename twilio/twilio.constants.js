@@ -65,6 +65,39 @@ export const MEDIA_RECEIVED_REPLY = 'Scanning ...';
 
 /**
  * @constant
+ * @type {number}
+ * @description Images scanned from one MMS; the rest are ignored. Each is a
+ * Gemini call and a reply of its own, and a message can carry ten.
+ */
+export const MAX_IMAGES_PER_MESSAGE = 3;
+
+/**
+ * @constant
+ * @description Reply acknowledging an MMS of which only some images will be
+ * scanned: past `MAX_IMAGES_PER_MESSAGE`, or past the number's scans for the day.
+ * @param {number} scanning
+ * @param {number} sent
+ * @returns {string}
+ */
+export const mediaPartialReply = (scanning, sent) => `Scanning ${scanning} of ${sent} ...`;
+
+/**
+ * @constant
+ * @description Reply sent when a number has had its image scans for the day.
+ */
+export const MEDIA_LIMIT_REPLY =
+    "My optics need to cool down, Guardian. That's all the scans I can run for you today.";
+
+/**
+ * @constant
+ * @description The one reply a number gets once its replies for the day are
+ * spent; after it, texts go unanswered until the day's window passes.
+ */
+export const DAILY_LIMIT_REPLY =
+    "That's all the chatter my circuits can take today, Guardian. Talk tomorrow.";
+
+/**
+ * @constant
  * @description Reply sent when an MMS image could not be queued for analysis,
  * asking for it again: Twilio does not redeliver an inbound message on its own.
  */

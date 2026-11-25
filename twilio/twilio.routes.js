@@ -68,6 +68,7 @@ const verifyWebhook = (req, res, next) => {
  * @property {import('../authentication/authentication.service.js').default} authenticationService
  * @property {import('../destiny2/destiny2.service.js').default} destinyService
  * @property {import('./mms.service.js').default} mmsService
+ * @property {import('../helpers/reply-limits.js').ReplyLimits} replyLimits
  * @property {import('../users/user.service.js').default} userService
  * @property {import('../helpers/world2.js').default} worldRepository
  */
@@ -79,6 +80,7 @@ const routes = ({
     authenticationService,
     destinyService,
     mmsService,
+    replyLimits,
     userService,
     worldRepository,
 }) => {
@@ -88,6 +90,7 @@ const routes = ({
         authenticationService,
         destinyService,
         mmsService,
+        replyLimits,
         userService,
         worldRepository,
     });

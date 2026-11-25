@@ -41,6 +41,7 @@ import pool from '../helpers/pool.js';
 import McpRouter from '../mcp/mcp.routes.js';
 import { readConsent } from '../helpers/consent-marker.js';
 import allowVerification from '../helpers/verification-limits.js';
+import replyLimits from '../helpers/reply-limits.js';
 import rateLimiterMiddleware, {
     resendRateLimiterMiddleware,
     signUpNetworkRateLimiterMiddleware,
@@ -111,6 +112,7 @@ export default () => {
         authenticationService,
         destinyService: destiny2Service,
         mmsService,
+        replyLimits,
         userService,
         worldRepository: world2,
     });
