@@ -150,19 +150,20 @@ describe('reply limits', () => {
             await expect(replyLimits.allowScans(from, 2)).resolves.toBe(0);
         });
 
+        /** Null, not 0: an unanswered check isn't a spent day. */
         it('fails closed when Redis rejects the script', async () => {
             const err = new Error('READONLY');
 
             cache.eval.mockRejectedValue(err);
 
-            await expect(replyLimits.allowScans(from, 3)).resolves.toBe(0);
+            await expect(replyLimits.allowScans(from, 3)).resolves.toBeNull();
             expect(log.error).toHaveBeenCalledWith({ err, from }, expect.any(String));
         });
 
         it('fails closed when Redis is not ready', async () => {
             cache.isReady = false;
 
-            await expect(replyLimits.allowScans(from, 3)).resolves.toBe(0);
+            await expect(replyLimits.allowScans(from, 3)).resolves.toBeNull();
             expect(cache.eval).not.toHaveBeenCalled();
         });
     });

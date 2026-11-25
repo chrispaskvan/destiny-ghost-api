@@ -645,6 +645,10 @@ class TwilioController {
                 Math.min(media.length, MAX_IMAGES_PER_MESSAGE),
             );
 
+            /** The limit couldn't be checked: worth another try, unlike a spent day. */
+            if (allowed === null) {
+                return { cookies: responseCookies, message: MEDIA_RETRY_REPLY };
+            }
             if (!allowed) {
                 return { cookies: responseCookies, message: MEDIA_LIMIT_REPLY };
             }

@@ -177,19 +177,21 @@ const allowIcon = async from => {
  * scans for each: all of them, what is left of the day, or none.
  *
  * Fails closed: a scan is the costliest thing a text can start, and the
- * queue it would go on needs Redis too. The sender is asked to send again.
+ * queue it would go on needs Redis too. But an unanswered check is not a
+ * spent day, so it comes back as `null` rather than 0, and the sender is
+ * asked to send again instead of being told to wait until tomorrow.
  * @param {string} from - the sender, in E.164
  * @param {number} wanted
- * @returns {Promise<number>}
+ * @returns {Promise<number | null>} null when the limit couldn't be checked
  */
 const allowScans = async (from, wanted) => {
     if (!client.isReady) {
         log.error({ from }, 'Scan limits unavailable; scanning nothing.');
 
-        return 0;
+        return null;
     }
 
-    let allowed = 0;
+    let allowed;
 
     try {
         allowed = Number(
@@ -200,6 +202,8 @@ const allowScans = async (from, wanted) => {
         );
     } catch (err) {
         log.error({ err, from }, 'Unable to check the daily scan limit; scanning nothing.');
+
+        return null;
     }
 
     if (allowed < wanted) {

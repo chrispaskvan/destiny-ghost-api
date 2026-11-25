@@ -513,6 +513,17 @@ describe('TwilioController', () => {
                 expect(mmsService.enqueue).not.toHaveBeenCalled();
             });
 
+            it('should ask for the images again when the scan limit could not be checked', async () => {
+                replyLimits.allowScans.mockResolvedValue(null);
+
+                const { message } = await twilioController.request({ body: image(), cookies: {} });
+
+                /** Not "that's all for today": nothing was spent, and nothing is queued. */
+                expect(message).toBe(MEDIA_RETRY_REPLY);
+                expect(mmsService.enqueue).not.toHaveBeenCalled();
+                expect(replyLimits.refundScans).not.toHaveBeenCalled();
+            });
+
             it('should give the scans back when the images could not be queued', async () => {
                 mmsService.enqueue.mockRejectedValueOnce(new Error('Redis unavailable'));
 
