@@ -12,6 +12,8 @@ const {
     signUpConsume,
     resendConsume,
     networkConsume,
+    directorConsume,
+    directorAllConsume,
     MockRateLimiterRes,
     limiterOptions,
 } = vi.hoisted(() => ({
@@ -27,6 +29,8 @@ const {
     signUpConsume: vi.fn(),
     resendConsume: vi.fn(),
     networkConsume: vi.fn(),
+    directorConsume: vi.fn(),
+    directorAllConsume: vi.fn(),
     MockRateLimiterRes: class RateLimiterRes {
         constructor(remainingPoints, msBeforeNext) {
             this.remainingPoints = remainingPoints;
@@ -51,6 +55,8 @@ vi.mock('rate-limiter-flexible', () => ({
                 'sign-up': signUpConsume,
                 'sign-up-resend': resendConsume,
                 'sign-up-network': networkConsume,
+                director: directorConsume,
+                'director-all': directorAllConsume,
             }[keyPrefix];
             this.get = invalidGet;
         }
@@ -60,9 +66,14 @@ vi.mock('rate-limiter-flexible', () => ({
 vi.mock('./cache.js', () => ({
     default: { isReady: true },
 }));
+vi.mock('./log.js', () => ({
+    default: { error: vi.fn(), info: vi.fn(), warn: vi.fn() },
+}));
 
 import cache from './cache.js';
+import log from './log.js';
 import rateLimiterMiddleware, {
+    directorRateLimiterMiddleware,
     twilioRateLimiterMiddleware,
     twilioIngressRateLimiterMiddleware,
     twilioCallbackRateLimiterMiddleware,
@@ -86,10 +97,93 @@ describe('rate limiter store', () => {
             'sign-up',
             'sign-up-resend',
             'sign-up-network',
+            'director',
+            'director-all',
         ]);
         for (const options of limiterOptions) {
             expect(options).toMatchObject({ storeClient: cache, useRedisPackage: true });
         }
+    });
+});
+
+describe('director limits', () => {
+    const limits = prefix => limiterOptions.find(({ keyPrefix }) => keyPrefix === prefix);
+    let req, res, next;
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        cache.isReady = true;
+        req = {
+            ip: '203.0.113.7',
+            session: { displayName: 'Ada', membershipType: 2, membershipId: 'm-1' },
+            headers: {},
+        };
+        res = { set: vi.fn(), status: vi.fn().mockReturnThis(), end: vi.fn() };
+        next = vi.fn();
+        directorConsume.mockResolvedValue({ remainingPoints: 4, msBeforeNext: 60_000 });
+        directorAllConsume.mockResolvedValue({ remainingPoints: 59, msBeforeNext: 3_600_000 });
+    });
+
+    it('allows 5 queries a minute per account and 60 an hour in all', () => {
+        expect(limits('director')).toMatchObject({ points: 5, duration: 60 });
+        expect(limits('director-all')).toMatchObject({ points: 60, duration: 60 * 60 });
+    });
+
+    it('charges the account, then the service, and lets the query through', async () => {
+        await directorRateLimiterMiddleware(req, res, next);
+
+        expect(directorConsume).toHaveBeenCalledExactlyOnceWith('2:Ada');
+        expect(directorAllConsume).toHaveBeenCalledExactlyOnceWith('all');
+        expect(directorConsume.mock.invocationCallOrder[0]).toBeLessThan(
+            directorAllConsume.mock.invocationCallOrder[0],
+        );
+        expect(res.set).toHaveBeenCalledWith(expect.objectContaining({ 'X-RateLimit-Limit': 5 }));
+        expect(next).toHaveBeenCalledOnce();
+    });
+
+    it.each([
+        ['account', () => directorConsume],
+        ['service', () => directorAllConsume],
+    ])("answers 429 with Retry-After once the %s's limit is spent", async (_, limiter) => {
+        limiter().mockRejectedValueOnce(new MockRateLimiterRes(0, 42_000));
+
+        await directorRateLimiterMiddleware(req, res, next);
+
+        expect(res.set).toHaveBeenCalledWith('Retry-After', '42');
+        expect(res.status).toHaveBeenCalledWith(StatusCodes.TOO_MANY_REQUESTS);
+        expect(next).not.toHaveBeenCalled();
+    });
+
+    it("doesn't spend the service's share on an account over its own", async () => {
+        directorConsume.mockRejectedValueOnce(new MockRateLimiterRes(0, 1_000));
+
+        await directorRateLimiterMiddleware(req, res, next);
+
+        expect(directorAllConsume).not.toHaveBeenCalled();
+    });
+
+    /** Unlike the general bucket: nothing depends on /director yet. */
+    it('fails closed with 503 when Redis is not ready', async () => {
+        cache.isReady = false;
+
+        await directorRateLimiterMiddleware(req, res, next);
+
+        expect(res.status).toHaveBeenCalledWith(StatusCodes.SERVICE_UNAVAILABLE);
+        expect(res.set).toHaveBeenCalledWith('Retry-After', '30');
+        expect(directorConsume).not.toHaveBeenCalled();
+        expect(next).not.toHaveBeenCalled();
+    });
+
+    it('fails closed with 503 when Redis rejects a command', async () => {
+        const err = new Error('READONLY');
+
+        directorConsume.mockRejectedValueOnce(err);
+
+        await directorRateLimiterMiddleware(req, res, next);
+
+        expect(res.status).toHaveBeenCalledWith(StatusCodes.SERVICE_UNAVAILABLE);
+        expect(log.error).toHaveBeenCalledWith({ err }, expect.any(String));
+        expect(next).not.toHaveBeenCalled();
     });
 });
 

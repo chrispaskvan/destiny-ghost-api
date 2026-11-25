@@ -3,6 +3,7 @@ import { StatusCodes } from 'http-status-codes';
 import { RateLimiterRedis, RateLimiterRes } from 'rate-limiter-flexible';
 import client from './cache.js';
 import clientIp, { clientNetwork } from './client-ip.js';
+import log from './log.js';
 
 // rate-limiter-flexible picks its node-redis code path by the client's class name (`Commander`),
 // which node-redis v6 no longer uses. Without `useRedisPackage` every consume throws, and
@@ -72,6 +73,25 @@ const signUpNetworkLimiter = new RateLimiterRedis({
     ...store,
     keyPrefix: 'sign-up-network',
     points: 20,
+    duration: 60 * 60,
+});
+/**
+ * `/director` is a demonstration of GraphQL, not yet for general use, and
+ * each search it runs is a Bungie search plus a statistics lookup for every
+ * player found: enough of them and Bungie throttles the API key everything
+ * else depends on. Held far below the general bucket, per account and for
+ * the service as a whole, so many accounts can't add up to that either.
+ */
+const directorLimiter = new RateLimiterRedis({
+    ...store,
+    keyPrefix: 'director',
+    points: 5,
+    duration: 60,
+});
+const directorServiceLimiter = new RateLimiterRedis({
+    ...store,
+    keyPrefix: 'director-all',
+    points: 60,
     duration: 60 * 60,
 });
 /**
@@ -310,8 +330,53 @@ const resendRateLimiterMiddleware = perChannel(resendLimiter);
 const signUpNetworkRateLimiterMiddleware = (req, res, next) =>
     consumePoints(signUpNetworkLimiter, clientNetwork(req), 1, res, next);
 
+/**
+ * Limit `/director` per account, then for the whole service. Runs after
+ * `authenticateUser`, so the session names an account.
+ *
+ * Fails closed, unlike the general bucket: nothing depends on this endpoint
+ * yet, and what it spends is the Bungie quota that everything else does. A
+ * Redis that can't answer gets a 503 to retry rather than an unlimited pass.
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ * @returns {Promise<void>}
+ */
+const directorRateLimiterMiddleware = async (req, res, next) => {
+    const unavailable = () => {
+        res.set('Retry-After', '30');
+        res.status(StatusCodes.SERVICE_UNAVAILABLE).end();
+    };
+
+    if (!client.isReady) {
+        unavailable();
+
+        return;
+    }
+
+    try {
+        const remaining = await directorLimiter.consume(accountKey(req));
+
+        await directorServiceLimiter.consume('all');
+        setRateLimitHeaders(remaining, res, directorLimiter.points);
+    } catch (rejection) {
+        if (rejection instanceof RateLimiterRes) {
+            res.set('Retry-After', String(Math.ceil(rejection.msBeforeNext / 1000)));
+            res.status(StatusCodes.TOO_MANY_REQUESTS).end();
+        } else {
+            log.error({ err: rejection }, 'Unable to check the /director limits; refusing.');
+            unavailable();
+        }
+
+        return;
+    }
+
+    next();
+};
+
 export default rateLimiterMiddleware;
 export {
+    directorRateLimiterMiddleware,
     twilioRateLimiterMiddleware,
     twilioIngressRateLimiterMiddleware,
     twilioCallbackRateLimiterMiddleware,
