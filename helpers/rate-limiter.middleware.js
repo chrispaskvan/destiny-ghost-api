@@ -299,36 +299,92 @@ const accountKey = req => {
 };
 
 /**
+ * How long a request refused for want of Redis is asked to wait.
+ */
+const UNCHECKED_RETRY_SECONDS = 30;
+
+/**
+ * Refuse a request whose limit couldn't be checked: 503, to retry shortly.
+ * @param {import('express').Response} res
+ */
+const refuseUnchecked = res => {
+    res.set('Retry-After', String(UNCHECKED_RETRY_SECONDS));
+    res.status(StatusCodes.SERVICE_UNAVAILABLE).end();
+};
+
+/**
+ * Spend a point as `consumePoints` does, but fail closed.
+ *
+ * For the limits in front of something billed. `consumePoints` lets a
+ * request through when Redis can't answer, which is right for reads - an
+ * outage shouldn't take them down too - but in front of a billed send it
+ * switches the limit off for as long as the outage lasts, and the queue the
+ * send goes on has a Redis connection of its own that may still be up.
+ * @param {RateLimiterRedis} limiter
+ * @param {string} key
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ * @returns {Promise<void>}
+ */
+const consumePointsOrRefuse = async (limiter, key, res, next) => {
+    if (!client.isReady) {
+        refuseUnchecked(res);
+
+        return;
+    }
+
+    try {
+        setRateLimitHeaders(await limiter.consume(key, 1), res, limiter.points);
+    } catch (rejection) {
+        if (rejection instanceof RateLimiterRes) {
+            setRateLimitHeaders(rejection, res, limiter.points);
+            res.set('Retry-After', String(Math.ceil(rejection.msBeforeNext / 1000)));
+            res.status(StatusCodes.TOO_MANY_REQUESTS).end();
+        } else {
+            log.error(
+                { err: rejection, keyPrefix: limiter.keyPrefix },
+                'Unable to check a limit on a billed endpoint; refusing.',
+            );
+            refuseUnchecked(res);
+        }
+
+        return;
+    }
+
+    next();
+};
+
+/**
  * Limit sign-ups per account. Runs after `authenticateUser`, so the session
- * names an account.
+ * names an account. Fails closed.
  * @param {import('express').Request} req
  * @param {import('express').Response} res
  * @param {import('express').NextFunction} next
  */
 const signUpRateLimiterMiddleware = (req, res, next) =>
-    consumePoints(signUpLimiter, accountKey(req), 1, res, next);
+    consumePointsOrRefuse(signUpLimiter, accountKey(req), res, next);
 
 /**
  * Charge a request to its account and channel. Runs after the route has
- * checked the channel.
+ * checked the channel. Fails closed.
  * @param {RateLimiterRedis} limiter
  * @returns {import('express').RequestHandler}
  */
 const perChannel = limiter => (req, res, next) =>
-    consumePoints(limiter, `${accountKey(req)}:${req.body.channel}`, 1, res, next);
+    consumePointsOrRefuse(limiter, `${accountKey(req)}:${req.body.channel}`, res, next);
 
 /** Limit sign-up resends per account and channel. */
 const resendRateLimiterMiddleware = perChannel(resendLimiter);
 
 /**
  * Limit sign-ups and resends together per client network: an IPv4 address
- * or an IPv6 /64.
+ * or an IPv6 /64. Fails closed.
  * @param {import('express').Request} req
  * @param {import('express').Response} res
  * @param {import('express').NextFunction} next
  */
 const signUpNetworkRateLimiterMiddleware = (req, res, next) =>
-    consumePoints(signUpNetworkLimiter, clientNetwork(req), 1, res, next);
+    consumePointsOrRefuse(signUpNetworkLimiter, clientNetwork(req), res, next);
 
 /**
  * Limit `/director` per account, then for the whole service. Runs after
@@ -343,13 +399,8 @@ const signUpNetworkRateLimiterMiddleware = (req, res, next) =>
  * @returns {Promise<void>}
  */
 const directorRateLimiterMiddleware = async (req, res, next) => {
-    const unavailable = () => {
-        res.set('Retry-After', '30');
-        res.status(StatusCodes.SERVICE_UNAVAILABLE).end();
-    };
-
     if (!client.isReady) {
-        unavailable();
+        refuseUnchecked(res);
 
         return;
     }
@@ -365,7 +416,7 @@ const directorRateLimiterMiddleware = async (req, res, next) => {
             res.status(StatusCodes.TOO_MANY_REQUESTS).end();
         } else {
             log.error({ err: rejection }, 'Unable to check the /director limits; refusing.');
-            unavailable();
+            refuseUnchecked(res);
         }
 
         return;
