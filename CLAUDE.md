@@ -1,3 +1,5 @@
 # Claude Guidelines
 
-See [AGENTS.md](./AGENTS.md) for project conventions including test file naming.
+Project conventions, including test file naming, live in [AGENTS.md](./AGENTS.md):
+
+@AGENTS.md
