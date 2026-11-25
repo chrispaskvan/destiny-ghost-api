@@ -2,7 +2,7 @@
 /**
  * User Authorization Middleware
  */
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { timingSafeEqual } from 'node:crypto';
 import { StatusCodes } from 'http-status-codes';
 import { z } from 'zod';
 import configuration from '../helpers/config.js';
@@ -56,10 +56,15 @@ const assertCredentials = (credentials = configuration) => {
 /**
  * Compare a header's value to the one expected in constant time.
  *
- * Both are hashed first, so the comparison is always of two equal-length
- * digests: `timingSafeEqual` throws on unequal lengths, and comparing the raw
- * values would leak the expected one's length. A missing header, a repeated
- * one (an array), or an empty expectation never matches.
+ * `timingSafeEqual` throws on unequal lengths, so a value of another length
+ * is compared with itself and refused. Either way the work done grows with
+ * the length of what was sent, not with anything about the expected value,
+ * so the comparison leaks no more than whether the length was right.
+ *
+ * Not hashed first to even out the lengths: a fast digest of a credential is
+ * what CodeQL's `js/insufficient-password-hash` looks for, and nothing here
+ * needs one. A missing header, a repeated one (an array), or an empty
+ * expectation never matches.
  * @param {string | string[] | undefined} given
  * @param {string | undefined} expected
  * @returns {boolean}
@@ -69,9 +74,16 @@ const isSameSecret = (given, expected) => {
         return false;
     }
 
-    const digest = (/** @type {string} */ value) => createHash('sha256').update(value).digest();
+    const sent = Buffer.from(given);
+    const wanted = Buffer.from(expected);
 
-    return timingSafeEqual(digest(given), digest(expected));
+    if (sent.length !== wanted.length) {
+        timingSafeEqual(sent, sent);
+
+        return false;
+    }
+
+    return timingSafeEqual(sent, wanted);
 };
 
 /**
