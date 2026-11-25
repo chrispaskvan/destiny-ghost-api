@@ -39,12 +39,58 @@ const icons = new RateLimiterRedis({
     points: ICONS_PER_DAY,
     duration: DAY,
 });
-const scans = new RateLimiterRedis({
-    ...store,
-    keyPrefix: 'mms-scans',
-    points: SCANS_PER_DAY,
-    duration: DAY,
-});
+
+/** @param {string} from */
+const scansKey = from => `mms-scans:${from}`;
+
+/**
+ * Grant up to ARGV[1] scans out of what is left of the day, in one step.
+ *
+ * A script rather than the limiter the other budgets use: a refused
+ * `consume()` still adds its point, so a partial grant (three wanted, one
+ * left) would leave the counter past the limit, and giving back the one
+ * granted after a failed enqueue would not bring the number back under it to
+ * send again. This adds only what it grants, and nothing on a refusal.
+ *
+ * The window opens with the day's first scan and is not stretched by later
+ * ones, as the limiter's is not.
+ *
+ * KEYS[1]: the number's counter. ARGV: wanted, limit, window in seconds.
+ * Returns how many were granted.
+ */
+const RESERVE_SCANS = `
+local used = tonumber(redis.call('GET', KEYS[1]) or '0')
+local granted = math.min(tonumber(ARGV[1]), tonumber(ARGV[2]) - used)
+
+if granted <= 0 then
+    return 0
+end
+
+redis.call('INCRBY', KEYS[1], granted)
+if redis.call('TTL', KEYS[1]) == -1 then
+    redis.call('EXPIRE', KEYS[1], ARGV[3])
+end
+
+return granted
+`;
+
+/**
+ * Give back up to ARGV[1] scans, never below zero, and never to a counter
+ * whose window has already closed: DECRBY on a missing key would create one
+ * with no expiry, a negative balance that never lapses.
+ *
+ * KEYS[1]: the number's counter. ARGV: count. Returns how many were refunded.
+ */
+const REFUND_SCANS = `
+local used = tonumber(redis.call('GET', KEYS[1]) or '0')
+local refunded = math.min(used, tonumber(ARGV[1]))
+
+if refunded > 0 then
+    redis.call('DECRBY', KEYS[1], refunded)
+end
+
+return refunded
+`;
 
 /**
  * Spend a point.
@@ -127,7 +173,8 @@ const allowIcon = async from => {
 };
 
 /**
- * How many of `wanted` images may be scanned, spending one point for each.
+ * How many of `wanted` images may be scanned, spending one of the day's
+ * scans for each: all of them, what is left of the day, or none.
  *
  * Fails closed: a scan is the costliest thing a text can start, and the
  * queue it would go on needs Redis too. The sender is asked to send again.
@@ -145,11 +192,14 @@ const allowScans = async (from, wanted) => {
     let allowed = 0;
 
     try {
-        while (allowed < wanted && (await spend(scans, from))) {
-            allowed += 1;
-        }
+        allowed = Number(
+            await client.eval(RESERVE_SCANS, {
+                keys: [scansKey(from)],
+                arguments: [String(wanted), String(SCANS_PER_DAY), String(DAY)],
+            }),
+        );
     } catch (err) {
-        log.error({ err, from }, 'Unable to check the daily scan limit; scanning nothing more.');
+        log.error({ err, from }, 'Unable to check the daily scan limit; scanning nothing.');
     }
 
     if (allowed < wanted) {
@@ -169,11 +219,16 @@ const allowScans = async (from, wanted) => {
  * @param {number} count
  * @returns {Promise<void>}
  */
-const refundScans = (from, count) =>
-    scans.reward(from, count).then(
-        () => undefined,
-        err => log.warn({ err, from }, 'Unable to refund unqueued scans.'),
-    );
+const refundScans = async (from, count) => {
+    try {
+        await client.eval(REFUND_SCANS, {
+            keys: [scansKey(from)],
+            arguments: [String(count)],
+        });
+    } catch (err) {
+        log.warn({ err, from }, 'Unable to refund unqueued scans.');
+    }
+};
 
 /**
  * @typedef {Object} ReplyLimits
