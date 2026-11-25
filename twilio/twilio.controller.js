@@ -16,14 +16,18 @@ import { recordConsent } from '../helpers/consent-marker.js';
 import subscriber from '../helpers/subscriber.js';
 import { enqueueConsentChange, QUEUE_NAME as CONSENT_QUEUE } from './consent.queue.js';
 import {
+    DAILY_LIMIT_REPLY,
     EMOJI_DEFAULT_REPLY,
     EMOJI_INTENT_REPLIES,
     HELP_KEYWORDS,
     HELP_REPLY,
+    MAX_IMAGES_PER_MESSAGE,
     MAX_SMS_MESSAGE_LENGTH,
+    MEDIA_LIMIT_REPLY,
     MEDIA_RECEIVED_REPLY,
     MEDIA_RETRY_REPLY,
     MEDIA_UNSUPPORTED_REPLY,
+    mediaPartialReply,
     START_KEYWORDS,
     START_REPLY,
     STOP_KEYWORDS,
@@ -133,6 +137,8 @@ function isRetryableConsentError(err) {
  * @property {import('../authentication/authentication.service.js').default} authenticationService
  * @property {import('../destiny2/destiny2.service.js').default} destinyService
  * @property {import('./mms.service.js').default} mmsService
+ * @property {import('../helpers/reply-limits.js').ReplyLimits} replyLimits - what
+ * one number's texts may spend a day (see `helpers/reply-limits.js`)
  * @property {import('../users/user.service.js').default} userService
  * @property {import('../helpers/world2.js').default} worldRepository
  */
@@ -146,6 +152,15 @@ class TwilioController {
      * @param {TwilioControllerOptions} options
      */
     constructor(options) {
+        /**
+         * Required: without them, one number can keep the per-minute limit up
+         * all day, in MMS replies and image scans.
+         */
+        if (!options.replyLimits) {
+            throw new TypeError('replyLimits is required');
+        }
+
+        this.limits = options.replyLimits;
         this.authentication = options.authenticationService;
         this.destiny = options.destinyService;
         this.mms = options.mmsService;
@@ -514,11 +529,11 @@ class TwilioController {
     }
 
     /**
+     * Answer one inbound SMS/MMS.
      * @param {{ body: TwilioWebhookBody, cookies: Record<string, string | undefined> }} param0
      * @returns {Promise<TwilioReply>}
      */
     async request({ body, cookies }) {
-        let responseCookies = {};
         /**
          * `bodySchema` in twilio.routes.js requires `Body` for this route
          * (POST /destiny/r); it's optional on `TwilioWebhookBody` only
@@ -526,7 +541,6 @@ class TwilioController {
          * type and doesn't send `Body`.
          */
         const rawMessage = /** @type {string} */ (body.Body).trim();
-        const emojiMatches = extractEmoji(rawMessage);
         /**
          * One normalization for keywords and item search alike, the one the
          * route used when exempting STOP/HELP/START from the rate limit. It
@@ -536,45 +550,32 @@ class TwilioController {
          * separately below, before falling through to item search.
          */
         const message = toKeyword(rawMessage);
+        const keywordReply = await this.#replyToComplianceKeyword(message, body.From);
+
+        if (keywordReply) {
+            return keywordReply;
+        }
 
         /**
-         * Carrier compliance requires STOP/HELP/START to work for any inbound
-         * number. Replies must not wait for user lookup or best-effort
-         * persistence. The arrival time is taken here, before any of it, so
-         * two messages from one number are ordered by when they reached us
-         * rather than by which write happened to finish first.
-         *
-         * The two writes below are deliberately asymmetric. The durable one
-         * stays fire-and-forget, because answering a STOP cannot depend on
-         * Cosmos. The marker is awaited, because a record of the
-         * acknowledgement is only useful if it is readable by the time the
-         * acknowledgement is out - that is the whole of #739. It is one Redis
-         * write, bounded by a timeout and incapable of throwing, so the worst
-         * it can do is delay the reply by that timeout and leave the window
-         * where it already was.
+         * Charged before the lookup, so a number past its day costs neither a
+         * read nor a reply. Every other text counts, answered or not. The one
+         * notice still waits for the lookup, so it never reaches a number that
+         * has opted out.
          */
-        const receivedAt = Temporal.Now.instant().epochMilliseconds;
+        const answer = await this.limits.chargeText(body.From);
 
-        if (STOP_KEYWORDS.has(message)) {
-            await recordConsent(body.From, false, receivedAt);
-            void this.#persistConsent(body.From, false, receivedAt);
-            return { message: STOP_REPLY };
-        }
-
-        if (HELP_KEYWORDS.has(message)) {
-            return { message: HELP_REPLY };
-        }
-
-        if (START_KEYWORDS.has(message)) {
-            await recordConsent(body.From, true, receivedAt);
-            void this.#persistConsent(body.From, true, receivedAt);
-            return { message: START_REPLY };
+        if (answer === 'quiet') {
+            return {};
         }
 
         const user = await this.users.getUserByPhoneNumber(body.From);
 
         if (user?.isSubscribed === false) {
             return {};
+        }
+
+        if (answer === 'notice') {
+            return { message: DAILY_LIMIT_REPLY };
         }
 
         if (!user?.dateRegistered) {
@@ -587,7 +588,8 @@ class TwilioController {
             return {};
         }
 
-        responseCookies = { isRegistered: 'true', ...responseCookies };
+        const responseCookies = { isRegistered: 'true' };
+
         // SmsStatus is a standard Twilio field on every inbound SMS/MMS webhook,
         // even though bodySchema (twilio.routes.js) doesn't validate it (SmsSid is).
         await this.users.addUserMessage(
@@ -597,48 +599,153 @@ class TwilioController {
         const numMedia = Number(body.NumMedia) || 0;
 
         if (numMedia > 0) {
-            const media = Array.from({ length: numMedia }, (_, index) => ({
-                contentType: body[`MediaContentType${index}`],
-                url: body[`MediaUrl${index}`],
-            })).filter(
-                /** @returns {item is import('./mms.service.js').MmsMedia} */
-                item => Boolean(item.url && item.contentType?.startsWith('image/')),
-            );
-
-            if (!media.length) {
-                return { cookies: responseCookies, message: MEDIA_UNSUPPORTED_REPLY };
-            }
-
-            /**
-             * Queued, not processed: downloading and analyzing can exceed
-             * Twilio's webhook timeout. Awaited, so the receipt is
-             * acknowledged only once the image is recorded. Twilio does not
-             * redeliver an inbound message whose webhook fails, so an image
-             * that could not be queued is asked for again instead.
-             */
-            try {
-                await this.mms.enqueue({
-                    /** Required on this route by `bodySchema` in twilio.routes.js. */
-                    messageSid: /** @type {string} */ (body.MessageSid),
-                    from: body.From,
-                    media,
-                });
-            } catch (err) {
-                log.error({ err, from: body.From }, 'Failed to queue the MMS media');
-
-                return { cookies: responseCookies, message: MEDIA_RETRY_REPLY };
-            }
-
-            return { cookies: responseCookies, message: MEDIA_RECEIVED_REPLY };
+            return await this.#replyToMedia(body, numMedia, responseCookies);
         }
 
-        const { itemHash } = cookies;
+        const emojiReply = this.#replyToEmoji(rawMessage, message, responseCookies);
+
+        if (emojiReply) {
+            return emojiReply;
+        }
+
+        if (this.itemKeywords.has(message)) {
+            const handler = /** @type {ItemKeywordHandler} */ (this.itemKeywords.get(message));
+
+            return await handler.bind(this)(cookies.itemHash, responseCookies);
+        }
+
+        if (message === 'xur') {
+            return await this.getXur(user, responseCookies);
+        }
+
+        return await this.#replyToSearch(message, user, body.From, responseCookies);
+    }
+
+    /**
+     * Answer STOP, HELP and START.
+     *
+     * Carrier compliance requires STOP/HELP/START to work for any inbound
+     * number. Replies must not wait for user lookup or best-effort
+     * persistence. The arrival time is taken here, before any of it, so
+     * two messages from one number are ordered by when they reached us
+     * rather than by which write happened to finish first.
+     *
+     * The two writes below are deliberately asymmetric. The durable one
+     * stays fire-and-forget, because answering a STOP cannot depend on
+     * Cosmos. The marker is awaited, because a record of the
+     * acknowledgement is only useful if it is readable by the time the
+     * acknowledgement is out - that is the whole of #739. It is one Redis
+     * write, bounded by a timeout and incapable of throwing, so the worst
+     * it can do is delay the reply by that timeout and leave the window
+     * where it already was.
+     * @param {string} message - the text, as `toKeyword` normalizes it
+     * @param {string} from - the sender, in E.164
+     * @returns {Promise<TwilioReply | undefined>} `undefined` for any other text
+     */
+    async #replyToComplianceKeyword(message, from) {
+        const receivedAt = Temporal.Now.instant().epochMilliseconds;
+
+        if (STOP_KEYWORDS.has(message)) {
+            await recordConsent(from, false, receivedAt);
+            void this.#persistConsent(from, false, receivedAt);
+            return { message: STOP_REPLY };
+        }
+
+        if (HELP_KEYWORDS.has(message)) {
+            return { message: HELP_REPLY };
+        }
+
+        if (START_KEYWORDS.has(message)) {
+            await recordConsent(from, true, receivedAt);
+            void this.#persistConsent(from, true, receivedAt);
+            return { message: START_REPLY };
+        }
+
+        return undefined;
+    }
+
+    /**
+     * Answer an MMS by queueing its images for scanning, as many as the
+     * sender's day allows.
+     * @param {TwilioWebhookBody} body
+     * @param {number} numMedia - how many attachments the message carries
+     * @param {Record<string, string | undefined>} cookies
+     * @returns {Promise<TwilioReply>}
+     */
+    async #replyToMedia(body, numMedia, cookies) {
+        const media = Array.from({ length: numMedia }, (_, index) => ({
+            contentType: body[`MediaContentType${index}`],
+            url: body[`MediaUrl${index}`],
+        })).filter(
+            /** @returns {item is import('./mms.service.js').MmsMedia} */
+            item => Boolean(item.url && item.contentType?.startsWith('image/')),
+        );
+
+        if (!media.length) {
+            return { cookies, message: MEDIA_UNSUPPORTED_REPLY };
+        }
+
+        const allowed = await this.limits.allowScans(
+            body.From,
+            Math.min(media.length, MAX_IMAGES_PER_MESSAGE),
+        );
+
+        /** The limit couldn't be checked: worth another try, unlike a spent day. */
+        if (allowed === null) {
+            return { cookies, message: MEDIA_RETRY_REPLY };
+        }
+        if (!allowed) {
+            return { cookies, message: MEDIA_LIMIT_REPLY };
+        }
+
+        const scanning = media.slice(0, allowed);
+
+        /**
+         * Queued, not processed: downloading and analyzing can exceed
+         * Twilio's webhook timeout. Awaited, so the receipt is
+         * acknowledged only once the image is recorded. Twilio does not
+         * redeliver an inbound message whose webhook fails, so an image
+         * that could not be queued is asked for again instead.
+         */
+        try {
+            await this.mms.enqueue({
+                /** Required on this route by `bodySchema` in twilio.routes.js. */
+                messageSid: /** @type {string} */ (body.MessageSid),
+                from: body.From,
+                media: scanning,
+            });
+        } catch (err) {
+            log.error({ err, from: body.From }, 'Failed to queue the MMS media');
+            /** Asked to send again, so not charged for this try. */
+            await this.limits.refundScans(body.From, allowed);
+
+            return { cookies, message: MEDIA_RETRY_REPLY };
+        }
+
+        return {
+            cookies,
+            message:
+                scanning.length < media.length
+                    ? mediaPartialReply(scanning.length, media.length)
+                    : MEDIA_RECEIVED_REPLY,
+        };
+    }
+
+    /**
+     * Answer a text that is only emoji, or a reaction to one of our replies.
+     * @param {string} rawMessage - the text as sent, trimmed
+     * @param {string} message - the text, as `toKeyword` normalizes it
+     * @param {Record<string, string | undefined>} cookies
+     * @returns {TwilioReply | undefined} `undefined` for any other text
+     */
+    #replyToEmoji(rawMessage, message, cookies) {
+        const emojiMatches = extractEmoji(rawMessage);
 
         if (emojiMatches.length && !message) {
             const reply =
                 EMOJI_INTENT_REPLIES.get(normalizeEmoji(emojiMatches[0])) ?? EMOJI_DEFAULT_REPLY;
 
-            return { cookies: responseCookies, message: reply };
+            return { cookies, message: reply };
         }
 
         /**
@@ -654,27 +761,30 @@ class TwilioController {
             }
 
             return {
-                cookies: responseCookies,
+                cookies,
                 message: EMOJI_INTENT_REPLIES.get(reaction.emoji ?? '') ?? EMOJI_DEFAULT_REPLY,
             };
         }
 
-        if (this.itemKeywords.has(message)) {
-            const handler = /** @type {ItemKeywordHandler} */ (this.itemKeywords.get(message));
+        return undefined;
+    }
 
-            return await handler.bind(this)(itemHash, responseCookies);
-        }
-
-        if (message === 'xur') {
-            return await this.getXur(user, responseCookies);
-        }
-
+    /**
+     * Answer a search for an item by name: the item and its icon for one
+     * match, the names for several, or a shrug for none.
+     * @param {string} message - the text, as `toKeyword` normalizes it
+     * @param {UserDocument} user - the registered sender
+     * @param {string} from - the sender, in E.164
+     * @param {Record<string, string | undefined>} cookies
+     * @returns {Promise<TwilioReply>}
+     */
+    async #replyToSearch(message, user, from, cookies) {
         const items = await this.queryItem(message);
 
         switch (items.length) {
             case 0: {
                 return {
-                    cookies: responseCookies,
+                    cookies,
                     message: TwilioController.getRandomResponseForNoResults(),
                 };
             }
@@ -683,19 +793,22 @@ class TwilioController {
                 // the raw manifest item - see queryItem()'s branches.
                 const item = /** @type {ItemResult} */ (items[0]);
 
-                responseCookies = {
-                    itemHash: item.itemHash !== undefined ? String(item.itemHash) : undefined,
-                    ...responseCookies,
-                };
                 item.itemCategory = (item.itemCategory ?? '').replace(/Weapon/g, '').trim();
 
                 return {
-                    cookies: responseCookies,
+                    cookies: {
+                        itemHash: item.itemHash !== undefined ? String(item.itemHash) : undefined,
+                        ...cookies,
+                    },
                     message: `${item.itemName} ${item.itemCategory}`.substring(
                         0,
                         MAX_SMS_MESSAGE_LENGTH,
                     ),
-                    media: user.type === 'landline' ? undefined : item.icon,
+                    /** Past the day's icons, the same answer as plain SMS. */
+                    media:
+                        item.icon && user.type !== 'landline' && (await this.limits.allowIcon(from))
+                            ? item.icon
+                            : undefined,
                 };
             }
             default: {
@@ -709,7 +822,7 @@ class TwilioController {
                     .trim();
 
                 return {
-                    cookies: { itemHash: undefined, ...responseCookies },
+                    cookies: { itemHash: undefined, ...cookies },
                     message: result.substring(0, MAX_SMS_MESSAGE_LENGTH),
                 };
             }

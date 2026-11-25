@@ -37,11 +37,15 @@ import TwilioRouter from '../twilio/twilio.routes.js';
 import UserRouter from '../users/user.routes.js';
 import schema from '../graphql/schema.js';
 import root from '../graphql/root.js';
+import maxRootFields from '../graphql/max-root-fields.js';
+import { assertCredentials } from '../authorization/authorization.middleware.js';
 import pool from '../helpers/pool.js';
 import McpRouter from '../mcp/mcp.routes.js';
 import { readConsent } from '../helpers/consent-marker.js';
 import allowVerification from '../helpers/verification-limits.js';
+import replyLimits from '../helpers/reply-limits.js';
 import rateLimiterMiddleware, {
+    directorRateLimiterMiddleware,
     resendRateLimiterMiddleware,
     signUpNetworkRateLimiterMiddleware,
     signUpRateLimiterMiddleware,
@@ -53,6 +57,12 @@ const {
 } = configuration;
 
 export default () => {
+    /**
+     * Before any route that `authorizeUser` guards is mounted: credentials
+     * missing a name or value would let every request through it.
+     */
+    assertCredentials();
+
     const routes = Router();
 
     /**
@@ -111,6 +121,7 @@ export default () => {
         authenticationService,
         destinyService: destiny2Service,
         mmsService,
+        replyLimits,
         userService,
         worldRepository: world2,
     });
@@ -194,9 +205,11 @@ export default () => {
     routes.use(
         '/director',
         (req, res, next) => middleware.authenticateUser(req, res, next),
+        directorRateLimiterMiddleware,
         createHandler({
             schema,
             rootValue: root,
+            validationRules: [maxRootFields],
             context: ({ raw: req }) => {
                 const {
                     session: { displayName, membershipType },

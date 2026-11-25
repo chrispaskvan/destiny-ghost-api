@@ -3,6 +3,7 @@ import { StatusCodes } from 'http-status-codes';
 import { RateLimiterRedis, RateLimiterRes } from 'rate-limiter-flexible';
 import client from './cache.js';
 import clientIp, { clientNetwork } from './client-ip.js';
+import log from './log.js';
 
 // rate-limiter-flexible picks its node-redis code path by the client's class name (`Commander`),
 // which node-redis v6 no longer uses. Without `useRedisPackage` every consume throws, and
@@ -72,6 +73,25 @@ const signUpNetworkLimiter = new RateLimiterRedis({
     ...store,
     keyPrefix: 'sign-up-network',
     points: 20,
+    duration: 60 * 60,
+});
+/**
+ * `/director` is a demonstration of GraphQL, not yet for general use, and
+ * each search it runs is a Bungie search plus a statistics lookup for every
+ * player found: enough of them and Bungie throttles the API key everything
+ * else depends on. Held far below the general bucket, per account and for
+ * the service as a whole, so many accounts can't add up to that either.
+ */
+const directorLimiter = new RateLimiterRedis({
+    ...store,
+    keyPrefix: 'director',
+    points: 5,
+    duration: 60,
+});
+const directorServiceLimiter = new RateLimiterRedis({
+    ...store,
+    keyPrefix: 'director-all',
+    points: 60,
     duration: 60 * 60,
 });
 /**
@@ -279,39 +299,122 @@ const accountKey = req => {
 };
 
 /**
+ * How long a request refused for want of Redis is asked to wait.
+ */
+const UNCHECKED_RETRY_SECONDS = 30;
+
+/**
+ * Refuse a request whose limit couldn't be checked: 503, to retry shortly.
+ * @param {import('express').Response} res
+ */
+const refuseUnchecked = res => {
+    res.set('Retry-After', String(UNCHECKED_RETRY_SECONDS));
+    res.status(StatusCodes.SERVICE_UNAVAILABLE).end();
+};
+
+/**
+ * Spend a point as `consumePoints` does, but fail closed.
+ *
+ * For the limits in front of something billed or scarce. `consumePoints` lets
+ * a request through when Redis can't answer, which is right for reads - an
+ * outage shouldn't take them down too - but in front of a billed send it
+ * switches the limit off for as long as the outage lasts, and the queue the
+ * send goes on has a Redis connection of its own that may still be up.
+ *
+ * A service limit, when given, is one bucket for every caller, charged only
+ * once the caller's own limit has let the request through, so a caller over
+ * its own spends none of the service's share. The rate-limit headers always
+ * describe the caller's own limit; `Retry-After`, whichever limit refused.
+ * @param {RateLimiterRedis} limiter - the caller's own limit
+ * @param {string} key
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ * @param {RateLimiterRedis} [serviceLimiter]
+ * @returns {Promise<void>}
+ */
+const consumePointsOrRefuse = async (limiter, key, res, next, serviceLimiter) => {
+    if (!client.isReady) {
+        refuseUnchecked(res);
+
+        return;
+    }
+
+    /** @type {RateLimiterRes | undefined} */
+    let own;
+
+    try {
+        own = await limiter.consume(key, 1);
+        await serviceLimiter?.consume('all', 1);
+    } catch (rejection) {
+        if (rejection instanceof RateLimiterRes) {
+            setRateLimitHeaders(own ?? rejection, res, limiter.points);
+            res.set('Retry-After', String(Math.ceil(rejection.msBeforeNext / 1000)));
+            res.status(StatusCodes.TOO_MANY_REQUESTS).end();
+        } else {
+            log.error(
+                { err: rejection, keyPrefix: limiter.keyPrefix },
+                'Unable to check a limit; refusing.',
+            );
+            refuseUnchecked(res);
+        }
+
+        return;
+    }
+
+    setRateLimitHeaders(own, res, limiter.points);
+    next();
+};
+
+/**
  * Limit sign-ups per account. Runs after `authenticateUser`, so the session
- * names an account.
+ * names an account. Fails closed.
  * @param {import('express').Request} req
  * @param {import('express').Response} res
  * @param {import('express').NextFunction} next
  */
 const signUpRateLimiterMiddleware = (req, res, next) =>
-    consumePoints(signUpLimiter, accountKey(req), 1, res, next);
+    consumePointsOrRefuse(signUpLimiter, accountKey(req), res, next);
 
 /**
  * Charge a request to its account and channel. Runs after the route has
- * checked the channel.
+ * checked the channel. Fails closed.
  * @param {RateLimiterRedis} limiter
  * @returns {import('express').RequestHandler}
  */
 const perChannel = limiter => (req, res, next) =>
-    consumePoints(limiter, `${accountKey(req)}:${req.body.channel}`, 1, res, next);
+    consumePointsOrRefuse(limiter, `${accountKey(req)}:${req.body.channel}`, res, next);
 
 /** Limit sign-up resends per account and channel. */
 const resendRateLimiterMiddleware = perChannel(resendLimiter);
 
 /**
  * Limit sign-ups and resends together per client network: an IPv4 address
- * or an IPv6 /64.
+ * or an IPv6 /64. Fails closed.
  * @param {import('express').Request} req
  * @param {import('express').Response} res
  * @param {import('express').NextFunction} next
  */
 const signUpNetworkRateLimiterMiddleware = (req, res, next) =>
-    consumePoints(signUpNetworkLimiter, clientNetwork(req), 1, res, next);
+    consumePointsOrRefuse(signUpNetworkLimiter, clientNetwork(req), res, next);
+
+/**
+ * Limit `/director` per account, then for the whole service. Runs after
+ * `authenticateUser`, so the session names an account.
+ *
+ * Fails closed, unlike the general bucket: nothing depends on this endpoint
+ * yet, and what it spends is the Bungie quota that everything else does. A
+ * Redis that can't answer gets a 503 to retry rather than an unlimited pass.
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ * @returns {Promise<void>}
+ */
+const directorRateLimiterMiddleware = (req, res, next) =>
+    consumePointsOrRefuse(directorLimiter, accountKey(req), res, next, directorServiceLimiter);
 
 export default rateLimiterMiddleware;
 export {
+    directorRateLimiterMiddleware,
     twilioRateLimiterMiddleware,
     twilioIngressRateLimiterMiddleware,
     twilioCallbackRateLimiterMiddleware,

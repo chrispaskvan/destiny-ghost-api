@@ -705,6 +705,9 @@
           },
           "429": {
             "description": "Too Many Requests. Five sign-ups an hour per account, and twenty sign-ups and resends an hour together from one network.\n"
+          },
+          "503": {
+            "description": "Service Unavailable. The limits couldn't be checked, so nothing was queued. Retry after the Retry-After header's seconds.\n"
           }
         }
       }
@@ -761,6 +764,9 @@
           },
           "429": {
             "description": "Too Many Requests. Three resends per channel every 15 minutes, and twenty sign-ups and resends an hour together from one network.\n"
+          },
+          "503": {
+            "description": "Service Unavailable. The limits couldn't be checked, so nothing was queued. Retry after the Retry-After header's seconds.\n"
           }
         }
       }
