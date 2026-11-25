@@ -64,7 +64,7 @@ const assertCredentials = (credentials = configuration) => {
  * @param {string | undefined} expected
  * @returns {boolean}
  */
-const matches = (given, expected) => {
+const isSameSecret = (given, expected) => {
     if (typeof given !== 'string' || typeof expected !== 'string' || !expected) {
         return false;
     }
@@ -92,7 +92,9 @@ const callerOf = (headers, credentials = configuration) => {
     const { apiKeys = [], notificationHeaders = {} } = credentials ?? {};
     const apiKey = apiKeys.find(
         ({ header, key }) =>
-            typeof header === 'string' && header && matches(headers[header.toLowerCase()], key),
+            typeof header === 'string' &&
+            header &&
+            isSameSecret(headers[header.toLowerCase()], key),
     );
 
     if (apiKey) {
@@ -102,7 +104,7 @@ const callerOf = (headers, credentials = configuration) => {
     const required = Object.entries(notificationHeaders);
     const allSent =
         required.length > 0 &&
-        required.every(([name, value]) => matches(headers[name.toLowerCase()], value));
+        required.every(([name, value]) => isSameSecret(headers[name.toLowerCase()], value));
 
     return allSent ? 'notification-headers' : undefined;
 };
