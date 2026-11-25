@@ -132,8 +132,8 @@ describe('director limits', () => {
     it('charges the account, then the service, and lets the query through', async () => {
         await directorRateLimiterMiddleware(req, res, next);
 
-        expect(directorConsume).toHaveBeenCalledExactlyOnceWith('2:Ada');
-        expect(directorAllConsume).toHaveBeenCalledExactlyOnceWith('all');
+        expect(directorConsume).toHaveBeenCalledExactlyOnceWith('2:Ada', 1);
+        expect(directorAllConsume).toHaveBeenCalledExactlyOnceWith('all', 1);
         expect(directorConsume.mock.invocationCallOrder[0]).toBeLessThan(
             directorAllConsume.mock.invocationCallOrder[0],
         );
@@ -141,18 +141,28 @@ describe('director limits', () => {
         expect(next).toHaveBeenCalledOnce();
     });
 
+    /** The headers describe the account's own limit, whichever refused. */
     it.each([
-        ['account', () => directorConsume],
-        ['service', () => directorAllConsume],
-    ])("answers 429 with Retry-After once the %s's limit is spent", async (_, limiter) => {
-        limiter().mockRejectedValueOnce(new MockRateLimiterRes(0, 42_000));
+        ['account', () => directorConsume, 0],
+        ['service', () => directorAllConsume, 4],
+    ])(
+        "answers 429 with Retry-After once the %s's limit is spent",
+        async (_, limiter, remaining) => {
+            limiter().mockRejectedValueOnce(new MockRateLimiterRes(0, 42_000));
 
-        await directorRateLimiterMiddleware(req, res, next);
+            await directorRateLimiterMiddleware(req, res, next);
 
-        expect(res.set).toHaveBeenCalledWith('Retry-After', '42');
-        expect(res.status).toHaveBeenCalledWith(StatusCodes.TOO_MANY_REQUESTS);
-        expect(next).not.toHaveBeenCalled();
-    });
+            expect(res.set).toHaveBeenCalledWith('Retry-After', '42');
+            expect(res.set).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    'X-RateLimit-Limit': 5,
+                    'X-RateLimit-Remaining': remaining,
+                }),
+            );
+            expect(res.status).toHaveBeenCalledWith(StatusCodes.TOO_MANY_REQUESTS);
+            expect(next).not.toHaveBeenCalled();
+        },
+    );
 
     it("doesn't spend the service's share on an account over its own", async () => {
         directorConsume.mockRejectedValueOnce(new MockRateLimiterRes(0, 1_000));

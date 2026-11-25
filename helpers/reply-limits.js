@@ -15,6 +15,7 @@
 import { RateLimiterRedis, RateLimiterRes } from 'rate-limiter-flexible';
 import client from './cache.js';
 import log from './log.js';
+import spendPoint from './spend-point.js';
 
 /** Replies one number may receive a day, beyond the compliance keywords. */
 const REPLIES_PER_DAY = 100;
@@ -93,27 +94,6 @@ return refunded
 `;
 
 /**
- * Spend a point.
- * @param {RateLimiterRedis} limiter
- * @param {string} key
- * @returns {Promise<boolean>} false once the limit is spent
- * @throws when Redis can't answer
- */
-const spend = async (limiter, key) => {
-    try {
-        await limiter.consume(key);
-
-        return true;
-    } catch (rejection) {
-        if (rejection instanceof RateLimiterRes) {
-            return false;
-        }
-
-        throw rejection;
-    }
-};
-
-/**
  * Charge a number's next text to its day's replies, and say how to answer it:
  * normally, with the one notice that its day's replies are spent, or not at
  * all.
@@ -165,7 +145,7 @@ const allowIcon = async from => {
     }
 
     try {
-        return await spend(icons, from);
+        return await spendPoint(icons, from);
     } catch (err) {
         log.warn({ err, from }, 'Unable to check the daily icon limit; replying without it.');
 
