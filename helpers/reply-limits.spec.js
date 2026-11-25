@@ -67,9 +67,9 @@ describe('reply limits', () => {
         expect([REPLIES_PER_DAY, ICONS_PER_DAY, SCANS_PER_DAY]).toEqual([100, 25, 10]);
     });
 
-    describe('answer', () => {
+    describe('chargeText', () => {
         it('replies within the day, charging the sender', async () => {
-            await expect(replyLimits.answer(from)).resolves.toBe('reply');
+            await expect(replyLimits.chargeText(from)).resolves.toBe('reply');
 
             expect(repliesConsume).toHaveBeenCalledWith(from);
         });
@@ -78,8 +78,8 @@ describe('reply limits', () => {
             repliesConsume.mockRejectedValueOnce(new MockRes(REPLIES_PER_DAY + 1));
             repliesConsume.mockRejectedValueOnce(new MockRes(REPLIES_PER_DAY + 2));
 
-            await expect(replyLimits.answer(from)).resolves.toBe('notice');
-            await expect(replyLimits.answer(from)).resolves.toBe('quiet');
+            await expect(replyLimits.chargeText(from)).resolves.toBe('notice');
+            await expect(replyLimits.chargeText(from)).resolves.toBe('quiet');
             expect(log.warn).toHaveBeenCalledOnce();
         });
 
@@ -89,7 +89,7 @@ describe('reply limits', () => {
         ])('fails open while Redis is %s', async (_, breakRedis) => {
             breakRedis();
 
-            await expect(replyLimits.answer(from)).resolves.toBe('reply');
+            await expect(replyLimits.chargeText(from)).resolves.toBe('reply');
         });
     });
 

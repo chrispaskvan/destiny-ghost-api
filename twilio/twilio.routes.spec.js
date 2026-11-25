@@ -228,7 +228,7 @@ const destinyService = { getProfile: vi.fn() };
 const mmsService = new MmsService({ notificationService: { sendMessage: vi.fn() } });
 /** Every reply within its limits; the limits have their own specs. */
 const replyLimits = {
-    answer: async () => 'reply',
+    chargeText: async () => 'reply',
     allowIcon: async () => true,
     allowScans: async (_from, wanted) => wanted,
     refundScans: async () => undefined,

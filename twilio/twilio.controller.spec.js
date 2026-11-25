@@ -50,7 +50,7 @@ const destinyService = { getProfile: vi.fn(), getXur: vi.fn() };
 const mmsService = { enqueue: vi.fn() };
 /** Within every limit unless a test says otherwise; reset in `beforeEach`. */
 const replyLimits = {
-    answer: vi.fn(),
+    chargeText: vi.fn(),
     allowIcon: vi.fn(),
     allowScans: vi.fn(),
     refundScans: vi.fn(),
@@ -94,7 +94,7 @@ beforeEach(() => {
     userService.getUserByPhoneNumber.mockResolvedValue(registeredUser());
     userService.addUserMessage.mockResolvedValue(undefined);
     worldRepository.getItemByName.mockResolvedValue([]);
-    replyLimits.answer.mockResolvedValue('reply');
+    replyLimits.chargeText.mockResolvedValue('reply');
     replyLimits.allowIcon.mockResolvedValue(true);
     replyLimits.allowScans.mockImplementation(async (_from, wanted) => wanted);
     replyLimits.refundScans.mockResolvedValue(undefined);
@@ -310,14 +310,14 @@ describe('TwilioController', () => {
             it('should charge the sender before looking them up', async () => {
                 await twilioController.request({ body: inbound('gjallarhorn'), cookies: {} });
 
-                expect(replyLimits.answer).toHaveBeenCalledWith(phoneNumber);
-                expect(replyLimits.answer.mock.invocationCallOrder[0]).toBeLessThan(
+                expect(replyLimits.chargeText).toHaveBeenCalledWith(phoneNumber);
+                expect(replyLimits.chargeText.mock.invocationCallOrder[0]).toBeLessThan(
                     userService.getUserByPhoneNumber.mock.invocationCallOrder[0],
                 );
             });
 
             it('should tell the sender once that the day is spent', async () => {
-                replyLimits.answer.mockResolvedValue('notice');
+                replyLimits.chargeText.mockResolvedValue('notice');
 
                 await expect(
                     twilioController.request({ body: inbound('gjallarhorn'), cookies: {} }),
@@ -327,7 +327,7 @@ describe('TwilioController', () => {
             });
 
             it('should not send the notice to a sender who opted out', async () => {
-                replyLimits.answer.mockResolvedValue('notice');
+                replyLimits.chargeText.mockResolvedValue('notice');
                 userService.getUserByPhoneNumber.mockResolvedValue({
                     ...registeredUser(),
                     isSubscribed: false,
@@ -339,7 +339,7 @@ describe('TwilioController', () => {
             });
 
             it('should then say nothing, and look nothing up', async () => {
-                replyLimits.answer.mockResolvedValue('quiet');
+                replyLimits.chargeText.mockResolvedValue('quiet');
 
                 await expect(
                     twilioController.request({ body: inbound('gjallarhorn'), cookies: {} }),
@@ -350,7 +350,7 @@ describe('TwilioController', () => {
 
             /** Carriers require these whatever the volume, so they're never charged. */
             it.each(['STOP', 'HELP', 'START'])('should answer %s past the limit', async keyword => {
-                replyLimits.answer.mockResolvedValue('quiet');
+                replyLimits.chargeText.mockResolvedValue('quiet');
 
                 const { message } = await twilioController.request({
                     body: inbound(keyword),
@@ -358,7 +358,7 @@ describe('TwilioController', () => {
                 });
 
                 expect(message).toEqual(expect.any(String));
-                expect(replyLimits.answer).not.toHaveBeenCalled();
+                expect(replyLimits.chargeText).not.toHaveBeenCalled();
             });
         });
 
