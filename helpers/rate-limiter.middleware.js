@@ -315,35 +315,45 @@ const refuseUnchecked = res => {
 /**
  * Spend a point as `consumePoints` does, but fail closed.
  *
- * For the limits in front of something billed. `consumePoints` lets a
- * request through when Redis can't answer, which is right for reads - an
+ * For the limits in front of something billed or scarce. `consumePoints` lets
+ * a request through when Redis can't answer, which is right for reads - an
  * outage shouldn't take them down too - but in front of a billed send it
  * switches the limit off for as long as the outage lasts, and the queue the
  * send goes on has a Redis connection of its own that may still be up.
- * @param {RateLimiterRedis} limiter
+ *
+ * A service limit, when given, is one bucket for every caller, charged only
+ * once the caller's own limit has let the request through, so a caller over
+ * its own spends none of the service's share. The rate-limit headers always
+ * describe the caller's own limit; `Retry-After`, whichever limit refused.
+ * @param {RateLimiterRedis} limiter - the caller's own limit
  * @param {string} key
  * @param {import('express').Response} res
  * @param {import('express').NextFunction} next
+ * @param {RateLimiterRedis} [serviceLimiter]
  * @returns {Promise<void>}
  */
-const consumePointsOrRefuse = async (limiter, key, res, next) => {
+const consumePointsOrRefuse = async (limiter, key, res, next, serviceLimiter) => {
     if (!client.isReady) {
         refuseUnchecked(res);
 
         return;
     }
 
+    /** @type {RateLimiterRes | undefined} */
+    let own;
+
     try {
-        setRateLimitHeaders(await limiter.consume(key, 1), res, limiter.points);
+        own = await limiter.consume(key, 1);
+        await serviceLimiter?.consume('all', 1);
     } catch (rejection) {
         if (rejection instanceof RateLimiterRes) {
-            setRateLimitHeaders(rejection, res, limiter.points);
+            setRateLimitHeaders(own ?? rejection, res, limiter.points);
             res.set('Retry-After', String(Math.ceil(rejection.msBeforeNext / 1000)));
             res.status(StatusCodes.TOO_MANY_REQUESTS).end();
         } else {
             log.error(
                 { err: rejection, keyPrefix: limiter.keyPrefix },
-                'Unable to check a limit on a billed endpoint; refusing.',
+                'Unable to check a limit; refusing.',
             );
             refuseUnchecked(res);
         }
@@ -351,6 +361,7 @@ const consumePointsOrRefuse = async (limiter, key, res, next) => {
         return;
     }
 
+    setRateLimitHeaders(own, res, limiter.points);
     next();
 };
 
@@ -398,32 +409,8 @@ const signUpNetworkRateLimiterMiddleware = (req, res, next) =>
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-const directorRateLimiterMiddleware = async (req, res, next) => {
-    if (!client.isReady) {
-        refuseUnchecked(res);
-
-        return;
-    }
-
-    try {
-        const remaining = await directorLimiter.consume(accountKey(req));
-
-        await directorServiceLimiter.consume('all');
-        setRateLimitHeaders(remaining, res, directorLimiter.points);
-    } catch (rejection) {
-        if (rejection instanceof RateLimiterRes) {
-            res.set('Retry-After', String(Math.ceil(rejection.msBeforeNext / 1000)));
-            res.status(StatusCodes.TOO_MANY_REQUESTS).end();
-        } else {
-            log.error({ err: rejection }, 'Unable to check the /director limits; refusing.');
-            refuseUnchecked(res);
-        }
-
-        return;
-    }
-
-    next();
-};
+const directorRateLimiterMiddleware = (req, res, next) =>
+    consumePointsOrRefuse(directorLimiter, accountKey(req), res, next, directorServiceLimiter);
 
 export default rateLimiterMiddleware;
 export {

@@ -9,9 +9,10 @@
  * service's verification texts as a whole, so many destinations can't add up
  * to a bill. Both are checked by the sign-up worker as it sends.
  */
-import { RateLimiterRedis, RateLimiterRes } from 'rate-limiter-flexible';
+import { RateLimiterRedis } from 'rate-limiter-flexible';
 import client from './cache.js';
 import log from './log.js';
+import spendPoint from './spend-point.js';
 
 /**
  * Verification messages one phone number or email address may receive a day,
@@ -40,27 +41,6 @@ const allTexts = new RateLimiterRedis({
     points: TEXTS_PER_HOUR,
     duration: 60 * 60,
 });
-
-/**
- * Spend a point.
- * @param {RateLimiterRedis} limiter
- * @param {string} key
- * @returns {Promise<boolean>} false when the limit is spent
- * @throws when Redis can't answer
- */
-const spend = async (limiter, key) => {
-    try {
-        await limiter.consume(key);
-
-        return true;
-    } catch (rejection) {
-        if (rejection instanceof RateLimiterRes) {
-            return false;
-        }
-
-        throw rejection;
-    }
-};
 
 /**
  * Give back a destination's point, for a text the service cap then withheld.
@@ -128,7 +108,7 @@ const allowVerification = async (channel, destination) => {
     const key = `${channel}:${channel === 'email' ? mailboxOf(destination) : destination}`;
 
     try {
-        if (!(await spend(perDestination, key))) {
+        if (!(await spendPoint(perDestination, key))) {
             log.warn(
                 { channel, limit: PER_DESTINATION_PER_DAY },
                 'Verification message withheld: its destination has had its share for the day.',
@@ -147,7 +127,7 @@ const allowVerification = async (channel, destination) => {
     }
 
     try {
-        if (await spend(allTexts, 'all')) {
+        if (await spendPoint(allTexts, 'all')) {
             return true;
         }
 
